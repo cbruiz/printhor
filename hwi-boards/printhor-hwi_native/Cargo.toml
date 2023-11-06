@@ -1,0 +1,66 @@
+[package]
+name = "printhor-hwi_native"
+version = "0.0.0"
+edition = "2021"
+authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
+description = "Printhor Hardware Abstraction native std for debugging/playgrounding/analysis"
+readme = "README.md"
+#repository = "https://github.com/"
+keywords = ["hardware", "abstraction"]
+license = "MIT"
+documentation = "https://docs.rs/printhor_hwi"
+homepage = "https://github.com/cbruiz/printhor_hwi"
+
+[lib]
+
+[features]
+# Hardware device features
+with-uart-port-1 = ["embedded-io/async", "embedded-io/std", "embedded-io/futures", "async-io", "nix"]
+with-printjob = []
+with-hotend = ["embedded-hal"]
+with-hotbed = ["embedded-hal"]
+with-motion = []
+with-probe = ["embedded-hal"]
+with-endstops = []
+with-sdcard = ["embedded-sdmmc"]
+with-fan0 = ["embedded-hal"]
+with-fan1 = ["embedded-hal"]
+with-laser = ["embedded-hal"]
+with-trinamic = []
+sdcard-uses-spi = []
+
+with-display = [
+    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
+    "printhor-hwa-common/with-ui",
+]
+
+#"log", "env_logger",
+
+
+[dependencies]
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["std"] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["std", "generic-queue"] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["nightly"] }
+
+nix = { version = "0.26.2", optional = true }
+embedded-io = { version = "0.4.0", optional = true }
+async-io = { version = "1.13.0", optional = true}
+gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
+embedded-graphics-simulator = { version = "0.4.1", optional = true }
+log = { version = "0.4.19" }
+env_logger = { version = "0.10.0" }
+
+embedded-hal = { version = "0.2.3", default-features = false, optional = true }
+embassy-usb = { version = "*", path = "../../ext/embassy/embassy-usb", features = [], optional = true }
+
+printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common" }
+async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
+
+futures = { version = "0.3.17", default-features = false, features = [] }
+embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
+
+lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
+embedded-graphics = { version = "0.7.1", optional = true}
+embedded-graphics-core = {version = "0.3.3", optional = true }

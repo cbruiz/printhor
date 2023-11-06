@@ -1,0 +1,26 @@
+[package]
+name = "printhor-hwa-common"
+version = "0.0.0"
+edition = "2021"
+authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
+description = "Printor harware abstraction utillery"
+readme = "README.md"
+#repository = "https://github.com/"
+keywords = ["env", "symbol", "macro", "config"]
+categories = ["config"]
+license = "MIT"
+documentation = "https://docs.rs/printhor"
+homepage = "https://github.com/cbruiz/printhor"
+
+[lib]
+
+[features]
+with-defmt=["defmt"]
+with-ui=["embedded-graphics-core"]
+
+[dependencies]
+static_cell = "1.2.0"
+defmt = {version = "0.3.4", optional = true }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["nightly"] }
+embedded-graphics-core = {version = "0.3.3", optional = true }
+bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }

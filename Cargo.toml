@@ -1,0 +1,205 @@
+[package]
+authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
+edition = "2021"
+name = "prinThor"
+version = "0.0.0"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+description = "The high reliable but not necessarily functional 3D Printer firmware"
+
+[badges.maintenance]
+status = "experimental"
+
+[features]
+default = ["native"]
+
+# Hardware device features
+with-defmt = ["defmt", "defmt-rtt", "panic-probe"]
+with-usbserial = []
+with-uart-port-1 = []
+with-printjob = []
+with-uart2 = []
+with-spi = ["embedded-hal"]
+with-hotend = ["embedded-hal"]
+with-hotbed = ["embedded-hal"]
+with-motion = []
+with-probe = ["embedded-hal"]
+with-endstops = []
+with-sdcard = ["embedded-sdmmc"]
+with-fan0 = ["embedded-hal"]
+with-fan1 = ["embedded-hal"]
+with-laser = ["embedded-hal"]
+with-trinamic = ["tmc2209"]
+sdcard-uses-spi = []
+
+ili9341_parallel = []
+ili9341_spi = []
+
+integration-test = ["integration-test-m100", "integration-test-power-on", "integration-test-homing", "integration-test-move-ortho"]
+integration-test-m100 = []
+integration-test-power-on = []
+integration-test-homing = []
+integration-test-move-ortho = []
+integration-test-move-oblique = []
+integration-test-dwell = []
+integration-test-set-hotend-temp = []
+
+
+fixed-point-128-impl = []
+float-point-f32-impl = []
+float-point-f64-impl = []
+
+# baremetal
+std = []
+arch-std = []
+nightly = []
+_arch = []
+
+with-lvgl = [
+    "with-display",
+    "lvgl",
+    "lvgl/logger",
+]
+
+with-display = [
+    "embedded-graphics-core", "embedded-graphics",
+]
+
+native = [
+    #"with-trinamic", "printhor-hwi_native/with-trinamic",
+    "with-motion", "printhor-hwi_native/with-motion",
+    "with-uart-port-1", "printhor-hwi_native/with-uart-port-1",
+    "with-sdcard", "printhor-hwi_native/with-sdcard",
+    "with-printjob", "printhor-hwi_native/with-printjob",
+    #"with-probe", "printhor-hwi_native/with-probe",
+    #"with-hotend", "printhor-hwi_native/with-hotend",
+    #"with-hotbed", "printhor-hwi_native/with-hotbed",
+    #"with-fan0", "printhor-hwi_native/with-fan0",
+    #"with-fan1", "printhor-hwi_native/with-fan1",
+    #"with-laser", "printhor-hwi_native/with-laser",
+    #"with-display", "printhor-hwi_native/with-display", "printhor-hwa-common/with-ui",
+
+    #"with-lvgl",
+    #"float-point-f64-impl",
+    #"float-point-f32-impl",
+    "fixed-point-128-impl",
+
+    "printhor-hwi_native",
+    "gnuplot",
+    "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-executor/nightly",
+    "embassy-executor/integrated-timers", "embassy-sync/log",
+    "embassy-sync/std", "embassy-time/std", "embassy-time/generic-queue",
+]
+skr_mini_e3_v3 = [
+    "with-defmt", "printhor-hwi_skr_mini_e3_v3/with-defmt",
+    "with-trinamic", "printhor-hwi_skr_mini_e3_v3/with-trinamic",
+    "with-motion", "printhor-hwi_skr_mini_e3_v3/with-motion",
+    #"with-uart-port-1", "printhor-hwi_skr_mini_e3_v3/with-uart-port-1",
+    "with-usbserial", "printhor-hwi_skr_mini_e3_v3/with-usbserial",
+    "with-spi", "printhor-hwi_skr_mini_e3_v3/with-spi",
+    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3_v3/with-sdcard", "printhor-hwi_skr_mini_e3_v3/sdcard-uses-spi",
+    "with-printjob", "printhor-hwi_skr_mini_e3_v3/with-printjob",
+    "with-probe", "printhor-hwi_skr_mini_e3_v3/with-probe",
+    "with-hotend", "printhor-hwi_skr_mini_e3_v3/with-hotend",
+    "with-hotbed", "printhor-hwi_skr_mini_e3_v3/with-hotbed",
+    "with-fan0", "printhor-hwi_skr_mini_e3_v3/with-fan0",
+    "with-fan1", "printhor-hwi_skr_mini_e3_v3/with-fan1",
+    "with-laser", "printhor-hwi_skr_mini_e3_v3/with-laser",
+
+    #"ili9341_spi",
+    #"with-display",
+    #"with-lvgl",
+
+    #"float-point-f32-impl",
+    #"float-point-f64-impl",
+    "fixed-point-128-impl",
+    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
+
+    "printhor-hwi_skr_mini_e3_v3",
+    "embassy-executor/nightly", "embassy-executor/integrated-timers",
+    "embassy-executor/arch-cortex-m",
+    "embassy-executor/executor-interrupt",
+    "embassy-time/tick-hz-32_768"
+]
+
+[dependencies]
+
+# Optional baremetal
+cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"], optional = true }
+cortex-m-rt = { version = "0.7.3", optional = true}
+alloc-cortex-m = { version = "0.4.4", optional = true}
+embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [], optional = true }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [], optional = true }
+
+defmt = {version = "0.3.4", optional = true}
+panic-probe = { version = "0.3.1", features = ["print-defmt"], optional = true}
+defmt-rtt = { version = "0.4.0", optional = true }
+
+# Software
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["nightly"], optional = true }
+
+embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
+embedded-hal = { version = "0.2.7", default-features = false, optional = true }
+embedded-graphics = { version = "0.7.1", optional = true}
+
+display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}
+ili9341 = {version = "0.5.0", default-features = false, optional = true}
+
+futures = { version = "0.3.17", default-features = false, features = [] }
+heapless = { version = "0.7.5", default-features = false, features = [] }
+
+async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization"}
+
+strum = { version = "0.24.1", default-features = false, features = ["derive"] }
+rust_decimal = { version = "1.29.1", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { version = "1.29.1" }
+pid = { version = "4.0.0", default-features = false, features = []}
+num-traits = {version = "0.2.16", default-features = false, features = [] }
+micromath = { version = "2.0.0", default-features = false, features = []}
+
+# Steppers
+tmc2209 = { version = "0.2.2", optional = true }
+
+# Boards
+printhor-hwi_native = {version = "*", path = "hwi-boards/printhor-hwi_native", optional = true}
+printhor-hwi_skr_mini_e3_v3 = {version = "*", path = "hwi-boards/printhor-hwi_skr_mini_e3_v3", optional = true}
+
+gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
+
+
+# Display
+lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
+embedded-graphics-core = {version = "0.3.3", optional = true }
+
+# machinery
+
+cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
+printhor-hwa-common = { version = "*", path= "printhor-hwa-common", default-features = false, features = [] }
+bitflags = { version = "2.4.1", default-features = false, features = [] }
+
+[build-dependencies]
+#proc-macro2 = "1.0."
+
+[profile.release]
+codegen-units = 1
+debug = 2
+strip = false
+debug-assertions = false
+opt-level = "z"
+lto = true
+panic = "unwind"
+
+[profile.release-opt]
+inherits = "release"
+codegen-units = 1
+debug = 0
+debug-assertions = false
+overflow-checks = false
+strip = false
+opt-level = "z"
+lto = true
+panic = "abort"
+
