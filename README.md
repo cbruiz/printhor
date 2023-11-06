@@ -69,7 +69,7 @@ cd printhor
 # Build
 
 The minimal toolset required to build and run is:
-* rust, in order to compila 
+* rust, in order to compile 
 * cargo binutils, to produce the image binary that you can flash via SD card as usual.
 * __[Optionally]__ probe-run, if you are willing to use a SWD/Jlink debugger (https://github.com/knurling-rs/probe-run)
 * __[Optionally]__ cargo-bloat and cargo-size utils are great to analyze the code size.
