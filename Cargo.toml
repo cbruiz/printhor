@@ -5,7 +5,7 @@ name = "prinThor"
 version = "0.0.0"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-description = "The high reliable but not necessarily functional 3D Printer firmware"
+description = "The highly reliable but not necessarily functional 3D Printer firmware"
 
 [badges.maintenance]
 status = "experimental"

@@ -2,7 +2,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
 
-<h3>Printhor: The high reliable but not necessarily functional 3D printer firmware</h3>
+<h3>Printhor: The highly reliable but not necessarily functional 3D printer firmware</h3>
 
 <h5><p align="center"><i>If you are using this product or like the project, please <a href="https://github.com/cbruiz/printhor/stargazers">★</a> this repository to show your support! 🤩</i></p></h5>
 
@@ -132,7 +132,7 @@ Firmware is around to 140Kb, and expecting to be around 100Kb with the core funt
 The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
 
 ```shell
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --package prinThor --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
 ### Minimal-size binary image production
