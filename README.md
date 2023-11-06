@@ -55,7 +55,9 @@ Which means the principal short-term goal is not to develop a productive firmwar
 </table>
 
 # Help wanted
-![Discord Banner 4](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=banner4)
+If you are interested in this project and want to collaborate, you are welcome.
+A Discord server has been created for informal discussions. Otherwise, Github Issues and Pull Requests are preferred.  
+[![Discord Banner 4](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=banner4)](https://discord.gg/VSag6T4KS6)
 
 # Checkout
 
