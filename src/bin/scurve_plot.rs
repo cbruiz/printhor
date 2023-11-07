@@ -23,8 +23,7 @@ use planner::{Constraints, PlanProfile, SCurveMotionProfile};
 use crate::math::{ONE, ZERO};
 
 mod hwa {
-    pub use printhor_hwi_native::{trace, debug, info, warn, error};
-    pub use printhor_hwi_native::init_logger;
+    pub use printhor_hwi_native::*;
 }
 
 #[path = "printhor/geometry.rs"]
@@ -125,9 +124,9 @@ fn main() {
                 };
                 let segment = Segment::new(
                     SegmentData {
-                        speed_enter_sps: 0,
-                        speed_exit_sps: 0,
-                        total_steps: module_target_distance.to_i32().unwrap_or(0) as u32,
+                        speed_enter_mms: 0,
+                        speed_exit_mms: 0,
+                        displacement_u: (module_target_distance / Real::from_lit(1000, 0)).to_i32().unwrap_or(0) as u32,
                         vdir,
                         dest_pos: Default::default(),
                     },

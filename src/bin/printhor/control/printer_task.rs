@@ -5,8 +5,8 @@ use embassy_time::Timer;
 use embassy_time::Duration;
 use crate::ctrl::*;
 
-use crate::hwa::controllers::printer_controller::PrinterController;
-use crate::hwa::controllers::printer_controller::PrinterControllerEvent;
+use crate::hwa::controllers::PrinterController;
+use crate::hwa::controllers::PrinterControllerEvent;
 use crate::hwa::controllers::sdcard_controller::SDCardStream;
 use crate::hwa::controllers::sdcard_controller::SDCardError;
 use printhor_hwa_common::EventStatus;

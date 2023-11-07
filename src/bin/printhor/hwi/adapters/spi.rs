@@ -31,13 +31,13 @@ impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
 
     #[inline]
     pub async fn retain(&self) {
-        #[cfg(feature = "sdcards-uses-spi")]
+        #[cfg(feature = "sdcard-uses-spi")]
         self.spi.retain().await;
     }
 
     #[inline]
     pub async fn release(&self) {
-        #[cfg(feature = "sdcards-uses-spi")]
+        #[cfg(feature = "sdcard-uses-spi")]
         self.spi.release().await;
     }
 

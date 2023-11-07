@@ -1,4 +1,3 @@
-#[allow(unused)]
 use crate::hwa;
 use crate::control::GCode;
 use crate::math::Real;
@@ -10,8 +9,6 @@ pub struct IntegrationaskParams {
     #[cfg(feature = "with-printjob")]
     pub printer_controller: hwa::controllers::PrinterController,
 }
-
-#[allow(unreachable_patterns)]
 #[embassy_executor::task(pool_size=1)]
 pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 {
@@ -76,7 +73,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
     #[cfg(feature = "integration-test-move-ortho")]
     {
-        hwa::info!("Testing G1");
+        hwa::info!("Testing G1 Ortho");
 
         let g1_code = GCode::G1(crate::control::XYZEFS {
             ln: None,
@@ -97,12 +94,12 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
     #[cfg(feature = "integration-test-move-oblique")]
     {
-        hwa::info!("Testing G1");
+        hwa::info!("Testing G1 Oblique");
 
         let g1_code = GCode::G1(crate::control::XYZEFS {
             ln: None,
             x: Some(Real::new(10, 0)),
-            y: Some(Real::new(1, 0)),
+            y: Some(Real::new(5, 0)),
             z: None,
             e: Some(Real::new(1414, 3)),
             f: None,
@@ -119,22 +116,22 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
     #[cfg(feature = "integration-test-dwell")]
     {
         hwa::info!("Testing G4");
-        if let Some(evt) = processor.execute(&GCode::G4, false).await.and_then(expect_deferred).ok() {
+        if let Some(evt) = params.processor.execute(&GCode::G4, false).await.and_then(expect_deferred).ok() {
             subscriber.wait_until(evt).await;
-            crate::info!("-- G4 OK");
+            hwa::info!("-- G4 OK");
         } else {
-            crate::error!("G4 Unexpected state");
+            hwa::error!("G4 Unexpected state");
         }
     }
 
     #[cfg(feature = "integration-test-set-hotend-temp")]
     {
         hwa::info!("Testing M104");
-        if !processor.execute(&GCode::M104(S { ln: None, s: Some(Real::new(235, 0)) }), false).await.and_then(expect_immediate).is_ok() {
+        if !params.processor.execute(&GCode::M104(S { ln: None, s: Some(Real::new(235, 0)) }), false).await.and_then(expect_immediate).is_ok() {
             hwa::error!("M104: unexpected result");
         }
         hwa::info!("Testing M109 S235");
-        if let Some(evt) = processor.execute(&GCode::M109(S{ln: None, s: Some(Real::new(235, 0))}), false).await.and_then(expect_deferred).ok() {
+        if let Some(evt) = params.processor.execute(&GCode::M109(S{ln: None, s: Some(Real::new(235, 0))}), false).await.and_then(expect_deferred).ok() {
             subscriber.wait_until(evt).await;
         }
     }

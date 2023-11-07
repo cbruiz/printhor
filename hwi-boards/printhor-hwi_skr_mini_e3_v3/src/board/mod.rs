@@ -1,5 +1,5 @@
-/// https://github.com/embassy-rs/stm32-data-generated/blob/a8cfee5b37710477e1e9eba20f981bb673f4ceba/data/chips/STM32G0B1RE.json
-
+/// https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32G0B1RE.json
+///
 pub mod device;
 pub mod io;
 
@@ -56,7 +56,7 @@ pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 #[cfg(feature = "with-spi")]
-pub(crate) const SPI_FREQUENCY_HZ: u32 = 1_000_000;
+pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
 
 /// Shared controllers
 pub struct Controllers {
@@ -143,13 +143,13 @@ pub fn init() -> embassy_stm32::Peripherals {
     //crate::info!("Initializing...");
     let mut config = Config::default();
     config.rcc.mux = ClockSrc::PLL(
-        // 8 / 1 * 16 / 2 = 64 MHz
+        // 8 / 1 * 24 / 3 = 64 MHz
         PllConfig {
             source: PllSrc::HSE(hz(8_000_000)),
             m: Pllm::DIV1,
             n: Plln::MUL24,
             r: Pllr::DIV3,
-            q: Some(Pllq::DIV4),
+            q: Some(Pllq::DIV2),
             p: Some(Pllp::DIV2),
         }
     );

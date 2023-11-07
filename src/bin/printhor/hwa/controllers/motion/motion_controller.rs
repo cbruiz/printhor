@@ -481,9 +481,9 @@ impl MotionPlanner {
             match profile {
                 Some(profile) => {
                     let segment_data = SegmentData {
-                        speed_enter_sps: 0,
-                        speed_exit_sps: 0,
-                        total_steps: module_target_distance.to_i32().unwrap_or(0) as u32,
+                        speed_enter_mms: 0,
+                        speed_exit_mms: 0,
+                        displacement_u: (module_target_distance * Real::from_lit(1000, 0)) .to_i32().unwrap_or(0) as u32,
                         vdir,
                         dest_pos: Default::default(),
                     };
@@ -497,7 +497,8 @@ impl MotionPlanner {
                     hwa::debug!("clamped_speed: {}", clamped_speed.rdp(4));
                     hwa::debug!("speed_rates: {}", speed_rate.rdp(4));
 
-                    hwa::debug!("profile: {} {} {} {} {}", profile.t_j1, profile.t_a, profile.t_v, profile.t_d, profile.t_j2);
+                    #[cfg(feature = "std")]
+                    hwa::debug!("profile: {} {} {} {} {}", profile.t_j1.rdp(4), profile.t_a.rdp(4), profile.t_v.rdp(4), profile.t_d.rdp(4), profile.t_j2.rdp(4));
 
                     hwa::debug!("Conf retr in: {} us", (t1-t0).as_micros());
                     hwa::debug!("Move prepared in: {} us", (t2-t1).as_micros());

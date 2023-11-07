@@ -6,7 +6,7 @@ use printhor_hwa_common::EventFlags;
 #[allow(unused)]
 use crate::ctrl::*;
 #[cfg(feature = "with-printjob")]
-use crate::hwa::controllers::printer_controller::{PrinterController, PrinterControllerEvent};
+use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
 
 #[cfg(feature = "with-sdcard")]
 use crate::hwa::controllers::sdcard_controller::SDEntryType;
@@ -44,6 +44,7 @@ pub async fn control_task(
 
     s.wait_until(EventStatus::containing(EventFlags::SYS_READY)).await;
     hwa::info!("Control_task started");
+    _processor.write("echo: ready\n").await;
 
     #[cfg(any(feature = "with-usbserial", feature = "with-uart-port-1"))]
     loop {

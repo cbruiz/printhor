@@ -375,7 +375,7 @@ impl CardController {
         let mut card = SDCardVolumeManager::new_with_limits(device, DummyTimeSource{});
         #[cfg(feature = "sdcard-uses-spi")]
         card.device().retain().await;
-        let vol = card.get_volume(VolumeIdx(hwa::SDCARD_PARTITION)).unwrap();
+        let vol = card.get_volume(VolumeIdx(hwa::SDCARD_PARTITION));
         #[cfg(feature = "sdcard-uses-spi")]
         card.device().release().await;
         let mut opened_dir_slots = heapless::Vec::new();
@@ -392,7 +392,7 @@ impl CardController {
                 "card_shared_state",
                 ControllerMutex::new(SDCard {
                     mgr: card,
-                    vol: Some(vol),
+                    vol: vol.ok(),
                     opened_dir_slots,
                     opened_dir_refcount,
                     opened_dir_names,
