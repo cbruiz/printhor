@@ -81,7 +81,7 @@ This crate requires rust nighlty.
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
-However, ff your os is unix based:
+However, if your os is unix based:
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup update
