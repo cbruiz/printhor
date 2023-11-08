@@ -4,7 +4,11 @@ pub mod sdcard_controller;
 #[cfg(feature = "with-sdcard")]
 pub use sdcard_controller::CardController;
 #[cfg(feature = "with-printjob")]
-pub mod printer_controller;
+mod printer_controller;
+
+#[cfg(feature = "with-printjob")]
+pub use printer_controller::*;
+
 #[cfg(feature = "with-motion")]
 mod motion;
 #[cfg(feature = "with-trinamic")]

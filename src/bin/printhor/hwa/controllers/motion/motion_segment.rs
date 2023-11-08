@@ -6,12 +6,12 @@ use crate::tgeo::TVector;
 #[allow(unused)]
 #[derive(Clone, Copy)]
 pub struct SegmentData {
-    /// Enter speed in steps per sec
-    pub speed_enter_sps: u32,
-    /// Exit speed in steps per sec
-    pub speed_exit_sps: u32,
-    /// Total steps to complete the movement
-    pub total_steps: u32,
+    /// Enter speed in mm/s
+    pub speed_enter_mms: u32,
+    /// Exit speed in mm/s
+    pub speed_exit_mms: u32,
+    /// Total displacement to complete the movement in micrometers
+    pub displacement_u: u32,
 
     pub vdir: TVector<Real>,
     pub dest_pos: TVector<Real>,

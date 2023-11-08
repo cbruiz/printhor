@@ -46,7 +46,7 @@ use crate::hwa::controllers::HotendPwmController;
 #[cfg(feature = "with-hotbed")]
 use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-printjob")]
-use crate::hwa::controllers::printer_controller::PrinterController;
+use crate::hwa::controllers::PrinterController;
 
 ////
 
@@ -281,8 +281,8 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
             }
 
             motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(400), Some(400), Some(400), Some(400))).await;
-            motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(800), Some(800), Some(800), Some(800))).await;
-            motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(1600), Some(1600), Some(1600), Some(1600))).await;
+            motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(50), Some(50), Some(50), Some(50))).await;
+            motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(100), Some(100), Some(100), Some(100))).await;
             motion_planer.set_default_travel_speed(400).await;
             motion_planer.set_flow_rate(100).await;
             motion_planer.set_speed_rate(100).await;

@@ -35,7 +35,7 @@ sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = []
 
-integration-test = ["integration-test-m100", "integration-test-power-on", "integration-test-homing", "integration-test-move-ortho"]
+integration-test = ["integration-test-m100", "integration-test-power-on", "integration-test-homing", "integration-test-move-ortho", "integration-test-move-oblique"]
 integration-test-m100 = []
 integration-test-power-on = []
 integration-test-homing = []
@@ -96,30 +96,30 @@ skr_mini_e3_v3 = [
     "with-motion", "printhor-hwi_skr_mini_e3_v3/with-motion",
     #"with-uart-port-1", "printhor-hwi_skr_mini_e3_v3/with-uart-port-1",
     "with-usbserial", "printhor-hwi_skr_mini_e3_v3/with-usbserial",
-    "with-spi", "printhor-hwi_skr_mini_e3_v3/with-spi",
-    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3_v3/with-sdcard", "printhor-hwi_skr_mini_e3_v3/sdcard-uses-spi",
-    "with-printjob", "printhor-hwi_skr_mini_e3_v3/with-printjob",
-    "with-probe", "printhor-hwi_skr_mini_e3_v3/with-probe",
-    "with-hotend", "printhor-hwi_skr_mini_e3_v3/with-hotend",
-    "with-hotbed", "printhor-hwi_skr_mini_e3_v3/with-hotbed",
-    "with-fan0", "printhor-hwi_skr_mini_e3_v3/with-fan0",
-    "with-fan1", "printhor-hwi_skr_mini_e3_v3/with-fan1",
-    "with-laser", "printhor-hwi_skr_mini_e3_v3/with-laser",
+    #"with-spi", "printhor-hwi_skr_mini_e3_v3/with-spi",
+    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3_v3/with-sdcard", "printhor-hwi_skr_mini_e3_v3/sdcard-uses-spi",
+    #"with-printjob", "printhor-hwi_skr_mini_e3_v3/with-printjob",
+    #"with-probe", "printhor-hwi_skr_mini_e3_v3/with-probe",
+    #"with-hotend", "printhor-hwi_skr_mini_e3_v3/with-hotend",
+    #"with-hotbed", "printhor-hwi_skr_mini_e3_v3/with-hotbed",
+    #"with-fan0", "printhor-hwi_skr_mini_e3_v3/with-fan0",
+    #"with-fan1", "printhor-hwi_skr_mini_e3_v3/with-fan1",
+    #"with-laser", "printhor-hwi_skr_mini_e3_v3/with-laser",
 
     #"ili9341_spi",
     #"with-display",
     #"with-lvgl",
 
     #"float-point-f32-impl",
-    #"float-point-f64-impl",
-    "fixed-point-128-impl",
+    "float-point-f64-impl",
+    #"fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_skr_mini_e3_v3",
     "embassy-executor/nightly", "embassy-executor/integrated-timers",
     "embassy-executor/arch-cortex-m",
     "embassy-executor/executor-interrupt",
-    "embassy-time/tick-hz-32_768"
+    "embassy-time/tick-hz-1_000_000"
 ]
 
 [dependencies]
@@ -128,18 +128,18 @@ skr_mini_e3_v3 = [
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"], optional = true }
 cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
-embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [], optional = true }
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [], optional = true }
+embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [], optional = true }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [], optional = true }
 
 defmt = {version = "0.3.4", optional = true}
 panic-probe = { version = "0.3.1", features = ["print-defmt"], optional = true}
 defmt-rtt = { version = "0.4.0", optional = true }
 
 # Software
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "3de01bc22332f37e38e7661ee7a3b403da0b096a", features = ["nightly"], optional = true }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = ["nightly"], optional = true }
 
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 embedded-hal = { version = "0.2.7", default-features = false, optional = true }
