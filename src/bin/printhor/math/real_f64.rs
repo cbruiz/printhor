@@ -50,6 +50,11 @@ impl Real {
     pub(crate) fn is_zero(&self) -> bool {
         F::is_zero(&self.0)
     }
+
+    #[inline]
+    pub(crate) fn is_positive(&self) -> bool {
+        !(self.0 < 0.0)
+    }
     #[inline]
     pub(crate) const fn one() -> Self {
         Self(1.0)

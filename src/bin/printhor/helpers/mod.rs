@@ -7,7 +7,6 @@ pub(crate) fn to_fixed(val: (i32, u8)) -> Real {
     Real::new(val.0.into(), val.1 as u32)
 }
 
-
 pub struct RingBuffer<'d, T, const N: usize> {
     pub buf: &'d mut [T],
     start: usize,

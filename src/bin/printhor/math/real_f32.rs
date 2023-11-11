@@ -46,6 +46,11 @@ impl Real {
     pub(crate) fn is_zero(&self) -> bool {
         f32::is_zero(&self.0)
     }
+
+    #[inline]
+    pub(crate) const fn is_positive(&self) -> bool {
+        !self.0.is_sign_negative()
+    }
     #[inline]
     pub(crate) const fn one() -> Self {
         Self(1.0f32)

@@ -1,6 +1,6 @@
 //! TODO: INCOMPLETE! BUGGY! This feature is still very experimental
 use embassy_time;
-use embassy_time::{block_for, Duration, with_timeout};
+use embassy_time::{Duration, with_timeout};
 #[cfg(feature = "with-motion")]
 use crate::{hwa, hwa::controllers::{DeferEvent, DeferType}};
 #[allow(unused)]
@@ -9,7 +9,7 @@ use crate::tgeo::TVector;
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 
-const PERIOD_HZ: u64 = 50;
+const PERIOD_HZ: u64 = 100;
 const PULSE_WIDTH_US: u32 = Duration::from_hz(PERIOD_HZ).as_micros() as u32;
 const PULSE_WITDH_TICKS: u32 = Duration::from_hz(PERIOD_HZ).as_ticks() as u32;
 
@@ -51,7 +51,7 @@ impl<const N: usize> MultiTimer<N> {
             i.next_tick = i.width + t0
         }
         Self {
-            timeout_instant: t0 + interval + 1,
+            timeout_instant: t0 + interval,
             channels: s,
         }
     }
@@ -60,10 +60,13 @@ impl<const N: usize> MultiTimer<N> {
         let mut next_tick = self.timeout_instant;
         let mut target_channel: Option<&mut ChannelStatus> = None;
         for c in self.channels.iter_mut() {
-            if c.next_tick < next_tick {
+            if c.next_tick < next_tick && c.next_tick < (self.timeout_instant - (c.width / 2)) {
                 next_tick = c.next_tick;
                 target_channel = Some(c);
             }
+        }
+        if next_tick >= self.timeout_instant {
+            return None
         }
         return if let Some(channel) = target_channel {
             while embassy_time::Instant::now().as_ticks() < channel.next_tick {}
@@ -72,6 +75,29 @@ impl<const N: usize> MultiTimer<N> {
         } else {
             None
         };
+    }
+}
+
+pub fn s_block_for(duration: Duration) {
+    let expires_at = embassy_time::Instant::now() + duration;
+    while embassy_time::Instant::now() < expires_at {}
+}
+
+pub struct Directions {
+    pub x: bool,
+    pub y: bool,
+    pub z: bool,
+    pub e: bool,
+}
+
+impl Directions {
+    pub const fn new(x: bool, y: bool, z: bool, e: bool) -> Self {
+        Self {
+            x,
+            y,
+            z,
+            e,
+        }
     }
 }
 
@@ -85,7 +111,7 @@ pub async fn stepper_task(
     watchdog: hwa::WatchdogRef)
 {
 
-    let one_ns = Duration::from_micros(1);
+    let one_us = Duration::from_micros(1);
     let timeout = Duration::from_secs(20);
     let period_ms: i32 = (PULSE_WIDTH_US / 1000) as i32;
     let mut steppers_off = true;
@@ -106,9 +132,10 @@ pub async fn stepper_task(
             // Process segment plan
             Ok(Some(segment)) => {
 
+                let mut xadv = 0;
                 let mut tick_id = 1;
 
-                let to_ustep: Real = Real::from_lit(8, 0);
+                let to_ustep: Real = Real::from_lit(32, 0);
                 let expected_advance = Real::from_lit(segment.segment_data.displacement_u as i64, 0) / Real::from_lit(1000, 0);
 
                 // segment metronome
@@ -141,23 +168,34 @@ pub async fn stepper_task(
                     // Interpolate as microsegments
                     let estimated_position: Real = segment.motion_profile.eval_position(time);
                     let axial_pos: TVector<Real> = segment.segment_data.vdir * estimated_position;
-                    let step_pos: TVector<Real> = (axial_pos * to_ustep).rdp(0);
 
-                    let steps_to_advance_precise: TVector<Real> = step_pos - axis_steps_advanced_precise;
+                    let axial_dirs: Directions = {
+                        let dir_ref = &segment.segment_data.vdir;
+                        Directions::new(
+                            dir_ref.x.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                            dir_ref.y.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                            dir_ref.z.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                            dir_ref.e.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                        )
+                    };
+                    let step_pos: TVector<Real> = axial_pos * to_ustep;
+
+                    let steps_to_advance_precise: TVector<Real> = (step_pos - axis_steps_advanced_precise).floor();
                     axis_steps_advanced_precise += steps_to_advance_precise;
 
-                    hwa::debug!("\t\\Delta_pos {}, \\Delta_axis {} \\delta_us: {}", estimated_position.rdp(4),
-                        axial_pos.rdp(4), steps_to_advance_precise.rdp(4));
+                    hwa::debug!("\ttick #{} \\Delta_pos {}, \\Delta_axis {} \\Delta_us: {} \\delta_us: {} {}", tick_id, estimated_position.rdp(4),
+                        axial_pos.rdp(4), step_pos.rdp(4), steps_to_advance_precise.rdp(0), steps_to_advance_precise.rdp(4));
 
                     let mut drv = motion_planner.motion_driver.lock().await;
 
                     steppers_off = false;
 
-                    let _pulses_by_us = (steps_to_advance_precise
-                        .map_val(Real::from_lit((PULSE_WIDTH_US) as i64, 0)) / (steps_to_advance_precise + TVector::one())
-                    ).rdp(0);
-                    let v: TVector<Real> = _pulses_by_us;
-                    let default = PULSE_WITDH_TICKS as u64 + 1;
+                    let _pulses_by_period = (steps_to_advance_precise
+                        .map_val(Real::from_lit((PULSE_WITDH_TICKS) as i64, 0)) / (steps_to_advance_precise + TVector::one())
+                    ).floor();
+                    let v: TVector<Real> = _pulses_by_period;
+                    hwa::debug!("\ttick #{} width {} ticks, ustep per {}", tick_id, PULSE_WITDH_TICKS, v);
+                    let default = PULSE_WITDH_TICKS as u64 + 10;
                     let vx = [
                         ChannelStatus::new(ChannelName::X, v.x.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
                         ChannelStatus::new(ChannelName::Y, v.y.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
@@ -170,6 +208,8 @@ pub async fn stepper_task(
                         vx,
                     );
 
+                    let mut x = 0;
+
                     let tx = embassy_time::Instant::now();
                     loop {
                         match multi_timer.next() {
@@ -177,47 +217,64 @@ pub async fn stepper_task(
                                 break;
                             },
                             Some(ChannelName::X) => {
+                                x += 1;
                                 drv.pins.x_enable_pin.set_low();
-                                drv.pins.x_dir_pin.set_high();
-
+                                match &axial_dirs.x {
+                                    true => drv.pins.x_dir_pin.set_high(),
+                                    false => drv.pins.x_dir_pin.set_low(),
+                                }
                                 drv.pins.x_step_pin.set_high();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                                 drv.pins.x_step_pin.set_low();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                             },
                             Some(ChannelName::Y) => {
                                 drv.pins.y_enable_pin.set_low();
-                                drv.pins.y_dir_pin.set_high();
+                                match &axial_dirs.y {
+                                    true => drv.pins.y_dir_pin.set_high(),
+                                    false => drv.pins.y_dir_pin.set_low(),
+                                }
 
                                 drv.pins.y_step_pin.set_high();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                                 drv.pins.y_step_pin.set_low();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                             },
                             Some(ChannelName::Z) => {
                                 drv.pins.z_enable_pin.set_low();
-                                drv.pins.z_dir_pin.set_high();
+                                match &axial_dirs.z {
+                                    true => drv.pins.z_dir_pin.set_high(),
+                                    false => drv.pins.z_dir_pin.set_low(),
+                                }
 
                                 drv.pins.z_step_pin.set_high();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                                 drv.pins.z_step_pin.set_low();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                             },
                             Some(ChannelName::E) => {
                                 drv.pins.e_enable_pin.set_low();
-                                drv.pins.e_dir_pin.set_high();
+                                match &axial_dirs.e {
+                                    true => drv.pins.e_dir_pin.set_high(),
+                                    false => drv.pins.e_dir_pin.set_low(),
+                                }
 
                                 drv.pins.e_step_pin.set_high();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                                 drv.pins.e_step_pin.set_low();
-                                block_for(one_ns);
+                                s_block_for(one_us);
                             },
                         }
                     }
+                    xadv += x;
                     hwa::debug!("\tInterpolation task took {} ms", tx.elapsed().as_millis());
+                    hwa::debug!("\ttick #{} x {} (Acc: {})", tick_id, x, xadv);
 
                     if estimated_position >= expected_advance {
-                        hwa::info!("<< Segment completed. axial_pos: {}", axial_pos.rdp(4));
+                        let rpos = Real::from_lit(xadv, 0) / to_ustep;
+                        hwa::info!("<< Segment completed. axial_pos: {} mm real_pos: X {} mm", axial_pos.rdp(4), rpos  );
+
+
                         motion_planner.consume_current_segment_data().await;
                         motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
                         break;
