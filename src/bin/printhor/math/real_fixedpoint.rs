@@ -46,6 +46,12 @@ impl Real {
     pub(crate) const fn is_zero(&self) -> bool {
         self.0.is_zero()
     }
+
+    #[inline]
+    pub(crate) const fn is_positive(&self) -> bool {
+        !self.0.is_sign_negative()
+    }
+
     #[inline]
     pub(crate) const fn one() -> Self {
         Real(dec!(1.0))

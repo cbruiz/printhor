@@ -39,6 +39,7 @@ pub trait RealOps
     fn pow(&self, power: i32) -> Self;
     fn sqrt(&self) -> Option<Self> where Self: Sized;
     fn rdp(&self, digits: u32) -> Self;
+    fn floor(&self) -> Self;
 }
 
 #[derive(Copy, Clone)]
@@ -429,6 +430,18 @@ impl<T> TVector<T>
         }
     }
 
+    #[allow(unused)]
+    pub fn floor(&self) -> TVector<T>
+    where T: RealOps
+    {
+        Self {
+            x: self.x.map_or_else(|| None, |v| Some(v.floor())),
+            y: self.y.map_or_else(|| None, |v| Some(v.floor())),
+            z: self.z.map_or_else(|| None, |v| Some(v.floor())),
+            e: self.e.map_or_else(|| None, |v| Some(v.floor())),
+        }
+    }
+
 
 }
 
@@ -763,6 +776,9 @@ impl RealOps for f32 {
         let dd =  10.0f32.powi(digits as i32);
         (self * dd).round() * dd
     }
+    fn floor(&self) -> Self {
+        <f32 as FloatCore>::floor(*self)
+    }
 }
 
 
@@ -798,6 +814,10 @@ impl RealOps for Real {
 
     fn rdp(&self, digits: u32) -> Self {
         Real::round_dp(self, digits)
+    }
+
+    fn floor(&self) -> Self {
+        Real::floor(self)
     }
 }
 
