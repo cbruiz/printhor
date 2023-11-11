@@ -12,27 +12,12 @@ pub fn new_screen<D,C>(display: &Display<D>, init_f: impl FnOnce(&mut Screen::<C
 
 #[allow(unused)]
 pub struct MotionScreen {
-    //btn_x_plus: Btn<Self>,
-    //btn_x_minus: Btn<Self>,
-    //btn_y_plus: Btn<Self>,
-    //btn_y_minus: Btn<Self>,
     dummy_label: Label<Self>,
-    //btn_z_plus: Btn<Self>,
-    //btn_z_minus: Btn<Self>,
-    //speed_slider: Slider<Self>,
-    //speed_label: Label<Self>,
-    //position_label: Label<Self>,
-    //btn_home: Btn<Self>,
-
-    //task_runner: &'static TaskRunner<Task>,
-    //zaxis: &'static zaxis::MotionControlAsync,
 }
 
 impl MotionScreen {
     pub fn new(
         screen: &mut Screen::<Self>,
-        //task_runner: &'static mut TaskRunner<Task>,
-        //zaxis: &'static zaxis::MotionControlAsync,
     ) -> Self {
         use lvgl::widgets::*;
         use lvgl::style::*;
@@ -93,18 +78,10 @@ impl MotionScreen {
 
         Self {
             dummy_label,
-            //btn_x_plus: (),
-            //btn_x_minus: (),
-            //btn_y_plus: (),
-            //btn_y_minus: (),
-            //btn_z_plus,
-            // btn_z_minus, btn_home,
-            //speed_label, position_label, speed_slider,
         }
     }
     #[allow(unused)]
     pub async fn refresh(&mut self) {
-        //let _x = MACHINE_STATE.hotend_temp.wait().await;
         self.dummy_label.set_text(&CStr::from_bytes_with_nul(b"TEST\0").unwrap());
     }
 }

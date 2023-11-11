@@ -6,16 +6,16 @@ pub mod io;
 use alloc_cortex_m::CortexMHeap;
 use embassy_executor::Spawner;
 use embassy_stm32::Config;
-#[cfg(any(feature = "with-usart2", feature = "with-usbserial", feature="with-trinamic"))]
+#[cfg(any(feature = "with-uart-port-1", feature = "with-usbserial", feature="with-trinamic"))]
 use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-usart2", feature="with-trinamic"))]
+#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart;
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 #[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
 use embassy_stm32::gpio::OutputType;
 use embassy_stm32::time::{hz};
 use embassy_sync::mutex::Mutex;
-#[cfg(any(feature = "with-usart2", feature="with-trinamic"))]
+#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
 #[cfg(feature = "with-usbserial")]
 use embassy_stm32::usb;

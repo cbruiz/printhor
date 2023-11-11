@@ -5,11 +5,11 @@ edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction native std for debugging/playgrounding/analysis"
 readme = "README.md"
-#repository = "https://github.com/"
+repository = "https://github.com/printhor"
 keywords = ["hardware", "abstraction"]
 license = "MIT"
-documentation = "https://docs.rs/printhor_hwi"
-homepage = "https://github.com/cbruiz/printhor_hwi"
+#documentation = "https://docs.rs/[TBD]"
+homepage = "https://github.com/cbruiz/printhor"
 
 [lib]
 
