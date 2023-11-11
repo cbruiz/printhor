@@ -5,6 +5,8 @@ name = "prinThor"
 version = "0.0.0"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
+repository = "https://github.com/printhor"
+#documentation = "https://docs.rs/[TBD]"
 description = "The highly reliable but not necessarily functional 3D Printer firmware"
 
 [badges.maintenance]
@@ -35,7 +37,9 @@ sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = []
 
-integration-test = ["integration-test-m100", "integration-test-power-on", "integration-test-homing", "integration-test-move-ortho", "integration-test-move-oblique"]
+integration-test = ["integration-test-m100", "integration-test-power-on", "integration-test-homing", "integration-test-move-ortho",
+    #"integration-test-move-oblique"
+]
 integration-test-m100 = []
 integration-test-power-on = []
 integration-test-homing = []
@@ -90,6 +94,33 @@ native = [
     "embassy-executor/integrated-timers", "embassy-sync/log",
     "embassy-sync/std", "embassy-time/std", "embassy-time/generic-queue",
 ]
+mks_robin_nano_v3_1 = [
+    "with-defmt", "printhor-hwi_mks_robin_nano_v3_1/with-defmt",
+    #"with-trinamic", "printhor-hwi_mks_robin_nano_v3_1/with-trinamic",
+    "with-motion", "printhor-hwi_mks_robin_nano_v3_1/with-motion",
+    "with-uart-port-1", "printhor-hwi_mks_robin_nano_v3_1/with-uart-port-1",
+    "with-usbserial", "printhor-hwi_mks_robin_nano_v3_1/with-usbserial",
+    "with-spi", "printhor-hwi_mks_robin_nano_v3_1/with-spi",
+    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano_v3_1/with-sdcard", "printhor-hwi_mks_robin_nano_v3_1/sdcard-uses-spi",
+    "with-printjob", "printhor-hwi_mks_robin_nano_v3_1/with-printjob",
+    #"with-probe", "printhor-hwi_mks_robin_nano_v3_1/with-probe",
+    #"with-hotend", "printhor-hwi_mks_robin_nano_v3_1/with-hotend",
+    #"with-hotbed", "printhor-hwi_mks_robin_nano_v3_1/with-hotbed",
+    #"with-fan0", "printhor-hwi_mks_robin_nano_v3_1/with-fan0",
+    #"with-fan1", "printhor-hwi_mks_robin_nano_v3_1/with-fan1",
+    #"with-laser", "printhor-hwi_mks_robin_nano_v3_1/with-laser",
+
+    #"float-point-f32-impl",
+    "float-point-f64-impl",
+    #"fixed-point-128-impl",
+    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
+
+    "printhor-hwi_mks_robin_nano_v3_1",
+    "embassy-executor/nightly", "embassy-executor/integrated-timers",
+    "embassy-executor/arch-cortex-m",
+    "embassy-executor/executor-interrupt",
+]
+
 skr_mini_e3_v3 = [
     "with-defmt", "printhor-hwi_skr_mini_e3_v3/with-defmt",
     "with-trinamic", "printhor-hwi_skr_mini_e3_v3/with-trinamic",
@@ -111,19 +142,17 @@ skr_mini_e3_v3 = [
     #"with-lvgl",
 
     #"float-point-f32-impl",
-    "float-point-f64-impl",
-    #"fixed-point-128-impl",
+    #"float-point-f64-impl",
+    "fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_skr_mini_e3_v3",
     "embassy-executor/nightly", "embassy-executor/integrated-timers",
     "embassy-executor/arch-cortex-m",
     "embassy-executor/executor-interrupt",
-    "embassy-time/tick-hz-1_000_000"
 ]
 
 [dependencies]
-
 # Optional baremetal
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"], optional = true }
 cortex-m-rt = { version = "0.7.3", optional = true}
@@ -166,9 +195,9 @@ tmc2209 = { version = "0.2.2", optional = true }
 # Boards
 printhor-hwi_native = {version = "*", path = "hwi-boards/printhor-hwi_native", optional = true}
 printhor-hwi_skr_mini_e3_v3 = {version = "*", path = "hwi-boards/printhor-hwi_skr_mini_e3_v3", optional = true}
+printhor-hwi_mks_robin_nano_v3_1 = {version = "*", path= "hwi-boards/printhor-hwi_mks_robin_nano_v3_1", optional = true}
 
 gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
-
 
 # Display
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }

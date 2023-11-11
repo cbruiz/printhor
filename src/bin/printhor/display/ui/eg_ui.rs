@@ -9,8 +9,6 @@ use embedded_graphics::text::Text;
 use embedded_graphics_core::prelude::DrawTarget;
 #[cfg(feature = "ili9341_spi")]
 use crate::display::ili9341_spi::RawDisplay;
-
-
 pub struct EmbeddedGraphicsUI {
     #[allow(unused)]
     event_bus: &'static EventBusRef,
