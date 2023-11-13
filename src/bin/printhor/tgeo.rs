@@ -115,6 +115,16 @@ where T: ArithmeticOps
 
     #[inline]
     #[allow(unused)]
+    pub fn increment(&mut self, coord_idx: CoordSel, val: T) -> &Self {
+        if coord_idx.contains(CoordSel::X) { self.x = self.x.and_then(|v| Some(v + val)) }
+        if coord_idx.contains(CoordSel::Y) { self.y = self.y.and_then(|v| Some(v + val)) }
+        if coord_idx.contains(CoordSel::Z) { self.z = self.z.and_then(|v| Some(v + val)) }
+        if coord_idx.contains(CoordSel::E) { self.e = self.e.and_then(|v| Some(v + val)) }
+        self
+    }
+
+    #[inline]
+    #[allow(unused)]
     pub fn assign(&mut self, coord_idx: CoordSel, other: &Self) -> &Self {
         if coord_idx.contains(CoordSel::X) { self.x = other.x }
         if coord_idx.contains(CoordSel::Y) { self.y = other.y }

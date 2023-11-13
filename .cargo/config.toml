@@ -11,7 +11,7 @@ DEFMT_LOG = "info"
 [profile.dev.package."*"]
 codegen-units = 1
 opt-level = "z"
-debug = 0
+debug = 2
 debug-assertions = false
 overflow-checks = false
 

@@ -42,9 +42,6 @@ pub mod usbserial {
             let config_descriptor = CONFIG_DESCRIPTOR_ST.init("", [0; 256]);
             static BOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
             let bos_descriptor = BOS_DESCRIPTOR_ST.init("", [0; 256]);
-            static MSOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let msos_descriptor = MSOS_DESCRIPTOR_ST.init("", [0; 256]);
-
             static CONTROL_BUF_ST: crate::board::TrackedStaticCell<[u8; 64]> = crate::board::TrackedStaticCell::new();
             let control_buf = CONTROL_BUF_ST.init("", [0; 64]);
 
@@ -56,7 +53,6 @@ pub mod usbserial {
                 device_descriptor,
                 config_descriptor,
                 bos_descriptor,
-                msos_descriptor,
                 control_buf,
             );
 
@@ -196,11 +192,13 @@ pub mod uart_port1 {
 
         fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
 
+            //defmt::trace!("poll()");
             let this = self.get_mut();
 
             if this.current_byte_index < this.bytes_read {
                 let byte = this.buffer[this.current_byte_index as usize];
                 this.current_byte_index += 1;
+                //defmt::trace!("poll() -> Ready buff");
                 Poll::Ready(Some(Ok(byte)))
             }
             else {
@@ -214,6 +212,7 @@ pub mod uart_port1 {
                     Poll::Ready(rst) => {
                         match rst {
                             Ok(n) => {
+                                //defmt::trace!("poll() -> Got {} bytes", n);
                                 this.bytes_read = n as u8;
                                 if n > 0 {
                                     let byte = this.buffer[this.current_byte_index as usize];
@@ -225,11 +224,15 @@ pub mod uart_port1 {
                                 }
                             }
                             Err(_e) => {
+                                //defmt::trace!("poll() -> Error");
                                 Poll::Ready(None)
                             }
                         }
                     }
-                    Poll::Pending => Poll::Pending
+                    Poll::Pending => {
+                        //defmt::debug!("poll() -> Pending");
+                        Poll::Pending
+                    }
                 }
             }
         }
