@@ -5,7 +5,7 @@ use embassy_time::{Duration, with_timeout};
 use crate::{hwa, hwa::controllers::{DeferEvent, DeferType}};
 #[allow(unused)]
 use crate::math::{Real, ONE_MILLION, ONE_THOUSAND};
-use crate::tgeo::TVector;
+use crate::tgeo::{CoordSel, TVector};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 
@@ -18,6 +18,7 @@ pub enum ChannelName {
     X,
     Y,
     Z,
+    #[cfg(feature="has-extruder")]
     E
 }
 
@@ -87,15 +88,20 @@ pub struct Directions {
     pub x: bool,
     pub y: bool,
     pub z: bool,
+    #[cfg(feature="has-extruder")]
     pub e: bool,
 }
 
 impl Directions {
-    pub const fn new(x: bool, y: bool, z: bool, e: bool) -> Self {
+    pub const fn new(x: bool, y: bool, z: bool,
+                     #[cfg(feature="has-extruder")]
+                     e: bool
+    ) -> Self {
         Self {
             x,
             y,
             z,
+            #[cfg(feature="has-extruder")]
             e,
         }
     }
@@ -132,7 +138,7 @@ pub async fn stepper_task(
             // Process segment plan
             Ok(Some(segment)) => {
 
-                let mut xadv = 0;
+                let mut usteps_advanced: TVector<u32> = TVector::zero();
                 let mut tick_id = 1;
 
                 let to_ustep: Real = Real::from_lit(32, 0);
@@ -175,6 +181,7 @@ pub async fn stepper_task(
                             dir_ref.x.and_then(|v| Some(v.is_positive())).unwrap_or(false),
                             dir_ref.y.and_then(|v| Some(v.is_positive())).unwrap_or(false),
                             dir_ref.z.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                            #[cfg(feature="has-extruder")]
                             dir_ref.e.and_then(|v| Some(v.is_positive())).unwrap_or(false),
                         )
                     };
@@ -200,6 +207,7 @@ pub async fn stepper_task(
                         ChannelStatus::new(ChannelName::X, v.x.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
                         ChannelStatus::new(ChannelName::Y, v.y.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
                         ChannelStatus::new(ChannelName::Z, v.z.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
+                        #[cfg(feature="has-extruder")]
                         ChannelStatus::new(ChannelName::E, v.e.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
                     ];
 
@@ -208,8 +216,6 @@ pub async fn stepper_task(
                         vx,
                     );
 
-                    let mut x = 0;
-
                     let tx = embassy_time::Instant::now();
                     loop {
                         match multi_timer.next() {
@@ -217,8 +223,8 @@ pub async fn stepper_task(
                                 break;
                             },
                             Some(ChannelName::X) => {
-                                x += 1;
-                                drv.pins.x_enable_pin.set_low();
+                                drv.pins.enable_x_stepper();
+                                usteps_advanced.increment(CoordSel::X, 1u32);
                                 match &axial_dirs.x {
                                     true => drv.pins.x_dir_pin.set_high(),
                                     false => drv.pins.x_dir_pin.set_low(),
@@ -229,36 +235,37 @@ pub async fn stepper_task(
                                 s_block_for(one_us);
                             },
                             Some(ChannelName::Y) => {
-                                drv.pins.y_enable_pin.set_low();
+                                drv.pins.enable_y_stepper();
+                                usteps_advanced.increment(CoordSel::Y, 1u32);
                                 match &axial_dirs.y {
                                     true => drv.pins.y_dir_pin.set_high(),
                                     false => drv.pins.y_dir_pin.set_low(),
                                 }
-
                                 drv.pins.y_step_pin.set_high();
                                 s_block_for(one_us);
                                 drv.pins.y_step_pin.set_low();
                                 s_block_for(one_us);
                             },
                             Some(ChannelName::Z) => {
-                                drv.pins.z_enable_pin.set_low();
+                                drv.pins.enable_z_stepper();
+                                usteps_advanced.increment(CoordSel::Z, 1u32);
                                 match &axial_dirs.z {
                                     true => drv.pins.z_dir_pin.set_high(),
                                     false => drv.pins.z_dir_pin.set_low(),
                                 }
-
                                 drv.pins.z_step_pin.set_high();
                                 s_block_for(one_us);
                                 drv.pins.z_step_pin.set_low();
                                 s_block_for(one_us);
                             },
+                            #[cfg(feature="has-extruder")]
                             Some(ChannelName::E) => {
-                                drv.pins.e_enable_pin.set_low();
+                                drv.pins.enable_e_stepper();
+                                usteps_advanced.increment(CoordSel::E, 1u32);
                                 match &axial_dirs.e {
                                     true => drv.pins.e_dir_pin.set_high(),
                                     false => drv.pins.e_dir_pin.set_low(),
                                 }
-
                                 drv.pins.e_step_pin.set_high();
                                 s_block_for(one_us);
                                 drv.pins.e_step_pin.set_low();
@@ -266,13 +273,12 @@ pub async fn stepper_task(
                             },
                         }
                     }
-                    xadv += x;
                     hwa::debug!("\tInterpolation task took {} ms", tx.elapsed().as_millis());
-                    hwa::debug!("\ttick #{} x {} (Acc: {})", tick_id, x, xadv);
+                    hwa::debug!("\ttick #{} usteps_adv: {}", tick_id, usteps_advanced);
 
                     if estimated_position >= expected_advance {
-                        let rpos = Real::from_lit(xadv, 0) / to_ustep;
-                        hwa::info!("<< Segment completed. axial_pos: {} mm real_pos: X {} mm", axial_pos.rdp(4), rpos  );
+                        let rpos = usteps_advanced.map_coords(|c| {Some(Real::from_lit(c as i64, 0))}) / to_ustep;
+                        hwa::info!("<< Segment completed. axial_pos: {} mm real_pos: {} mm", axial_pos.rdp(4), rpos  );
 
 
                         motion_planner.consume_current_segment_data().await;
@@ -303,10 +309,7 @@ pub async fn stepper_task(
                 if !steppers_off {
                     hwa::info!("Timeout. Powering steppers off");
                     let mut drv = motion_planner.motion_driver.lock().await;
-                    drv.pins.x_enable_pin.set_high();
-                    drv.pins.y_enable_pin.set_high();
-                    drv.pins.z_enable_pin.set_high();
-                    drv.pins.e_enable_pin.set_high();
+                    drv.pins.disable_all_steppers();
                     steppers_off = true;
                 }
             }

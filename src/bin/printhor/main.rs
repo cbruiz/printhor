@@ -267,44 +267,13 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     });
     #[cfg(feature = "with-motion")]
     {
-        {
-            let mut md = motion_planer.motion_driver.lock().await;
-            md.pins.x_enable_pin.set_high();
-            md.pins.y_enable_pin.set_high();
-            md.pins.z_enable_pin.set_high();
-            md.pins.e_enable_pin.set_high();
-            //embassy_time::Timer::after_millis(500).await;
+        motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(400), Some(400), Some(400), Some(400))).await;
+        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(50), Some(50), Some(50), Some(50))).await;
+        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(100), Some(100), Some(100), Some(100))).await;
+        motion_planer.set_default_travel_speed(400).await;
+        motion_planer.set_flow_rate(100).await;
+        motion_planer.set_speed_rate(100).await;
 
-            #[cfg(feature = "with-trinamic")]
-            if md.trinamic_controller.init().await.is_err() {
-                hwa::error!("Unable to setup trinamic steppers")
-            }
-
-            motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(400), Some(400), Some(400), Some(400))).await;
-            motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(50), Some(50), Some(50), Some(50))).await;
-            motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(100), Some(100), Some(100), Some(100))).await;
-            motion_planer.set_default_travel_speed(400).await;
-            motion_planer.set_flow_rate(100).await;
-            motion_planer.set_speed_rate(100).await;
-            /*
-            {
-                let mut md = mp.motion_driver.lock().await;
-
-                md.x_enable_pin.set_high();
-                md.y_enable_pin.set_high();
-                md.z_enable_pin.set_high();
-                md.e_enable_pin.set_high();
-                embassy_time::Timer::after_millis(1000).await;
-
-                md.x_enable_pin.set_low();
-                md.y_enable_pin.set_low();
-                md.z_enable_pin.set_low();
-                md.e_enable_pin.set_low();
-
-                embassy_time::Timer::after_millis(1000).await;
-                }
-               */
-        }
         hwa::launch_high_priotity( stepper_isr::stepper_task(
             motion_planer, _wd
         )).and_then(|_| {

@@ -63,6 +63,34 @@ pub struct MotionPins {
 }
 
 #[cfg(feature = "with-motion")]
+impl MotionPins {
+    #[inline]
+    pub fn enable_x_stepper(&mut self) {
+        self.x_enable_pin.set_low();
+    }
+    #[inline]
+    pub fn enable_y_stepper(&mut self) {
+        self.y_enable_pin.set_low();
+    }
+    #[inline]
+    pub fn enable_z_stepper(&mut self) {
+        self.z_enable_pin.set_low();
+    }
+    #[inline]
+    pub fn enable_e_stepper(&mut self) {
+        self.e_enable_pin.set_low();
+    }
+    #[inline]
+    pub fn disable_all_steppers(&mut self) {
+        self.x_enable_pin.set_high();
+        self.y_enable_pin.set_high();
+        self.z_enable_pin.set_high();
+        self.e_enable_pin.set_high();
+    }
+}
+
+
+#[cfg(feature = "with-motion")]
 pub struct MotionDevice {
 
     #[cfg(feature = "with-trinamic")]

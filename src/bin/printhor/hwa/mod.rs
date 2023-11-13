@@ -8,6 +8,7 @@ pub use crate::control::processor::GCodeProcessor;
 pub use defmt;
 
 #[cfg(feature = "with-defmt")]
+#[allow(unused)]
 pub use defmt::{trace, debug, info, warn, error};
 
 pub mod devices;

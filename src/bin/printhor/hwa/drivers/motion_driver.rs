@@ -59,7 +59,7 @@ impl MotionDriver {
         #[cfg(feature="with-laser")]
         let _on = self.laser_controller.lock().await.is_on();
 
-        self.pins.z_enable_pin.set_low();
+        self.pins.enable_z_stepper();
 
         let mut num_pulses = 0u32;
         let mut reached = false;

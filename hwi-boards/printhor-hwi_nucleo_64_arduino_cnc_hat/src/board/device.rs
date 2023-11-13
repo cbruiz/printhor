@@ -1,10 +1,13 @@
-use embassy_stm32::wdg;
-use embassy_stm32::gpio::Output;
-use embassy_stm32::timer::simple_pwm::SimplePwm;
-use embassy_stm32::exti::ExtiInput;
+#[allow(unused)]
+use embassy_stm32::{
+    wdg,
+    gpio::{Input, Output},
+    exti::ExtiInput,
+    timer::simple_pwm::SimplePwm
+};
 
 #[cfg(feature = "with-usbserial")]
-pub type USBDrv = embassy_stm32::usb::Driver<'static, embassy_stm32::peripherals::USB>;
+pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
 
 #[cfg(feature = "with-usbserial")]
 pub use crate::board::io::usbserial::*;
@@ -12,15 +15,15 @@ pub use crate::board::io::usbserial::*;
 #[cfg(feature = "with-uart-port-1")]
 pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
     embassy_stm32::peripherals::USART2,
-    embassy_stm32::peripherals::DMA2_CH2, embassy_stm32::peripherals::DMA2_CH1
+    embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6
 >;
 #[cfg(feature = "with-uart-port-1")]
 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA2_CH2
+    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH7
 >;
 #[cfg(feature = "with-uart-port-1")]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA2_CH1
+    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
 >;
 #[cfg(feature = "with-uart-port-1")]
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
@@ -38,8 +41,8 @@ pub type UartTrinamic = Uart4;
 
 #[cfg(feature = "with-spi")]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
-    embassy_stm32::peripherals::SPI1,
-    embassy_stm32::peripherals::DMA1_CH2, embassy_stm32::peripherals::DMA1_CH1
+    embassy_stm32::peripherals::SPI3,
+    embassy_stm32::peripherals::DMA1_CH5, embassy_stm32::peripherals::DMA1_CH0
 >;
 
 #[cfg(feature = "with-spi")]
@@ -55,7 +58,7 @@ pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
 pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 
 #[cfg(feature = "with-sdcard")]
-pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PA4>;
+pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC9>;
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
 pub trait AdcTrait = embassy_stm32::adc::Instance;
@@ -74,9 +77,6 @@ pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static,
 
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
 
-#[cfg(feature = "with-laser")]
-pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
-
 pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
 pub type PwmFan0 = PwmFan0Fan1HotendHotbed;
@@ -90,20 +90,6 @@ pub type Watchdog = wdg::IndependentWatchdog<'static,
     embassy_stm32::peripherals::IWDG
 >;
 
-#[allow(non_camel_case_types)]
-pub type DISPLAY_SER_RST_OUTPUT = Output<'static, embassy_stm32::peripherals::PC1>;
-#[allow(non_camel_case_types)]
-pub type DISPLAY_SER_CS_OUTPUT = Output<'static, embassy_stm32::peripherals::PB0>;
-#[allow(non_camel_case_types)]
-pub type DISPLAY_SER_DC_OUTPUT = Output<'static, embassy_stm32::peripherals::PA4>;
-
-#[cfg(feature = "ili9341_spi")]
-pub struct DisplayDevice {
-    pub interface: SpiControllerRef,
-    pub rst: DISPLAY_SER_RST_OUTPUT,
-    pub cs: DISPLAY_SER_CS_OUTPUT,
-    pub dc: DISPLAY_SER_DC_OUTPUT,
-}
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
@@ -147,51 +133,37 @@ pub struct LaserPeripherals {
 
 #[cfg(feature = "with-motion")]
 pub struct MotionPins {
-    pub x_enable_pin: Output<'static, embassy_stm32::peripherals::PB14>,
-    pub y_enable_pin: Output<'static, embassy_stm32::peripherals::PB11>,
-    pub z_enable_pin: Output<'static, embassy_stm32::peripherals::PB1>,
-    pub e_enable_pin: Output<'static, embassy_stm32::peripherals::PD1>,
+    pub all_enable_pin: Output<'static, embassy_stm32::peripherals::PA9>, // D8
 
-    pub x_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC0>,
-    pub y_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC1>,
-    pub z_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC2>,
-    pub e_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC15>,
+    pub x_endstop_pin: Input<'static, embassy_stm32::peripherals::PC7>, // D9
+    pub y_endstop_pin: Input<'static, embassy_stm32::peripherals::PB6>, // D10
+    pub z_endstop_pin: Input<'static, embassy_stm32::peripherals::PA7>, // D11
 
-    pub x_step_pin: Output<'static, embassy_stm32::peripherals::PB13>,
-    pub y_step_pin: Output<'static, embassy_stm32::peripherals::PB10>,
-    pub z_step_pin: Output<'static, embassy_stm32::peripherals::PB0>,
-    pub e_step_pin: Output<'static, embassy_stm32::peripherals::PB3>,
+    pub x_step_pin: Output<'static, embassy_stm32::peripherals::PA10>, // D2
+    pub y_step_pin: Output<'static, embassy_stm32::peripherals::PB3>, // D3
+    pub z_step_pin: Output<'static, embassy_stm32::peripherals::PB5>, // D4
 
-    pub x_dir_pin: Output<'static, embassy_stm32::peripherals::PB12>,
-    pub y_dir_pin: Output<'static, embassy_stm32::peripherals::PB2>,
-    pub z_dir_pin: Output<'static, embassy_stm32::peripherals::PC5>,
-    pub e_dir_pin: Output<'static, embassy_stm32::peripherals::PB4>,
+    pub x_dir_pin: Output<'static, embassy_stm32::peripherals::PB4>, // D5
+    pub y_dir_pin: Output<'static, embassy_stm32::peripherals::PB10>, // D6
+    pub z_dir_pin: Output<'static, embassy_stm32::peripherals::PA8>, // D7
 }
 
 #[cfg(feature = "with-motion")]
 impl MotionPins {
     #[inline]
     pub fn enable_x_stepper(&mut self) {
-        self.x_enable_pin.set_low();
+        self.all_enable_pin.set_low();
     }
     #[inline]
     pub fn enable_y_stepper(&mut self) {
-        self.y_enable_pin.set_low();
+        self.all_enable_pin.set_low();
     }
     #[inline]
     pub fn enable_z_stepper(&mut self) {
-        self.z_enable_pin.set_low();
+        self.all_enable_pin.set_low();
     }
-    #[inline]
-    pub fn enable_e_stepper(&mut self) {
-        self.e_enable_pin.set_low();
-    }
-    #[inline]
     pub fn disable_all_steppers(&mut self) {
-        self.x_enable_pin.set_high();
-        self.y_enable_pin.set_high();
-        self.z_enable_pin.set_high();
-        self.e_enable_pin.set_high();
+        self.all_enable_pin.set_high();
     }
 }
 
