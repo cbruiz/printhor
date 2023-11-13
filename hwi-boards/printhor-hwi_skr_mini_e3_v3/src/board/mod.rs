@@ -145,7 +145,7 @@ pub fn init() -> embassy_stm32::Peripherals {
     config.rcc.mux = ClockSrc::PLL(
         // 8 / 1 * 24 / 3 = 64 MHz
         PllConfig {
-            source: PllSrc::HSE(hz(8_000_000)),
+            source: PllSource::HSE(hz(8_000_000)),
             m: Pllm::DIV1,
             n: Plln::MUL24,
             r: Pllr::DIV3,
@@ -170,11 +170,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         embassy_stm32::pac::RCC.ccipr2().write(|w| {
             w.set_usbsel(embassy_stm32::pac::rcc::vals::Usbsel::HSI48);
         });
-
-        /*
-        let _dp = Output::new(&mut p.PA12, Level::Low, Speed::Low);
-        embassy_time::Timer::after_millis(10).await;
-        */
 
         defmt::info!("Creating USB Driver");
         let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
@@ -239,13 +234,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     };
     #[cfg(feature = "with-spi")]
     defmt::info!("SPI done");
-
-    /*
-    embassy_stm32::pac::RCC.apbenr1().write(|w| {
-        w.set_ucpd1en(true);
-        w.set_usben(true);
-    });
-    */
 
     #[cfg(feature = "with-sdcard")]
     let (sdcard_device, sdcard_cs_pin) = {

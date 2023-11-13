@@ -114,8 +114,8 @@ mks_robin_nano_v3_1 = [
     #"with-laser", "printhor-hwi_mks_robin_nano_v3_1/with-laser",
 
     #"float-point-f32-impl",
-    "float-point-f64-impl",
-    #"fixed-point-128-impl",
+    #"float-point-f64-impl",
+    "fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_mks_robin_nano_v3_1",
@@ -123,11 +123,10 @@ mks_robin_nano_v3_1 = [
     "embassy-executor/arch-cortex-m",
     "embassy-executor/executor-interrupt",
 ]
-
 nucleo_64_arduino_cnc_hat = [
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     #"with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-trinamic",
-    "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
+    #"with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     "with-uart-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-uart-port-1",
     #"with-usbserial", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-usbserial",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
@@ -141,8 +140,8 @@ nucleo_64_arduino_cnc_hat = [
     #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
 
     #"float-point-f32-impl",
-    "float-point-f64-impl",
-    #"fixed-point-128-impl",
+    #"float-point-f64-impl",
+    "fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_nucleo_64_arduino_cnc_hat",
@@ -150,6 +149,8 @@ nucleo_64_arduino_cnc_hat = [
     "embassy-executor/arch-cortex-m",
     "embassy-executor/executor-interrupt",
 ]
+nucleo64-l476rg = ["printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg"]
+nucleo64-f410rb = ["printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-f410rb"]
 
 skr_mini_e3_v3 = [
     "with-defmt", "printhor-hwi_skr_mini_e3_v3/with-defmt",
@@ -182,23 +183,25 @@ skr_mini_e3_v3 = [
     "embassy-executor/executor-interrupt",
 ]
 
+
+
 [dependencies]
 # Optional baremetal
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"], optional = true }
 cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
-embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [], optional = true }
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [], optional = true }
+embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [], optional = true }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [], optional = true }
 
-defmt = {version = "0.3.4", optional = true}
+defmt = {version = "0.3.5", optional = true}
 panic-probe = { version = "0.3.1", features = ["print-defmt"], optional = true}
 defmt-rtt = { version = "0.4.0", optional = true }
 
 # Software
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = ["nightly"], optional = true }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["nightly"], optional = true }
 
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 embedded-hal = { version = "0.2.7", default-features = false, optional = true }
@@ -207,17 +210,17 @@ embedded-graphics = { version = "0.7.1", optional = true}
 display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}
 ili9341 = {version = "0.5.0", default-features = false, optional = true}
 
-futures = { version = "0.3.17", default-features = false, features = [] }
-heapless = { version = "0.7.5", default-features = false, features = [] }
+futures = { version = "0.3.29", default-features = false, features = [] }
+heapless = { version = "0.8.0", default-features = false, features = [] }
 
 async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization"}
 
 strum = { version = "0.24.1", default-features = false, features = ["derive"] }
-rust_decimal = { version = "1.29.1", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { version = "1.29.1" }
+rust_decimal = { version = "1.32.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { version = "1.32.0" }
 pid = { version = "4.0.0", default-features = false, features = []}
-num-traits = {version = "0.2.16", default-features = false, features = [] }
-micromath = { version = "2.0.0", default-features = false, features = []}
+num-traits = {version = "0.2.17", default-features = false, features = [] }
+micromath = { version = "2.1.0", default-features = false, features = []}
 
 # Steppers
 tmc2209 = { version = "0.2.2", optional = true }
@@ -228,7 +231,7 @@ printhor-hwi_skr_mini_e3_v3 = {version = "*", path = "hwi-boards/printhor-hwi_sk
 printhor-hwi_mks_robin_nano_v3_1 = {version = "*", path= "hwi-boards/printhor-hwi_mks_robin_nano_v3_1", optional = true}
 printhor-hwi_nucleo_64_arduino_cnc_hat = {version = "*", path= "hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat", optional = true}
 
-gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
+gnuplot = {version = "0.0.39", default-features = false, features=[], optional = true}
 
 # Display
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
@@ -242,6 +245,15 @@ bitflags = { version = "2.4.1", default-features = false, features = [] }
 
 [build-dependencies]
 #proc-macro2 = "1.0."
+
+[profile.dev]
+codegen-units = 1
+debug = 2
+strip = false
+debug-assertions = true
+opt-level = "z"
+lto = false
+panic = "unwind"
 
 [profile.release]
 codegen-units = 1

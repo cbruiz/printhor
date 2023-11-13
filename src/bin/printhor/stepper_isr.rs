@@ -278,8 +278,7 @@ pub async fn stepper_task(
 
                     if estimated_position >= expected_advance {
                         let rpos = usteps_advanced.map_coords(|c| {Some(Real::from_lit(c as i64, 0))}) / to_ustep;
-                        hwa::info!("<< Segment completed. axial_pos: {} mm real_pos: {} mm", axial_pos.rdp(4), rpos  );
-
+                        hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
 
                         motion_planner.consume_current_segment_data().await;
                         motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;

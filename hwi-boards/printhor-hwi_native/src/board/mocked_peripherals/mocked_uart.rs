@@ -2,26 +2,23 @@ use std::io::{stdout, Write};
 use embassy_executor::SendSpawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
-use embedded_io::asynch::Read;
-use crate::board::mocked_peripherals::native_serial::NativeSerialPort;
 use futures::Stream;
 use core::pin::Pin;
 use futures::task::Context;
 use futures::task::Poll;
 use futures::Future;
+use async_std::io::ReadExt;
 
 pub(crate) static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, 256> = Pipe::<CriticalSectionRawMutex, 256>::new();
 
 #[embassy_executor::task(pool_size=1)]
 pub async fn processor() {
 
-    let port = NativeSerialPort::new("/dev/stdin", None).unwrap();
-    let port = async_io::Async::new(port).unwrap();
-    let mut port = embedded_io::adapters::FromFutures::new(port);
+    let mut stream = async_std::io::stdin();
 
     loop {
         let mut buf = [0u8; 256];
-        let n = port.read(&mut buf).await.unwrap();
+        let n = stream.read(&mut buf).await.unwrap();
         SERIAL_PIPE.write(&buf[..n]).await;
     }
 }

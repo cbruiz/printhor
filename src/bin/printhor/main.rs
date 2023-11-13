@@ -56,7 +56,6 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     hwa::init_logger();
 
     hwa::info!("Init");
-
     let peripherals = hwa::init();
     hwa::info!("Peripherals initialized");
 

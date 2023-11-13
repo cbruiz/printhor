@@ -43,20 +43,19 @@ const UART_PORT1_BAUD_RATE: u32 = 115200;
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
 #[interrupt]
-unsafe fn RTC_ALARM() {
+unsafe fn RNG() {
     EXECUTOR_HIGH.on_interrupt()
 }
 
 #[inline]
 pub fn get_stepper_spawner() -> SendSpawner {
-    interrupt::RTC_ALARM.set_priority(Priority::P5);
-    interrupt::OTG_FS.set_priority(Priority::P6);
-    EXECUTOR_HIGH.start(interrupt::RTC_ALARM)
+    interrupt::RNG.set_priority(Priority::P5);
+    EXECUTOR_HIGH.start(interrupt::RNG)
 }
 
 #[inline]
 pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-    let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
+    let spawner = EXECUTOR_HIGH.start(interrupt::RNG);
     spawner.spawn(token).map_err(|_| ())
 }
 

@@ -240,14 +240,17 @@ impl GCodeProcessor
                 //let z1 = format!("O.K. M100; ({}/{} : {}% heap usage) + ({}/{} : {}% stack reservation)\n",
                 //                 heap_current, heap_max, (100.0f32 * heap_current as f32 / heap_max as f32),
                 //                 stack_current, stack_max, (100.0f32 * stack_current as f32 / stack_max as f32));
-                let z1 = format!("O.K. M100; ({}/{} {}% of heap usage) + ({}/{} {}% of stack reservation)\n",
+                let z1 = format!("echo: {}/{} {}% of heap usage\n",
                                  heap_current, heap_max,
                                  Real::from_f32(100.0f32 * heap_current as f32 / heap_max as f32).rdp(4),
+                );
+                self.write(z1.as_str()).await;
+
+                let z2 = format!("echo: {}/{} {}% of stack reservation\n",
                                  stack_current, stack_max,
                                  Real::from_f32(100.0f32 * stack_current as f32 / stack_max as f32).rdp(4),
                 );
-                hwa::info!("{}", z1.as_str());
-                let _ = self.write(z1.as_str()).await;
+                self.write(z2.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]

@@ -27,7 +27,7 @@ use embassy_stm32::spi;
 use embassy_stm32::exti::ExtiInput;
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
-use embassy_stm32::rcc::*;
+
 
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
@@ -125,25 +125,32 @@ pub(crate) fn init_heap() -> () {
 #[inline]
 pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
-    //crate::info!("Initializing...");
     #[cfg(feature="nucleo64-f410rb")]
         let config = {
-        let mut config = Config::default();
+        let config = Config::default();
         // TODO
         config
     };
     #[cfg(feature="nucleo64-l476rg")]
     let config = {
         let mut config = Config::default();
-        config.rcc.mux = ClockSrc::PLL1_R;
+
+        config.rcc.mux = embassy_stm32::rcc::ClockSrc::PLL1_R;
         config.rcc.hsi = true;
-        config.rcc.pll = Some(Pll {
-            source: PLLSource::HSI,
-            prediv: PllPreDiv::DIV1,
-            mul: PllMul::MUL10,
-            divp: None,
-            divq: None,
-            divr: Some(PllRDiv::DIV2), // sysclk 80Mhz (16 / 1 * 10 / 2)
+        /*
+        config.rcc.hse = None;
+        config.rcc.hse = Some(embassy_stm32::rcc::Hse {
+            freq: embassy_stm32::time::Hertz(24_000_000),
+            mode: embassy_stm32::rcc::HseMode::Oscillator,
+        });
+         */
+        config.rcc.pll = Some(embassy_stm32::rcc::Pll {
+            source: embassy_stm32::rcc::PllSource::HSI,
+            prediv: embassy_stm32::rcc::PllPreDiv::DIV1,
+            mul: embassy_stm32::rcc::PllMul::MUL10,
+            divp: None, //Some(embassy_stm32::rcc::PllPDiv::DIV2),
+            divq: None, // Some(embassy_stm32::rcc::PllQDiv::DIV2),
+            divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // sysclk 80Mhz (16 / 1 * 10 / 2)
         });
         config
     };
@@ -182,11 +189,18 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         cfg.parity = Parity::ParityNone;
         cfg.detect_previous_overrun = false;
 
+        #[cfg(feature = "nucleo64-f410rb")]
         let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART2,
                                                             p.PA3, p.PA2,
                                                             UartPort1Irqs,
-                                                            p.DMA1_CH7, p.DMA1_CH6,
+                                                            p.DMA1_CH6, p.DMA1_CH5,
                                                             cfg).expect("Ready").split();
+        #[cfg(feature = "nucleo64-l476rg")]
+        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART2,
+                                                                                        p.PA3, p.PA2,
+                                                                                        UartPort1Irqs,
+                                                                                        p.DMA1_CH7, p.DMA1_CH6,
+                                                                                        cfg).expect("Ready").split();
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let uart_port1_tx = ControllerRef::new(

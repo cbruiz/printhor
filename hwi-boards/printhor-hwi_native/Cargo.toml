@@ -15,7 +15,7 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Hardware device features
-with-uart-port-1 = ["embedded-io/async", "embedded-io/std", "embedded-io/futures", "async-io", "nix"]
+with-uart-port-1 = ["async-std", "nix/fs", "nix/term"]
 with-printjob = []
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]
@@ -38,19 +38,21 @@ with-display = [
 
 
 [dependencies]
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = ["std"] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = ["std", "generic-queue"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "8369f7614ab7c7d035c99cd17b3e7bb5b2abfa70", features = ["nightly"] }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["std"] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["std", "generic-queue"] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["nightly"] }
 
-nix = { version = "0.26.2", optional = true }
-embedded-io = { version = "0.4.0", optional = true }
-async-io = { version = "1.13.0", optional = true}
+nix = { version = "0.27.1", optional = true }
+embedded-io-async = { version = "0.6.0", optional = true }
+embedded-io = { version = "0.6.1", optional = true }
+
+async-std = { version = "*", optional = true}
 gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
 embedded-graphics-simulator = { version = "0.4.1", optional = true }
-log = { version = "0.4.19" }
-env_logger = { version = "0.10.0" }
+log = { version = "0.4.20" }
+env_logger = { version = "0.10.1" }
 
 embedded-hal = { version = "0.2.3", default-features = false, optional = true }
 embassy-usb = { version = "*", path = "../../ext/embassy/embassy-usb", features = [], optional = true }
@@ -58,7 +60,7 @@ embassy-usb = { version = "*", path = "../../ext/embassy/embassy-usb", features 
 printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common" }
 async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
 
-futures = { version = "0.3.17", default-features = false, features = [] }
+futures = { version = "0.3.29", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }

@@ -12,16 +12,29 @@ pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::periphe
 #[cfg(feature = "with-usbserial")]
 pub use crate::board::io::usbserial::*;
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
+pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
+    embassy_stm32::peripherals::USART2,
+    embassy_stm32::peripherals::DMA1_CH6, embassy_stm32::peripherals::DMA1_CH5
+>;
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
 pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
     embassy_stm32::peripherals::USART2,
     embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
+pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
+    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
+>;
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
     embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH7
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
+pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
+    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH5
+>;
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
     embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
 >;
@@ -29,6 +42,7 @@ pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
 #[cfg(feature = "with-uart-port-1")]
 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
+
 
 #[cfg(feature = "with-trinamic")]
 pub type Uart4 = crate::board::usart::Uart<'static,
@@ -74,15 +88,16 @@ pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
 
 pub trait PwmTrait = embassy_stm32::timer::CaptureCompare16bitInstance;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
+/*
+pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
 
-pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
-
-pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
 
 pub type PwmFan0 = PwmFan0Fan1HotendHotbed;
 pub type PwmFan1 = PwmFan0Fan1HotendHotbed;
 pub type PwmHotend = PwmFan0Fan1HotendHotbed;
 pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
+*/
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 

@@ -9,8 +9,6 @@ mod mocked_spi;
 mod mocked_sdcard;
 #[cfg(feature = "with-uart-port-1")]
 mod mocked_uart;
-#[cfg(feature = "with-uart-port-1")]
-mod native_serial;
 
 #[cfg(feature = "with-display")]
 mod mocked_display;
