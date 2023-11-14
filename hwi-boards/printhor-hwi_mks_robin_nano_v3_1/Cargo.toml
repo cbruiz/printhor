@@ -37,15 +37,15 @@ ili9341_spi = ["with-spi"]
 [dependencies]
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
-embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["stm32f407ve", "nightly", "rt", "unstable-traits", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["nightly", "integrated-timers", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["tick-hz-100_000"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
+embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["stm32f407ve", "nightly", "rt", "unstable-traits", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["nightly", "integrated-timers", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = [] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["tick-hz-100_000"] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = [] }
 defmt = {version = "0.3"}
 
 embedded-hal = { version = "0.2.7", default-features = false, optional = true }
-embassy-usb = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [], optional = true }
+embassy-usb = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = [], optional = true }
 
 printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common" }
 async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }

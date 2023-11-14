@@ -286,33 +286,35 @@ impl SCurveMotionProfile {
     }
 
     /// Computes the position (steps) in given timestamp (uS)
-    pub fn eval_position(&self, t_i: Real) -> Real {
+    pub fn eval_position(&self, t_i: Real) -> Option<Real> {
         let v0 =  self.v_0;
         let v1 = self.v_1;
 
         if t_i <= self.t1() {
-            (v0 * t_i) + (self.j_max * t_i.powi(3) / SIX)
+            Some((v0 * t_i) + (self.j_max * t_i.powi(3) / SIX))
         } else if t_i <= self.t2() {
-            (v0 * t_i) + ((self.a_lim_a * ((THREE * t_i.powi(2)) - (THREE * self.t_j1 * t_i) + self.t_j1.powi(2))) / SIX)
+            Some((v0 * t_i) + ((self.a_lim_a * ((THREE * t_i.powi(2)) - (THREE * self.t_j1 * t_i) + self.t_j1.powi(2))) / SIX))
         } else if t_i <= self.t3() {
-             (self.v_lim + v0) * self.t_a / TWO - self.v_lim * (self.t_a - t_i) - self.j_min * (self.t_a - t_i).powi(3) / SIX
+            Some((self.v_lim + v0) * self.t_a / TWO - self.v_lim * (self.t_a - t_i) - self.j_min * (self.t_a - t_i).powi(3) / SIX)
         } else if t_i <= self.t4() {
-            (self.v_lim + v0) * self.t_a / TWO + self.v_lim * (t_i - self.t_a)
+            Some((self.v_lim + v0) * self.t_a / TWO + self.v_lim * (t_i - self.t_a))
         } else if t_i <= self.t5() {
-            self.q1 - (self.v_lim + v1) * self.t_d / TWO + self.v_lim * (t_i - self.t + self.t_d)
-                - self.j_max * (t_i - self.t + self.t_d).powi(3) / SIX
+            Some(self.q1 - (self.v_lim + v1) * self.t_d / TWO
+                + self.v_lim * (t_i - self.t + self.t_d)
+                - self.j_max * (t_i - self.t + self.t_d).powi(3) / SIX)
         } else if t_i <= self.t6() {
-            self.q1 - (self.v_lim + v1) * self.t_d / TWO
-            + self.v_lim * (t_i - self.t + self.t_d)
-            - (self.a_lim_d / SIX) * (
+            Some(self.q1 - (self.v_lim + v1) * self.t_d / TWO
+                + self.v_lim * (t_i - self.t + self.t_d)
+                - (self.a_lim_d / SIX) * (
                     (THREE * ((t_i - self.t + self.t_d).powi(2)))
                         - (THREE * self.t_j2 * (t_i - self.t + self.t_d))
-                    + self.t_j2.powi(2)
+                        + self.t_j2.powi(2)
+                )
             )
         } else if t_i <= self.t7() {
-            self.q1 - v1 * (self.t - t_i) - self.j_max * (self.t - t_i).powi(3) / SIX
+            Some(self.q1 - v1 * (self.t - t_i) - self.j_max * (self.t - t_i).powi(3) / SIX)
         } else {
-            self.q1
+            None
         }
     }
 }
@@ -540,7 +542,7 @@ impl Iterator for PlanProfile
                 None
             },
             Some(tp) => {
-                Some((1, tp, self.plan.eval_position(tp)))
+                Some((1, tp, self.plan.eval_position(tp)?))
             }
         }
     }

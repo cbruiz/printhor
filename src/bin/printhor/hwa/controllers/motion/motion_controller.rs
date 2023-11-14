@@ -452,32 +452,31 @@ impl MotionPlanner {
                         a_max: module_target_accel,
                         j_max: module_target_jerk,
                     };
-                    let profile = SCurveMotionProfile::compute(module_target_distance, ZERO, ZERO, &_constraints)?;
+                    let profile = SCurveMotionProfile::compute(module_target_distance.clone(), ZERO, ZERO, &_constraints)?;
                     Some(profile)
                 },
                 false => {
                     hwa::error!("p0: {}", p0.rdp(4));
                     hwa::error!("p1: {}", p1.rdp(4));
-                    hwa::error!("dist: {}", module_target_distance.rdp(4));
-                    hwa::error!("vdir: {}", vdir.rdp(4));
-                    hwa::error!("speed_vector: {}", speed_vector.rdp(4));
-                    hwa::error!("clamped_speed: {}", clamped_speed.rdp(4));
-                    hwa::error!("clamped_speed: {}", clamped_speed.rdp(4));
+                    hwa::error!("dist: {} mm", module_target_distance.rdp(4));
+                    hwa::error!("vdir: {} mm/s", vdir.rdp(4));
+                    hwa::error!("speed_vector: {} mm/s", speed_vector.rdp(4));
+                    hwa::error!("clamped_speed: {} mm/s", clamped_speed.rdp(4));
+                    hwa::error!("clamped_speed: {} mm/s", clamped_speed.rdp(4));
 
                     None
                 }
             };
             //
             let t3 = embassy_time::Instant::now();
-            hwa::info!("----");
-            hwa::info!("P0 ({})", p0);
-            hwa::info!("P1 ({})", p1);
-            hwa::info!("--");
-            hwa::info!("dist: {}", module_target_distance.rdp(4));
-            hwa::info!("speed: {}", module_target_speed.rdp(4));
-            hwa::info!("accel: {}", module_target_accel.rdp(4));
-            hwa::info!("jerk: {}", module_target_jerk.rdp(4));
-            hwa::info!("--");
+            hwa::info!("P0 ({}) mm", p0);
+            hwa::info!("P1 ({}) mm", p1);
+            hwa::info!("dist: {} mm, speed_max: {} mm/s, accel_max: {} mm/s^2, jerk_max: {} mm/s^3",
+                module_target_distance.rdp(4),
+                module_target_speed.rdp(4),
+                module_target_accel.rdp(4),
+                module_target_jerk.rdp(4)
+            );
             match profile {
                 Some(profile) => {
                     let segment_data = SegmentData {

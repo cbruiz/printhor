@@ -172,123 +172,123 @@ pub async fn stepper_task(
                     hwa::debug!("\ttick #{} at t = {} ms", tick_id, t_ref.elapsed().as_millis());
 
                     // Interpolate as microsegments
-                    let estimated_position: Real = segment.motion_profile.eval_position(time);
-                    let axial_pos: TVector<Real> = segment.segment_data.vdir * estimated_position;
+                    if let Some(estimated_position) = segment.motion_profile.eval_position(time) {
+                        let axial_pos: TVector<Real> = segment.segment_data.vdir * estimated_position;
 
-                    let axial_dirs: Directions = {
-                        let dir_ref = &segment.segment_data.vdir;
-                        Directions::new(
-                            dir_ref.x.and_then(|v| Some(v.is_positive())).unwrap_or(false),
-                            dir_ref.y.and_then(|v| Some(v.is_positive())).unwrap_or(false),
-                            dir_ref.z.and_then(|v| Some(v.is_positive())).unwrap_or(false),
-                            #[cfg(feature="has-extruder")]
-                            dir_ref.e.and_then(|v| Some(v.is_positive())).unwrap_or(false),
-                        )
-                    };
-                    let step_pos: TVector<Real> = axial_pos * to_ustep;
+                        let axial_dirs: Directions = {
+                            let dir_ref = &segment.segment_data.vdir;
+                            Directions::new(
+                                dir_ref.x.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                                dir_ref.y.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                                dir_ref.z.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                                #[cfg(feature = "has-extruder")]
+                                    dir_ref.e.and_then(|v| Some(v.is_positive())).unwrap_or(false),
+                            )
+                        };
+                        let step_pos: TVector<Real> = axial_pos * to_ustep;
 
-                    let steps_to_advance_precise: TVector<Real> = (step_pos - axis_steps_advanced_precise).floor();
-                    axis_steps_advanced_precise += steps_to_advance_precise;
+                        let steps_to_advance_precise: TVector<Real> = (step_pos - axis_steps_advanced_precise).floor();
+                        axis_steps_advanced_precise += steps_to_advance_precise;
 
-                    hwa::debug!("\ttick #{} \\Delta_pos {}, \\Delta_axis {} \\Delta_us: {} \\delta_us: {} {}", tick_id, estimated_position.rdp(4),
+                        hwa::debug!("\ttick #{} \\Delta_pos {}, \\Delta_axis {} \\Delta_us: {} \\delta_us: {} {}", tick_id, estimated_position.rdp(4),
                         axial_pos.rdp(4), step_pos.rdp(4), steps_to_advance_precise.rdp(0), steps_to_advance_precise.rdp(4));
 
-                    let mut drv = motion_planner.motion_driver.lock().await;
+                        let mut drv = motion_planner.motion_driver.lock().await;
 
-                    steppers_off = false;
+                        steppers_off = false;
 
-                    let _pulses_by_period = (steps_to_advance_precise
-                        .map_val(Real::from_lit((PULSE_WITDH_TICKS) as i64, 0)) / (steps_to_advance_precise + TVector::one())
-                    ).floor();
-                    let v: TVector<Real> = _pulses_by_period;
-                    hwa::debug!("\ttick #{} width {} ticks, ustep per {}", tick_id, PULSE_WITDH_TICKS, v);
-                    let default = PULSE_WITDH_TICKS as u64 + 10;
-                    let vx = [
-                        ChannelStatus::new(ChannelName::X, v.x.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
-                        ChannelStatus::new(ChannelName::Y, v.y.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
-                        ChannelStatus::new(ChannelName::Z, v.z.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
-                        #[cfg(feature="has-extruder")]
-                        ChannelStatus::new(ChannelName::E, v.e.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
-                    ];
+                        let tick_period_by_axis = (steps_to_advance_precise
+                            .map_val(Real::from_lit((PULSE_WITDH_TICKS) as i64, 0)) / (steps_to_advance_precise + TVector::one())
+                        ).floor();
+                        hwa::debug!("\ttick #{} width {} ticks, ustep period {}", tick_id, PULSE_WITDH_TICKS, tick_period_by_axis);
+                        let default = PULSE_WITDH_TICKS as u64 + 10;
 
-                    let mut multi_timer = MultiTimer::new(
-                        PULSE_WITDH_TICKS as u64,
-                        vx,
-                    );
+                        let mut multi_timer = MultiTimer::new(
+                            PULSE_WITDH_TICKS as u64,
+                            [
+                                ChannelStatus::new(ChannelName::X, tick_period_by_axis.x.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
+                                ChannelStatus::new(ChannelName::Y, tick_period_by_axis.y.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
+                                ChannelStatus::new(ChannelName::Z, tick_period_by_axis.z.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
+                                #[cfg(feature = "has-extruder")]
+                                ChannelStatus::new(ChannelName::E, tick_period_by_axis.e.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default)),
+                            ],
+                        );
 
-                    let tx = embassy_time::Instant::now();
-                    loop {
-                        match multi_timer.next() {
-                            None => {
-                                break;
-                            },
-                            Some(ChannelName::X) => {
-                                drv.pins.enable_x_stepper();
-                                usteps_advanced.increment(CoordSel::X, 1u32);
-                                match &axial_dirs.x {
-                                    true => drv.pins.x_dir_pin.set_high(),
-                                    false => drv.pins.x_dir_pin.set_low(),
-                                }
-                                drv.pins.x_step_pin.set_high();
-                                s_block_for(one_us);
-                                drv.pins.x_step_pin.set_low();
-                                s_block_for(one_us);
-                            },
-                            Some(ChannelName::Y) => {
-                                drv.pins.enable_y_stepper();
-                                usteps_advanced.increment(CoordSel::Y, 1u32);
-                                match &axial_dirs.y {
-                                    true => drv.pins.y_dir_pin.set_high(),
-                                    false => drv.pins.y_dir_pin.set_low(),
-                                }
-                                drv.pins.y_step_pin.set_high();
-                                s_block_for(one_us);
-                                drv.pins.y_step_pin.set_low();
-                                s_block_for(one_us);
-                            },
-                            Some(ChannelName::Z) => {
-                                drv.pins.enable_z_stepper();
-                                usteps_advanced.increment(CoordSel::Z, 1u32);
-                                match &axial_dirs.z {
-                                    true => drv.pins.z_dir_pin.set_high(),
-                                    false => drv.pins.z_dir_pin.set_low(),
-                                }
-                                drv.pins.z_step_pin.set_high();
-                                s_block_for(one_us);
-                                drv.pins.z_step_pin.set_low();
-                                s_block_for(one_us);
-                            },
-                            #[cfg(feature="has-extruder")]
-                            Some(ChannelName::E) => {
-                                drv.pins.enable_e_stepper();
-                                usteps_advanced.increment(CoordSel::E, 1u32);
-                                match &axial_dirs.e {
-                                    true => drv.pins.e_dir_pin.set_high(),
-                                    false => drv.pins.e_dir_pin.set_low(),
-                                }
-                                drv.pins.e_step_pin.set_high();
-                                s_block_for(one_us);
-                                drv.pins.e_step_pin.set_low();
-                                s_block_for(one_us);
-                            },
+                        let tx = embassy_time::Instant::now();
+                        loop {
+                            match multi_timer.next() {
+                                None => {
+                                    break;
+                                },
+                                Some(ChannelName::X) => {
+                                    drv.pins.enable_x_stepper();
+                                    usteps_advanced.increment(CoordSel::X, 1u32);
+                                    match &axial_dirs.x {
+                                        true => drv.pins.x_dir_pin.set_high(),
+                                        false => drv.pins.x_dir_pin.set_low(),
+                                    }
+                                    drv.pins.x_step_pin.set_high();
+                                    s_block_for(one_us);
+                                    drv.pins.x_step_pin.set_low();
+                                    s_block_for(one_us);
+                                },
+                                Some(ChannelName::Y) => {
+                                    drv.pins.enable_y_stepper();
+                                    usteps_advanced.increment(CoordSel::Y, 1u32);
+                                    match &axial_dirs.y {
+                                        true => drv.pins.y_dir_pin.set_high(),
+                                        false => drv.pins.y_dir_pin.set_low(),
+                                    }
+                                    drv.pins.y_step_pin.set_high();
+                                    s_block_for(one_us);
+                                    drv.pins.y_step_pin.set_low();
+                                    s_block_for(one_us);
+                                },
+                                Some(ChannelName::Z) => {
+                                    drv.pins.enable_z_stepper();
+                                    usteps_advanced.increment(CoordSel::Z, 1u32);
+                                    match &axial_dirs.z {
+                                        true => drv.pins.z_dir_pin.set_high(),
+                                        false => drv.pins.z_dir_pin.set_low(),
+                                    }
+                                    drv.pins.z_step_pin.set_high();
+                                    s_block_for(one_us);
+                                    drv.pins.z_step_pin.set_low();
+                                    s_block_for(one_us);
+                                },
+                                #[cfg(feature = "has-extruder")]
+                                Some(ChannelName::E) => {
+                                    drv.pins.enable_e_stepper();
+                                    usteps_advanced.increment(CoordSel::E, 1u32);
+                                    match &axial_dirs.e {
+                                        true => drv.pins.e_dir_pin.set_high(),
+                                        false => drv.pins.e_dir_pin.set_low(),
+                                    }
+                                    drv.pins.e_step_pin.set_high();
+                                    s_block_for(one_us);
+                                    drv.pins.e_step_pin.set_low();
+                                    s_block_for(one_us);
+                                },
+                            }
                         }
-                    }
-                    hwa::debug!("\tInterpolation task took {} ms", tx.elapsed().as_millis());
-                    hwa::debug!("\ttick #{} usteps_adv: {}", tick_id, usteps_advanced);
 
-                    if estimated_position >= expected_advance {
-                        let rpos = usteps_advanced.map_coords(|c| {Some(Real::from_lit(c as i64, 0))}) / to_ustep;
-                        hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
+                        hwa::debug!("\tInterpolation task took {} ms", tx.elapsed().as_millis());
+                        hwa::debug!("\ttick #{} usteps_adv: {}", tick_id, usteps_advanced);
 
-                        motion_planner.consume_current_segment_data().await;
-                        motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
-                        break;
+                        if estimated_position >= expected_advance {
+                            let rpos = usteps_advanced.map_coords(|c| { Some(Real::from_lit(c as i64, 0)) }) / to_ustep;
+                            hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
+
+                            motion_planner.consume_current_segment_data().await;
+                            motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
+                            break;
+                        }
                     }
 
                     let elapsed = t_segment.elapsed();
                     let t_tick_elapsed = t_tick.elapsed();
                     let rem = period_ms - t_tick_elapsed.as_millis() as i32;
-                    hwa::debug!("^^ t = {} ms took {} ms. pend = {} ms. tot = {} ms", elapsed.as_millis(), t_tick_elapsed.as_millis(), rem, (t_tick_elapsed).as_millis() as i32 + rem);
+                    hwa::debug!("== t = {} ms took {} ms. pend = {} ms. tot = {} ms", elapsed.as_millis(), t_tick_elapsed.as_millis(), rem, (t_tick_elapsed).as_millis() as i32 + rem);
                     tick_id += 1;
 
                     absolute_ticker.next().await;

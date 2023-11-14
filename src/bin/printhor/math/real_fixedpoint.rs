@@ -3,6 +3,7 @@ use core::ops::*;
 use core::fmt::{Debug, Display, Formatter};
 use rust_decimal::prelude::*;
 use rust_decimal_macros::dec;
+use crate::hwa;
 
 #[derive(Copy, Clone, Default, Debug)]
 pub struct Real(Decimal);
@@ -293,8 +294,7 @@ pub struct RealInclusiveRange {
 impl RealInclusiveRange {
     pub fn new(start: Real, end: Real, step_size: Real) -> Self {
         let num_steps = ((end - start) / step_size).ceil();
-        #[cfg(feature = "native")]
-        println!("RealInclusiveRange: start={} end={} step_size={}, num_steps={}", start, end, step_size, num_steps);
+        hwa::debug!("RealInclusiveRange: start={} end={} step_size={}, num_steps={}", start.rdp(4), end.rdp(4), step_size.rdp(4), num_steps.rdp(4));
         RealInclusiveRange {
             current: start,
             current_back: start,
