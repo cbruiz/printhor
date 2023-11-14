@@ -234,7 +234,7 @@ printhor-hwi_nucleo_64_arduino_cnc_hat = {version = "*", path= "hwi-boards/print
 gnuplot = {version = "0.0.39", default-features = false, features=[], optional = true}
 
 # Display
-lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
+lvgl = { version = "*", git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
 embedded-graphics-core = {version = "0.3.3", optional = true }
 
 # machinery
