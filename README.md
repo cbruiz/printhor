@@ -77,7 +77,7 @@ The minimal toolset required to build and run is:
 
 ## Prerequisites: Rust and toolchain
 
-This crate requires rust nighlty.
+This crate requires Rust nighlty.
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
