@@ -1,14 +1,14 @@
 [package]
 name = "printhor-hwi_native"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction native std for debugging/playgrounding/analysis"
 readme = "README.md"
-repository = "https://github.com/printhor"
-keywords = ["hardware", "abstraction"]
+repository = "https://github.com/cbruiz/printhor"
+keywords = ["hardware", "abstration", "library", "printhor"]
 license = "MIT"
-#documentation = "https://docs.rs/[TBD]"
+documentation = "https://docs.rs/printhor-hwi_native"
 homepage = "https://github.com/cbruiz/printhor"
 
 [lib]
@@ -38,11 +38,11 @@ with-display = [
 
 
 [dependencies]
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["std"] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["std", "generic-queue"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "ea99671729be91b63156097b01128c3ea6f74a75", features = ["nightly"] }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["std"] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["std", "generic-queue"] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["nightly"] }
 
 nix = { version = "0.27.1", optional = true }
 embedded-io-async = { version = "0.6.0", optional = true }
@@ -63,6 +63,6 @@ async-gcode = {version = "*", default-features = false, features=["parse-trailin
 futures = { version = "0.3.29", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 
-lvgl = { git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
+lvgl = { version="*", git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
 embedded-graphics = { version = "0.7.1", optional = true}
 embedded-graphics-core = {version = "0.3.3", optional = true }

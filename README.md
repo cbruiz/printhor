@@ -1,4 +1,5 @@
 ![Minimum Rust: Nightly](https://img.shields.io/badge/Minimum%20Rust%20Version-nightly-orange.svg)
+[![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
 
@@ -153,7 +154,7 @@ Example output:
 ![alt text](design/motion_plan.png "Motion Plan")
 
 # TODO
-* Code productivization. Mostly based on https://dl.acm.org/doi/pdf/10.1145/3519941.3535075:
+* Code productivization. Mostly based on https://dl.acm.org/doi/pdf/10.1145/3519941.3535075 and https://jamesmunns.com/blog/fmt-unreasonably-expensive/:
   * Code size reduction.
   * Remove unwrap/panic calls.
   * Remove unsafe code (a little bit, but there it is)
@@ -181,8 +182,10 @@ printhor is composed by the following architectural blocks
 * async-gcode, as the core of the GCode interpretation  https://github.com/ithinuel/async-gcode
 * printhor-hwa-common (within the project), as the hardware abstraction layer contract and common utilery
 * A set of crates (withn the project) for each harware/board. Currently:
-  * printhor-hwi_native
-  * printhor-hwi_skr_mini_e3_v3
+  * printhor-hwi_native : The native simulator.
+  * printhor-hwi_skr_mini_e3_v3 : (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0))
+  * printhor-hwi_mks_robin_nano_v3_1 [WIP] : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
+  * printhor-hwi_nucleo_64_arduino_cnc_hat [WIP] : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3))
 
 Intentionally, traits are in general avoided when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
 * type aliases

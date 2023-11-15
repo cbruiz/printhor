@@ -15,6 +15,7 @@ mod mocked_display;
 
 mod mocked_wdt;
 
+#[allow(unused)]
 pub use mocked_pin::*;
 pub use mocked_wdt::*;
 
