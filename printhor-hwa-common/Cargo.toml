@@ -1,15 +1,15 @@
 [package]
 name = "printhor-hwa-common"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printor harware abstraction utillery"
 readme = "README.md"
-#repository = "https://github.com/"
-keywords = ["env", "symbol", "macro", "config"]
-categories = ["config"]
+repository = "https://github.com/cbruiz/printhor"
+keywords = ["hardware", "abstration", "library", "printhor"]
+categories = ["hardware-support"]
 license = "MIT"
-documentation = "https://docs.rs/printhor"
+documentation = "https://docs.rs/printhor-hwa_common"
 homepage = "https://github.com/cbruiz/printhor"
 
 [lib]

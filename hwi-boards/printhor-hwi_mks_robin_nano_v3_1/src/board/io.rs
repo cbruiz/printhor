@@ -42,6 +42,9 @@ pub mod usbserial {
             let config_descriptor = CONFIG_DESCRIPTOR_ST.init("", [0; 256]);
             static BOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
             let bos_descriptor = BOS_DESCRIPTOR_ST.init("", [0; 256]);
+            static MSOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
+            let msos_descriptor = MSOS_DESCRIPTOR_ST.init("", [0; 256]);
+
             static CONTROL_BUF_ST: crate::board::TrackedStaticCell<[u8; 64]> = crate::board::TrackedStaticCell::new();
             let control_buf = CONTROL_BUF_ST.init("", [0; 64]);
 
@@ -53,6 +56,7 @@ pub mod usbserial {
                 device_descriptor,
                 config_descriptor,
                 bos_descriptor,
+                msos_descriptor,
                 control_buf,
             );
 

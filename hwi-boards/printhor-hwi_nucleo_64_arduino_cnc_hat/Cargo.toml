@@ -1,14 +1,14 @@
 [package]
 name = "printhor-hwi_nucleo_64_arduino_cnc_hat"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for STM32 Nucleo-64 with Arduino CNC Hat V3.x"
 readme = "README.md"
-repository = "https://github.com/printhor"
+repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
 license = "MIT"
-#documentation = "https://docs.rs/[TBD]"
+documentation = "https://docs.rs/printhor-hwi_nucleo_64_arduino_cnc_hat"
 homepage = "https://github.com/cbruiz/printhor"
 
 [lib]

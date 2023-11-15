@@ -6,12 +6,6 @@ use core::fmt::Formatter;
 use core::ops::{Div, Neg};
 use core::ops::Mul;
 #[cfg(feature = "native")]
-use gnuplot::{AxesCommon, Figure};
-#[cfg(feature = "native")]
-use gnuplot::{AutoOption, Tick, MultiplotFillOrder::RowsFirst, MultiplotFillDirection::{Downwards}};
-#[cfg(feature = "native")]
-use gnuplot::{DashType, PlotOption};
-#[cfg(feature = "native")]
 use num_traits::float::FloatCore;
 use crate::{math::Real, math::RealInclusiveRange};
 #[cfg(feature = "native")]
@@ -376,8 +370,12 @@ impl PlanProfile
 
     #[allow(unused)]
     #[allow(dead_code)]
-    #[cfg(feature = "native")]
+    #[cfg(feature = "plot")]
     pub fn plot(&mut self, plot_pos: bool, plot_vel: bool, plot_accel: bool, plot_jerk: bool) {
+
+        use gnuplot::{AxesCommon, Figure};
+        use gnuplot::{AutoOption, Tick, MultiplotFillOrder::RowsFirst, MultiplotFillDirection::{Downwards}};
+        use gnuplot::{DashType, PlotOption};
 
         let p = &(self.plan);
 

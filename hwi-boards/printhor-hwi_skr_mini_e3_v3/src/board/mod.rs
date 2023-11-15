@@ -23,7 +23,6 @@ use embassy_stm32::usb;
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
-use embassy_stm32::exti::ExtiInput;
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 use embassy_stm32::rcc::*;
@@ -341,10 +340,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             y_enable_pin: Output::new(p.PB11, Level::Low, Speed::VeryHigh),
             z_enable_pin: Output::new(p.PB1, Level::Low, Speed::VeryHigh),
             e_enable_pin: Output::new(p.PD1, Level::Low, Speed::VeryHigh),
-            x_endstop_pin: ExtiInput::new(Input::new(p.PC0, Pull::Down), p.EXTI0),
-            y_endstop_pin: ExtiInput::new(Input::new(p.PC1, Pull::Down), p.EXTI1),
-            z_endstop_pin: ExtiInput::new(Input::new(p.PC2, Pull::Down), p.EXTI2),
-            e_endstop_pin: ExtiInput::new(Input::new(p.PC15, Pull::Down), p.EXTI15),
+            x_endstop_pin: Input::new(p.PC0, Pull::Down),
+            y_endstop_pin: Input::new(p.PC1, Pull::Down),
+            z_endstop_pin: Input::new(p.PC2, Pull::Down),
+            e_endstop_pin: Input::new(p.PC15, Pull::Down),
             x_step_pin: Output::new(p.PB13, Level::Low, Speed::VeryHigh),
             y_step_pin: Output::new(p.PB10, Level::Low, Speed::VeryHigh),
             z_step_pin: Output::new(p.PB0, Level::Low, Speed::VeryHigh),

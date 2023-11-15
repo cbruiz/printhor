@@ -1,14 +1,14 @@
 [package]
 name = "printhor-hwi_native"
-version = "0.0.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction native std for debugging/playgrounding/analysis"
 readme = "README.md"
-repository = "https://github.com/printhor"
-keywords = ["hardware", "abstraction"]
+repository = "https://github.com/cbruiz/printhor"
+keywords = ["hardware", "abstration", "library", "printhor"]
 license = "MIT"
-#documentation = "https://docs.rs/[TBD]"
+documentation = "https://docs.rs/printhor-hwi_native"
 homepage = "https://github.com/cbruiz/printhor"
 
 [lib]

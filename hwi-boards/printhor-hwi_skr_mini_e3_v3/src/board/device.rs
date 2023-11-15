@@ -1,7 +1,7 @@
 use embassy_stm32::wdg;
-use embassy_stm32::gpio::Output;
+#[allow(unused)]
+use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::timer::simple_pwm::SimplePwm;
-use embassy_stm32::exti::ExtiInput;
 
 #[cfg(feature = "with-usbserial")]
 pub type USBDrv = embassy_stm32::usb::Driver<'static, embassy_stm32::peripherals::USB>;
@@ -152,10 +152,10 @@ pub struct MotionPins {
     pub z_enable_pin: Output<'static, embassy_stm32::peripherals::PB1>,
     pub e_enable_pin: Output<'static, embassy_stm32::peripherals::PD1>,
 
-    pub x_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC0>,
-    pub y_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC1>,
-    pub z_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC2>,
-    pub e_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC15>,
+    pub x_endstop_pin: Input<'static, embassy_stm32::peripherals::PC0>,
+    pub y_endstop_pin: Input<'static, embassy_stm32::peripherals::PC1>,
+    pub z_endstop_pin: Input<'static, embassy_stm32::peripherals::PC2>,
+    pub e_endstop_pin: Input<'static, embassy_stm32::peripherals::PC15>,
 
     pub x_step_pin: Output<'static, embassy_stm32::peripherals::PB13>,
     pub y_step_pin: Output<'static, embassy_stm32::peripherals::PB10>,
