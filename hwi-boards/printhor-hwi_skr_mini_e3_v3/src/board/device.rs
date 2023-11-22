@@ -39,7 +39,7 @@ pub type UartTrinamic = Uart4;
 #[cfg(feature = "with-spi")]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
     embassy_stm32::peripherals::SPI1,
-    embassy_stm32::peripherals::DMA1_CH2, embassy_stm32::peripherals::DMA1_CH1
+    embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3
 >;
 
 #[cfg(feature = "with-spi")]

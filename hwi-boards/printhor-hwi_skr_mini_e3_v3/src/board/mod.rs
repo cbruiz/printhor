@@ -13,7 +13,6 @@ use embassy_stm32::usart;
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 #[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
 use embassy_stm32::gpio::OutputType;
-use embassy_stm32::time::{hz};
 use embassy_sync::mutex::Mutex;
 #[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
@@ -41,7 +40,7 @@ static HEAP: CortexMHeap = CortexMHeap::empty();
 pub const MACHINE_TYPE: &str = "SKR";
 pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V3";
 /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
-pub const MACHINE_PROCESSOR: &str = "STM32G0B1RE";
+pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
@@ -55,7 +54,7 @@ pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 #[cfg(feature = "with-spi")]
-pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
+pub(crate) const SPI_FREQUENCY_HZ: u32 = 1_000_000;
 
 /// Shared controllers
 pub struct Controllers {
@@ -138,37 +137,136 @@ pub(crate) fn init_heap() -> () {
 
 #[inline]
 pub fn init() -> embassy_stm32::Peripherals {
+    use embassy_stm32::pac::*;
     init_heap();
+
+    //TODO: verify with https://www.st.com/resource/en/application_note/DM00443870-.pdf
     //crate::info!("Initializing...");
+
+    // Modify voltage scaling range */
+    // MODIFY_REG(PWR->CR1, PWR_CR1_VOS, VoltageScaling);
+    // WAIT for PWR_SR2_VOSF
+
+    PWR.cr1().write(|w| {
+        w.set_vos(pwr::vals::Vos::RANGE1);
+    });
+    while PWR.sr2().read().vosf() {}
+
+    defmt::info!("Enabling LSI...");
+    RCC.csr().write(|w| w.set_lsion(true));
+    while !RCC.csr().read().lsirdy() {}
+
+    RCC.cfgr().modify(|w| {
+        w.set_sw(rcc::vals::Sw::LSI);
+    });
+
+    defmt::info!("Disabling PLL...");
+    RCC.cr().modify(|w| w.set_pllon(false));
+    while RCC.cr().read().pllrdy() {}
+
+    defmt::info!("Disabling HSI...");
+    RCC.cr().write(|w| {
+        w.set_hsion(false);
+        w.set_hsidiv(rcc::vals::Hsidiv::DIV1);
+    });
+    while RCC.cr().read().hsirdy() {}
+
+    defmt::info!("Disabling LSE...");
+    RCC.bdcr().write(|w| {
+        w.set_lseon(false);
+    });
+    while RCC.bdcr().read().lserdy() {}
+
+    defmt::info!("Proceeding...");
     let mut config = Config::default();
     config.rcc.mux = ClockSrc::PLL(
-        // 8 / 1 * 24 / 3 = 64 MHz
         PllConfig {
-            source: PllSource::HSE(hz(8_000_000)),
+            // HSI = 16MHz
+            source: PllSource::HSI,
+            // HSE = 8MHz. Setting still not available in embassy_stm32
+            //source: PllSource::HSE(embassy_stm32::time::Hertz(8_000_000), HseMode::Oscillator),
             m: Pllm::DIV1,
-            n: Plln::MUL24,
+            // n = 12 for HSI
+            n: Plln::MUL12,
+            // n = 24 por HSE
+            // n: Plln::MUL24,
+            // SysClk = 8 / 1 * n / 3 = 64MHz
             r: Pllr::DIV3,
-            q: Some(Pllq::DIV2),
-            p: Some(Pllp::DIV2),
+            // PLLQ = 8 / 1 * n / 4 = 48MHz
+            q: Some(Pllq::DIV4),
+            // PLLP = 8 / 1 * n / 2 = 64MHz
+            p: Some(Pllp::DIV3),
+            //p: None,
         }
     );
+    // HCLK = {Power, AHB bus, core, memory, DMA, System timer, FCLK} = 64MHz
     config.rcc.ahb_pre = AHBPrescaler::DIV1;
+    // PCLK = APB peripheral clocks = 64MHz
+    // TPCLK = APOB timer clocks = 64MHz
     config.rcc.apb_pre = APBPrescaler::DIV1;
-    config.rcc.ls = LsConfig::default_lsi();
     config.rcc.low_power_run = false;
+    config.rcc.ls = LsConfig {
+        rtc: RtcClockSource::LSI,
+        lsi: true,
+        lse: None,
+    };
+    let c = embassy_stm32::init(config);
 
-    embassy_stm32::init(config)
+    /*
+    RCC.abpenr1().write(|w| {
+        w.set_usben(true);
+        w.set_crsen(true);
+    });
+    */
+    c
 }
 
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
+
+    #[cfg(feature = "with-spi")]
+        let spi1_device = {
+
+        let mut cfg = spi::Config::default();
+        cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
+        static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
+        ControllerRef::new(SPI1_INST.init(
+            "SPI1",
+            ControllerMutex::new(
+                device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
+                                  p.DMA1_CH4, p.DMA1_CH3, cfg
+                )
+            )
+        ))
+    };
+
+    // Use UART1 instead of USB CDC Serial
     #[cfg(feature = "with-usbserial")]
     let (usbserial_tx, usbserial_rx_stream) = {
+
         embassy_stm32::pac::RCC.cr().modify(|w| w.set_hsi48on(true));
         while !embassy_stm32::pac::RCC.cr().read().hsi48rdy() {}
         embassy_stm32::pac::RCC.ccipr2().write(|w| {
             w.set_usbsel(embassy_stm32::pac::rcc::vals::Usbsel::HSI48);
+            //w.set_usbsel(embassy_stm32::pac::rcc::vals::Usbsel::PLL1_Q); // does not work yet
         });
+
+        {
+            use embassy_stm32::peripherals::CRS;
+            use embassy_stm32::rcc::low_level::RccPeripheral;
+            use embassy_stm32::pac::crs::vals::Syncsrc;
+
+            CRS::enable_and_reset();
+            embassy_stm32::pac::CRS.cfgr().modify(|w| {
+                w.set_syncsrc(Syncsrc::USB);
+            });
+
+            embassy_stm32::pac::CRS.cr().modify(|w| {
+                w.set_autotrimen(true);
+                w.set_cen(true);
+            });
+        }
+
 
         defmt::info!("Creating USB Driver");
         let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
@@ -179,11 +277,18 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let usbserial_tx_controller = ControllerRef::new(
             USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
         );
+
         (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
 
+    defmt::info!("Waiting a little bit...");
+    // Wait for usb task to startup
+    embassy_time::Timer::after_secs(10).await;
+    defmt::info!("Waiting Done");
+
     #[cfg(feature = "with-uart-port-1")]
     let (uart_port1_tx, uart_port1_rx_stream) = {
+
         let mut cfg = usart::Config::default();
         cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
         cfg.data_bits = DataBits::DataBits8;
@@ -217,20 +322,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                    cfg).expect("Ready")
     };
 
-    #[cfg(feature = "with-spi")]
-    let spi1_device = {
-        let mut cfg = spi::Config::default();
-        cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
-        static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
-        ControllerRef::new(SPI1_INST.init(
-            "SPI1",
-            ControllerMutex::new(
-                device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
-                                  p.DMA1_CH2, p.DMA1_CH1, cfg
-                )
-            )
-        ))
-    };
     #[cfg(feature = "with-spi")]
     defmt::info!("SPI done");
 

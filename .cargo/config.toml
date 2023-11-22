@@ -1,17 +1,19 @@
 [target.'cfg(all(target_arch="arm", target_os="none"))']
 #runner = "probe-rs run --chip STM32F410RBTx"
 #runner = "probe-rs run --chip STM32L476RG"
-runner = "probe-rs run --chip STM32G0B1RETx"
+#runner = "probe-rs run --chip STM32G0B1RETx"
+runner = "probe-rs run --chip STM32F407VETx"
 
 [build]
 
 [env]
-DEFMT_LOG = "info"
+DEFMT_LOG = "trace"
 
 [profile.dev.package."*"]
 codegen-units = 1
+incremental = false
 opt-level = "z"
-debug = 1
-debug-assertions = false
-overflow-checks = false
+debug = 2
+debug-assertions = true
+overflow-checks = true
 

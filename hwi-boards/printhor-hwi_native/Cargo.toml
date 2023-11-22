@@ -15,7 +15,7 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Hardware device features
-with-uart-port-1 = ["async-std", "nix/fs", "nix/term"]
+with-uart-port-1 = ["async-std"]
 with-printjob = []
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]
@@ -38,13 +38,21 @@ with-display = [
 
 
 [dependencies]
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["std"] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["std", "generic-queue"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["nightly"] }
 
-nix = { version = "0.27.1", optional = true }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
+#embassy-executor = { version = "*", default-features = false, path = "../../../embassy/embassy-executor", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["std"] }
+#embassy-sync = { version = "*", path = "../../../embassy/embassy-sync", features = ["std"] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["std", "generic-queue"] }
+#embassy-time = { version = "*", path = "../../../embassy/embassy-time", features = ["std", "generic-queue"] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [] }
+#embassy-futures = { version = "*", path = "../../../embassy/embassy-futures", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["nightly"] }
+#embassy-embedded-hal = { version = "*", path = "../../../embassy/embassy-embedded-hal", features = ["nightly"] }
+embassy-usb = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [], optional = true }
+#embassy-usb = { version = "*", path = "../../../embassy/embassy-usb", features = [], optional = true }
+
+#nix = { version = "0.27.1", optional = true }
 embedded-io-async = { version = "0.6.0", optional = true }
 embedded-io = { version = "0.6.1", optional = true }
 
@@ -54,12 +62,10 @@ embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
 
-embedded-hal = { version = "0.2.3", default-features = false, optional = true }
-embassy-usb = { version = "*", path = "../../ext/embassy/embassy-usb", features = [], optional = true }
 
 printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common" }
 async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
-
+embedded-hal = { version = "0.2.3", default-features = false, optional = true }
 futures = { version = "0.3.29", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 

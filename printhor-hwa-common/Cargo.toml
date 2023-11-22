@@ -20,6 +20,8 @@ with-ui=["embedded-graphics-core"]
 [dependencies]
 portable-atomic = { version = "1.5.1",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.0.0",  default-features = false, features = ["nightly"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["nightly"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["nightly"] }
+#embassy-sync = { version = "*", path="../../../embassy/embassy-sync", features = ["nightly"] }
+
 embedded-graphics-core = {version = "0.3.3", optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }

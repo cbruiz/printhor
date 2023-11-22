@@ -123,6 +123,14 @@ pending to be matured.
 RUST_LOG=info cargo +nightly run --features integration-test --bin printhor
 ```
 
+## MKS Robin Nano V3.1
+
+TODO: Work in progress
+
+## Nucleo-64
+
+TODO: Work in progress
+
 ## SKR Mini E3 V3
 
 This board (https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3) is quite functional

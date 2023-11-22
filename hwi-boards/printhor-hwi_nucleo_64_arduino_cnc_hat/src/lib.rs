@@ -3,10 +3,7 @@
 #![feature(type_alias_impl_trait)]
 #![allow(stable_features)]
 use embassy_stm32::interrupt;
-use embassy_stm32::interrupt::Priority;
-use embassy_stm32::interrupt::InterruptExt;
 use embassy_executor::InterruptExecutor;
-use embassy_executor::SendSpawner;
 
 pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
@@ -45,12 +42,6 @@ pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 #[interrupt]
 unsafe fn RNG() {
     EXECUTOR_HIGH.on_interrupt()
-}
-
-#[inline]
-pub fn get_stepper_spawner() -> SendSpawner {
-    interrupt::RNG.set_priority(Priority::P5);
-    EXECUTOR_HIGH.start(interrupt::RNG)
 }
 
 #[inline]

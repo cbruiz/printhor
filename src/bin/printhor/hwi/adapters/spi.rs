@@ -123,10 +123,11 @@ impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
     }
 
     fn acquire(&self) -> Result<(), Error> {
+        defmt::info!("CSCARD_SPI: Acquiring");
         let f = |s: &Self| {
             // Assume it hasn't worked
             let mut card_type;
-            //trace!("Reset card..");
+            defmt::trace!("CSCARD_SPI: Reset card..");
             // Supply minimum of 74 clock cycles without CS asserted.
             s.cs_high()?;
             s.write_bytes(&[0xFF; 10])?;
@@ -135,9 +136,10 @@ impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
             // Enter SPI mode.
             let mut delay = Delay::new_command();
             for _attempts in 1.. {
-                //trace!("Enter SPI mode, attempt: {}..", attempts);
+                defmt::trace!("Enter SPI mode, attempt: {}..", _attempts);
                 match s.card_command(CMD0, 0) {
                     Err(Error::TimeoutCommand(0)) => {
+                        defmt::trace!("\tEnter SPI mode, timeout");
                         // Try again?
                         //warn!("Timed out, trying again..");
                         // Try flushing the card as done here: https://github.com/greiman/SdFat/blob/master/src/SdCard/SdSpiCard.cpp#L170,
@@ -147,13 +149,16 @@ impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
                         }
                     }
                     Err(e) => {
+                        defmt::trace!("\tEnter SPI mode: ERROR");
                         return Err(e);
                     }
                     Ok(R1_IDLE_STATE) => {
+                        defmt::trace!("\tEnter SPI modd: IDLE");
                         break;
                     }
                     Ok(_r) => {
                         // Try again
+                        defmt::trace!("\tEnter SPI mode, got response {:x}. Trying again", _r);
                         //warn!("Got response: {:x}, trying again..", _r);
                     }
                 }
@@ -281,6 +286,7 @@ impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
     /// Send mutiple bytes and ignore what comes back over the SPI bus.
     fn write_bytes(&self, out: &[u8]) -> Result<(), Error> {
         self.spi.apply_result(|spi| {
+            defmt::debug!("SPI: write_bytes ....");
             spi.blocking_write(out).map_err(|_e| Error::Transport)
         }, Error::Transport)
     }

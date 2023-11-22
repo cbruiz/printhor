@@ -21,7 +21,6 @@ use embassy_stm32::usb_otg;
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
-use embassy_stm32::exti::ExtiInput;
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 use embassy_stm32::rcc::*;
@@ -112,11 +111,12 @@ pub(crate) fn init_heap() -> () {
 #[inline]
 pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
-    //crate::info!("Initializing...");
+    crate::info!("Initializing...");
     let mut config = Config::default();
+    // https://community.platformio.org/t/stm32f407vet6-external-oscillator-configuration/22497
     config.rcc.hse = Some(Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
-        mode: HseMode::Bypass,
+        mode: HseMode::Oscillator,
     });
     config.rcc.pll_src = PllSource::HSE;
     config.rcc.pll = Some(Pll {
@@ -141,9 +141,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let ep_out_buffer = EP_OUT_BUFFER_INST.init("USBEPBuffer", [0u8; 256]);
         defmt::info!("Creating USB Driver");
         let mut config = embassy_stm32::usb_otg::Config::default();
-        config.vbus_detection = true;
+        config.vbus_detection = false;
 
-                // Maybe OTG_FS is not the right peripheral...
+        // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
         let driver = usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
         let mut usb_serial_device = USBSerialDevice::new(driver);
@@ -211,10 +211,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             y_enable_pin: Output::new(p.PE1, Level::Low, Speed::VeryHigh),
             z_enable_pin: Output::new(p.PB8, Level::Low, Speed::VeryHigh),
             e_enable_pin: Output::new(p.PB3, Level::Low, Speed::VeryHigh),
-            x_endstop_pin: ExtiInput::new(Input::new(p.PA15, Pull::Down), p.EXTI15),
-            y_endstop_pin: ExtiInput::new(Input::new(p.PD2, Pull::Down), p.EXTI2),
-            z_endstop_pin: ExtiInput::new(Input::new(p.PC8, Pull::Down), p.EXTI8),
-            e_endstop_pin: ExtiInput::new(Input::new(p.PC4, Pull::Down), p.EXTI4),
+            x_endstop_pin: Input::new(p.PA15, Pull::Down),
+            y_endstop_pin: Input::new(p.PD2, Pull::Down),
+            z_endstop_pin: Input::new(p.PC8, Pull::Down),
+            e_endstop_pin: Input::new(p.PC4, Pull::Down),
             x_step_pin: Output::new(p.PE3, Level::Low, Speed::VeryHigh),
             y_step_pin: Output::new(p.PE0, Level::Low, Speed::VeryHigh),
             z_step_pin: Output::new(p.PB5, Level::Low, Speed::VeryHigh),
