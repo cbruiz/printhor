@@ -6,26 +6,19 @@ mod mocked_peripherals;
 
 use embassy_executor::Spawner;
 
-#[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
-use embassy_stm32::gpio::OutputType;
-#[cfg(feature = "with-usbserial")]
-use embassy_stm32::usb;
 #[cfg(feature = "with-usbserial")]
 use device::*;
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 #[cfg(feature = "with-trinamic")]
 use device::Uart4;
-#[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
-use embassy_stm32::timer::{CountingMode,simple_pwm::SimplePwm};
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-use embassy_stm32::adc::SampleTime;
 #[cfg(feature = "with-motion")]
 use crate::board::mocked_peripherals::MockedOutputPin;
 #[cfg(feature = "with-motion")]
 use crate::board::mocked_peripherals::MockedInputPin;
+use crate::board::mocked_peripherals::MockedPwm;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
 pub const MACHINE_BOARD: &str = "PC";
@@ -74,8 +67,8 @@ pub struct PwmDevices {
     pub hotbed: device::HotbedPeripherals,
     #[cfg(feature = "with-fan0")]
     pub fan0: device::Fan0Peripherals,
-    #[cfg(feature = "with-fan1")]
-    pub fan1: device::Fan1Peripherals,
+    #[cfg(feature = "with-fan-layer")]
+    pub layer_fan: device::FanLayerPeripherals,
     #[cfg(feature = "with-laser")]
     pub laser: device::LaserPeripherals,
 }
@@ -172,79 +165,32 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
         #[cfg(feature = "with-display")]
     let display_device = mocked_peripherals::SimulatorDisplayDevice::new();
 
-    // PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo) PA1(Probe)
-    // OK FOR: FAN0, FAN1, HE_PWM, BE_PWM
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
-    let pwm_fan0_fan1_hotend_hotbed = {
-        let pwm_fan0_fan1_hotend_hotbed = SimplePwm::new(
-            p.TIM3,
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PC6, OutputType::PushPull)), // PA6 | PB4 | PC6
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PC7, OutputType::PushPull)), // PA7 | PB5 | PC7
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch3(p.PC8, OutputType::PushPull)), // PB0 | PC8
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PC9, OutputType::PushPull)), // PB1 | PC9
-            hz(5_000),
-            CountingMode::CenterAlignedBothInterrupts,
-        );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
+    #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
+    let pwm_fan0_fan1_hotend_hotbed_laser = {
+        let pwm_fan0_fan1_hotend_hotbed_laser = mocked_peripherals::MockedPwm::new();
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLayerFan>> = TrackedStaticCell::new();
         ControllerRef::new(PWM_INST.init(
             "PwmFanFan0HotendHotbed",
-            ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
-        ))
-    };
-
-    #[cfg(feature = "with-fan0")]
-    let pwm_fan0_channel = embassy_stm32::timer::Channel::Ch1;
-    #[cfg(feature = "with-fan1")]
-    let pwm_fan1_channel = embassy_stm32::timer::Channel::Ch2;
-    #[cfg(feature = "with-hotend")]
-    let pwm_hotend_channel = embassy_stm32::timer::Channel::Ch3;
-    #[cfg(feature = "with-hotbed")]
-    let pwm_hotbed_channel = embassy_stm32::timer::Channel::Ch4;
-
-    #[cfg(any(feature = "with-neo"))]
-        let pwm_neo = {
-        let pwm_neo = SimplePwm::new(
-            p.TIM1,
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PA8, OutputType::PushPull)), // PA8
-            None, //
-            None, //
-            None, //
-            hz(5_000),
-            CountingMode::CenterAlignedBothInterrupts,
-        );
-        static PWM_NEO_INST: TrackedStaticCell<ControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
-        ControllerRef::new(PWM_NEO_INST.init(
-            "NeoController",
-            ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
+            ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed_laser)
         ))
     };
 
     #[cfg(any(feature = "with-laser"))]
     let (pwm_laser, pwm_laser_channel) = {
         static PWM_LASER_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
-        (
-            ControllerRef::new(PWM_LASER_INST.init(
+        (ControllerRef::new(PWM_LASER_INST.init(
                 "LaserPwmController",
                 ControllerMutex::new(
-                    SimplePwm::new(
-                        p.TIM16,
-                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PD0, OutputType::PushPull)), // PA6 | PB8 | PD0
-                        None, //
-                        None, //
-                        None, //
-                        hz(5_000),
-                        CountingMode::CenterAlignedBothInterrupts,
-                    )
+                    MockedPwm::new()
                 )
             )),
-            embassy_stm32::timer::Channel::Ch1
+            0
         )
     };
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     let adc_hotend_hotbed = {
-        let mut adc_hotend_hotbed = AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
-        adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
+        let adc_hotend_hotbed = device::AdcHotendHotbed::new(MockedInputPin::new());
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
         ControllerRef::new(ADC_INST.init(
@@ -252,25 +198,16 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
             ControllerMutex::new(adc_hotend_hotbed)
         ))
     };
-    #[cfg(feature = "with-hotend")]
-    let adc_hotend_pin = p.PA0;
-    #[cfg(feature = "with-hotbed")]
-    let adc_hotbed_pin = p.PC4;
 
     #[cfg(feature = "with-probe")]
-    let probe_device = crate::device::ProbePeripherals {
-        #[cfg(feature = "with-probe")]
-        probe_pwm: SimplePwm::new(
-            p.TIM2,
-            None, // PA0 | PA15 | PA5 | PC4
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, OutputType::PushPull)), // PA1 | PB3 | PC5
-            None, // PA2 | PB10 | PC6
-            None, // PA3 | PB11 | PC7
-            hz(50),
-            CountingMode::CenterAlignedBothInterrupts,
-            ),
-        #[cfg(feature = "with-probe")]
-        probe_channel: embassy_stm32::timer::Channel::Ch2,
+    let probe_device = {
+        let probe_pwm = device::PwmServo::new();
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+
+        crate::device::ProbePeripherals {
+            power_pwm: ControllerRef::new(PWM_INST.init("ProbePwm", ControllerMutex::new(probe_pwm))),
+            power_channel: 0,
+        }
     };
 
     #[cfg(feature = "with-motion")]
@@ -305,31 +242,31 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
             #[cfg(feature = "with-probe")]
             probe: probe_device,
             #[cfg(feature = "with-hotend")]
-            hotend: HotendPeripherals {
-                power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: pwm_hotend_channel,
+            hotend: device::HotendPeripherals {
+                power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
+                power_channel: 0,
                 temp_adc: adc_hotend_hotbed.clone(),
-                temp_pin: adc_hotend_pin,
+                temp_pin: MockedInputPin::new(),
             },
             #[cfg(feature = "with-hotbed")]
-            hotbed: HotbedPeripherals {
-                power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: pwm_hotbed_channel,
+            hotbed: device::HotbedPeripherals {
+                power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
+                power_channel: 0,
                 temp_adc: adc_hotend_hotbed.clone(),
-                temp_pin: adc_hotbed_pin,
+                temp_pin: MockedInputPin::new(),
             },
             #[cfg(feature = "with-fan0")]
             fan0: Fan0Peripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_fan0_channel,
             },
-            #[cfg(feature = "with-fan1")]
-            fan1: Fan1Peripherals {
-                power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: pwm_fan1_channel,
+            #[cfg(feature = "with-fan-layer")]
+            layer_fan: device::FanLayerPeripherals {
+                power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
+                power_channel: 0u8,
             },
             #[cfg(feature = "with-laser")]
-            laser: LaserPeripherals {
+            laser: device::LaserPeripherals {
                 power_pwm: pwm_laser.clone(),
                 power_channel: pwm_laser_channel,
             },

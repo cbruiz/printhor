@@ -65,6 +65,7 @@ pub mod mem {
 #[cfg(feature = "with-display")]
 pub mod display {
     pub use crate::hwi::device::DisplayDevice;
+    #[allow(unused)]
     pub use crate::hwi::device::DisplayScreen;
 }
 

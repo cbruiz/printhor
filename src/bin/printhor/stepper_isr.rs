@@ -221,6 +221,7 @@ pub async fn stepper_task(
                                     break;
                                 },
                                 Some(ChannelName::X) => {
+                                    //drv.laser_controller.lock().await.set_power(1.0f32).await;
                                     drv.pins.enable_x_stepper();
                                     usteps_advanced.increment(CoordSel::X, 1u32);
                                     match &axial_dirs.x {

@@ -13,6 +13,11 @@ pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1Tx>;
 #[cfg(feature = "with-uart-port-1")]
 pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
 
+pub trait AdcImpl {}
+
+pub trait AdcTrait {}
+
+pub trait AdcPinTrait {}
 
 #[cfg(feature = "with-trinamic")]
 pub type Uart4 = crate::board::mocked_peripherals::MockedUart;
@@ -26,11 +31,32 @@ pub type Spi = crate::board::mocked_peripherals::MockedSpi;
 #[cfg(feature = "with-spi")]
 pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
 
+#[cfg(feature = "with-fan-layer")]
+pub type PwmLayerFan = crate::board::mocked_peripherals::MockedPwm;
+
+#[cfg(feature = "with-probe")]
+pub type PwmServo = crate::board::mocked_peripherals::MockedPwm;
+
+#[cfg(feature = "with-hotend")]
+pub type PwmHotend = crate::board::mocked_peripherals::MockedPwm;
+
+#[cfg(feature = "with-hotbed")]
+pub type PwmHotbed = crate::board::mocked_peripherals::MockedPwm;
+
+#[cfg(feature = "with-laser")]
+pub type PwmLaser = crate::board::mocked_peripherals::MockedPwm;
+
+#[cfg(feature = "with-fan-layer")]
+pub use crate::board::mocked_peripherals::PwmChannel;
+
 #[cfg(feature = "with-sdcard")]
 pub type SDCardBlockDevice = crate::board::mocked_peripherals::MockledSDCardBlockDevice;
 
 #[cfg(feature = "with-sdcard")]
 pub type SDCardBlockDeviceRef = crate::board::ControllerRef<SDCardBlockDevice>;
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+pub type AdcHotendHotbed = crate::board::mocked_peripherals::MockedAdc<MockedInputPin<'static, u8>>;
 
 pub type Watchdog = crate::board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
@@ -104,4 +130,38 @@ pub struct MotionDevice {
 pub struct CardDevice {
 
     pub card_spi: SDCardBlockDevice,
+}
+
+#[cfg(feature = "with-probe")]
+pub struct ProbePeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_channel: PwmChannel,
+}
+
+#[cfg(feature = "with-hotend")]
+pub struct HotendPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
+    pub power_channel: PwmChannel,
+    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
+    pub temp_pin: MockedInputPin<'static, u8>,
+}
+
+#[cfg(feature = "with-hotbed")]
+pub struct HotbedPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
+    pub power_channel: PwmChannel,
+    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
+    pub temp_pin: MockedInputPin<'static, u8>,
+}
+
+#[cfg(feature = "with-fan-layer")]
+pub struct FanLayerPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
+    pub power_channel: PwmChannel,
+}
+
+#[cfg(feature = "with-laser")]
+pub struct LaserPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLaser>,
+    pub power_channel: PwmChannel,
 }

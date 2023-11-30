@@ -79,7 +79,7 @@ pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
 
 pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
-pub type PwmFan0 = PwmFan0Fan1HotendHotbed;
+pub type PwmLayerFan = PwmFan0Fan1HotendHotbed;
 pub type PwmFan1 = PwmFan0Fan1HotendHotbed;
 pub type PwmHotend = PwmFan0Fan1HotendHotbed;
 pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
@@ -107,8 +107,8 @@ pub struct DisplayDevice {
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub probe_pwm: PwmServo,
-    pub probe_channel: PwmChannel,
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-hotend")]
@@ -127,9 +127,9 @@ pub struct HotbedPeripherals {
     pub temp_pin: AdcHotbedPin
 }
 
-#[cfg(feature = "with-fan0")]
-pub struct Fan0Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan0>,
+#[cfg(feature = "with-fan-layer-fan0")]
+pub struct FanLayerPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
     pub power_channel: PwmChannel,
 }
 

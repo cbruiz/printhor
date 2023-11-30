@@ -107,7 +107,7 @@ pub async fn temp_task(
 
             current_temp = m.read_temp().await;
             #[cfg(feature = "native")]
-            if t0.elapsed().as_secs() > 5 {
+            if _t0.elapsed().as_secs() > 5 {
                 current_temp = (m.get_target_temp()) as f32;
             }
 

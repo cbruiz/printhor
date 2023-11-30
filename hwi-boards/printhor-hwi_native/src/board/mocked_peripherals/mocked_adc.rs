@@ -1,13 +1,11 @@
-use crate::board::mocked_peripherals::InputPin;
-
-pub(crate) struct MockedTemperatureAdc {
+pub struct MockedAdc<PIN> {
     #[allow(unused)]
-    p: InputPin,
+    p: PIN,
 }
-impl MockedTemperatureAdc {
-    pub(crate) const fn new() -> Self {
+impl<PIN> MockedAdc<PIN> {
+    pub(crate) const fn new(p: PIN) -> Self {
         Self {
-            p: InputPin::new(),
+            p,
         }
     }
     #[allow(unused)]

@@ -22,3 +22,6 @@ pub use tracked_static_cell::COUNTER;
 mod display;
 #[cfg(feature = "with-ui")]
 pub use display::DisplayScreenUI;
+
+// TODO software serial
+// https://github.com/sajattack/bitbang-hal/blob/master/src/serial.rs

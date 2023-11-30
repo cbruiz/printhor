@@ -28,8 +28,8 @@ pub struct GCodeProcessorParams {
     pub hotbed: hwa::controllers::HotbedControllerRef,
     #[cfg(feature = "with-fan0")]
     pub fan0: hwa::controllers::Fan0PwmControllerRef,
-    #[cfg(feature = "with-fan1")]
-    pub fan1: hwa::controllers::Fan0PwmControllerRef,
+    #[cfg(feature = "with-fan-layer")]
+    pub layer_fan: hwa::controllers::LayerPwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
 }
@@ -54,7 +54,7 @@ pub struct GCodeProcessor
     #[cfg(feature = "with-fan0")]
     pub fan0: hwa::controllers::Fan0PwmControllerRef,
     #[cfg(feature = "with-fan1")]
-    pub fan1: hwa::controllers::Fan1PwmControllerRef,
+    pub layer_fan: hwa::controllers::LayerPwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
 }
@@ -80,7 +80,7 @@ impl GCodeProcessor
             #[cfg(feature = "with-fan0")]
             fan0: params.fan0,
             #[cfg(feature = "with-fan1")]
-            fan1: params.fan1,
+            layer_fan: params.layer_fan,
             #[cfg(feature = "with-laser")]
             laser: params.laser,
 
@@ -267,13 +267,13 @@ impl GCodeProcessor
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M106 => {
                 //crate::info!("M106 BEGIN");
-                self.fan0.lock().await.set_power(1.0f32).await;
+                self.layer_fan.lock().await.set_power(1.0f32).await;
                 //crate::info!("M106 END");
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M107 => {
-                 self.fan0.lock().await.set_power(0.0f32).await;
+                 self.layer_fan.lock().await.set_power(0.0f32).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]

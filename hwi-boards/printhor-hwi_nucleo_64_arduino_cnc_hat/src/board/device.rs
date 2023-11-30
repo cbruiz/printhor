@@ -53,10 +53,15 @@ pub type Uart4 = crate::board::usart::Uart<'static,
 #[cfg(feature = "with-trinamic")]
 pub type UartTrinamic = Uart4;
 
-#[cfg(feature = "with-spi")]
+#[cfg(all(feature = "with-spi", feature = "nucleo64-f410rb"))]
+pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
+    embassy_stm32::peripherals::SPI2,
+    embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3
+>;
+#[cfg(all(feature = "with-spi", feature = "nucleo64-l476rg"))]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
     embassy_stm32::peripherals::SPI3,
-    embassy_stm32::peripherals::DMA1_CH5, embassy_stm32::peripherals::DMA1_CH0
+    embassy_stm32::peripherals::DMA2_CH2, embassy_stm32::peripherals::DMA2_CH1
 >;
 
 #[cfg(feature = "with-spi")]
@@ -72,7 +77,7 @@ pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
 pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 
 #[cfg(feature = "with-sdcard")]
-pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC9>;
+pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC4>;
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
 pub trait AdcTrait = embassy_stm32::adc::Instance;
@@ -83,21 +88,35 @@ pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
 pub type AdcHotbedPeripheral = AdcHotendHotbedPeripheral;
 pub type AdcHotend = AdcHotendHotbed;
 pub type AdcHotbed = AdcHotendHotbed;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type AdcHotendPin = embassy_stm32::peripherals::PC2;
+#[cfg(feature = "nucleo64-f410rb")]
 pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type AdcHotbedPin = embassy_stm32::peripherals::PC3;
+#[cfg(feature = "nucleo64-f410rb")]
 pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
 
 pub trait PwmTrait = embassy_stm32::timer::CaptureCompare16bitInstance;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
-/*
-pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
 
-pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+#[cfg(feature = "nucleo64-f410rb")]
+pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 
-pub type PwmFan0 = PwmFan0Fan1HotendHotbed;
-pub type PwmFan1 = PwmFan0Fan1HotendHotbed;
-pub type PwmHotend = PwmFan0Fan1HotendHotbed;
-pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
-*/
+#[cfg(feature = "nucleo64-l476rg")]
+pub type PwmHotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM15>;
+
+pub type PwmFan0 = PwmServo;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type PwmLayerFan = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type PwmHotend = PwmHotendHotbed;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type PwmHotbed = PwmHotendHotbed;
+#[cfg(feature = "nucleo64-l476rg")]
+pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM8>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
@@ -108,11 +127,11 @@ pub type Watchdog = wdg::IndependentWatchdog<'static,
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub probe_pwm: PwmServo,
-    pub probe_channel: PwmChannel,
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-hotend")]
+#[cfg(all(feature = "nucleo64-l476rg", feature = "with-hotend"))]
 pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
@@ -120,7 +139,7 @@ pub struct HotendPeripherals {
     pub temp_pin: AdcHotendPin
 }
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(all(feature = "nucleo64-l476rg", feature = "with-hotbed"))]
 pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
@@ -140,9 +159,15 @@ pub struct Fan1Peripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-laser")]
+#[cfg(all(feature = "nucleo64-l476rg", feature = "with-laser"))]
 pub struct LaserPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmLaser>,
+    pub power_channel: PwmChannel,
+}
+
+#[cfg(all(feature = "nucleo64-l476rg", feature = "with-layer-fan"))]
+pub struct LayerFanPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
     pub power_channel: PwmChannel,
 }
 

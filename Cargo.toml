@@ -29,7 +29,7 @@ with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = ["embedded-sdmmc"]
 with-fan0 = ["embedded-hal"]
-with-fan1 = ["embedded-hal"]
+with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
 sdcard-uses-spi = []
@@ -78,13 +78,12 @@ native = [
     "with-uart-port-1", "printhor-hwi_native/with-uart-port-1",
     "with-sdcard", "printhor-hwi_native/with-sdcard",
     "with-printjob", "printhor-hwi_native/with-printjob",
-    #"with-probe", "printhor-hwi_native/with-probe",
+    "with-probe", "printhor-hwi_native/with-probe",
     #"with-hotend", "printhor-hwi_native/with-hotend",
     #"with-hotbed", "printhor-hwi_native/with-hotbed",
-    #"with-fan0", "printhor-hwi_native/with-fan0",
-    #"with-fan1", "printhor-hwi_native/with-fan1",
-    #"with-laser", "printhor-hwi_native/with-laser",
-    #"with-display", "printhor-hwi_native/with-display", "printhor-hwa-common/with-ui",
+    "with-fan-layer", "printhor-hwi_native/with-fan-layer",
+    "with-laser", "printhor-hwi_native/with-laser",
+    "with-display", "printhor-hwi_native/with-display", "printhor-hwa-common/with-ui",
 
     #"with-lvgl",
     #"float-point-f64-impl",
@@ -106,13 +105,12 @@ mks_robin_nano_v3_1 = [
     "with-usbserial", "printhor-hwi_mks_robin_nano_v3_1/with-usbserial",
     "with-spi", "printhor-hwi_mks_robin_nano_v3_1/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano_v3_1/with-sdcard", "printhor-hwi_mks_robin_nano_v3_1/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_mks_robin_nano_v3_1/with-printjob",
-    #"with-probe", "printhor-hwi_mks_robin_nano_v3_1/with-probe",
-    #"with-hotend", "printhor-hwi_mks_robin_nano_v3_1/with-hotend",
-    #"with-hotbed", "printhor-hwi_mks_robin_nano_v3_1/with-hotbed",
-    #"with-fan0", "printhor-hwi_mks_robin_nano_v3_1/with-fan0",
-    #"with-fan1", "printhor-hwi_mks_robin_nano_v3_1/with-fan1",
-    #"with-laser", "printhor-hwi_mks_robin_nano_v3_1/with-laser",
+    "with-printjob", "printhor-hwi_mks_robin_nano_v3_1/with-printjob",
+    "with-probe", "printhor-hwi_mks_robin_nano_v3_1/with-probe",
+    "with-hotend", "printhor-hwi_mks_robin_nano_v3_1/with-hotend",
+    "with-hotbed", "printhor-hwi_mks_robin_nano_v3_1/with-hotbed",
+    "with-fan-layer", "printhor-hwi_mks_robin_nano_v3_1/with-fan-layer-fan1",
+    "with-laser", "printhor-hwi_mks_robin_nano_v3_1/with-laser",
 
     #"float-point-f32-impl",
     #"float-point-f64-impl",
@@ -126,18 +124,16 @@ mks_robin_nano_v3_1 = [
 ]
 nucleo_64_arduino_cnc_hat = [
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
-    #"with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-trinamic",
-    #"with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
+    "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     "with-uart-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-uart-port-1",
     #"with-usbserial", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-usbserial",
-    #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
+    "with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
+    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
+    "with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
     #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     #"with-hotend", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotend",
     #"with-hotbed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotbed",
-    #"with-fan0", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan0",
-    #"with-fan1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan1",
+    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-layer-fan",
     #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
 
     #"float-point-f32-impl",
@@ -161,13 +157,12 @@ skr_mini_e3_v3 = [
     #"with-uart-port-1", "printhor-hwi_skr_mini_e3_v3/with-uart-port-1",
     "with-spi", "printhor-hwi_skr_mini_e3_v3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3_v3/with-sdcard", "printhor-hwi_skr_mini_e3_v3/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_skr_mini_e3_v3/with-printjob",
-    #"with-probe", "printhor-hwi_skr_mini_e3_v3/with-probe",
-    #"with-hotend", "printhor-hwi_skr_mini_e3_v3/with-hotend",
-    #"with-hotbed", "printhor-hwi_skr_mini_e3_v3/with-hotbed",
-    #"with-fan0", "printhor-hwi_skr_mini_e3_v3/with-fan0",
-    #"with-fan1", "printhor-hwi_skr_mini_e3_v3/with-fan1",
-    #"with-laser", "printhor-hwi_skr_mini_e3_v3/with-laser",
+    "with-printjob", "printhor-hwi_skr_mini_e3_v3/with-printjob",
+    "with-probe", "printhor-hwi_skr_mini_e3_v3/with-probe",
+    "with-hotend", "printhor-hwi_skr_mini_e3_v3/with-hotend",
+    "with-hotbed", "printhor-hwi_skr_mini_e3_v3/with-hotbed",
+    "with-fan-layer", "printhor-hwi_skr_mini_e3_v3/with-fan-layer-fan0",
+    "with-laser", "printhor-hwi_skr_mini_e3_v3/with-laser",
 
     #"ili9341_spi",
     #"with-display",
@@ -185,7 +180,6 @@ skr_mini_e3_v3 = [
 ]
 
 
-
 [dependencies]
 # Optional baremetal
 
@@ -197,19 +191,18 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
 
-embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [], optional = true }
-#embassy-stm32 = { version = "*", default-features = false, path = "../../../embassy/embassy-stm32", features = [], optional = true }
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [], optional = true }
-#embassy-executor = { version = "*", default-features = false, path = "../../../embassy/embassy-executor", features = [], optional = true }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [] }
-#embassy-sync = { version = "*", path = "../../../embassy/embassy-sync", features = [] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [] }
-#embassy-time = { version = "*", path = "../../../embassy/embassy-time", features = [] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [] }
-#embassy-futures = { version = "*", path = "../../../embassy/embassy-futures", features = [] }
-
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["nightly"], optional = true }
-#embassy-embedded-hal = { version = "*", path = "../../../embassy/embassy-embedded-hal", features = ["nightly"], optional = true }
+embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [], optional = true }
+#embassy-stm32 = { version = "*", default-features = false, path = "../embassy/embassy-stm32", features = [], optional = true }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [], optional = true }
+#embassy-executor = { version = "*", default-features = false, path = "../embassy/embassy-executor", features = [], optional = true }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [] }
+#embassy-sync = { version = "*", path = "../embassy/embassy-sync", features = [] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [] }
+#embassy-time = { version = "*", path = "../embassy/embassy-time", features = [] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [] }
+#embassy-futures = { version = "*", path = "../embassy/embassy-futures", features = [] }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [], optional = true }
+#embassy-embedded-hal = { version = "*", path = "../embassy/embassy-embedded-hal", features = [], optional = true }
 
 
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }

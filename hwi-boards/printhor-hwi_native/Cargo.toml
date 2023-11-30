@@ -23,8 +23,7 @@ with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = ["embedded-sdmmc"]
-with-fan0 = ["embedded-hal"]
-with-fan1 = ["embedded-hal"]
+with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = []
 sdcard-uses-spi = []
@@ -39,17 +38,17 @@ with-display = [
 
 [dependencies]
 
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
+embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
 #embassy-executor = { version = "*", default-features = false, path = "../../../embassy/embassy-executor", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["std"] }
+embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = ["std"] }
 #embassy-sync = { version = "*", path = "../../../embassy/embassy-sync", features = ["std"] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["std", "generic-queue"] }
+embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = ["std", "generic-queue"] }
 #embassy-time = { version = "*", path = "../../../embassy/embassy-time", features = ["std", "generic-queue"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [] }
+embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [] }
 #embassy-futures = { version = "*", path = "../../../embassy/embassy-futures", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = ["nightly"] }
-#embassy-embedded-hal = { version = "*", path = "../../../embassy/embassy-embedded-hal", features = ["nightly"] }
-embassy-usb = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "e0727fe1f6bd1b8c9c356f33991b522956251ba1", features = [], optional = true }
+embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [] }
+#embassy-embedded-hal = { version = "*", path = "../../../embassy/embassy-embedded-hal", features = [] }
+embassy-usb = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "85d5f42562ca9374e3200d652616af9533346c5e", features = [], optional = true }
 #embassy-usb = { version = "*", path = "../../../embassy/embassy-usb", features = [], optional = true }
 
 #nix = { version = "0.27.1", optional = true }
@@ -61,8 +60,6 @@ gnuplot = {version = "0.0.38", default-features = false, features=[], optional =
 embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
-
-
 printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common" }
 async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
 embedded-hal = { version = "0.2.3", default-features = false, optional = true }
@@ -72,3 +69,4 @@ embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true 
 lvgl = { version="*", git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
 embedded-graphics = { version = "0.7.1", optional = true}
 embedded-graphics-core = {version = "0.3.3", optional = true }
+nb = {version = "1.1.0", default-features = false, features = []}

@@ -40,34 +40,6 @@ pub struct EventBus {
 
 impl EventBus {
     pub(crate) fn publish_event(&mut self, event: EventStatus) {
-        // Get changing bits
-        // i: 000
-        // m: 001
-        //
-        // s: 000
-        //
-        // i: 000 & 001 = 000
-        // c: (i:000 ^ s:000) & m:001 = 000
-        //
-        // s: 001
-        //
-        // i: 000 & 001 = 000
-        // c: (i:000 ^ s:001) & m:001 = 001
-        // n: ( (s:001 & !c=110)=000 | (i:000 & c:001)=000 )=000
-
-        // i: 001
-        // s: 001
-        //
-        // i: 001 & 001 = 001
-        // c: (i:001 ^ s:001)=000 & m:001 = 000
-        // n: ( (s:001 & !c=111)=001 | (i:001 & c:001)=001 )=001
-
-        // i: 001
-        // s: 100
-        //
-        // i: 001 & 001 = 001
-        // c: (i:001 ^ s:100)=101 & m:001 = 001
-        // n: ( (s:100 & !c=110)=100 | (i:001 & c:001)=001 )=101
         let incoming_bits = event.flags.bitand(event.mask);
         let changed_bits = incoming_bits.bitxor(self.status).bitand(event.mask);
         if !changed_bits.is_empty() {
@@ -162,9 +134,6 @@ impl EventBusSubscriber<'_> {
         }
         loop {
             let relevant_bits = self.last_status.bitand(what.mask);
-            // 001 . 100 111
-            // r_bits = 00
-            // 00 = 10 ?
             if wanted.eq(&relevant_bits) {
                 return;
             }
@@ -230,8 +199,6 @@ impl EventStatus {
         }
     }
 }
-
-//pub type EventBusType = Mutex<CriticalSectionRawMutex, EventBus>;
 
 pub fn init_event_bus() -> EventBusRef {
     static EVT_BUS: TrackedStaticCell<PubSubType> = TrackedStaticCell::new();

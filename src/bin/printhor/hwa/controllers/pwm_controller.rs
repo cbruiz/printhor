@@ -23,12 +23,14 @@ impl<TimPeri> PwmController<TimPeri>
         }
     }
 
+    #[allow(unused)]
     pub async fn set_power(&self, _power: f32) {
         let mut x = self.pwm.lock().await;
-        x.disable(self.pwm_chan.clone());
+        x.disable(self.pwm_chan);
     }
 
     #[inline]
+    #[allow(unused)]
     pub fn is_on(&self) -> bool {
         self.enabled
     }

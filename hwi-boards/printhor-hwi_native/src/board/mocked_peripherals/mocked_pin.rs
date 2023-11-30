@@ -1,7 +1,5 @@
 use std::marker::PhantomData;
 use embassy_time::{Duration, Timer};
-#[cfg(feature = "with-hotbed")]
-use crate::hwi::native::traits::{AdcPin, TemperatureAdcCompat};
 
 pub struct MockedOutputPin<'a, T> {
     p: PhantomData<&'a T>
@@ -59,10 +57,16 @@ impl<'a, T> MockedInputPin<'a, T> {
 }
 
 #[cfg(feature = "with-hotbed")]
-impl<'a, T> AdcPin for MockedInputPin<'a, T> {}
+impl<'a, ADC, Word, PIN> embedded_hal::adc::OneShot<ADC, Word, PIN> for MockedInputPin<'a, PIN>
+where PIN: embedded_hal::adc::Channel<ADC>
+{
 
-#[cfg(feature = "with-hotbed")]
-impl<'a, T> TemperatureAdcCompat for MockedInputPin<'a, T> {}
+    type Error = u8;
+    fn read(&mut self, _: &mut PIN) -> Result<Word, nb::Error<u8>> {
+        todo!()
+    }
+
+}
 
 
 #[cfg(feature = "with-spi")]

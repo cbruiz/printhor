@@ -1,7 +1,7 @@
 #[allow(unused)]
 use crate::{hwa, hwi};
-#[cfg(feature = "with-probe")]
-use crate::hwa::{ControllerRef};
+#[allow(unused)]
+use crate::hwa::ControllerRef;
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
 
@@ -12,8 +12,8 @@ pub struct MotionDriverParams {
     pub(crate) probe_controller: ControllerRef<hwa::controllers::ServoController>,
     #[cfg(feature = "with-fan0")]
     pub(crate) fan0_controller: ControllerRef<hwa::controllers::Fan0PwmController>,
-    #[cfg(feature = "with-fan1")]
-    pub(crate) fan1_controller: ControllerRef<hwa::controllers::Fan1PwmController>,
+    #[cfg(feature = "with-fan-layer")]
+    pub(crate) layer_fan_controller: ControllerRef<hwa::controllers::LayerPwmController>,
     #[cfg(feature = "with-laser")]
     pub(crate) laser_controller: ControllerRef<hwa::controllers::LaserPwmController>,
 }
@@ -28,8 +28,8 @@ pub struct MotionDriver {
     pub probe_controller: ControllerRef<hwa::controllers::ServoController>,
     #[cfg(feature = "with-fan0")]
     pub fan0_controller: ControllerRef<hwa::controllers::Fan0PwmController>,
-    #[cfg(feature = "with-fan1")]
-    pub fan1_controller: ControllerRef<hwa::controllers::Fan1PwmController>,
+    #[cfg(feature = "with-fan-layer")]
+    pub layer_fan_controller: ControllerRef<hwa::controllers::LayerPwmController>,
     #[cfg(feature = "with-laser")]
     pub laser_controller: ControllerRef<hwa::controllers::LaserPwmController>,
 }
@@ -46,8 +46,8 @@ impl MotionDriver {
             probe_controller: params.probe_controller,
             #[cfg(feature = "with-fan0")]
             fan0_controller: params.fan0_controller,
-            #[cfg(feature = "with-fan1")]
-            fan1_controller: params.fan1_controller,
+            #[cfg(feature = "with-fan-layer")]
+            layer_fan_controller: params.layer_fan_controller,
             #[cfg(feature = "with-laser")]
             laser_controller: params.laser_controller,
         }

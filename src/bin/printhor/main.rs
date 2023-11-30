@@ -29,7 +29,7 @@ pub mod math;
 
 use crate::control::control_task::ControlTaskControllers;
 use embassy_executor::Spawner;
-#[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan1"))]
+#[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan-layer"))]
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
 use printhor_hwa_common::{EventBusRef, TrackedStaticCell};
@@ -111,135 +111,147 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
                      _pwm_devices: PwmDevices,
                      _wd: hwa::WatchdogRef
 ) -> Result<(), ()> {
-
     #[cfg(all(feature = "with-sdcard", feature = "sdcard-uses-spi"))]
-    let sdcard_adapter = hwa::adapters::SPIAdapter::new(devices.sdcard_device, devices.sdcard_cs_pin);
+        let sdcard_adapter = hwa::adapters::SPIAdapter::new(devices.sdcard_device, devices.sdcard_cs_pin);
 
     #[cfg(all(feature = "with-sdcard", not(feature = "sdcard-uses-spi")))]
-    let sdcard_adapter = devices.sdcard_device;
+        let sdcard_adapter = devices.sdcard_device;
 
 
     #[cfg(feature = "with-sdcard")]
-    let sdcard_controller = CardController::new(
+        let sdcard_controller = CardController::new(
         sdcard_adapter
     ).await;
 
     #[cfg(feature = "with-printjob")]
-    let printer_controller = PrinterController::new(event_bus.clone());
+        let printer_controller = PrinterController::new(event_bus.clone());
 
     #[cfg(feature = "with-hotend")]
-    let hotend_pwm = HotendPwmController::new(
+        let hotend_pwm = HotendPwmController::new(
         _pwm_devices.hotend.power_pwm.clone(),
         _pwm_devices.hotend.power_channel,
     );
     #[cfg(feature = "with-hotbed")]
-    let hotbed_pwm = HotbedPwmController::new(
-        _pwm_devices.hotend.power_pwm.clone(),
-        _pwm_devices.hotend.power_channel,
+        let hotbed_pwm = HotbedPwmController::new(
+        _pwm_devices.hotbed.power_pwm.clone(),
+        _pwm_devices.hotbed.power_channel,
     );
 
     #[cfg(feature = "with-probe")]
-    static PROBE_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::ServoController>> = TrackedStaticCell::new();
-    #[cfg(feature = "with-probe")]
-    let probe_controller = ControllerRef::new(
-        PROBE_CONTROLLER_INST.init( "ProbeServoController",
-                                    ControllerMutex::new(
-                                    hwa::controllers::ServoController::new(
-                                        _pwm_devices.probe.probe_pwm,
-                                        _pwm_devices.probe.probe_channel,
-                                    ))
-    ));
-
-    #[cfg(feature = "with-fan0")]
-    static FAN0_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::Fan0PwmController>> = TrackedStaticCell::new();
-    #[cfg(feature = "with-fan0")]
-    let fan0_controller = ControllerRef::new(
-        FAN0_CONTROLLER_INST.init( "Fan0Controller",
-                                    ControllerMutex::new(
-                                        hwa::controllers::Fan0PwmController::new(
-                                            _pwm_devices.fan0.power_pwm,
-                                            _pwm_devices.fan0.power_channel,
-                                        ))
-        ));
-
-    #[cfg(feature = "with-fan1")]
-    static FAN1_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::Fan1PwmController>> = TrackedStaticCell::new();
-    #[cfg(feature = "with-fan1")]
-        let fan1_controller = ControllerRef::new(
-        FAN1_CONTROLLER_INST.init( "Fan1Controller",
-                                   ControllerMutex::new(
-                                       hwa::controllers::Fan1PwmController::new(
-                                           _pwm_devices.fan1.power_pwm,
-                                           _pwm_devices.fan1.power_channel,
-                                       ))
-        ));
-
-    #[cfg(feature = "with-laser")]
-    static LASER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::LaserPwmController>> = TrackedStaticCell::new();
-    #[cfg(feature = "with-laser")]
-        let laser_controller = ControllerRef::new(
-        LASER_CONTROLLER_INST.init( "LaserController",
-                                   ControllerMutex::new(
-                                       hwa::controllers::LaserPwmController::new(
-                                           _pwm_devices.laser.power_pwm,
-                                           _pwm_devices.laser.power_channel,
-                                       ))
-        ));
-
-    #[cfg(feature = "with-hotend")]
-    static HOTEND_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotendController>> = TrackedStaticCell::new();
-    #[cfg(feature = "with-hotend")]
-    let hotend_controller = ControllerRef::new(
-        HOTEND_CONTROLLER_INST.init("HotendController",
-            ControllerMutex::new(
-                hwa::controllers::HotendController::new(
-                    _pwm_devices.hotend.temp_adc.clone(),
-                    _pwm_devices.hotend.temp_pin,
-                    hotend_pwm,
-                )
+        let probe_controller = {
+        static PROBE_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::ServoController>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            PROBE_CONTROLLER_INST.init("ProbeServoController",
+                                       ControllerMutex::new(
+                                           hwa::controllers::ServoController::new(
+                                               _pwm_devices.probe.power_pwm,
+                                               _pwm_devices.probe.power_channel,
+                                           )
+                                       )
             )
         )
-    );
-    #[cfg(feature = "with-hotend")]
-    hotend_controller.lock().await.init().await;
+    };
 
-    #[cfg(feature = "with-hotbed")]
-    static HOTBED_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotbedController>> = TrackedStaticCell::new();
-    #[cfg(feature = "with-hotbed")]
-    let hotbed_controller = ControllerRef::new(
-        HOTBED_CONTROLLER_INST.init("HotbedController",
-                                    ControllerMutex::new(
-                                        hwa::controllers::HotbedController::new(
-                                            _pwm_devices.hotbed.temp_adc,
-                                            _pwm_devices.hotbed.temp_pin,
-                                            hotbed_pwm,
+    #[cfg(feature = "with-fan0")]
+        let fan0_controller = {
+        static FAN0_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::Fan0PwmController>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            FAN0_CONTROLLER_INST.init("Fan0Controller",
+                                      ControllerMutex::new(
+                                          hwa::controllers::Fan0PwmController::new(
+                                              _pwm_devices.fan0.power_pwm,
+                                              _pwm_devices.fan0.power_channel,
+                                          )
+                                      )
+            )
+        )
+    };
+
+    #[cfg(feature = "with-fan-layer")]
+        let layer_fan_controller = {
+        static LAYER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::LayerPwmController>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            LAYER_CONTROLLER_INST.init("LayerFanController",
+                                       ControllerMutex::new(
+                                           hwa::controllers::LayerPwmController::new(
+                                               _pwm_devices.layer_fan.power_pwm,
+                                               _pwm_devices.layer_fan.power_channel,
+                                           )
+                                       )
+            )
+        )
+    };
+
+    #[cfg(feature = "with-laser")]
+        let laser_controller = {
+        static LASER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::LaserPwmController>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            LASER_CONTROLLER_INST.init("LaserController",
+                                       ControllerMutex::new(
+                                           hwa::controllers::LaserPwmController::new(
+                                               _pwm_devices.laser.power_pwm,
+                                               _pwm_devices.laser.power_channel,
+                                           ))
+            ))
+    };
+
+    #[cfg(feature = "with-hotend")]
+    let hotend_controller = {
+        static HOTEND_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotendController>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            HOTEND_CONTROLLER_INST.init("HotendController",
+                                        ControllerMutex::new(
+                                            hwa::controllers::HotendController::new(
+                                                _pwm_devices.hotend.temp_adc.clone(),
+                                                _pwm_devices.hotend.temp_pin,
+                                                hotend_pwm,
+                                            )
                                         )
-                                    )
+            )
         )
-    );
+    };
+    #[cfg(feature = "with-hotend")]
+    hotend_controller.lock().await.init().await;
+
+    #[cfg(feature = "with-hotbed")]
+    let hotbed_controller = {
+        static HOTBED_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotbedController>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            HOTBED_CONTROLLER_INST.init("HotbedController",
+                                        ControllerMutex::new(
+                                            hwa::controllers::HotbedController::new(
+                                                _pwm_devices.hotbed.temp_adc,
+                                                _pwm_devices.hotbed.temp_pin,
+                                                hotbed_pwm,
+                                            )
+                                        )
+            )
+        )
+    };
     #[cfg(feature = "with-hotbed")]
     hotend_controller.lock().await.init().await;
 
     #[cfg(feature = "with-motion")]
-    static MPS : TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
-    #[cfg(feature = "with-motion")]
-    let motion_planer = MotionPlannerRef {
-        inner: MPS.init("MotionPlanner",
-            hwa::controllers::MotionPlanner::new(
-                event_bus.clone(),
-                hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
-                    motion_device: _motion_device.motion_devices,
-                    #[cfg(feature = "with-probe")]
-                    probe_controller: probe_controller.clone(),
-                    #[cfg(feature = "with-fan0")]
-                    fan0_controller: fan0_controller.clone(),
-                    #[cfg(feature = "with-fan1")]
-                    fan1_controller: fan1_controller.clone(),
-                    #[cfg(feature = "with-laser")]
-                    laser_controller: laser_controller.clone(),
-                }),
-            )
-        ),
+    let motion_planer = {
+        static MPS : TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
+        MotionPlannerRef {
+            inner: MPS.init("MotionPlanner",
+                            hwa::controllers::MotionPlanner::new(
+                                event_bus.clone(),
+                                hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
+                                    motion_device: _motion_device.motion_devices,
+                                    #[cfg(feature = "with-probe")]
+                                    probe_controller: probe_controller.clone(),
+                                    #[cfg(feature = "with-fan0")]
+                                    fan0_controller: fan0_controller.clone(),
+                                    #[cfg(feature = "with-fan-layer")]
+                                    layer_fan_controller: layer_fan_controller.clone(),
+                                    #[cfg(feature = "with-laser")]
+                                    laser_controller: laser_controller.clone(),
+                                }),
+                            )
+            ),
+        }
     };
 
     let processor: GCodeProcessor = GCodeProcessor::new(GCodeProcessorParams {
@@ -258,8 +270,8 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         hotbed: hotbed_controller.clone(),
         #[cfg(feature = "with-fan0")]
         fan0: fan0_controller.clone(),
-        #[cfg(feature = "with-fan1")]
-        fan1: fan1_controller.clone(),
+        #[cfg(feature = "with-fan-layer")]
+        layer_fan: layer_fan_controller.clone(),
         #[cfg(feature = "with-laser")]
         laser: laser_controller,
 
@@ -342,7 +354,9 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     }
 }
 
+#[allow(unused)]
 #[cfg(feature = "with-defmt")]
 use defmt_rtt as _;
+#[allow(unused)]
 #[cfg(feature = "with-defmt")]
 use panic_probe as _;
