@@ -1,11 +1,9 @@
 use crate::hwa;
 use printhor_hwa_common::ControllerRef;
+use hwa::devices::*;
 use crate::hwa::controllers::pwm_controller::PwmController;
 use crate::hwa::VREF_SAMPLE;
 
-use crate::hwa::devices::AdcImpl;
-use crate::hwa::devices::AdcPinTrait;
-use crate::hwa::devices::AdcTrait;
 
 type AdcControllerRef<AdcPeri> = ControllerRef<AdcImpl<AdcPeri>>;
 
@@ -14,7 +12,7 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
     where
         AdcPeri: AdcTrait + 'static,
         AdcPin: AdcPinTrait<AdcPeri>,
-        PwmHwaDevice: embedded_hal::Pwm + 'static,
+        PwmHwaDevice: embedded_hal::Pwm<Duty=u16> + 'static,
         <PwmHwaDevice as embedded_hal::Pwm>::Channel: Copy
 
 {
@@ -22,6 +20,8 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
     adc_pin: AdcPin,
     vref_sample: u16,
     pwm: PwmController<PwmHwaDevice>,
+    target_temp: f32,
+    current_temp: f32,
 }
 
 #[allow(dead_code)]
@@ -29,7 +29,7 @@ impl<AdcPeri, AdcPin, PwmHwaDevice> HeaterController<AdcPeri, AdcPin, PwmHwaDevi
 where
     AdcPeri: AdcTrait + 'static,
     AdcPin: AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal::Pwm + 'static,
+    PwmHwaDevice: embedded_hal::Pwm<Duty=u16> + 'static,
     <PwmHwaDevice as embedded_hal::Pwm>::Channel: Copy
 {
     pub fn new(adc: AdcControllerRef<AdcPeri>, adc_pin: AdcPin, pwm: PwmController<PwmHwaDevice>) -> Self {
@@ -38,6 +38,8 @@ where
             adc_pin,
             vref_sample: VREF_SAMPLE,
             pwm,
+            target_temp: 0.0f32,
+            current_temp: 0.0f32,
         }
     }
     pub async fn init(&mut self) {
@@ -53,28 +55,59 @@ where
         hwa::info!("ADC Initiallized: vref_sample = {}", self.vref_sample);
     }
 
+    #[inline]
     pub async fn read_temp(&mut self) -> f32 {
         let mut bus  = self.adc.lock().await;
-        bus.read(&mut self.adc_pin);
-        0.0f32
+        let sample = bus.read(&mut self.adc_pin);
+        self.convert_to_celcius(sample)
     }
+
+    #[inline]
     pub fn get_target_temp(&self) -> f32 {
-        0.0f32
+        self.target_temp
     }
 
-    pub async fn set_target_temp(&mut self, _target_temp: f32) {
-
+    #[inline]
+    pub fn set_target_temp(&mut self, target_temp: f32) {
+        self.target_temp = target_temp;
     }
 
-    pub fn set_current_temp(&mut self, _target_temp: f32) {
+    #[inline]
+    pub fn set_current_temp(&mut self, current_temp: f32) {
+        self.current_temp = current_temp;
     }
 
+    #[inline]
     pub fn get_current_temp(&mut self) -> f32 {
-        0.0f32
+        self.current_temp
     }
 
-    pub async fn set_power(&mut self, _power: f32) {
-        self.pwm.set_power(_power).await;
+    /// Measures the temperature aplying the SteinHart-Hart equation
+    /// Steps:
+    /// 1 - Compute the resistance of the thermistor
+    /// 2 - Compute the temperature applying the β parameter Steinhart–Hart equation
+    fn convert_to_celcius(&self, sample: u16) -> f32 {
+        const B: f32 = 3950.0; // B value of the thermistor
+        const R0: f32 = 10000.0; // Nominal NTC Value
+        const R1: f32 = 9850.0;
+
+        let sample_mv =  self.convert_to_millivolts(sample);
+        let measured_resistance: f32 = R1 / ((4096.0f32 / sample_mv as f32) - 1.0f32);
+        let log_mr_by_r0: f32 = micromath::F32::from(measured_resistance / R0).ln().into();
+        (1.0 / (log_mr_by_r0 / B + 1.0 / 298.15)) - 273.15
+    }
+
+    fn convert_to_millivolts(&self, sample: u16) -> u16 {
+        // From http://www.st.com/resource/en/datasheet/DM00071990.pdf
+        // 6.3.24 Reference voltage
+        const VREFINT_MV: u32 = 1210; // Internal reference voltage (average)
+        hwa::trace!("sample: {}", sample);
+        ((u32::from(sample) * VREFINT_MV) / u32::from(self.vref_sample)) as u16
+    }
+
+    #[inline]
+    pub async fn set_power(&mut self, power: u8) {
+        self.pwm.set_power(power).await;
     }
 
     #[inline]

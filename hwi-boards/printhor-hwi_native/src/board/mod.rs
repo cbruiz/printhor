@@ -190,7 +190,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     let adc_hotend_hotbed = {
-        let adc_hotend_hotbed = device::AdcHotendHotbed::new(MockedInputPin::new());
+        let adc_hotend_hotbed = device::AdcHotendHotbed::new(0);
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
         ControllerRef::new(ADC_INST.init(

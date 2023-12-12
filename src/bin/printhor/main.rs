@@ -29,7 +29,7 @@ pub mod math;
 
 use crate::control::control_task::ControlTaskControllers;
 use embassy_executor::Spawner;
-#[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan-layer"))]
+#[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
 use printhor_hwa_common::{EventBusRef, TrackedStaticCell};
@@ -96,8 +96,8 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     let _t0 = embassy_time::Instant::now();
     loop {
         let _r = event_bus.get_status().await;
-        //info!("STATUS: {:?}", _r);
-        //crate::info!("watchdog feed at {}", _t0.elapsed().as_micros());
+        //hwa::info!("STATUS: {:?}", _r);
+        //hwa::info!("watchdog feed at {}", _t0.elapsed().as_micros());
         wdt.lock().await.pet();
         ticker.next().await;
     }

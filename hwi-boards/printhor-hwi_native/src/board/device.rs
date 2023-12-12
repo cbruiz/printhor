@@ -13,11 +13,14 @@ pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1Tx>;
 #[cfg(feature = "with-uart-port-1")]
 pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
 
-pub trait AdcImpl {}
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+pub type AdcImpl<T> = crate::board::mocked_peripherals::MockedAdc<T>;
 
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 pub trait AdcTrait {}
 
-pub trait AdcPinTrait {}
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+pub trait AdcPinTrait<T> {}
 
 #[cfg(feature = "with-trinamic")]
 pub type Uart4 = crate::board::mocked_peripherals::MockedUart;
@@ -55,8 +58,22 @@ pub type SDCardBlockDevice = crate::board::mocked_peripherals::MockledSDCardBloc
 #[cfg(feature = "with-sdcard")]
 pub type SDCardBlockDeviceRef = crate::board::ControllerRef<SDCardBlockDevice>;
 
+#[cfg(feature = "with-hotend")]
+pub type AdcHotendPeripheral = u8;
+
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-pub type AdcHotendHotbed = crate::board::mocked_peripherals::MockedAdc<MockedInputPin<'static, u8>>;
+pub type AdcHotendHotbed = AdcImpl<u8>;
+
+
+
+#[cfg(feature = "with-hotend")]
+pub type AdcHotendPin = crate::board::mocked_peripherals::MockedInputPin<'static, u8>;
+
+#[cfg(feature = "with-hotbed")]
+pub type AdcHotbedPeripheral = u8;
+
+#[cfg(feature = "with-hotbed")]
+pub type AdcHotbedPin = crate::board::mocked_peripherals::MockedInputPin<'static, u8>;
 
 pub type Watchdog = crate::board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
@@ -143,7 +160,7 @@ pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
-    pub temp_pin: MockedInputPin<'static, u8>,
+    pub temp_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
 }
 
 #[cfg(feature = "with-hotbed")]
@@ -151,7 +168,7 @@ pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
-    pub temp_pin: MockedInputPin<'static, u8>,
+    pub temp_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
 }
 
 #[cfg(feature = "with-fan-layer")]

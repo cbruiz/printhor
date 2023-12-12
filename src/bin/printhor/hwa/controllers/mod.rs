@@ -19,7 +19,7 @@ mod servo_controller;
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 mod heater_controller;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer"))]
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
 mod pwm_controller;
 
 // Use

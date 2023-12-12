@@ -91,11 +91,11 @@ pub type AdcHotbed = AdcHotendHotbed;
 #[cfg(feature = "nucleo64-l476rg")]
 pub type AdcHotendPin = embassy_stm32::peripherals::PC2;
 #[cfg(feature = "nucleo64-f410rb")]
-pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
+pub type AdcHotendPin = embassy_stm32::peripherals::PB0;
 #[cfg(feature = "nucleo64-l476rg")]
 pub type AdcHotbedPin = embassy_stm32::peripherals::PC3;
 #[cfg(feature = "nucleo64-f410rb")]
-pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
+pub type AdcHotbedPin = embassy_stm32::peripherals::PB1;
 
 pub trait PwmTrait = embassy_stm32::timer::CaptureCompare16bitInstance;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
@@ -103,20 +103,32 @@ pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static,
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 #[cfg(feature = "nucleo64-f410rb")]
-pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
+pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM11>;
 
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmHotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM15>;
+#[cfg(feature = "nucleo64-f410rb")]
+pub type PwmHotendHotbedLayer = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 
-pub type PwmFan0 = PwmServo;
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmLayerFan = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+#[cfg(feature = "nucleo64-f410rb")]
+pub type PwmLayerFan = PwmHotendHotbedLayer;
+
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmHotend = PwmHotendHotbed;
+#[cfg(feature = "nucleo64-f410rb")]
+pub type PwmHotend = PwmHotendHotbedLayer;
+
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmHotbed = PwmHotendHotbed;
+#[cfg(feature = "nucleo64-f410rb")]
+pub type PwmHotbed = PwmHotendHotbedLayer;
+
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM8>;
+#[cfg(feature = "nucleo64-f410rb")]
+pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
@@ -131,7 +143,7 @@ pub struct ProbePeripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(all(feature = "nucleo64-l476rg", feature = "with-hotend"))]
+#[cfg(feature = "with-hotend")]
 pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
@@ -139,7 +151,7 @@ pub struct HotendPeripherals {
     pub temp_pin: AdcHotendPin
 }
 
-#[cfg(all(feature = "nucleo64-l476rg", feature = "with-hotbed"))]
+#[cfg(feature = "with-hotbed")]
 pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
@@ -159,13 +171,13 @@ pub struct Fan1Peripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(all(feature = "nucleo64-l476rg", feature = "with-laser"))]
+#[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmLaser>,
     pub power_channel: PwmChannel,
 }
 
-#[cfg(all(feature = "nucleo64-l476rg", feature = "with-layer-fan"))]
+#[cfg(feature = "with-layer-fan")]
 pub struct LayerFanPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
     pub power_channel: PwmChannel,

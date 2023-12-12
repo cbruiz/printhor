@@ -212,7 +212,15 @@ pub mod uart_port1 {
                     Poll::Ready(rst) => {
                         match rst {
                             Ok(n) => {
-                                //defmt::trace!("poll() -> Got {} bytes", n);
+
+                                /*
+                                let n = buff.len();
+                                for (place, data) in this.buffer.iter_mut().zip(buff.iter()) {
+                                    *place = *data
+                                }
+                                this.receiver.consume(n);
+                                */
+                                //defmt::debug!("poll() -> Got {} bytes", n);
                                 this.bytes_read = n as u8;
                                 if n > 0 {
                                     let byte = this.buffer[this.current_byte_index as usize];
@@ -224,20 +232,17 @@ pub mod uart_port1 {
                                 }
                             }
                             Err(_e) => {
-                                //defmt::trace!("poll() -> Error");
+                                defmt::trace!("poll() -> Error");
                                 Poll::Ready(None)
                             }
                         }
                     }
                     Poll::Pending => {
-                        //defmt::debug!("poll() -> Pending");
+                        defmt::trace!("poll() -> Pending");
                         Poll::Pending
                     }
                 }
             }
         }
     }
-
-
-
 }

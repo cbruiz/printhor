@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 use embassy_time::{Duration, Timer};
+use crate::device::AdcPinTrait;
 
 pub struct MockedOutputPin<'a, T> {
     p: PhantomData<&'a T>
@@ -54,6 +55,26 @@ impl<'a, T> MockedInputPin<'a, T> {
         //println!("wait_edge");
         Timer::after(Duration::from_secs(10)).await;
     }
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl<'a, T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedInputPin<'a, T> {
+
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl<'a, T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
+
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl AdcPinTrait<u8> for u8 {
+
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl<'a, T> AdcPinTrait<u8> for MockedInputPin<'a, T> {
+
 }
 
 #[cfg(feature = "with-hotbed")]

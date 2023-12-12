@@ -1,21 +1,25 @@
-pub struct MockedAdc<PIN> {
-    #[allow(unused)]
-    p: PIN,
+use crate::device::AdcTrait;
+
+pub struct MockedAdc<PERI> {
+    _peri: PERI
 }
-impl<PIN> MockedAdc<PIN> {
-    pub(crate) const fn new(p: PIN) -> Self {
+impl<PERI> MockedAdc<PERI> {
+    pub(crate) const fn new(_peri: PERI) -> Self {
         Self {
-            p,
+            _peri
         }
     }
     #[allow(unused)]
-    pub(crate) fn read<T>(&self, _pin: &T) -> u16 {
-        1024
+    pub fn read<T>(&mut self, _pin: &T) -> u16 {
+        0
     }
 
-    #[allow(unused)]
-    pub(crate) async fn test(&self) {
-        crate::info!("adc test ok");
-    }
+}
+
+impl<PERI> AdcTrait for MockedAdc<PERI> {
+
+}
+
+impl AdcTrait for u8 {
 
 }

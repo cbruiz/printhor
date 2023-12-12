@@ -255,7 +255,7 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-hotend")]
             GCode::M104(s) => {
-                self.hotend.lock().await.set_target_temp(s.s.and_then(|v| v.to_i32()).unwrap_or(0) as f32).await;
+                self.hotend.lock().await.set_target_temp(s.s.and_then(|v| v.to_i32()).unwrap_or(0) as f32);
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]
@@ -278,7 +278,7 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-hotend")]
             GCode::M109(s) => {
-                self.hotend.lock().await.set_target_temp((s.s.and_then(|v| v.to_i32()).unwrap_or(0)) as f32).await;
+                self.hotend.lock().await.set_target_temp((s.s.and_then(|v| v.to_i32()).unwrap_or(0)) as f32);
                 Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(EventFlags::HOTEND_TEMP_OK)))
             }
             #[cfg(feature = "with-motion")]

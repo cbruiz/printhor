@@ -119,7 +119,11 @@ pub fn heap_current_usage_percentage() -> f32 {
 bind_interrupts!(struct UsbIrqs {
     OTG_FS => usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
 });
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(all(feature = "nucleo64-l476rg", feature = "with-uart-port-1"))]
+bind_interrupts!(struct UartPort1Irqs {
+    USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+});
+#[cfg(all(feature = "nucleo64-f410rb", feature = "with-uart-port-1"))]
 bind_interrupts!(struct UartPort1Irqs {
     USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
 });
@@ -136,8 +140,21 @@ pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
     #[cfg(feature="nucleo64-f410rb")]
         let config = {
-        let config = Config::default();
-        // TODO
+        let mut config = Config::default();
+        config.rcc.hsi = true;
+        config.rcc.hse = None;
+        config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;
+        config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSI;
+        config.rcc.pll = Some(embassy_stm32::rcc::Pll{
+            prediv: embassy_stm32::rcc::PllPreDiv::DIV16,
+            mul: embassy_stm32::rcc::PllMul::MUL200,
+            divp: Some(embassy_stm32::rcc::PllPDiv::DIV2),
+            divq: None,
+            divr: None,
+        });
+        config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
+        config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV2;
+        config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
         config
     };
     #[cfg(feature="nucleo64-l476rg")]
@@ -189,6 +206,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
 
+
     #[cfg(feature = "with-uart-port-1")]
     let (uart_port1_tx, uart_port1_rx_stream) = {
         let mut cfg = usart::Config::default();
@@ -196,20 +214,24 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         cfg.data_bits = DataBits::DataBits8;
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
-        cfg.detect_previous_overrun = false;
+        cfg.detect_previous_overrun = true;
+
+        /*
+        static RXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
+        let rxb = RXB.init("RXBuffer", [0u8; 32]);
+        static TXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
+        let txb = TXB.init("TXBuffer", [0u8; 32]);
+         */
 
         #[cfg(feature = "nucleo64-f410rb")]
-        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART2,
-                                                            p.PA3, p.PA2,
-                                                            UartPort1Irqs,
-                                                            p.DMA1_CH6, p.DMA1_CH5,
-                                                            cfg).expect("Ready").split();
+        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
+            p.USART2, p.PA3, p.PA2, UartPort1Irqs, p.DMA1_CH6, p.DMA1_CH5, cfg
+        ).expect("Ready").split();
         #[cfg(feature = "nucleo64-l476rg")]
-        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART2,
-                                                                                        p.PA3, p.PA2,
-                                                                                        UartPort1Irqs,
-                                                                                        p.DMA1_CH7, p.DMA1_CH6,
-                                                                                        cfg).expect("Ready").split();
+        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
+            p.USART2, p.PA3, p.PA2, UartPort1Irqs,
+            p.DMA1_CH7, p.DMA1_CH6, cfg
+        ).expect("Ready").split();
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let uart_port1_tx = ControllerRef::new(
@@ -303,17 +325,17 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 PWM_INST.init("PwmServo",
                               ControllerMutex::new(
                                   device::PwmServo::new(
-                                      p.TIM5,
+                                      p.TIM11,
+                                      Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB9, embassy_stm32::gpio::OutputType::PushPull)),
                                       None,
                                       None,
-                                      Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch3(p.PC11, embassy_stm32::gpio::OutputType::PushPull)),
                                       None,
                                       embassy_stm32::time::hz(50),
                                       embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
                                   )
                               ),
                 )),
-            power_channel: embassy_stm32::timer::Channel::Ch3,
+            power_channel: embassy_stm32::timer::Channel::Ch1,
         }
     };
 
@@ -325,6 +347,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
         #[cfg(feature = "nucleo64-l476rg")]
         adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles12_5);
+        #[cfg(feature = "nucleo64-f410rb")]
+        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles15);
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
         ControllerRef::new(ADC_INST.init(
             "HotendHotbedAdc",
@@ -332,26 +356,45 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+    #[cfg(all(feature ="nucleo64-l476rg", any(feature = "with-hotend", feature = "with-hotbed")))]
         let pwm_hotend_hotbed = {
             let pwm = device::PwmHotendHotbed::new(
-                p.TIM15,
-                Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB14, embassy_stm32::gpio::OutputType::PushPull)),
-                Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PB15, embassy_stm32::gpio::OutputType::PushPull)),
-                None,
-                None,
-                embassy_stm32::time::hz(5_000),
-                embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
-            );
-            static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotendHotbed>> = TrackedStaticCell::new();
+            p.TIM15,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB14, embassy_stm32::gpio::OutputType::PushPull)),
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PB15, embassy_stm32::gpio::OutputType::PushPull)),
+            None,
+            None,
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotendHotbed>> = TrackedStaticCell::new();
 
-            ControllerRef::new(PWM_INST.init(
-                "PwmHotendHotbed",
-                ControllerMutex::new(pwm)
-            ))
-        };
+        ControllerRef::new(PWM_INST.init(
+            "PwmHotendHotbed",
+            ControllerMutex::new(pwm)
+        ))
+    };
 
-    #[cfg(any(feature = "with-hotend"))]
+    #[cfg(all(feature ="nucleo64-f410rb", any(feature = "with-hotend", feature = "with-hotbed", feature = "with-layer-fan")))]
+        let pwm_hotend_hotbed_layer = {
+            let pwm = device::PwmHotendHotbedLayer::new(
+            p.TIM5,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB12, embassy_stm32::gpio::OutputType::PushPull)),
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, embassy_stm32::gpio::OutputType::PushPull)),
+            None,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PB11, embassy_stm32::gpio::OutputType::PushPull)),
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotendHotbedLayer>> = TrackedStaticCell::new();
+
+        ControllerRef::new(PWM_INST.init(
+            "PwmHotendHotbedLayer",
+            ControllerMutex::new(pwm)
+        ))
+    };
+
+    #[cfg(all(feature = "nucleo64-l476rg", feature = "with-hotend"))]
         let hotend_device = {
 
         device::HotendPeripherals {
@@ -361,8 +404,18 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             temp_pin: p.PC2,
         }
     };
+    #[cfg(all(feature = "nucleo64-f410rb", feature = "with-hotend"))]
+        let hotend_device = {
 
-    #[cfg(any(feature = "with-hotbed"))]
+        device::HotendPeripherals {
+            power_pwm: pwm_hotend_hotbed_layer.clone(),
+            power_channel: embassy_stm32::timer::Channel::Ch1,
+            temp_adc: adc.clone(),
+            temp_pin: p.PB0,
+        }
+    };
+
+    #[cfg(all(feature="nucleo64-l476rg", feature = "with-hotbed"))]
         let hotbed_device = {
 
         device::HotbedPeripherals {
@@ -372,8 +425,18 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             temp_pin: p.PC3,
         }
     };
+    #[cfg(all(feature="nucleo64-f410rb", feature = "with-hotbed"))]
+        let hotbed_device = {
 
-    #[cfg(all(feature = "with-laser"))]
+        device::HotbedPeripherals {
+            power_pwm: pwm_hotend_hotbed_layer.clone(),
+            power_channel: embassy_stm32::timer::Channel::Ch4,
+            temp_adc: adc.clone(),
+            temp_pin: p.PB1,
+        }
+    };
+
+    #[cfg(all(feature="nucleo64-l476rg", feature = "with-laser"))]
         let laser_device = {
         let pwm = device::PwmLaser::new(
             p.TIM8,
@@ -381,6 +444,28 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             None,
             None,
             Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PC9, embassy_stm32::gpio::OutputType::PushPull)),
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
+
+        device::LaserPeripherals {
+            power_pwm: ControllerRef::new(PWM_INST.init(
+                "PwmLaser",
+                ControllerMutex::new(pwm)
+            )),
+            power_channel: embassy_stm32::timer::Channel::Ch4,
+        }
+    };
+
+    #[cfg(all(feature="nucleo64-f410rb", feature = "with-laser"))]
+        let laser_device = {
+            let pwm = device::PwmLaser::new(
+            p.TIM1,
+            None,
+            None,
+            None,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PA11, embassy_stm32::gpio::OutputType::PushPull)),
             embassy_stm32::time::hz(5_000),
             embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
         );
@@ -414,6 +499,15 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 ControllerMutex::new(pwm)
             )),
             power_channel: embassy_stm32::timer::Channel::Ch1,
+        }
+    };
+
+    #[cfg(all(feature="nucleo64-f410rb", feature = "with-layer-fan"))]
+        let layer_fan_device = {
+
+        device::LayerFanPeripherals {
+            power_pwm: pwm_hotend_hotbed_layer.clone(),
+            power_channel: embassy_stm32::timer::Channel::Ch2,
         }
     };
 
