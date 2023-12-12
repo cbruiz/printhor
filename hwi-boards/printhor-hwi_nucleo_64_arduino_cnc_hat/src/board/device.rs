@@ -34,10 +34,22 @@ pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
     embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH5
 >;
+
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
+pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static,
+    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH5
+>;
+
 #[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
     embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
 >;
+
+#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
+pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static,
+    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
+>;
+
 #[cfg(feature = "with-uart-port-1")]
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
 #[cfg(feature = "with-uart-port-1")]

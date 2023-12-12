@@ -162,14 +162,16 @@ pub mod usbserial {
 #[cfg(feature = "with-uart-port-1")]
 pub mod uart_port1 {
     use crate::device::UartPort1RxDevice;
+    use crate::device::UartPort1RingBufferedRxDevice;
     use futures::Stream;
     use core::pin::Pin;
     use futures::task::Context;
     use futures::task::Poll;
     use futures::Future;
+    use printhor_hwa_common::TrackedStaticCell;
 
     pub struct UartPort1RxInputStream {
-        pub receiver: UartPort1RxDevice,
+        pub receiver: UartPort1RingBufferedRxDevice,
         buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
         bytes_read: u8,
         current_byte_index: u8,
@@ -177,8 +179,9 @@ pub mod uart_port1 {
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
+            static BUFF: TrackedStaticCell<[u8;crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
             Self {
-                receiver,
+                receiver: receiver.into_ring_buffered(BUFF.init("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
                 buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
                 bytes_read: 0,
                 current_byte_index: 0,
@@ -206,21 +209,12 @@ pub mod uart_port1 {
                 this.bytes_read = 0;
 
                 let r = core::pin::pin!(
-                    this.receiver.read_until_idle(&mut this.buffer)
+                    this.receiver.read(&mut this.buffer)
                 ).poll(ctx);
                 match r {
                     Poll::Ready(rst) => {
                         match rst {
                             Ok(n) => {
-
-                                /*
-                                let n = buff.len();
-                                for (place, data) in this.buffer.iter_mut().zip(buff.iter()) {
-                                    *place = *data
-                                }
-                                this.receiver.consume(n);
-                                */
-                                //defmt::debug!("poll() -> Got {} bytes", n);
                                 this.bytes_read = n as u8;
                                 if n > 0 {
                                     let byte = this.buffer[this.current_byte_index as usize];
