@@ -1,9 +1,8 @@
 //! TODO: This feature is still incomplete
-use crate::{hwa};
+use crate::hwa;
 use crate::control::parser::{GCodeLineParser, GCodeLineParserError};
 use embassy_time::Timer;
 use embassy_time::Duration;
-use crate::ctrl::*;
 
 use crate::hwa::controllers::PrinterController;
 use crate::hwa::controllers::PrinterControllerEvent;
@@ -12,6 +11,7 @@ use crate::hwa::controllers::sdcard_controller::SDCardError;
 use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
 use printhor_hwa_common::EventBusSubscriber;
+use crate::control::GCode;
 
 #[allow(unused_mut)]
 #[allow(unreachable_patterns)]
@@ -22,112 +22,97 @@ pub(crate) async fn printer_task(
     mut card_controller: hwa::controllers::CardController,
 ) -> ! {
 
-    const ABORT_ON_FAIL: bool = false;
     let mut subscriber: EventBusSubscriber<'static> = hwa::task_allocations::init_printer_subscriber(processor.event_bus.clone()).await;
     subscriber.wait_until(EventStatus::not_containing(EventFlags::SYS_BOOTING)).await;
 
     hwa::debug!("printer_task started");
     hwa::debug!("SDCardStream takes {} bytes", core::mem::size_of::<SDCardStream>());
 
+    let mut print_job_parser = None;
+    let mut current_line = 0;
+
     loop {
         hwa::debug!("Waiting for event");
-        match printer_controller.wait().await {
-            PrinterControllerEvent::PrintFile(file_path) => {
-                hwa::info!("Printing {}.\n", file_path.as_str());
-                processor.write("Q. (M24)\n").await;
-                let mut print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
+        match printer_controller.consume().await {
+            PrinterControllerEvent::SetFile(file_path) => {
+                hwa::info!("SetFile: {}", file_path.as_str());
+                current_line = 0;
+                print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
                     Ok(stream) => {
-                        GCodeLineParser::new(stream)
+                        Some(GCodeLineParser::new(stream))
                     }
                     Err(_e) => {
                         match _e {
                             SDCardError::NoSuchVolume => {
-                                processor.write("E. M24 (card not ready)\n").await;
-                                continue;
+                                hwa::error!("SetFile: Card not ready");
                             }
                             SDCardError::NotFound => {
-                                processor.write("E. M24 (file not found)\n").await;
-                                continue;
+                                hwa::error!("SetFile: File not found");
                             }
                             _ => {
-                                processor.write("E. M24 (Internal error)\n").await;
-                                continue;
+                                hwa::error!("SetFile: Internal error {:?}", _e);
                             }
                         }
+                        processor.event_bus.publish_event(EventStatus::not_containing(EventFlags::JOB_FILE_SEL)).await;
+                        continue;
                     }
                 };
-
-                let mut num_gcodes_processed: u32 = 0u32;
-
-                loop {
-                    match print_job_parser.next_gcode().await {
-                        Err(_error) => {
-                            match _error {
-                                GCodeLineParserError::ParseError(line) => {
-                                    let s = alloc::format!("E. M24 (Parse error at line {}. Ignored)\n", line);
-                                    processor.write(s.as_str()).await;
-                                }
-                                GCodeLineParserError::GCodeNotImplemented(_ln, _gc) => {
-                                    let s = alloc::format!("E. {} (Not Implemented at line {})\n", _gc, _ln);
-                                    processor.write(s.as_str()).await;
-                                    if ABORT_ON_FAIL {
-                                        break;
-                                    }
-                                }
-                            }
-                            continue;
-                        }
-                        Ok(result) => {
-                            match result {
-                                None => { // EOF
-                                    let summary = alloc::format!("ok; M24 done. {} gcodes processed\n", num_gcodes_processed);
-                                    processor.write(summary.as_str()).await;
-                                    break;
-                                }
-                                Some(gc) => {
-                                    num_gcodes_processed += 1;
-                                    match gc {
-                                        _ => {
-                                            hwa::debug!("Executing {}", gc);
-                                            match processor.execute(&gc, true).await {
-                                                Ok(CodeExecutionSuccess::OK) | Ok(CodeExecutionSuccess::QUEUED) => {
-
-                                                },
-                                                Ok(CodeExecutionSuccess::DEFERRED(state)) => {
-                                                    subscriber.wait_until(state).await;
-                                                },
-                                                Err(CodeExecutionFailure::BUSY) => {
-                                                    hwa::error!("E. (ExecError BUSY) at line {}", print_job_parser.current_line());
-                                                    if ABORT_ON_FAIL {
-                                                        break;
-                                                    }
-                                                },
-                                                Err(CodeExecutionFailure::ERR) => {
-                                                    hwa::debug!("E. (ExecError ERR)");
-                                                },
-                                                Err(CodeExecutionFailure::NumericalError) => {
-                                                    hwa::debug!("E. (NumericalError ERR)");
-                                                },
-                                                Err(CodeExecutionFailure::NotYetImplemented) => {
-                                                    hwa::debug!("E. (NotImplemented)");
-                                                },
-                                                Err(CodeExecutionFailure::HomingRequired) => {
-                                                    hwa::debug!("E. (Homing required)");
-                                                },
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                print_job_parser.close().await;
-                hwa::info!("file done");
+                processor.event_bus.publish_event(EventStatus::containing(EventFlags::JOB_FILE_SEL | EventFlags::JOB_PAUSED)).await;
 
             }
+            PrinterControllerEvent::Resume => {
+                let mut interrupted = false;
+                loop {
+                    current_line += 1;
+                    match gcode_pull(&mut print_job_parser).await {
+                        Ok(Some(_gcode)) => {
+                            hwa::info!("Processing {}", current_line);
+                            // TODO: Process something
+                            embassy_time::Timer::after_secs(5).await;
+                        }
+                        Ok(None) => { // EOF
+                            break;
+                        }
+                        Err(GCodeLineParserError::FatalError) => { // Fatal
+                            hwa::error!("Fatal error at line {}", current_line);
+                            break;
+                        }
+                        Err(GCodeLineParserError::GCodeNotImplemented(_ln, _gcode)) => { // Fatal
+                            hwa::warn!("Ignoring GCode at line {} ({}): Not implemented", current_line, _gcode.as_str());
+                        }
+                        Err(_e) => {
+                            hwa::warn!("Error procesing GCode at line {} ({:?})", current_line, _e);
+                            break;
+                        }
+                    }
+                    // Peek new event to see if job is cancelled
+                    if printer_controller.signaled().await {
+                        interrupted = true;
+                        break;
+                    }
+                }
+                if !interrupted {
+                    processor.event_bus.publish_event(EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
+                    // Job completed or cancelled
+                    match print_job_parser.take() {
+                        None => {}
+                        Some(mut p) => {
+                            p.close().await
+                        }
+                    }
+                    current_line = 0;
+                    hwa::info!("Job completed");
+                }
+            }
             PrinterControllerEvent::Abort => {
-
+                match print_job_parser.take() {
+                    None => {}
+                    Some(mut p) => {
+                        p.close().await
+                    }
+                }
+                current_line = 0;
+                hwa::info!("file done");
             }
             _ => {
                 hwa::debug!("unexpected event");
@@ -136,4 +121,9 @@ pub(crate) async fn printer_task(
         }
         Timer::after(Duration::from_secs(2)).await;
     }
+}
+
+#[inline]
+async fn gcode_pull(print_job_parser: &mut Option<GCodeLineParser<SDCardStream>>) -> Result<Option<GCode>, GCodeLineParserError> {
+    print_job_parser.as_mut().ok_or(GCodeLineParserError::FatalError)?.next_gcode().await
 }

@@ -198,12 +198,9 @@ impl GCodeProcessor
             }
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
-                    let _ = self.write("C; ").await;
+                    let _ = self.write("echo: ").await;
                     let _ = self.writeln(x).await;
                 }
-                Ok(CodeExecutionSuccess::OK)
-            }
-            GCode::M24 => {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M73 => {

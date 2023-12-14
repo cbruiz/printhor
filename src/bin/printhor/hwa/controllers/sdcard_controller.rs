@@ -22,6 +22,7 @@ pub type SDCardBlockDevice = hwa::device::SDCardBlockDevice;
 
 #[allow(unused)]
 #[derive(Debug)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum SDCardError {
     NoSuchVolume,
     InternalError,

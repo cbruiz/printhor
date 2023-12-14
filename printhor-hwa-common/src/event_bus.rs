@@ -19,14 +19,18 @@ bitflags! {
         const SYS_BOOT_FAILURE = 0b0100000000000000;
         const SYS_READY        = 0b0010000000000000;
         const SYS_ALARM        = 0b0001000000000000;
-        const ATX_ON           = 0b0000010000000000;
-        const HOMMING          = 0b0000001000000000;
-        const MOV_QUEUE_EMPTY  = 0b0000000100000000;
-        const HOTBED_TEMP_OK   = 0b0000000000000010;
-        const HOTEND_TEMP_OK   = 0b0000000000000100;
-        const X_MIN_ON         = 0b0000000000001000;
-        const Y_MIN_ON         = 0b0000000000010000;
-        const Z_MIN_ON         = 0b0000000000100000;
+        const ATX_ON           = 0b0000100000000000;
+        const HOMMING          = 0b0000010000000000;
+        const MOV_QUEUE_EMPTY  = 0b0000001000000000;
+        const JOB_FILE_SEL     = 0b0000000100000000;
+        const JOB_PRINTING     = 0b0000000010000000;
+        const JOB_PAUSED       = 0b0000000001000000;
+        const JOB_COMPLETED    = 0b0000000000100000;
+        const HOTBED_TEMP_OK   = 0b0000000000010000;
+        const HOTEND_TEMP_OK   = 0b0000000000001000;
+        const X_MIN_ON         = 0b0000000000000100;
+        const Y_MIN_ON         = 0b0000000000000010;
+        const Z_MIN_ON         = 0b0000000000000001;
 
     }
 }

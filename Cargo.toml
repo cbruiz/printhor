@@ -42,8 +42,12 @@ has-extruder = []
 ili9341_parallel = []
 ili9341_spi = []
 
-integration-test = ["integration-test-m100", "integration-test-power-on", "integration-test-homing", "integration-test-move-ortho",
-    #"integration-test-move-oblique"
+integration-test = [
+    #"integration-test-m100",
+    #"integration-test-power-on", "integration-test-homing",
+    #"integration-test-move-ortho",
+    #"integration-test-move-oblique",
+    "integration-test-laser-engrave",
 ]
 integration-test-m100 = []
 integration-test-power-on = []
@@ -52,6 +56,7 @@ integration-test-move-ortho = []
 integration-test-move-oblique = []
 integration-test-dwell = []
 integration-test-set-hotend-temp = []
+integration-test-laser-engrave = []
 
 
 fixed-point-128-impl = []
@@ -87,7 +92,7 @@ native = [
     "with-hotbed", "printhor-hwi_native/with-hotbed",
     "with-fan-layer", "printhor-hwi_native/with-fan-layer",
     "with-laser", "printhor-hwi_native/with-laser",
-    "with-display", "printhor-hwi_native/with-display", "printhor-hwa-common/with-ui",
+    #"with-display", "printhor-hwi_native/with-display", "printhor-hwa-common/with-ui",
 
     #"with-lvgl",
     #"float-point-f64-impl",
@@ -281,7 +286,8 @@ panic = "abort"
 
 [patch.crates-io]
 
-async-gcode = { git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
+async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
+#async-gcode = { path = "../async-gcode" }
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path= "printhor-hwa-common" }
