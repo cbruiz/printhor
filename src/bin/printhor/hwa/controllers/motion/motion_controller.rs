@@ -184,7 +184,6 @@ impl MotionPlanner {
     pub async fn schedule_raw_move(&self, move_type: ScheduledMove, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
 
         loop {
-
             self.available.wait().await;
             {
                 let mut rb = self.ringbuffer.lock().await;
@@ -469,9 +468,9 @@ impl MotionPlanner {
             };
             //
             let t3 = embassy_time::Instant::now();
-            hwa::info!("P0 ({}) mm", p0);
-            hwa::info!("P1 ({}) mm", p1);
-            hwa::info!("dist: {} mm, speed_max: {} mm/s, accel_max: {} mm/s^2, jerk_max: {} mm/s^3",
+            hwa::debug!("P0 ({}) mm", p0);
+            hwa::debug!("P1 ({}) mm", p1);
+            hwa::debug!("MOTION PLAN: dist: {} mm, speed_max: {} mm/s, accel_max: {} mm/s^2, jerk_max: {} mm/s^3",
                 module_target_distance.rdp(4),
                 module_target_speed.rdp(4),
                 module_target_accel.rdp(4),
@@ -528,11 +527,12 @@ impl MotionPlanner {
 
     #[inline(always)]
     pub async fn do_homing(&self) -> Result<(), ()>{
-        hwa::info!("Homing start");
         let r = self.motion_driver.lock().await.homing_action().await;
-        hwa::info!("Homing end");
         if r.is_err() {
             self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM));
+        }
+        else {
+            self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING));
         }
         r
     }

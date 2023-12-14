@@ -113,7 +113,7 @@ impl GCodeProcessor
 
      */
     #[allow(unused)]
-    pub(crate) async fn execute(&mut self, gc: &GCode, _blocking: bool) -> CodeExecutionResult {
+    pub(crate) async fn execute(&mut self, gc: &GCode, blocking: bool) -> CodeExecutionResult {
         let result = match gc {
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
@@ -124,8 +124,8 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-motion")]
             GCode::G0(_) | GCode::G1(_) => {
-                let result =  self.motion_planner.plan(&gc, _blocking).await?;
-                if !_blocking {
+                let result =  self.motion_planner.plan(&gc, blocking).await?;
+                if !blocking {
                     self.motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::AwaitRequested)).await;
                 }
                 match result {
@@ -143,10 +143,10 @@ impl GCodeProcessor
             },
             #[cfg(feature = "with-motion")]
             GCode::G4 => {
-                if !_blocking {
+                if !blocking {
                     self.motion_planner.defer_channel.send(DeferEvent::Dwell(DeferType::AwaitRequested)).await;
                 }
-                Ok(self.motion_planner.plan(&gc, _blocking).await?)
+                Ok(self.motion_planner.plan(&gc, blocking).await?)
             }
             GCode::G21 => {
                 Ok(CodeExecutionSuccess::OK)
@@ -156,10 +156,10 @@ impl GCodeProcessor
                 match self.event_bus.has_flags(EventFlags::HOMMING).await {
                     true => Err(CodeExecutionFailure::BUSY),
                     false => {
-                        hwa::info!("Planing homing");
-                        let x = self.motion_planner.plan(&gc, _blocking).await;
-                        hwa::info!("Homing planned");
-                        x
+                        hwa::debug!("Planing homing");
+                        let result = self.motion_planner.plan(&gc, blocking).await;
+                        hwa::debug!("Homing planned");
+                        result
                     },
                 }
             }

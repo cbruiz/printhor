@@ -42,13 +42,12 @@ pub async fn control_task(
 
     let mut _processor = _processor;
 
-    s.wait_until(EventStatus::containing(EventFlags::SYS_READY)).await;
+    s.wait_for(EventStatus::containing(EventFlags::SYS_READY)).await;
     #[cfg(feature = "with-usbserial")]
-    hwa::info!("Control_task started [USBSerial]");
+    hwa::debug!("Control_task started [USBSerial]");
     #[cfg(feature = "with-uart-port-1")]
-    hwa::info!("Control_task started [UARTPort1]");
-    _processor.write("echo: ready\n").await;
-
+    hwa::debug!("Control_task started [UARTPort1]");
+    _processor.write("echo: ready for commands\n").await;
 
     #[cfg(any(feature = "with-usbserial", feature = "with-uart-port-1"))]
     loop {

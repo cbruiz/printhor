@@ -127,7 +127,7 @@ impl EventBusSubscriber<'_> {
     }
 
     #[inline]
-    pub async fn wait_until(&mut self, what: EventStatus) {
+    pub async fn wait_for(&mut self, what: EventStatus) {
         let wanted = what.flags.bitand(what.mask);
         if let Some(msg) = self.inner.try_next_message_pure() {
             //crate::trace!("last_status = {:?}", msg);
@@ -143,6 +143,16 @@ impl EventBusSubscriber<'_> {
             }
             self.last_status = self.inner.next_message_pure().await;
         }
+    }
+
+    #[inline]
+    pub async fn wait_until(&mut self, flags: EventFlags) {
+        self.wait_for(EventStatus::containing(flags)).await
+    }
+
+    #[inline]
+    pub async fn wait_while(&mut self, flags: EventFlags) {
+        self.wait_for(EventStatus::not_containing(flags)).await
     }
 }
 

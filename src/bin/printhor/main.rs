@@ -55,19 +55,19 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 
     hwa::init_logger();
 
-    hwa::info!("Init");
+    hwa::info!("Init printhor {}", machine::MACHINE_INFO.firmware_version);
     let peripherals = hwa::init();
-    hwa::info!("Peripherals initialized");
+    hwa::debug!("Peripherals initialized");
 
     let context = hwa::setup(spawner, peripherals).await;
-    hwa::info!("Hardware setup OK");
+    hwa::info!("Hardware setup completed. Allocated {} bytes for context.", core::mem::size_of_val(&context));
 
     let event_bus: EventBusRef = printhor_hwa_common::init_event_bus();
+    #[cfg(feature = "with-motion")]
+    let mut event_suscriber = event_bus.subscriber().await;
     event_bus.publish_event(
         EventStatus::containing(EventFlags::SYS_BOOTING)
     ).await;
-
-    hwa::info!("Controllers take {} bytes", core::mem::size_of_val(&context));
 
     let wdt = context.controllers.sys_watchdog.clone();
     wdt.lock().await.unleash();
@@ -79,10 +79,16 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
                    context.pwm,
                    wdt.clone()
     ).await.is_ok() {
-        hwa::info!("Tasks spawned: System ready");
+        event_bus.publish_event(
+            EventStatus::not_containing(EventFlags::SYS_BOOTING)
+        ).await;
+        #[cfg(feature = "with-motion")]
+        event_suscriber.wait_until(EventFlags::MOV_QUEUE_EMPTY).await;
+        hwa::info!("Tasks spawned. Allocated {} bytes for shared state. Firing SYS_READY.",
+            crate::hwa::mem::stack_reservation_current_size(),
+        );
         event_bus.publish_event(
             EventStatus::containing(EventFlags::SYS_READY)
-                .and_not_containing(EventFlags::SYS_BOOTING)
         ).await;
     }
     else {
@@ -288,7 +294,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         hwa::launch_high_priotity( stepper_isr::stepper_task(
             motion_planer, _wd
         )).and_then(|_| {
-            hwa::info!("stepper_start() spawned");
+            hwa::debug!("stepper_start() spawned");
             Ok(())
         })?;
     }

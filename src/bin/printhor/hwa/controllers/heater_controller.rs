@@ -44,7 +44,7 @@ where
     }
     pub async fn init(&mut self) {
         // TODO: Rework on callibration
-        hwa::info!("Initializing ADC...");
+        hwa::debug!("Initializing ADC...");
         //let mut _bus  = self.adc.lock().await;
         //let mut bus = &mut (*_bus);
 
@@ -52,7 +52,7 @@ where
         //embassy_time::Timer::after(Duration::from_micros(embassy_stm32::adc::VrefInt::start_time_us() as u64)).await;
         //self.vref_sample = bus.read_internal(&mut vref_int);
         self.vref_sample = VREF_SAMPLE;
-        hwa::info!("ADC Initiallized: vref_sample = {}", self.vref_sample);
+        hwa::debug!("ADC Initiallized: vref_sample = {}", self.vref_sample);
     }
 
     #[inline]

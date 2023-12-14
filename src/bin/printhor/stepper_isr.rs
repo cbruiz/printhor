@@ -124,11 +124,11 @@ pub async fn stepper_task(
 
     motion_planner.start().await;
 
-    #[allow(unused)]
-        #[allow(unused_mut)]
     let mut s = motion_planner.event_bus.subscriber().await;
+    s.wait_while(EventFlags::HOMMING).await;
 
     hwa::info!("Pulse controller starting with {} us, {} ms period", PULSE_WIDTH_US, period_ms);
+    motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
 
     loop {
 
@@ -137,7 +137,7 @@ pub async fn stepper_task(
         match with_timeout(timeout, motion_planner.get_current_segment_data()).await {
             // Process segment plan
             Ok(Some(segment)) => {
-
+                hwa::debug!("Segment init");
                 let mut usteps_advanced: TVector<u32> = TVector::zero();
                 let mut tick_id = 1;
 
@@ -145,7 +145,7 @@ pub async fn stepper_task(
                 let expected_advance = Real::from_lit(segment.segment_data.displacement_u as i64, 0) / Real::from_lit(1000, 0);
 
                 // segment metronome
-                hwa::info!(">> Motion segment will advance {} mm at ~{} mm/sec ({} usteps/sec)",
+                hwa::debug!(">> Motion segment will advance {} mm at ~{} mm/sec ({} usteps/sec)",
                     (segment.segment_data.displacement_u as f64) / 1000.0f64,
                     segment.motion_profile.v_lim.rdp(4),
                     (segment.motion_profile.v_lim * to_ustep).rdp(4)
@@ -278,12 +278,19 @@ pub async fn stepper_task(
 
                         if estimated_position >= expected_advance {
                             let rpos = usteps_advanced.map_coords(|c| { Some(Real::from_lit(c as i64, 0)) }) / to_ustep;
-                            hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
+                            hwa::debug!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
 
                             motion_planner.consume_current_segment_data().await;
                             motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
                             break;
                         }
+                    }
+                    else {
+                        // TODO reached end-of-segment, but still missing any step
+                        hwa::debug!("!! Segment exausted in {} ms.", t_segment.elapsed().as_millis()  );
+                        motion_planner.consume_current_segment_data().await;
+                        motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
+                        break;
                     }
 
                     let elapsed = t_segment.elapsed();
@@ -294,15 +301,16 @@ pub async fn stepper_task(
 
                     absolute_ticker.next().await;
                 }
+                hwa::debug!("Segment done");
             }
             // Homing
             Ok(None) => {
-                hwa::info!("Doing homing");
+                hwa::debug!("Homing init");
                 if !motion_planner.do_homing().await.is_ok() {
                     // TODO
                 }
-                hwa::info!("Homing done");
                 motion_planner.consume_current_segment_data().await;
+                hwa::debug!("Homing done");
             }
             // Timeout
             Err(_) => {

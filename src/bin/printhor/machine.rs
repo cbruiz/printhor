@@ -27,5 +27,4 @@ impl MachineInfo {
         }
     }
 }
-#[allow(unused)]
 pub(crate) static MACHINE_INFO: MachineInfo = MachineInfo::new();

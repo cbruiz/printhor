@@ -54,7 +54,7 @@ impl MotionDriver {
     }
 
     pub async fn homing_action(&mut self) -> Result<(), ()>{
-        hwa::info!("Do homing");
+        hwa::debug!("Do homing");
 
         #[cfg(feature="with-laser")]
         let _on = self.laser_controller.lock().await.is_on();
@@ -90,11 +90,11 @@ impl MotionDriver {
             self.pins.z_step_pin.set_low();
             embassy_time::Timer::after(embassy_time::Duration::from_micros(1000)).await;
         }
-        hwa::info!("1.ZDone");
+        hwa::debug!("1.ZDone");
         #[cfg(feature = "with-probe")]
         self.probe_controller.lock().await.probe_pin_up(300).await;
         if ! reached{
-            hwa::info!("not reached in {}", num_pulses);
+            hwa::debug!("not reached in {}", num_pulses);
             Err(())
         }
         else {

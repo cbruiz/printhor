@@ -15,7 +15,6 @@ pub struct IntegrationaskParams {
 #[embassy_executor::task(pool_size=1)]
 pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 {
-    hwa::info!("D; integration_task started");
 
     #[allow(unused)]
     let expect_immediate = |res| match res {
@@ -32,6 +31,9 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
     let event_bus = params.processor.event_bus.clone();
     let mut subscriber: EventBusSubscriber<'static> = hwa::task_allocations::init_integration_subscriber(event_bus).await;
+
+    subscriber.wait_until(EventFlags::SYS_READY).await;
+    hwa::info!("D; integration_task started");
 
     #[cfg(feature = "integration-test-m100")]
     {
@@ -68,7 +70,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         let t0 = embassy_time::Instant::now();
         if let Some(evt) = params.processor.execute(&homing_gcode, false).await.and_then(expect_deferred).ok()
         {
-            subscriber.wait_until(evt).await;
+            subscriber.wait_for(evt).await;
             hwa::info!("G28 OK (took: {} ms)", t0.elapsed().as_millis());
         } else {
             hwa::error!("Unexpected state for G28");
@@ -121,7 +123,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
     {
         hwa::info!("Testing G4");
         if let Some(evt) = params.processor.execute(&GCode::G4, false).await.and_then(expect_deferred).ok() {
-            subscriber.wait_until(evt).await;
+            subscriber.wait_for(evt).await;
             hwa::info!("-- G4 OK");
         } else {
             hwa::error!("G4 Unexpected state");
@@ -136,7 +138,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         }
         hwa::info!("Testing M109 S235");
         if let Some(evt) = params.processor.execute(&GCode::M109(S{ln: None, s: Some(Real::new(235, 0))}), false).await.and_then(expect_deferred).ok() {
-            subscriber.wait_until(evt).await;
+            subscriber.wait_for(evt).await;
         }
     }
     #[cfg(feature = "integration-test-laser-engrave")]
@@ -147,11 +149,13 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("dir/laser.g"))).await.unwrap();
         match embassy_time::with_timeout(
             Duration::from_secs(5),
-            subscriber.wait_until(EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+            subscriber.wait_for(EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
         ).await {
             Ok(_) => {
+                // command resume (eq: M24)
                 params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
-                subscriber.wait_until(EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
+                // wait for job completion
+                subscriber.wait_for(EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
             }
             Err(_) => {
                 hwa::error!("Timeout engraving");

@@ -99,7 +99,7 @@ pub struct HWIPeripherals {
 
 #[inline]
 pub fn init() -> HWIPeripherals {
-    log::info!("native init");
+    log::debug!("native init");
     HWIPeripherals{}
 }
 
@@ -129,7 +129,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
         ))
     };
     #[cfg(feature = "with-spi")]
-    log::info!("SPI done");
+    log::debug!("SPI done");
 
     #[cfg(feature = "with-sdcard")]
     let sdcard_device = {
@@ -160,7 +160,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
         }
     };
     #[cfg(feature = "with-motion")]
-    log::info!("motion_driver done");
+    log::debug!("motion_driver done");
 
         #[cfg(feature = "with-display")]
     let display_device = mocked_peripherals::SimulatorDisplayDevice::new();
@@ -211,7 +211,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
     };
 
     #[cfg(feature = "with-motion")]
-    log::info!("motion_planner done");
+    log::debug!("motion_planner done");
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));

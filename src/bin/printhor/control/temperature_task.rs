@@ -85,7 +85,7 @@ pub async fn temp_task(
     event_bus: EventBusRef,
     hotend_controller: hwa::controllers::HotendControllerRef
 ) -> ! {
-    hwa::info!("D; temperature_task started");
+    hwa::debug!("temperature_task started");
 
     let mut pid: pid::Pid<f32> = pid::Pid::new(0.0f32, 100.0f32);
     pid.p(5.0f32, 100.0f32);

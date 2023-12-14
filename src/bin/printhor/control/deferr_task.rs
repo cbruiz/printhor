@@ -13,7 +13,7 @@ pub async fn defer_task(
 ) -> ! {
     //let mut subscriber: state_manager::EventBusSubscriber<'static> = hwa::task_allocations::init_defer_subscriber(processor.event_bus.clone()).await;
     //subscriber.wait_until(EventStatus::containing(EventFlags::SYS_READY)).await;
-    hwa::info!("defer_task started");
+    hwa::debug!("defer_task started");
     let mut num_homes = 0u8;
     let mut num_linear = 0u8;
     let mut num_rapid = 0u8;
@@ -28,7 +28,8 @@ pub async fn defer_task(
             DeferEvent::Homing(DeferType::Completed) => {
                 if num_homes > 0 {
                     num_homes -= 1;
-                    processor.write("O. G28 (Completed @defer_task)\n").await;
+                    // FIXME: Control when a confirmation is needed from specific channel
+                    processor.write("ok; G28 (Completed @defer_task)\n").await;
                 }
             }
             DeferEvent::Dwell(DeferType::AwaitRequested) => {
@@ -38,7 +39,7 @@ pub async fn defer_task(
             DeferEvent::Dwell(DeferType::Completed) => {
                 if num_dwell > 0 {
                     num_dwell -= 1;
-                    processor.write("O. G4 (Completed @defer_task)\n").await;
+                    processor.write("ok; G4 (Completed @defer_task)\n").await;
                 }
             }
             DeferEvent::LinearMove(DeferType::AwaitRequested) => {
@@ -57,7 +58,7 @@ pub async fn defer_task(
             DeferEvent::RapidMove(DeferType::Completed) => {
                 if num_rapid > 0 {
                     num_rapid -= 1;
-                    processor.write("O. G0 (Completed @defer_task)\n").await;
+                    processor.write("ok; G0 (Completed @defer_task)\n").await;
                 }
             }
             DeferEvent::HotendTemperature(DeferType::AwaitRequested) => {
