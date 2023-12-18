@@ -44,9 +44,9 @@ ili9341_spi = []
 
 integration-test = [
     #"integration-test-m100",
-    #"integration-test-power-on", "integration-test-homing",
-    #"integration-test-move-ortho",
-    #"integration-test-move-oblique",
+    "integration-test-power-on", "integration-test-homing",
+    "integration-test-move-ortho",
+    "integration-test-move-oblique",
     "integration-test-laser-engrave",
 ]
 integration-test-m100 = []
@@ -66,7 +66,7 @@ float-point-f64-impl = []
 # baremetal
 std = []
 arch-std = []
-nightly = []
+nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly"]
 _arch = []
 
 with-lvgl = [
@@ -81,6 +81,7 @@ with-display = [
 ]
 
 native = [
+    #"nightly", "printhor-hwi_native/nightly",
     "has-extruder",
     #"with-trinamic", "printhor-hwi_native/with-trinamic",
     "with-motion", "printhor-hwi_native/with-motion",
@@ -100,12 +101,14 @@ native = [
     "fixed-point-128-impl",
 
     "printhor-hwi_native",
-    "plot",
-    "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-executor/nightly",
-    "embassy-executor/integrated-timers", "embassy-sync/log",
-    "embassy-sync/std", "embassy-time/std", "embassy-time/generic-queue",
+    "plot", "itertools",
+    "embassy-executor/arch-std", "embassy-executor/executor-thread",
+    "embassy-sync/log",
+    "embassy-sync/std", "embassy-time/std",
+    "embassy-time/generic-queue",
 ]
 mks_robin_nano_v3_1 = [
+    #"nightly", "printhor-hwi_mks_robin_nano_v3_1/nightly",
     "has-extruder",
     "with-defmt", "printhor-hwi_mks_robin_nano_v3_1/with-defmt",
     #"with-trinamic", "printhor-hwi_mks_robin_nano_v3_1/with-trinamic",
@@ -127,11 +130,11 @@ mks_robin_nano_v3_1 = [
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_mks_robin_nano_v3_1",
-    "embassy-executor/nightly", "embassy-executor/integrated-timers",
-    "embassy-executor/arch-cortex-m",
-    "embassy-executor/executor-interrupt",
+    "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
+    "embassy-time/generic-queue",
 ]
 nucleo_64_arduino_cnc_hat = [
+    #"nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat/nightly",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     "with-uart-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-uart-port-1",
@@ -150,14 +153,14 @@ nucleo_64_arduino_cnc_hat = [
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_nucleo_64_arduino_cnc_hat",
-    "embassy-executor/nightly", "embassy-executor/integrated-timers",
-    "embassy-executor/arch-cortex-m",
-    "embassy-executor/executor-interrupt",
+    "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
+    "embassy-time/generic-queue",
 ]
 nucleo64-l476rg = ["printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg"]
 nucleo64-f410rb = ["printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-f410rb"]
 
 skr_mini_e3_v3 = [
+    #"nightly", "printhor-hwi_skr_mini_e3_v3/nightly",
     "with-defmt", "printhor-hwi_skr_mini_e3_v3/with-defmt",
     "with-trinamic", "printhor-hwi_skr_mini_e3_v3/with-trinamic",
     "with-motion", "printhor-hwi_skr_mini_e3_v3/with-motion",
@@ -182,9 +185,8 @@ skr_mini_e3_v3 = [
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_skr_mini_e3_v3",
-    "embassy-executor/nightly", "embassy-executor/integrated-timers",
-    "embassy-executor/arch-cortex-m",
-    "embassy-executor/executor-interrupt",
+    "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
+    "embassy-time/generic-queue",
 ]
 
 
@@ -218,9 +220,9 @@ heapless = { version = "0.8.0", default-features = false, features = [] }
 
 async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"]}
 
-strum = { version = "0.24.1", default-features = false, features = ["derive"] }
-rust_decimal = { version = "1.32.0", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { version = "1.32.0" }
+strum = { version = "0.25.0", default-features = false, features = ["derive"] }
+rust_decimal = { version = "1.33.1", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { version = "1.33.1" }
 pid = { version = "4.0.0", default-features = false, features = []}
 num-traits = {version = "0.2.17", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = []}
@@ -230,7 +232,7 @@ embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
 
 # Common base
-printhor-hwa-common = { version = "0",default-features = false, features = [] }
+printhor-hwa-common = { version = "0", default-features = false, features = [] }
 
 # Boards
 printhor-hwi_native = {version = "0", optional = true}
@@ -239,7 +241,6 @@ printhor-hwi_mks_robin_nano_v3_1 = {version = "0", optional = true}
 printhor-hwi_nucleo_64_arduino_cnc_hat = {version = "0", optional = true}
 
 gnuplot = {version = "0.0.39", default-features = false, features=[], optional = true}
-
 # Display
 lvgl = { version = "0", default-features = false, features =[], optional = true }
 embedded-graphics-core = {version = "0.3.3", optional = true }
@@ -248,6 +249,7 @@ embedded-graphics-core = {version = "0.3.3", optional = true }
 
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = [] }
+itertools = { version = "0", optional = true }
 
 [build-dependencies]
 #proc-macro2 = "1.0."
@@ -258,7 +260,7 @@ debug = 2
 strip = false
 incremental = false
 debug-assertions = true
-opt-level = "z"
+opt-level = "s"
 lto = false
 panic = "unwind"
 
@@ -268,9 +270,9 @@ debug = 2
 strip = false
 incremental = false
 debug-assertions = false
-opt-level = "z"
+opt-level = "s"
 lto = true
-panic = "unwind"
+panic = "abort"
 
 [profile.release-opt]
 inherits = "release"
@@ -280,14 +282,13 @@ incremental = false
 debug-assertions = false
 overflow-checks = false
 strip = false
-opt-level = "z"
+opt-level = "s"
 lto = true
 panic = "abort"
 
 [patch.crates-io]
 
 async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
-#async-gcode = { path = "../async-gcode" }
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path= "printhor-hwa-common" }
@@ -296,8 +297,8 @@ printhor-hwi_skr_mini_e3_v3 = { path = "hwi-boards/printhor-hwi_skr_mini_e3_v3" 
 printhor-hwi_mks_robin_nano_v3_1 = { path= "hwi-boards/printhor-hwi_mks_robin_nano_v3_1" }
 printhor-hwi_nucleo_64_arduino_cnc_hat = { path= "hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat" }
 
-embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
+embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
 embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
 embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
 embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

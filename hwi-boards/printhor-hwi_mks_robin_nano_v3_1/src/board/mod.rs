@@ -28,6 +28,7 @@ use embassy_stm32::rcc::*;
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
 
+
 #[global_allocator]
 static HEAP: CortexMHeap = CortexMHeap::empty();
 
@@ -187,8 +188,44 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
 
-    // TODO: Trinamic UART (when needed) requires a software usar implementation because of the wiring [Not yet implemented]
-    // SPI is possible but not all stepper drivers have one. then the lack of UART could be a relevant issue
+    //#[cfg(feature = "with-trinamic-wip")]
+    {
+        // TODO: WorkInProgress Trinamic UART (when needed) requires a software usar implementation because of the wiring
+
+        use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
+
+        pub struct AnyPinWrapper<PIN>(embassy_stm32::gpio::Flex<'static, PIN>)
+            where PIN: embassy_stm32::gpio::Pin;
+
+        impl<PIN> printhor_hwa_common::soft_uart::IOPin for AnyPinWrapper<PIN>
+            where PIN: embassy_stm32::gpio::Pin
+        {
+            #[inline]
+            fn set_output(&mut self) {
+                self.0.set_as_output(Speed::VeryHigh);
+            }
+            #[inline]
+            fn set_input(&mut self) {
+                self.0.set_as_input(Pull::Down);
+            }
+            #[inline]
+            fn is_high(&mut self) -> bool {
+                self.0.is_high()
+            }
+            #[inline]
+            fn set_high(&mut self) { self.0.set_high() }
+            #[inline]
+            fn set_low(&mut self) { self.0.set_low() }
+        }
+
+        let mut uart_e0 = printhor_hwa_common::soft_uart::HalfDuplexSerial::new(
+            AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD5))
+        );
+
+        let _ = uart_e0.write(0b10101010u8).await;
+        let _ = uart_e0.read().await;
+    }
+
 
     #[cfg(feature = "with-spi")]
     let spi1_device = {

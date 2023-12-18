@@ -1,4 +1,4 @@
-![Minimum Rust: Nightly](https://img.shields.io/badge/Minimum%20Rust%20Version-nightly-orange.svg)
+![Minimum Rust: Beta](https://img.shields.io/badge/Minimum%20Rust%20Version-beta-orange.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
@@ -78,7 +78,7 @@ The minimal toolset required to build and run is:
 
 ## Prerequisites: Rust and toolchain
 
-This crate requires Rust nighlty.
+This crate requires Rust >= 1.75 (still beta).
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
@@ -91,9 +91,10 @@ rustup update
 For microcontrollers (currently few stm32 only), the specific target toolchain and cargo binutils is also needed:
 
 ```shell
-rustup target add thumbv7em-none-eabi
-rustup target add thumbv7em-none-eabihf
-rustup target add thumbv6m-none-eabi
+rustup +beta target add thumbv7em-none-eabi
+rustup +beta target add thumbv7em-none-eabihf
+rustup +beta target add thumbv6m-none-eabi
+rustup +beta component add llvm-tools
 cargo install cargo-binutils
 ```
 
@@ -111,7 +112,7 @@ Provides a commandline GCode prompt on standard input
 __Note__: A SDCard image in ./data/ is required to be open if sdcard feature is enabled in native :)
 
 ```shell
-RUST_LOG=info cargo +nightly run --bin printhor
+RUST_LOG=info cargo +beta run --bin printhor
 ```
 
 ### Integration tests
@@ -120,7 +121,7 @@ Native backend has a special feature called integration-test which is used to pe
 pending to be matured.
 
 ```shell
-RUST_LOG=info cargo +nightly run --features integration-test --bin printhor
+RUST_LOG=info cargo +beta run --features integration-test --bin printhor
 ```
 
 ## MKS Robin Nano V3.1
@@ -142,20 +143,20 @@ Firmware is around to 140Kb, and expecting to be around 100Kb with the core funt
 The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
 
 ```shell
-DEFMT_LOG=info cargo +nightly objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=info cargo +beta objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
 ### Minimal-size binary image production
 
 ```shell
-DEFMT_LOG=off RUST_BACKTRACE=0 cargo +nightly objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=off RUST_BACKTRACE=0 cargo +beta objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 ## Extra utilery
 
 A simple stand-alone std binary to experiment with motion plan (kind of playground):
 
 ```shell
-cargo +nightly run --bin scurve_plot
+cargo +beta run --bin scurve_plot
 ```
 Example output:
 
@@ -1130,11 +1131,12 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     G28; Homing
     G1 F3000. Z7.
     M107;svg#svg5 > g#layer89324 > path#rect2575
-    G0 X12.650835 Y109.995
-    M4 I S255
-    G1 X112.64085 Y109.995 F3000
-    G1 X112.64085 Y10.004999999999995 F3000
-    G1 X12.650835 Y10.004999999999995 F3000
-    G1 X12.650835 Y109.99499999999999 F3000
-    M5 I
+    G0 X12.6508 Y109.9950
+    M4 S255
+    G1 X112.6408 Y109.9950 F3000
+    G1 X112.6408 Y10.0050 F3000
+    G1 X12.6508 Y10.0050 F3000
+    G1 X12.6508 Y109.9950 F3000
+    M5
+    G4
 

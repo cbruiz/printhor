@@ -14,10 +14,11 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
+nightly = ["printhor-hwa-common/nightly"]
 #default = ["nucleo64-l476rg"]
 # Board kind
-nucleo64-l476rg = ["embassy-stm32/defmt", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-32_768"]
-nucleo64-f410rb = ["embassy-stm32/defmt", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9", "embassy-time/tick-hz-100_000"]
+nucleo64-l476rg = ["embassy-stm32/defmt", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-32_768", "embassy-executor/task-arena-size-16384"]
+nucleo64-f410rb = ["embassy-stm32/defmt", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9", "embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384"]
 # Hardware device features
 with-usbserial = ["embassy-usb"]
 with-printjob = []
@@ -44,7 +45,7 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-stm32 = { version = "0", default-features = false, features = ["defmt", "rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0", default-features = false, features = ["defmt", "nightly", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0", default-features = false, features = ["defmt", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0", features = ["defmt"] }
 embassy-time = { version = "0", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }

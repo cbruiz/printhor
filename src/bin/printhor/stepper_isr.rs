@@ -117,7 +117,7 @@ pub async fn stepper_task(
     watchdog: hwa::WatchdogRef)
 {
 
-    let one_us = Duration::from_micros(1);
+    let one_us = Duration::from_micros(100);
     let timeout = Duration::from_secs(20);
     let period_ms: i32 = (PULSE_WIDTH_US / 1000) as i32;
     let mut steppers_off = true;
@@ -159,6 +159,8 @@ pub async fn stepper_task(
                 let mut axis_steps_advanced_precise: TVector<Real> = TVector::zero();
 
                 let t_segment = embassy_time::Instant::now();
+                #[cfg(feature = "native")]
+                motion_planner.start_segment(t_segment).await;
 
                 loop { // Iterate on segment
 
@@ -221,53 +223,54 @@ pub async fn stepper_task(
                                     break;
                                 },
                                 Some(ChannelName::X) => {
+
                                     //drv.laser_controller.lock().await.set_power(1.0f32).await;
-                                    drv.pins.enable_x_stepper();
+                                    drv.enable_x_stepper();
                                     usteps_advanced.increment(CoordSel::X, 1u32);
                                     match &axial_dirs.x {
-                                        true => drv.pins.x_dir_pin.set_high(),
-                                        false => drv.pins.x_dir_pin.set_low(),
+                                        true => drv.x_dir_pin_high(),
+                                        false => drv.x_dir_pin_low(),
                                     }
-                                    drv.pins.x_step_pin.set_high();
+                                    drv.x_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.x_step_pin.set_low();
+                                    drv.x_step_pin_low();
                                     s_block_for(one_us);
                                 },
                                 Some(ChannelName::Y) => {
-                                    drv.pins.enable_y_stepper();
+                                    drv.enable_y_stepper();
                                     usteps_advanced.increment(CoordSel::Y, 1u32);
                                     match &axial_dirs.y {
-                                        true => drv.pins.y_dir_pin.set_high(),
-                                        false => drv.pins.y_dir_pin.set_low(),
+                                        true => drv.y_dir_pin_high(),
+                                        false => drv.y_dir_pin_low(),
                                     }
-                                    drv.pins.y_step_pin.set_high();
+                                    drv.y_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.y_step_pin.set_low();
+                                    drv.y_step_pin_low();
                                     s_block_for(one_us);
                                 },
                                 Some(ChannelName::Z) => {
-                                    drv.pins.enable_z_stepper();
+                                    drv.enable_z_stepper();
                                     usteps_advanced.increment(CoordSel::Z, 1u32);
                                     match &axial_dirs.z {
-                                        true => drv.pins.z_dir_pin.set_high(),
-                                        false => drv.pins.z_dir_pin.set_low(),
+                                        true => drv.z_dir_pin_high(),
+                                        false => drv.z_dir_pin_low(),
                                     }
-                                    drv.pins.z_step_pin.set_high();
+                                    drv.z_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.z_step_pin.set_low();
+                                    drv.z_step_pin_low();
                                     s_block_for(one_us);
                                 },
                                 #[cfg(feature = "has-extruder")]
                                 Some(ChannelName::E) => {
-                                    drv.pins.enable_e_stepper();
+                                    drv.enable_e_stepper();
                                     usteps_advanced.increment(CoordSel::E, 1u32);
                                     match &axial_dirs.e {
-                                        true => drv.pins.e_dir_pin.set_high(),
-                                        false => drv.pins.e_dir_pin.set_low(),
+                                        true => drv.e_dir_pin_high(),
+                                        false => drv.e_dir_pin_low(),
                                     }
-                                    drv.pins.e_step_pin.set_high();
+                                    drv.e_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.e_step_pin.set_low();
+                                    drv.e_step_pin_low();
                                     s_block_for(one_us);
                                 },
                             }
@@ -300,7 +303,12 @@ pub async fn stepper_task(
                     tick_id += 1;
 
                     absolute_ticker.next().await;
+                    #[cfg(feature = "native")]
+                    motion_planner.mark_microsegment().await;
+
                 }
+                #[cfg(feature = "native")]
+                motion_planner.end_segment().await;
                 hwa::debug!("Segment done");
             }
             // Homing

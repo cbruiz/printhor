@@ -88,7 +88,6 @@ pub struct MotionPlanner {
     pub(self) motion_cfg: Mutex<CriticalSectionRawMutex, MotionConfig>,
     pub(self) motion_st: Mutex<CriticalSectionRawMutex, MotionStatus>,
     pub motion_driver: Mutex<CriticalSectionRawMutex, hwa::drivers::MotionDriver>,
-
 }
 
 #[allow(unused)]
@@ -535,6 +534,21 @@ impl MotionPlanner {
             self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING));
         }
         r
+    }
+
+    #[cfg(feature="native")]
+    pub async fn start_segment(&self, ref_time: embassy_time::Instant) {
+        self.motion_driver.lock().await.start_segment(ref_time)
+    }
+
+    #[cfg(feature="native")]
+    pub async fn end_segment(&self) {
+        self.motion_driver.lock().await.end_segment()
+    }
+
+    #[cfg(feature="native")]
+    pub async fn mark_microsegment(&self) {
+        self.motion_driver.lock().await.mark_microsegment();
     }
 }
 

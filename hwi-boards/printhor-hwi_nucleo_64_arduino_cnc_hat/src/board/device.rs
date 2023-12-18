@@ -92,8 +92,8 @@ pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC4>;
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-pub trait AdcTrait = embassy_stm32::adc::Instance;
-pub trait AdcPinTrait<PERI: AdcTrait> = embassy_stm32::adc::AdcPin<PERI>;
+pub trait AdcTrait: embassy_stm32::adc::Instance {}
+pub trait AdcPinTrait<PERI: AdcTrait>: embassy_stm32::adc::AdcPin<PERI> {}
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -109,7 +109,7 @@ pub type AdcHotbedPin = embassy_stm32::peripherals::PC3;
 #[cfg(feature = "nucleo64-f410rb")]
 pub type AdcHotbedPin = embassy_stm32::peripherals::PB1;
 
-pub trait PwmTrait = embassy_stm32::timer::CaptureCompare16bitInstance;
+pub trait PwmTrait: embassy_stm32::timer::CaptureCompare16bitInstance {}
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
 #[cfg(feature = "nucleo64-l476rg")]

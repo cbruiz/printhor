@@ -16,12 +16,16 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 with-ui = ["embedded-graphics-core"]
+nightly = []
 
 [dependencies]
 portable-atomic = { version = "1.5.1",  default-features = false, features = ["critical-section"] }
-static_cell = { version = "2.0.0",  default-features = false, features = ["nightly"] }
+static_cell = { version = "2.0.0",  default-features = false, features = [] }
 
 embassy-sync = { version = "0", features = [] }
+embassy-time = { version = "0", features = [] }
+
+embedded-hal = "0.2.7"
 
 embedded-graphics-core = {version = "0.3.3", optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }

@@ -1,11 +1,10 @@
-use embassy_time::Duration;
 use crate::hwa;
 #[allow(unused)]
 use crate::control::GCode;
 #[allow(unused)]
 use crate::math::Real;
 use crate::ctrl::*;
-use printhor_hwa_common::{EventBusSubscriber, EventFlags, EventStatus};
+use printhor_hwa_common::{EventBusSubscriber, EventFlags};
 
 pub struct IntegrationaskParams {
     pub processor: hwa::GCodeProcessor,
@@ -148,14 +147,14 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         hwa::info!("Testing GCODE for engraving");
         params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("dir/laser.g"))).await.unwrap();
         match embassy_time::with_timeout(
-            Duration::from_secs(5),
-            subscriber.wait_for(EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+            embassy_time::Duration::from_secs(5),
+            subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
         ).await {
             Ok(_) => {
                 // command resume (eq: M24)
                 params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
                 // wait for job completion
-                subscriber.wait_for(EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
+                subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
             }
             Err(_) => {
                 hwa::error!("Timeout engraving");

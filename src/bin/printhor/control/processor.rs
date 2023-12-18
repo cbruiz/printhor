@@ -310,7 +310,7 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-motion")]
             GCode::M119 => {
-                let d = self.motion_planner.motion_driver.lock().await;
+                let mut d = self.motion_planner.motion_driver.lock().await;
                 let z = format!("M119 X {} Y {} Z {}\n",
                     if d.pins.x_endstop_pin.is_high() {"1"} else {"0"},
                     if d.pins.y_endstop_pin.is_high() {"1"} else {"0"},

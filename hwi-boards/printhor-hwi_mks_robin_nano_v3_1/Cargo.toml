@@ -39,9 +39,9 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-stm32 = { version = "0", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "0", default-features = false, features = ["nightly", "integrated-timers", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0", features = [] }
-embassy-time = { version = "0", features = ["tick-hz-100_000"] }
+embassy-time = { version = "0", features = ["tick-hz-1_000_000"] }
 embassy-futures = { version = "0", features = [] }
 embassy-usb = { version = "0", features = [], optional = true, git = "https://github.com/cbruiz/embassy.git", branch="main" }
 

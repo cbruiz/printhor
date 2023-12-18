@@ -3,9 +3,9 @@
 
 #![allow(incomplete_features)]
 #![allow(stable_features)]
-#![feature(type_alias_impl_trait)]
-#![feature(async_closure)]
-#![feature(trait_alias)]
+#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
+#![cfg_attr(feature="nightly", feature(async_closure))]
+#![cfg_attr(feature="nightly", feature(trait_alias))]
 
 extern crate alloc;
 extern crate core;

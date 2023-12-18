@@ -1,6 +1,5 @@
 #![no_std]
-#![feature(trait_alias)]
-#![feature(type_alias_impl_trait)]
+#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
 #![allow(stable_features)]
 use embassy_stm32::interrupt;
 use embassy_executor::InterruptExecutor;
