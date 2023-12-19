@@ -237,7 +237,7 @@ impl SCurveMotionProfile {
         #[allow(unused)]
             let v_lim = v_0 + ((intervals.t_a - intervals.t_j1) * a_lim_a);
 
-        hwa::info!("Internal Motion plan computed in {} us", _t0.elapsed().as_micros());
+        hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
         Ok(intervals)
     }
 

@@ -15,7 +15,8 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Hardware device features
-with-uart-port-1 = ["async-std", "nix/fs", "nix/term"]
+nightly = []
+with-uart-port-1 = ["async-std"]
 with-printjob = []
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]
@@ -23,8 +24,7 @@ with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = ["embedded-sdmmc"]
-with-fan0 = ["embedded-hal"]
-with-fan1 = ["embedded-hal"]
+with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = []
 sdcard-uses-spi = []
@@ -34,35 +34,38 @@ with-display = [
     "printhor-hwa-common/with-ui",
 ]
 
-#"log", "env_logger",
-
-
 [dependencies]
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["arch-std", "executor-thread", "nightly", "integrated-timers"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["std"] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["std", "generic-queue"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = [] }
-embassy-embedded-hal = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["nightly"] }
 
-nix = { version = "0.27.1", optional = true }
+embassy-executor = { version = "0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
+embassy-sync = { version = "0", features = ["std"] }
+embassy-time = { version = "0", features = ["std", "generic-queue-32"] }
+embassy-futures = { version = "0", features = [] }
+embassy-embedded-hal = { version = "0", features = [] }
+embassy-usb = { version = "0", features = [], optional = true }
+
 embedded-io-async = { version = "0.6.0", optional = true }
 embedded-io = { version = "0.6.1", optional = true }
 
-async-std = { version = "*", optional = true}
+async-std = { version = "1.12.0", optional = true}
 gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
 embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
-
-embedded-hal = { version = "0.2.3", default-features = false, optional = true }
-embassy-usb = { version = "*", path = "../../ext/embassy/embassy-usb", features = [], optional = true }
-
-printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common" }
-async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
-
+printhor-hwa-common = { version = "0"}
+async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
+embedded-hal = { version = "0.2.7", default-features = false, optional = true }
 futures = { version = "0.3.29", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 
-lvgl = { version="*", git = "https://github.com/nviennot/lvgl-rs.git", default-features = false, features =[], optional = true }
+lvgl = { version="0", default-features = false, features =[], optional = true }
 embedded-graphics = { version = "0.7.1", optional = true}
 embedded-graphics-core = {version = "0.3.3", optional = true }
+nb = {version = "1.1.0", default-features = false, features = []}
+
+[patch.crates-io]
+embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
+embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
+embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

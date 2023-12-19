@@ -175,9 +175,18 @@ pub enum GCode {
     M17, M18, // Stepper motors
     /// List SD
     M20(Option<String>),
-    M21, M22,
-    /// Set print job file
-    M23(Option<String>), M24, M25, M26, M27, M30, M31, M32, M33, // SD
+    M21,
+    M22,
+    /// Select SD file
+    M23(Option<String>),
+    /// Start/resume SD print
+    M24,
+    /// Pause SD print
+    M25,
+    M26,
+    M27,
+    /// Program Stop
+    M30, M31, M32, M33, // SD
     M37, // Simulation mode
     /// Set Print Progress
     M73,

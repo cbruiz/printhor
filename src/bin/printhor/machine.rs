@@ -18,7 +18,7 @@ impl MachineInfo {
         Self {
             firmware_name: "PrinThor",
             firmware_version: env!("CARGO_PKG_VERSION"),
-            firmware_url: "https://github.com",
+            firmware_url: "https://github.com/cbruiz/printhor",
             machine_type: hwa::MACHINE_TYPE,
             machine_board: hwa::MACHINE_BOARD,
             machine_processor: hwa::MACHINE_PROCESSOR,
@@ -27,5 +27,4 @@ impl MachineInfo {
         }
     }
 }
-#[allow(unused)]
 pub(crate) static MACHINE_INFO: MachineInfo = MachineInfo::new();

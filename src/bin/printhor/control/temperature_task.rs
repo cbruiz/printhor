@@ -62,6 +62,7 @@ use crate::hwa;
 use embassy_time::{Duration, Ticker};
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
+use num_traits::ToPrimitive;
 use printhor_hwa_common::EventBusRef;
 use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
@@ -74,7 +75,7 @@ use crate::hwa::defmt;
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 enum State {
-    Dutty,
+    Duty,
     Targeting,
     Maintaining,
 }
@@ -84,7 +85,7 @@ pub async fn temp_task(
     event_bus: EventBusRef,
     hotend_controller: hwa::controllers::HotendControllerRef
 ) -> ! {
-    hwa::info!("D; temperature_task started");
+    hwa::debug!("temperature_task started");
 
     let mut pid: pid::Pid<f32> = pid::Pid::new(0.0f32, 100.0f32);
     pid.p(5.0f32, 100.0f32);
@@ -99,7 +100,7 @@ pub async fn temp_task(
 
     hotend_controller.lock().await.init().await;
 
-    let mut state = State::Dutty;
+    let mut state = State::Duty;
     loop {
         ticker.next().await;
         let new_state = {
@@ -107,7 +108,7 @@ pub async fn temp_task(
 
             current_temp = m.read_temp().await;
             #[cfg(feature = "native")]
-            if t0.elapsed().as_secs() > 5 {
+            if _t0.elapsed().as_secs() > 5 {
                 current_temp = (m.get_target_temp()) as f32;
             }
 
@@ -133,7 +134,7 @@ pub async fn temp_task(
                 };
                 hwa::trace!("TEMP {} -> {}, {} P={} [{}]", last_temp, current_temp, delta, power, target_temp);
 
-                m.set_power(power).await;
+                m.set_power((power * 255.0f32).to_u8().unwrap_or(0)).await;
 
                 if (current_temp - m.get_target_temp() as f32).abs() / target_temp < 0.25 {
                     State::Maintaining
@@ -145,14 +146,14 @@ pub async fn temp_task(
                 if last_temp != current_temp {
                     last_temp = current_temp;
                 }
-                State::Dutty
+                State::Duty
             }
         };
 
         if new_state != state {
             hwa::trace!("Temp changed to {:?}", new_state);
             match new_state {
-                State::Dutty => {
+                State::Duty => {
                     event_bus.publish_event(EventStatus::not_containing(EventFlags::HOTEND_TEMP_OK)).await;
                 }
                 State::Maintaining => {

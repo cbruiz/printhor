@@ -13,7 +13,6 @@ use embassy_stm32::usart;
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 #[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
 use embassy_stm32::gpio::OutputType;
-use embassy_stm32::time::{hz};
 use embassy_sync::mutex::Mutex;
 #[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
@@ -28,8 +27,6 @@ use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 use embassy_stm32::rcc::*;
 #[cfg(feature = "with-trinamic")]
 use device::Uart4;
-#[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
-use embassy_stm32::timer::{CountingMode,simple_pwm::SimplePwm};
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
@@ -41,7 +38,7 @@ static HEAP: CortexMHeap = CortexMHeap::empty();
 pub const MACHINE_TYPE: &str = "SKR";
 pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V3";
 /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
-pub const MACHINE_PROCESSOR: &str = "STM32G0B1RE";
+pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
@@ -55,7 +52,7 @@ pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 #[cfg(feature = "with-spi")]
-pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
+pub(crate) const SPI_FREQUENCY_HZ: u32 = 1_000_000;
 
 /// Shared controllers
 pub struct Controllers {
@@ -87,8 +84,8 @@ pub struct PwmDevices {
     pub hotend: device::HotendPeripherals,
     #[cfg(feature = "with-hotbed")]
     pub hotbed: device::HotbedPeripherals,
-    #[cfg(feature = "with-fan0")]
-    pub fan0: device::Fan0Peripherals,
+    #[cfg(feature = "with-fan-layer-fan0")]
+    pub layer_fan: device::FanLayerPeripherals,
     #[cfg(feature = "with-fan1")]
     pub fan1: device::Fan1Peripherals,
     #[cfg(feature = "with-laser")]
@@ -138,37 +135,146 @@ pub(crate) fn init_heap() -> () {
 
 #[inline]
 pub fn init() -> embassy_stm32::Peripherals {
+    use embassy_stm32::pac::*;
     init_heap();
+
+    //TODO: verify with https://www.st.com/resource/en/application_note/DM00443870-.pdf
     //crate::info!("Initializing...");
+
+    // Modify voltage scaling range */
+    // MODIFY_REG(PWR->CR1, PWR_CR1_VOS, VoltageScaling);
+    // WAIT for PWR_SR2_VOSF
+
+    PWR.cr1().write(|w| {
+        w.set_vos(pwr::vals::Vos::RANGE1);
+    });
+    while PWR.sr2().read().vosf() {}
+
+    defmt::info!("Enabling LSI...");
+    RCC.csr().write(|w| w.set_lsion(true));
+    while !RCC.csr().read().lsirdy() {}
+
+    RCC.cfgr().modify(|w| {
+        w.set_sw(rcc::vals::Sw::LSI);
+    });
+
+    defmt::info!("Disabling PLL...");
+    RCC.cr().modify(|w| w.set_pllon(false));
+    while RCC.cr().read().pllrdy() {}
+
+    defmt::info!("Disabling HSI...");
+    RCC.cr().write(|w| {
+        w.set_hsion(false);
+        w.set_hsidiv(rcc::vals::Hsidiv::DIV1);
+    });
+    while RCC.cr().read().hsirdy() {}
+
+    defmt::info!("Disabling LSE...");
+    RCC.bdcr().write(|w| {
+        w.set_lseon(false);
+    });
+    while RCC.bdcr().read().lserdy() {}
+
+    defmt::info!("Proceeding...");
     let mut config = Config::default();
     config.rcc.mux = ClockSrc::PLL(
-        // 8 / 1 * 24 / 3 = 64 MHz
         PllConfig {
-            source: PllSource::HSE(hz(8_000_000)),
+            // HSI = 16MHz
+            source: PllSource::HSI,
+            // HSE = 8MHz. Setting still not available in embassy_stm32
+            //source: PllSource::HSE(embassy_stm32::time::Hertz(8_000_000), HseMode::Oscillator),
             m: Pllm::DIV1,
-            n: Plln::MUL24,
+            // n = 12 for HSI
+            n: Plln::MUL12,
+            // n = 24 por HSE
+            // n: Plln::MUL24,
+            // SysClk = 8 / 1 * n / 3 = 64MHz
             r: Pllr::DIV3,
+            // PLLQ = 8 / 1 * n / 4 = 48MHz
             q: Some(Pllq::DIV2),
-            p: Some(Pllp::DIV2),
+            // PLLP = 8 / 1 * n / 2 = 64MHz
+            p: Some(Pllp::DIV3),
+            //p: None,
         }
     );
+    // HCLK = {Power, AHB bus, core, memory, DMA, System timer, FCLK} = 64MHz
     config.rcc.ahb_pre = AHBPrescaler::DIV1;
+    // PCLK = APB peripheral clocks = 64MHz
+    // TPCLK = APOB timer clocks = 64MHz
     config.rcc.apb_pre = APBPrescaler::DIV1;
-    config.rcc.ls = LsConfig::default_lsi();
     config.rcc.low_power_run = false;
+    config.rcc.ls = LsConfig {
+        rtc: RtcClockSource::LSI,
+        lsi: true,
+        lse: None,
+    };
+    let c = embassy_stm32::init(config);
 
-    embassy_stm32::init(config)
+    /*
+    RCC.abpenr1().write(|w| {
+        w.set_usben(true);
+        w.set_crsen(true);
+    });
+    */
+    c
 }
 
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
+    defmt::info!("Remapping");
+    embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
+        // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
+        //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)
+        let val = true;
+        let off = 3usize;
+        w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
+        let off = 4usize;
+        w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
+    });
+
+    #[cfg(feature = "with-spi")]
+        let spi1_device = {
+
+        let mut cfg = spi::Config::default();
+        cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
+        static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
+        ControllerRef::new(SPI1_INST.init(
+            "SPI1",
+            ControllerMutex::new(
+                device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
+                                  p.DMA1_CH4, p.DMA1_CH3, cfg
+                )
+            )
+        ))
+    };
+
+    // Use UART1 instead of USB CDC Serial
     #[cfg(feature = "with-usbserial")]
     let (usbserial_tx, usbserial_rx_stream) = {
+
         embassy_stm32::pac::RCC.cr().modify(|w| w.set_hsi48on(true));
         while !embassy_stm32::pac::RCC.cr().read().hsi48rdy() {}
         embassy_stm32::pac::RCC.ccipr2().write(|w| {
             w.set_usbsel(embassy_stm32::pac::rcc::vals::Usbsel::HSI48);
+            //w.set_usbsel(embassy_stm32::pac::rcc::vals::Usbsel::PLL1_Q); // does not work yet
         });
+
+        {
+            use embassy_stm32::peripherals::CRS;
+            use embassy_stm32::rcc::low_level::RccPeripheral;
+            use embassy_stm32::pac::crs::vals::Syncsrc;
+
+            CRS::enable_and_reset();
+            embassy_stm32::pac::CRS.cfgr().modify(|w| {
+                w.set_syncsrc(Syncsrc::USB);
+            });
+
+            embassy_stm32::pac::CRS.cr().modify(|w| {
+                w.set_autotrimen(true);
+                w.set_cen(true);
+            });
+        }
+
 
         defmt::info!("Creating USB Driver");
         let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
@@ -179,11 +285,18 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let usbserial_tx_controller = ControllerRef::new(
             USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
         );
+
         (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
 
+    defmt::info!("Waiting a little bit...");
+    // Wait for usb task to startup
+    embassy_time::Timer::after_secs(10).await;
+    defmt::info!("Waiting Done");
+
     #[cfg(feature = "with-uart-port-1")]
     let (uart_port1_tx, uart_port1_rx_stream) = {
+
         let mut cfg = usart::Config::default();
         cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
         cfg.data_bits = DataBits::DataBits8;
@@ -217,20 +330,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                    cfg).expect("Ready")
     };
 
-    #[cfg(feature = "with-spi")]
-    let spi1_device = {
-        let mut cfg = spi::Config::default();
-        cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
-        static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
-        ControllerRef::new(SPI1_INST.init(
-            "SPI1",
-            ControllerMutex::new(
-                device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
-                                  p.DMA1_CH2, p.DMA1_CH1, cfg
-                )
-            )
-        ))
-    };
     #[cfg(feature = "with-spi")]
     defmt::info!("SPI done");
 
@@ -359,16 +458,16 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     // PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo) PA1(Probe)
     // OK FOR: FAN0, FAN1, HE_PWM, BE_PWM
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
+    #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer-fan0"))]
     let pwm_fan0_fan1_hotend_hotbed = {
-        let pwm_fan0_fan1_hotend_hotbed = SimplePwm::new(
+        let pwm_fan0_fan1_hotend_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
             p.TIM3,
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PC6, OutputType::PushPull)), // PA6 | PB4 | PC6
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PC7, OutputType::PushPull)), // PA7 | PB5 | PC7
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch3(p.PC8, OutputType::PushPull)), // PB0 | PC8
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PC9, OutputType::PushPull)), // PB1 | PC9
-            hz(5_000),
-            CountingMode::CenterAlignedBothInterrupts,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PC6, embassy_stm32::gpio::OutputType::PushPull)), // PA6 | PB4 | PC6
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PC7, embassy_stm32::gpio::OutputType::PushPull)), // PA7 | PB5 | PC7
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch3(p.PC8, embassy_stm32::gpio::OutputType::PushPull)), // PB0 | PC8
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PC9, embassy_stm32::gpio::OutputType::PushPull)), // PB1 | PC9
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
         );
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
         ControllerRef::new(PWM_INST.init(
@@ -376,10 +475,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
         ))
     };
-
-    #[cfg(feature = "with-fan0")]
-    let pwm_fan0_channel = embassy_stm32::timer::Channel::Ch1;
-    #[cfg(feature = "with-fan1")]
+    #[cfg(feature = "with-fan-layer-fan0")]
     let pwm_fan1_channel = embassy_stm32::timer::Channel::Ch2;
     #[cfg(feature = "with-hotend")]
     let pwm_hotend_channel = embassy_stm32::timer::Channel::Ch3;
@@ -411,14 +507,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             ControllerRef::new(PWM_LASER_INST.init(
                 "LaserPwmController",
                 ControllerMutex::new(
-                    SimplePwm::new(
+                    embassy_stm32::timer::simple_pwm::SimplePwm::new(
                         p.TIM16,
                         Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PD0, OutputType::PushPull)), // PA6 | PB8 | PD0
                         None, //
                         None, //
                         None, //
-                        hz(5_000),
-                        CountingMode::CenterAlignedBothInterrupts,
+                        embassy_stm32::time::hz(5_000),
+                        embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
                     )
                 )
             )),
@@ -443,19 +539,27 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     let adc_hotbed_pin = p.PC4;
 
     #[cfg(feature = "with-probe")]
-    let probe_device = crate::device::ProbePeripherals {
-        #[cfg(feature = "with-probe")]
-        probe_pwm: SimplePwm::new(
-            p.TIM2,
-            None, // PA0 | PA15 | PA5 | PC4
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, OutputType::PushPull)), // PA1 | PB3 | PC5
-            None, // PA2 | PB10 | PC6
-            None, // PA3 | PB11 | PC7
-            hz(50),
-            CountingMode::CenterAlignedBothInterrupts,
-            ),
-        #[cfg(feature = "with-probe")]
-        probe_channel: embassy_stm32::timer::Channel::Ch2,
+    let probe_device =  {
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+
+        crate::device::ProbePeripherals {
+            power_pwm: ControllerRef::new(
+                PWM_INST.init("PwmServo",
+                              ControllerMutex::new(
+                                  device::PwmServo::new(
+                                      p.TIM2,
+                                      None, // PA0 | PA15 | PA5 | PC4
+                                      Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, OutputType::PushPull)), // PA1 | PB3 | PC5
+                                      None, // PA2 | PB10 | PC6
+                                      None, // PA3 | PB11 | PC7
+                                      embassy_stm32::time::hz(50),
+                                      embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+                                  )
+                ),
+            )),
+            power_channel: embassy_stm32::timer::Channel::Ch2,
+        }
+
     };
 
     #[cfg(feature = "with-motion")]
@@ -505,10 +609,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: adc_hotbed_pin,
             },
-            #[cfg(feature = "with-fan0")]
-            fan0: Fan0Peripherals {
+            #[cfg(feature = "with-fan-layer-fan0")]
+            layer_fan: FanLayerPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: pwm_fan0_channel,
+                power_channel: pwm_fan1_channel,
             },
             #[cfg(feature = "with-fan1")]
             fan1: Fan1Peripherals {

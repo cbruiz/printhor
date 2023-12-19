@@ -19,7 +19,7 @@ mod servo_controller;
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 mod heater_controller;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
 mod pwm_controller;
 
 // Use
@@ -71,14 +71,14 @@ pub type Fan0PwmController = pwm_controller::PwmController<crate::hwa::devices::
 #[cfg(any(feature = "with-fan0"))]
 pub type Fan0PwmControllerRef = printhor_hwa_common::ControllerRef<Fan0PwmController>;
 
-#[cfg(any(feature = "with-fan1"))]
-pub type Fan1PwmController = pwm_controller::PwmController<crate::hwa::devices::PwmFan1>;
+#[cfg(any(feature = "with-fan-layer"))]
+pub type LayerPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmLayerFan>;
 
-#[cfg(any(feature = "with-fan1"))]
-pub type Fan1PwmControllerRef = printhor_hwa_common::ControllerRef<Fan1PwmController>;
+#[cfg(any(feature = "with-fan-layer"))]
+pub type LayerPwmControllerRef = printhor_hwa_common::ControllerRef<LayerPwmController>;
 
 #[cfg(any(feature = "with-laser"))]
 pub type LaserPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmLaser>;
 
-#[cfg(any(feature = "with-fan1"))]
+#[cfg(any(feature = "with-laser"))]
 pub type LaserPwmControllerRef = printhor_hwa_common::ControllerRef<LaserPwmController>;

@@ -28,8 +28,8 @@ pub struct GCodeProcessorParams {
     pub hotbed: hwa::controllers::HotbedControllerRef,
     #[cfg(feature = "with-fan0")]
     pub fan0: hwa::controllers::Fan0PwmControllerRef,
-    #[cfg(feature = "with-fan1")]
-    pub fan1: hwa::controllers::Fan0PwmControllerRef,
+    #[cfg(feature = "with-fan-layer")]
+    pub layer_fan: hwa::controllers::LayerPwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
 }
@@ -54,7 +54,7 @@ pub struct GCodeProcessor
     #[cfg(feature = "with-fan0")]
     pub fan0: hwa::controllers::Fan0PwmControllerRef,
     #[cfg(feature = "with-fan1")]
-    pub fan1: hwa::controllers::Fan1PwmControllerRef,
+    pub layer_fan: hwa::controllers::LayerPwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
 }
@@ -80,7 +80,7 @@ impl GCodeProcessor
             #[cfg(feature = "with-fan0")]
             fan0: params.fan0,
             #[cfg(feature = "with-fan1")]
-            fan1: params.fan1,
+            layer_fan: params.layer_fan,
             #[cfg(feature = "with-laser")]
             laser: params.laser,
 
@@ -113,7 +113,7 @@ impl GCodeProcessor
 
      */
     #[allow(unused)]
-    pub(crate) async fn execute(&mut self, gc: &GCode, _blocking: bool) -> CodeExecutionResult {
+    pub(crate) async fn execute(&mut self, gc: &GCode, blocking: bool) -> CodeExecutionResult {
         let result = match gc {
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
@@ -124,8 +124,8 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-motion")]
             GCode::G0(_) | GCode::G1(_) => {
-                let result =  self.motion_planner.plan(&gc, _blocking).await?;
-                if !_blocking {
+                let result =  self.motion_planner.plan(&gc, blocking).await?;
+                if !blocking {
                     self.motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::AwaitRequested)).await;
                 }
                 match result {
@@ -143,10 +143,10 @@ impl GCodeProcessor
             },
             #[cfg(feature = "with-motion")]
             GCode::G4 => {
-                if !_blocking {
+                if !blocking {
                     self.motion_planner.defer_channel.send(DeferEvent::Dwell(DeferType::AwaitRequested)).await;
                 }
-                Ok(self.motion_planner.plan(&gc, _blocking).await?)
+                Ok(self.motion_planner.plan(&gc, blocking).await?)
             }
             GCode::G21 => {
                 Ok(CodeExecutionSuccess::OK)
@@ -156,10 +156,10 @@ impl GCodeProcessor
                 match self.event_bus.has_flags(EventFlags::HOMMING).await {
                     true => Err(CodeExecutionFailure::BUSY),
                     false => {
-                        hwa::info!("Planing homing");
-                        let x = self.motion_planner.plan(&gc, _blocking).await;
-                        hwa::info!("Homing planned");
-                        x
+                        hwa::debug!("Planing homing");
+                        let result = self.motion_planner.plan(&gc, blocking).await;
+                        hwa::debug!("Homing planned");
+                        result
                     },
                 }
             }
@@ -198,12 +198,9 @@ impl GCodeProcessor
             }
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
-                    let _ = self.write("C; ").await;
+                    let _ = self.write("echo: ").await;
                     let _ = self.writeln(x).await;
                 }
-                Ok(CodeExecutionSuccess::OK)
-            }
-            GCode::M24 => {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M73 => {
@@ -255,7 +252,7 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-hotend")]
             GCode::M104(s) => {
-                self.hotend.lock().await.set_target_temp(s.s.and_then(|v| v.to_i32()).unwrap_or(0) as f32).await;
+                self.hotend.lock().await.set_target_temp(s.s.and_then(|v| v.to_i32()).unwrap_or(0) as f32);
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]
@@ -267,18 +264,18 @@ impl GCodeProcessor
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M106 => {
                 //crate::info!("M106 BEGIN");
-                self.fan0.lock().await.set_power(1.0f32).await;
+                self.layer_fan.lock().await.set_power(1.0f32).await;
                 //crate::info!("M106 END");
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M107 => {
-                 self.fan0.lock().await.set_power(0.0f32).await;
+                 self.layer_fan.lock().await.set_power(0.0f32).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]
             GCode::M109(s) => {
-                self.hotend.lock().await.set_target_temp((s.s.and_then(|v| v.to_i32()).unwrap_or(0)) as f32).await;
+                self.hotend.lock().await.set_target_temp((s.s.and_then(|v| v.to_i32()).unwrap_or(0)) as f32);
                 Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(EventFlags::HOTEND_TEMP_OK)))
             }
             #[cfg(feature = "with-motion")]
@@ -313,7 +310,7 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-motion")]
             GCode::M119 => {
-                let d = self.motion_planner.motion_driver.lock().await;
+                let mut d = self.motion_planner.motion_driver.lock().await;
                 let z = format!("M119 X {} Y {} Z {}\n",
                     if d.pins.x_endstop_pin.is_high() {"1"} else {"0"},
                     if d.pins.y_endstop_pin.is_high() {"1"} else {"0"},

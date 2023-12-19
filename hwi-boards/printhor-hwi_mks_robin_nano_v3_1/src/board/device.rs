@@ -1,7 +1,7 @@
 use embassy_stm32::wdg;
-use embassy_stm32::gpio::Output;
+#[allow(unused)]
+use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::timer::simple_pwm::SimplePwm;
-use embassy_stm32::exti::ExtiInput;
 
 #[cfg(feature = "with-usbserial")]
 pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
@@ -58,28 +58,25 @@ pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC9>;
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-pub trait AdcTrait = embassy_stm32::adc::Instance;
-pub trait AdcPinTrait<PERI: AdcTrait> = embassy_stm32::adc::AdcPin<PERI>;
+pub use embassy_stm32::adc::Instance as AdcTrait;
+pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
 pub type AdcHotbedPeripheral = AdcHotendHotbedPeripheral;
 pub type AdcHotend = AdcHotendHotbed;
 pub type AdcHotbed = AdcHotendHotbed;
-pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
-pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
+pub type AdcHotendPin = embassy_stm32::peripherals::PC1;
+pub type AdcHotbedPin = embassy_stm32::peripherals::PC0;
 
-pub trait PwmTrait = embassy_stm32::timer::CaptureCompare16bitInstance;
+pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
-pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
-
-pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
-
-pub type PwmFan0 = PwmFan0Fan1HotendHotbed;
-pub type PwmFan1 = PwmFan0Fan1HotendHotbed;
-pub type PwmHotend = PwmFan0Fan1HotendHotbed;
-pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
+pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
+pub type PwmLayerFan = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+pub type PwmHotend = SimplePwm<'static, embassy_stm32::peripherals::TIM9>;
+pub type PwmHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
+pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM13>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
@@ -90,8 +87,8 @@ pub type Watchdog = wdg::IndependentWatchdog<'static,
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub probe_pwm: PwmServo,
-    pub probe_channel: PwmChannel,
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-hotend")]
@@ -110,15 +107,9 @@ pub struct HotbedPeripherals {
     pub temp_pin: AdcHotbedPin
 }
 
-#[cfg(feature = "with-fan0")]
-pub struct Fan0Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan0>,
-    pub power_channel: PwmChannel,
-}
-
-#[cfg(feature = "with-fan1")]
-pub struct Fan1Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan1>,
+#[cfg(feature = "with-fan-layer-fan1")]
+pub struct LayerFanPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
     pub power_channel: PwmChannel,
 }
 
@@ -135,10 +126,10 @@ pub struct MotionPins {
     pub z_enable_pin: Output<'static, embassy_stm32::peripherals::PB8>,
     pub e_enable_pin: Output<'static, embassy_stm32::peripherals::PB3>,
 
-    pub x_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PA15>,
-    pub y_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PD2>,
-    pub z_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC8>,
-    pub e_endstop_pin: ExtiInput<'static, embassy_stm32::peripherals::PC4>,
+    pub x_endstop_pin: Input<'static, embassy_stm32::peripherals::PA15>,
+    pub y_endstop_pin: Input<'static, embassy_stm32::peripherals::PD2>,
+    pub z_endstop_pin: Input<'static, embassy_stm32::peripherals::PC8>,
+    pub e_endstop_pin: Input<'static, embassy_stm32::peripherals::PC4>,
 
     pub x_step_pin: Output<'static, embassy_stm32::peripherals::PE3>,
     pub y_step_pin: Output<'static, embassy_stm32::peripherals::PE0>,

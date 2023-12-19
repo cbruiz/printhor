@@ -1,12 +1,10 @@
 #![no_std]
-#![feature(trait_alias)]
-#![feature(type_alias_impl_trait)]
+#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
 #![allow(stable_features)]
 use embassy_stm32::interrupt;
 use embassy_stm32::interrupt::Priority;
 use embassy_stm32::interrupt::InterruptExt;
 use embassy_executor::InterruptExecutor;
-use embassy_executor::SendSpawner;
 
 pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
@@ -43,22 +41,16 @@ const UART_PORT1_BAUD_RATE: u32 = 115200;
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
 #[interrupt]
-unsafe fn I2C2_3() {
+unsafe fn CEC() {
     EXECUTOR_HIGH.on_interrupt()
 }
 
 #[inline]
-pub fn get_stepper_spawner() -> SendSpawner {
-    interrupt::I2C2_3.set_priority(Priority::P5);
-    interrupt::USB_UCPD1_2.set_priority(Priority::P6);
-    EXECUTOR_HIGH.start(interrupt::I2C2_3)
-}
-
-#[inline]
 pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-    interrupt::I2C2_3.set_priority(Priority::P5);
-    interrupt::USB_UCPD1_2.set_priority(Priority::P6);
-    let spawner = EXECUTOR_HIGH.start(interrupt::I2C2_3);
+    interrupt::USB_UCPD1_2.set_priority(Priority::P3);
+    interrupt::CEC.set_priority(Priority::P2);
+
+    let spawner = EXECUTOR_HIGH.start(interrupt::CEC);
     spawner.spawn(token).map_err(|_| ())
 }
 

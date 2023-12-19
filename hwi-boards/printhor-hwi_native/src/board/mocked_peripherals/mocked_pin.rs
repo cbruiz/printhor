@@ -1,7 +1,6 @@
 use std::marker::PhantomData;
 use embassy_time::{Duration, Timer};
-#[cfg(feature = "with-hotbed")]
-use crate::hwi::native::traits::{AdcPin, TemperatureAdcCompat};
+use crate::device::AdcPinTrait;
 
 pub struct MockedOutputPin<'a, T> {
     p: PhantomData<&'a T>
@@ -58,11 +57,37 @@ impl<'a, T> MockedInputPin<'a, T> {
     }
 }
 
-#[cfg(feature = "with-hotbed")]
-impl<'a, T> AdcPin for MockedInputPin<'a, T> {}
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl<'a, T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedInputPin<'a, T> {
+
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl<'a, T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
+
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl AdcPinTrait<u8> for u8 {
+
+}
+
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+impl<'a, T> AdcPinTrait<u8> for MockedInputPin<'a, T> {
+
+}
 
 #[cfg(feature = "with-hotbed")]
-impl<'a, T> TemperatureAdcCompat for MockedInputPin<'a, T> {}
+impl<'a, ADC, Word, PIN> embedded_hal::adc::OneShot<ADC, Word, PIN> for MockedInputPin<'a, PIN>
+where PIN: embedded_hal::adc::Channel<ADC>
+{
+
+    type Error = u8;
+    fn read(&mut self, _: &mut PIN) -> Result<Word, nb::Error<u8>> {
+        todo!()
+    }
+
+}
 
 
 #[cfg(feature = "with-spi")]

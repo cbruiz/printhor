@@ -117,18 +117,18 @@ pub async fn stepper_task(
     watchdog: hwa::WatchdogRef)
 {
 
-    let one_us = Duration::from_micros(1);
+    let one_us = Duration::from_micros(100);
     let timeout = Duration::from_secs(20);
     let period_ms: i32 = (PULSE_WIDTH_US / 1000) as i32;
     let mut steppers_off = true;
 
     motion_planner.start().await;
 
-    #[allow(unused)]
-        #[allow(unused_mut)]
     let mut s = motion_planner.event_bus.subscriber().await;
+    s.wait_while(EventFlags::HOMMING).await;
 
     hwa::info!("Pulse controller starting with {} us, {} ms period", PULSE_WIDTH_US, period_ms);
+    motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
 
     loop {
 
@@ -137,7 +137,7 @@ pub async fn stepper_task(
         match with_timeout(timeout, motion_planner.get_current_segment_data()).await {
             // Process segment plan
             Ok(Some(segment)) => {
-
+                hwa::debug!("Segment init");
                 let mut usteps_advanced: TVector<u32> = TVector::zero();
                 let mut tick_id = 1;
 
@@ -145,7 +145,7 @@ pub async fn stepper_task(
                 let expected_advance = Real::from_lit(segment.segment_data.displacement_u as i64, 0) / Real::from_lit(1000, 0);
 
                 // segment metronome
-                hwa::info!(">> Motion segment will advance {} mm at ~{} mm/sec ({} usteps/sec)",
+                hwa::debug!(">> Motion segment will advance {} mm at ~{} mm/sec ({} usteps/sec)",
                     (segment.segment_data.displacement_u as f64) / 1000.0f64,
                     segment.motion_profile.v_lim.rdp(4),
                     (segment.motion_profile.v_lim * to_ustep).rdp(4)
@@ -159,6 +159,8 @@ pub async fn stepper_task(
                 let mut axis_steps_advanced_precise: TVector<Real> = TVector::zero();
 
                 let t_segment = embassy_time::Instant::now();
+                #[cfg(feature = "native")]
+                motion_planner.start_segment(t_segment).await;
 
                 loop { // Iterate on segment
 
@@ -221,52 +223,54 @@ pub async fn stepper_task(
                                     break;
                                 },
                                 Some(ChannelName::X) => {
-                                    drv.pins.enable_x_stepper();
+
+                                    //drv.laser_controller.lock().await.set_power(1.0f32).await;
+                                    drv.enable_x_stepper();
                                     usteps_advanced.increment(CoordSel::X, 1u32);
                                     match &axial_dirs.x {
-                                        true => drv.pins.x_dir_pin.set_high(),
-                                        false => drv.pins.x_dir_pin.set_low(),
+                                        true => drv.x_dir_pin_high(),
+                                        false => drv.x_dir_pin_low(),
                                     }
-                                    drv.pins.x_step_pin.set_high();
+                                    drv.x_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.x_step_pin.set_low();
+                                    drv.x_step_pin_low();
                                     s_block_for(one_us);
                                 },
                                 Some(ChannelName::Y) => {
-                                    drv.pins.enable_y_stepper();
+                                    drv.enable_y_stepper();
                                     usteps_advanced.increment(CoordSel::Y, 1u32);
                                     match &axial_dirs.y {
-                                        true => drv.pins.y_dir_pin.set_high(),
-                                        false => drv.pins.y_dir_pin.set_low(),
+                                        true => drv.y_dir_pin_high(),
+                                        false => drv.y_dir_pin_low(),
                                     }
-                                    drv.pins.y_step_pin.set_high();
+                                    drv.y_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.y_step_pin.set_low();
+                                    drv.y_step_pin_low();
                                     s_block_for(one_us);
                                 },
                                 Some(ChannelName::Z) => {
-                                    drv.pins.enable_z_stepper();
+                                    drv.enable_z_stepper();
                                     usteps_advanced.increment(CoordSel::Z, 1u32);
                                     match &axial_dirs.z {
-                                        true => drv.pins.z_dir_pin.set_high(),
-                                        false => drv.pins.z_dir_pin.set_low(),
+                                        true => drv.z_dir_pin_high(),
+                                        false => drv.z_dir_pin_low(),
                                     }
-                                    drv.pins.z_step_pin.set_high();
+                                    drv.z_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.z_step_pin.set_low();
+                                    drv.z_step_pin_low();
                                     s_block_for(one_us);
                                 },
                                 #[cfg(feature = "has-extruder")]
                                 Some(ChannelName::E) => {
-                                    drv.pins.enable_e_stepper();
+                                    drv.enable_e_stepper();
                                     usteps_advanced.increment(CoordSel::E, 1u32);
                                     match &axial_dirs.e {
-                                        true => drv.pins.e_dir_pin.set_high(),
-                                        false => drv.pins.e_dir_pin.set_low(),
+                                        true => drv.e_dir_pin_high(),
+                                        false => drv.e_dir_pin_low(),
                                     }
-                                    drv.pins.e_step_pin.set_high();
+                                    drv.e_step_pin_high();
                                     s_block_for(one_us);
-                                    drv.pins.e_step_pin.set_low();
+                                    drv.e_step_pin_low();
                                     s_block_for(one_us);
                                 },
                             }
@@ -277,12 +281,19 @@ pub async fn stepper_task(
 
                         if estimated_position >= expected_advance {
                             let rpos = usteps_advanced.map_coords(|c| { Some(Real::from_lit(c as i64, 0)) }) / to_ustep;
-                            hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
+                            hwa::debug!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment.elapsed().as_millis(), axial_pos.rdp(4), rpos  );
 
                             motion_planner.consume_current_segment_data().await;
                             motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
                             break;
                         }
+                    }
+                    else {
+                        // TODO reached end-of-segment, but still missing any step
+                        hwa::debug!("!! Segment exausted in {} ms.", t_segment.elapsed().as_millis()  );
+                        motion_planner.consume_current_segment_data().await;
+                        motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
+                        break;
                     }
 
                     let elapsed = t_segment.elapsed();
@@ -292,16 +303,22 @@ pub async fn stepper_task(
                     tick_id += 1;
 
                     absolute_ticker.next().await;
+                    #[cfg(feature = "native")]
+                    motion_planner.mark_microsegment().await;
+
                 }
+                #[cfg(feature = "native")]
+                motion_planner.end_segment().await;
+                hwa::debug!("Segment done");
             }
             // Homing
             Ok(None) => {
-                hwa::info!("Doing homing");
+                hwa::debug!("Homing init");
                 if !motion_planner.do_homing().await.is_ok() {
                     // TODO
                 }
-                hwa::info!("Homing done");
                 motion_planner.consume_current_segment_data().await;
+                hwa::debug!("Homing done");
             }
             // Timeout
             Err(_) => {

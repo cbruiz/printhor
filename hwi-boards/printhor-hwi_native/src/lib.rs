@@ -1,5 +1,5 @@
-#![feature(trait_alias)]
-#![feature(type_alias_impl_trait)]
+#![cfg_attr(feature="niglty", feature(trait_alias))]
+#![cfg_attr(feature="niglty", feature(type_alias_impl_trait))]
 #![allow(stable_features)]
 
 mod board;

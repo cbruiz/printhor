@@ -4,10 +4,30 @@ use crate::helpers;
 use alloc::string::String;
 use futures::Stream;
 
-#[allow(unused)]
+#[cfg_attr(not(feature="with-defmt"), derive(Debug))]
 pub enum GCodeLineParserError {
     ParseError(u32),
     GCodeNotImplemented(u32, String),
+    #[allow(unused)]
+    FatalError,
+}
+
+#[cfg(feature = "with-defmt")]
+impl defmt::Format for GCodeLineParserError {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self {
+            GCodeLineParserError::ParseError(ln) => {
+                defmt::write!(fmt, "ParseError(line={})", ln);
+            }
+            GCodeLineParserError::GCodeNotImplemented(ln, string) => {
+                defmt::write!(fmt, "GCodeNotImplemented(line={}, gcode={})", ln, string.as_str());
+            }
+            GCodeLineParserError::FatalError => {
+                defmt::write!(fmt, "FatalError");
+            }
+        }
+
+    }
 }
 
 // dyn trait could reduce code size a lot with the penalty of the indirection
@@ -150,6 +170,9 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     }
                                                     ('m', Some((24, 0))) => {
                                                         Some(GCode::M24)
+                                                    }
+                                                    ('m', Some((25, 0))) => {
+                                                        Some(GCode::M25)
                                                     }
                                                     ('m', Some((73, 0))) => {
                                                         Some(GCode::M73)

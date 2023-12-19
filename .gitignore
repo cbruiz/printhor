@@ -15,6 +15,8 @@ Cargo.lock
 firmware.bin
 # For anyone who wanted to put .svd in data and debug peripherals with vscode complements like "Cortex Debug" + "Peripheral Viewer". I woul'd rather not to put them in git
 data/*.svd
+data/*.jar
+data/*.puml
 # Best practice is https://blog.sebastian-daschner.com/entries/global-gitignore but I'd better to maintain to avoid mistakes for people who are not highly proficient in git.
 .idea
 .vscode

@@ -1,23 +1,25 @@
-use crate::board::mocked_peripherals::InputPin;
+use crate::device::AdcTrait;
 
-pub(crate) struct MockedTemperatureAdc {
-    #[allow(unused)]
-    p: InputPin,
+pub struct MockedAdc<PERI> {
+    _peri: PERI
 }
-impl MockedTemperatureAdc {
-    pub(crate) const fn new() -> Self {
+impl<PERI> MockedAdc<PERI> {
+    pub(crate) const fn new(_peri: PERI) -> Self {
         Self {
-            p: InputPin::new(),
+            _peri
         }
     }
     #[allow(unused)]
-    pub(crate) fn read<T>(&self, _pin: &T) -> u16 {
-        1024
+    pub fn read<T>(&mut self, _pin: &T) -> u16 {
+        0
     }
 
-    #[allow(unused)]
-    pub(crate) async fn test(&self) {
-        crate::info!("adc test ok");
-    }
+}
+
+impl<PERI> AdcTrait for MockedAdc<PERI> {
+
+}
+
+impl AdcTrait for u8 {
 
 }

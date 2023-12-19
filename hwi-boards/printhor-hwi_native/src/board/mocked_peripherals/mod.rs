@@ -1,7 +1,8 @@
-#[cfg(feature = "needs-adc")]
+#[cfg(any(feature = "with-hotbed", feature = "with-hotend"))]
 mod mocked_adc;
+
 mod mocked_pin;
-#[cfg(feature = "with-hotbed")]
+#[cfg(any(feature = "with-hotbed", feature = "with-hotend", feature = "with-fan-layer"))]
 mod mocked_pwm;
 #[cfg(feature = "with-spi")]
 mod mocked_spi;
@@ -30,3 +31,9 @@ pub use mocked_sdcard::*;
 
 #[cfg(feature = "with-display")]
 pub use mocked_display::*;
+
+#[cfg(any(feature = "with-hotbed", feature = "with-hotend", feature = "with-fan-layer"))]
+pub use mocked_pwm::*;
+
+#[cfg(any(feature = "with-hotbed", feature = "with-hotend"))]
+pub use mocked_adc::*;

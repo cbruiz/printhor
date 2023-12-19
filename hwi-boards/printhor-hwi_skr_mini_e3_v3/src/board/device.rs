@@ -39,7 +39,7 @@ pub type UartTrinamic = Uart4;
 #[cfg(feature = "with-spi")]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
     embassy_stm32::peripherals::SPI1,
-    embassy_stm32::peripherals::DMA1_CH2, embassy_stm32::peripherals::DMA1_CH1
+    embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3
 >;
 
 #[cfg(feature = "with-spi")]
@@ -58,8 +58,8 @@ pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PA4>;
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-pub trait AdcTrait = embassy_stm32::adc::Instance;
-pub trait AdcPinTrait<PERI: AdcTrait> = embassy_stm32::adc::AdcPin<PERI>;
+pub use embassy_stm32::adc::Instance as AdcTrait;
+pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -69,7 +69,7 @@ pub type AdcHotbed = AdcHotendHotbed;
 pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
 pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
 
-pub trait PwmTrait = embassy_stm32::timer::CaptureCompare16bitInstance;
+pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
@@ -79,7 +79,7 @@ pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
 
 pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
-pub type PwmFan0 = PwmFan0Fan1HotendHotbed;
+pub type PwmLayerFan = PwmFan0Fan1HotendHotbed;
 pub type PwmFan1 = PwmFan0Fan1HotendHotbed;
 pub type PwmHotend = PwmFan0Fan1HotendHotbed;
 pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
@@ -107,8 +107,8 @@ pub struct DisplayDevice {
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub probe_pwm: PwmServo,
-    pub probe_channel: PwmChannel,
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-hotend")]
@@ -127,9 +127,9 @@ pub struct HotbedPeripherals {
     pub temp_pin: AdcHotbedPin
 }
 
-#[cfg(feature = "with-fan0")]
-pub struct Fan0Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan0>,
+#[cfg(feature = "with-fan-layer-fan0")]
+pub struct FanLayerPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
     pub power_channel: PwmChannel,
 }
 

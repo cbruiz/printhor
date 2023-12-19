@@ -21,13 +21,13 @@ use embassy_stm32::usb_otg;
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
-use embassy_stm32::exti::ExtiInput;
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 use embassy_stm32::rcc::*;
 
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
+
 
 #[global_allocator]
 static HEAP: CortexMHeap = CortexMHeap::empty();
@@ -69,7 +69,16 @@ pub struct IODevices {
 }
 
 pub struct PwmDevices {
-
+    #[cfg(feature = "with-probe")]
+    pub probe: device::ProbePeripherals,
+    #[cfg(feature = "with-fan-layer-fan1")]
+    pub layer_fan: device::LayerFanPeripherals,
+    #[cfg(feature = "with-hotend")]
+    pub hotend: device::HotendPeripherals,
+    #[cfg(feature = "with-hotbed")]
+    pub hotbed: device::HotbedPeripherals,
+    #[cfg(feature = "with-laser")]
+    pub laser: device::LaserPeripherals,
 }
 
 pub struct MotionDevices {
@@ -112,11 +121,12 @@ pub(crate) fn init_heap() -> () {
 #[inline]
 pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
-    //crate::info!("Initializing...");
+    crate::info!("Initializing...");
     let mut config = Config::default();
+    // https://community.platformio.org/t/stm32f407vet6-external-oscillator-configuration/22497
     config.rcc.hse = Some(Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
-        mode: HseMode::Bypass,
+        mode: HseMode::Oscillator,
     });
     config.rcc.pll_src = PllSource::HSE;
     config.rcc.pll = Some(Pll {
@@ -141,9 +151,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let ep_out_buffer = EP_OUT_BUFFER_INST.init("USBEPBuffer", [0u8; 256]);
         defmt::info!("Creating USB Driver");
         let mut config = embassy_stm32::usb_otg::Config::default();
-        config.vbus_detection = true;
+        config.vbus_detection = false;
 
-                // Maybe OTG_FS is not the right peripheral...
+        // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
         let driver = usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
         let mut usb_serial_device = USBSerialDevice::new(driver);
@@ -178,6 +188,45 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
 
+    //#[cfg(feature = "with-trinamic-wip")]
+    {
+        // TODO: WorkInProgress Trinamic UART (when needed) requires a software usar implementation because of the wiring
+
+        use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
+
+        pub struct AnyPinWrapper<PIN>(embassy_stm32::gpio::Flex<'static, PIN>)
+            where PIN: embassy_stm32::gpio::Pin;
+
+        impl<PIN> printhor_hwa_common::soft_uart::IOPin for AnyPinWrapper<PIN>
+            where PIN: embassy_stm32::gpio::Pin
+        {
+            #[inline]
+            fn set_output(&mut self) {
+                self.0.set_as_output(Speed::VeryHigh);
+            }
+            #[inline]
+            fn set_input(&mut self) {
+                self.0.set_as_input(Pull::Down);
+            }
+            #[inline]
+            fn is_high(&mut self) -> bool {
+                self.0.is_high()
+            }
+            #[inline]
+            fn set_high(&mut self) { self.0.set_high() }
+            #[inline]
+            fn set_low(&mut self) { self.0.set_low() }
+        }
+
+        let mut uart_e0 = printhor_hwa_common::soft_uart::HalfDuplexSerial::new(
+            AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD5))
+        );
+
+        let _ = uart_e0.write(0b10101010u8).await;
+        let _ = uart_e0.read().await;
+    }
+
+
     #[cfg(feature = "with-spi")]
     let spi1_device = {
         let mut cfg = spi::Config::default();
@@ -211,10 +260,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             y_enable_pin: Output::new(p.PE1, Level::Low, Speed::VeryHigh),
             z_enable_pin: Output::new(p.PB8, Level::Low, Speed::VeryHigh),
             e_enable_pin: Output::new(p.PB3, Level::Low, Speed::VeryHigh),
-            x_endstop_pin: ExtiInput::new(Input::new(p.PA15, Pull::Down), p.EXTI15),
-            y_endstop_pin: ExtiInput::new(Input::new(p.PD2, Pull::Down), p.EXTI2),
-            z_endstop_pin: ExtiInput::new(Input::new(p.PC8, Pull::Down), p.EXTI8),
-            e_endstop_pin: ExtiInput::new(Input::new(p.PC4, Pull::Down), p.EXTI4),
+            x_endstop_pin: Input::new(p.PA15, Pull::Down),
+            y_endstop_pin: Input::new(p.PD2, Pull::Down),
+            z_endstop_pin: Input::new(p.PC8, Pull::Down),
+            e_endstop_pin: Input::new(p.PC4, Pull::Down),
             x_step_pin: Output::new(p.PE3, Level::Low, Speed::VeryHigh),
             y_step_pin: Output::new(p.PE0, Level::Low, Speed::VeryHigh),
             z_step_pin: Output::new(p.PB5, Level::Low, Speed::VeryHigh),
@@ -228,7 +277,140 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     #[cfg(feature = "with-motion")]
     defmt::info!("motion_driver done");
 
-    // TODO: PC14(Fan0) PB1(Fan1) PB0(HE_PWM) PA0(BED_PWM) PA8(Probe)
+    #[cfg(feature = "with-probe")]
+        let probe_device = {
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+        crate::device::ProbePeripherals {
+            power_pwm: ControllerRef::new(
+                PWM_INST.init("PwmServo",
+                              ControllerMutex::new(
+                                  device::PwmServo::new(
+                                      p.TIM1,
+                                      Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PA8, embassy_stm32::gpio::OutputType::PushPull)),
+                                      None,
+                                      None,
+                                      None,
+                                      embassy_stm32::time::hz(50),
+                                      embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+                                  )
+                              ),
+                )),
+            power_channel: embassy_stm32::timer::Channel::Ch1,
+        }
+    };
+
+    // FAN0 = PC14 // Requires a soft pwm [Not implemented (yet)]
+    // FAN1 = PB1 // T3.CH4
+    // HE0 = PE5 // T9.Ch1
+    // HE1 = PB0 // T3.3 | T1.2N
+    // BE0 = PA0 // T2.1 | T5.1
+    // LASER = PA6 // T13.1
+
+    #[cfg(feature = "with-fan-layer-fan1")]
+        let layer_device = {
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLayerFan>> = TrackedStaticCell::new();
+
+        let pwm_fan1 = embassy_stm32::timer::simple_pwm::SimplePwm::new(
+            p.TIM3,
+            None,
+            None,
+            None,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PB1, embassy_stm32::gpio::OutputType::PushPull)),
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        crate::device::LayerFanPeripherals {
+            power_pwm: ControllerRef::new(PWM_INST.init(
+                "PwmFan",
+                ControllerMutex::new(pwm_fan1)
+            )),
+            power_channel: embassy_stm32::timer::Channel::Ch1,
+        }
+    };
+
+    #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+    let adc = {
+        let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
+        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles15);
+        static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
+        ControllerRef::new(ADC_INST.init(
+            "HotendHotbedAdc",
+            ControllerMutex::new(adc_hotend_hotbed)
+        ))
+    };
+
+    #[cfg(any(feature = "with-hotend"))]
+        let hotend_device = {
+
+        let pwm_hotend = embassy_stm32::timer::simple_pwm::SimplePwm::new(
+            p.TIM9,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PE5, embassy_stm32::gpio::OutputType::PushPull)),
+            None,
+            None,
+            None,
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotend>> = TrackedStaticCell::new();
+
+        HotendPeripherals {
+            power_pwm: ControllerRef::new(PWM_INST.init(
+                "PwmFanFan0HotendHotbed",
+                ControllerMutex::new(pwm_hotend)
+            )),
+            power_channel: embassy_stm32::timer::Channel::Ch1,
+            temp_adc: adc.clone(),
+            temp_pin: p.PC1,
+        }
+    };
+
+    #[cfg(any(feature = "with-hotbed"))]
+        let hotbed_device = {
+
+        let pwm_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
+            p.TIM5,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PA0, embassy_stm32::gpio::OutputType::PushPull)),
+            None,
+            None,
+            None,
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotbed>> = TrackedStaticCell::new();
+
+        HotbedPeripherals {
+            power_pwm: ControllerRef::new(PWM_INST.init(
+                "PwmHotbed",
+                ControllerMutex::new(pwm_hotbed)
+            )),
+            power_channel: embassy_stm32::timer::Channel::Ch1,
+            temp_adc: adc.clone(),
+            temp_pin: p.PC0,
+        }
+    };
+
+    #[cfg(any(feature = "with-laser"))]
+        let laser_device = {
+
+        let pwm_laser = device::PwmLaser::new(
+            p.TIM13,
+            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PA6, embassy_stm32::gpio::OutputType::PushPull)),
+            None,
+            None,
+            None,
+            embassy_stm32::time::hz(5_000),
+            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+        );
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
+
+        LaserPeripherals {
+            power_pwm: ControllerRef::new(PWM_INST.init(
+                "PwmLaser",
+                ControllerMutex::new(pwm_laser)
+            )),
+            power_channel: embassy_stm32::timer::Channel::Ch1,
+        }
+    };
 
     #[cfg(feature = "with-motion")]
     defmt::info!("motion_planner done");
@@ -261,6 +443,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         pwm: PwmDevices {
             #[cfg(feature = "with-probe")]
             probe: probe_device,
+            #[cfg(feature = "with-fan-layer-fan1")]
+            layer_fan: layer_device,
+            #[cfg(feature = "with-hotend")]
+            hotend: hotend_device,
+            #[cfg(feature = "with-hotbed")]
+            hotbed: hotbed_device,
+            #[cfg(feature = "with-laser")]
+            laser: laser_device,
         }
     }
 

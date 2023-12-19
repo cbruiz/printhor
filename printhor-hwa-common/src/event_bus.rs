@@ -19,14 +19,18 @@ bitflags! {
         const SYS_BOOT_FAILURE = 0b0100000000000000;
         const SYS_READY        = 0b0010000000000000;
         const SYS_ALARM        = 0b0001000000000000;
-        const ATX_ON           = 0b0000010000000000;
-        const HOMMING          = 0b0000001000000000;
-        const MOV_QUEUE_EMPTY  = 0b0000000100000000;
-        const HOTBED_TEMP_OK   = 0b0000000000000010;
-        const HOTEND_TEMP_OK   = 0b0000000000000100;
-        const X_MIN_ON         = 0b0000000000001000;
-        const Y_MIN_ON         = 0b0000000000010000;
-        const Z_MIN_ON         = 0b0000000000100000;
+        const ATX_ON           = 0b0000100000000000;
+        const HOMMING          = 0b0000010000000000;
+        const MOV_QUEUE_EMPTY  = 0b0000001000000000;
+        const JOB_FILE_SEL     = 0b0000000100000000;
+        const JOB_PRINTING     = 0b0000000010000000;
+        const JOB_PAUSED       = 0b0000000001000000;
+        const JOB_COMPLETED    = 0b0000000000100000;
+        const HOTBED_TEMP_OK   = 0b0000000000010000;
+        const HOTEND_TEMP_OK   = 0b0000000000001000;
+        const X_MIN_ON         = 0b0000000000000100;
+        const Y_MIN_ON         = 0b0000000000000010;
+        const Z_MIN_ON         = 0b0000000000000001;
 
     }
 }
@@ -40,34 +44,6 @@ pub struct EventBus {
 
 impl EventBus {
     pub(crate) fn publish_event(&mut self, event: EventStatus) {
-        // Get changing bits
-        // i: 000
-        // m: 001
-        //
-        // s: 000
-        //
-        // i: 000 & 001 = 000
-        // c: (i:000 ^ s:000) & m:001 = 000
-        //
-        // s: 001
-        //
-        // i: 000 & 001 = 000
-        // c: (i:000 ^ s:001) & m:001 = 001
-        // n: ( (s:001 & !c=110)=000 | (i:000 & c:001)=000 )=000
-
-        // i: 001
-        // s: 001
-        //
-        // i: 001 & 001 = 001
-        // c: (i:001 ^ s:001)=000 & m:001 = 000
-        // n: ( (s:001 & !c=111)=001 | (i:001 & c:001)=001 )=001
-
-        // i: 001
-        // s: 100
-        //
-        // i: 001 & 001 = 001
-        // c: (i:001 ^ s:100)=101 & m:001 = 001
-        // n: ( (s:100 & !c=110)=100 | (i:001 & c:001)=001 )=101
         let incoming_bits = event.flags.bitand(event.mask);
         let changed_bits = incoming_bits.bitxor(self.status).bitand(event.mask);
         if !changed_bits.is_empty() {
@@ -151,7 +127,7 @@ impl EventBusSubscriber<'_> {
     }
 
     #[inline]
-    pub async fn wait_until(&mut self, what: EventStatus) {
+    pub async fn wait_for(&mut self, what: EventStatus) {
         let wanted = what.flags.bitand(what.mask);
         if let Some(msg) = self.inner.try_next_message_pure() {
             //crate::trace!("last_status = {:?}", msg);
@@ -162,14 +138,21 @@ impl EventBusSubscriber<'_> {
         }
         loop {
             let relevant_bits = self.last_status.bitand(what.mask);
-            // 001 . 100 111
-            // r_bits = 00
-            // 00 = 10 ?
             if wanted.eq(&relevant_bits) {
                 return;
             }
             self.last_status = self.inner.next_message_pure().await;
         }
+    }
+
+    #[inline]
+    pub async fn wait_until(&mut self, flags: EventFlags) {
+        self.wait_for(EventStatus::containing(flags)).await
+    }
+
+    #[inline]
+    pub async fn wait_while(&mut self, flags: EventFlags) {
+        self.wait_for(EventStatus::not_containing(flags)).await
     }
 }
 
@@ -230,8 +213,6 @@ impl EventStatus {
         }
     }
 }
-
-//pub type EventBusType = Mutex<CriticalSectionRawMutex, EventBus>;
 
 pub fn init_event_bus() -> EventBusRef {
     static EVT_BUS: TrackedStaticCell<PubSubType> = TrackedStaticCell::new();

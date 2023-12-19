@@ -14,14 +14,15 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
+nightly = ["printhor-hwa-common/nightly"]
 #default = ["nucleo64-l476rg"]
 # Board kind
-nucleo64-l476rg = ["embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-any", "embassy-time/tick-hz-100_000"]
-nucleo64-f410rb = ["embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-100_000"]
+nucleo64-l476rg = ["embassy-stm32/defmt", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-32_768", "embassy-executor/task-arena-size-16384"]
+nucleo64-f410rb = ["embassy-stm32/defmt", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9", "embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384"]
 # Hardware device features
 with-usbserial = ["embassy-usb"]
 with-printjob = []
-with-uart-port-1 = []
+with-uart-port-1 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]
@@ -29,7 +30,7 @@ with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
-with-fan0 = ["embedded-hal"]
+with-layer-fan = ["embedded-hal"]
 with-fan1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-defmt = []
@@ -39,18 +40,19 @@ ili9341_parallel = []
 ili9341_spi = ["with-spi"]
 
 [dependencies]
+defmt = {version = "0.3"}
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
-embassy-stm32 = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["defmt", "nightly", "rt", "unstable-traits", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "*", default-features = false, git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["defmt", "nightly", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
-embassy-sync = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["defmt"] }
-embassy-time = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["defmt"] }
-embassy-futures = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["defmt"] }
-defmt = {version = "0.3"}
 
-embedded-hal = { version = "0.2.7", default-features = false, optional = true, features = ["defmt"] }
-embassy-usb = { version = "*", git = "https://github.com/embassy-rs/embassy", rev = "7e5deae58943e886d3879b29f752e4ebdee71195", features = ["defmt"], optional = true }
+embassy-stm32 = { version = "0", default-features = false, features = ["defmt", "rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "0", default-features = false, features = ["defmt", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-sync = { version = "0", features = ["defmt"] }
+embassy-time = { version = "0", features = ["defmt"] }
+embassy-futures = { version = "0", features = ["defmt"] }
+embassy-usb = { version = "0", features = [], optional = true, git = "https://github.com/cbruiz/embassy.git", branch="main" }
 
-printhor-hwa-common = { version = "*", path= "../../printhor-hwa-common", features = [] }
-async-gcode = {version = "*", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"], git="https://github.com/cbruiz/async-gcode.git", branch= "feature/embedded-productivization" }
+printhor-hwa-common = { version = "0", features = [] }
+async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.29", default-features = false, features = [] }
+embedded-hal = { version = "0.2.7", default-features = false, optional = true, features = [] }
+embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }

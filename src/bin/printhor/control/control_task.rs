@@ -42,9 +42,12 @@ pub async fn control_task(
 
     let mut _processor = _processor;
 
-    s.wait_until(EventStatus::containing(EventFlags::SYS_READY)).await;
-    hwa::info!("Control_task started");
-    _processor.write("echo: ready\n").await;
+    s.wait_for(EventStatus::containing(EventFlags::SYS_READY)).await;
+    #[cfg(feature = "with-usbserial")]
+    hwa::debug!("Control_task started [USBSerial]");
+    #[cfg(feature = "with-uart-port-1")]
+    hwa::debug!("Control_task started [UARTPort1]");
+    _processor.write("echo: ready for commands\n").await;
 
     #[cfg(any(feature = "with-usbserial", feature = "with-uart-port-1"))]
     loop {
@@ -58,6 +61,9 @@ pub async fn control_task(
                     crate::control::parser::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name) => {
                         let s = alloc::format!("E. {} (NotImplemented)\n", _gcode_name);
                         _processor.write(&s).await;
+                    }
+                    crate::control::parser::GCodeLineParserError::FatalError => {
+                        // TODO
                     }
                 }
             }
@@ -116,12 +122,12 @@ pub async fn control_task(
                             #[cfg(feature = "with-printjob")]
                             crate::control::GCode::M23(f) => {
                                 match _c.printer_controller.set(
-                                    PrinterControllerEvent::PrintFile(
+                                    PrinterControllerEvent::SetFile(
                                         f.map_or(alloc::string::String::from("default"),
                                                  |s| { alloc::string::String::from(s.as_str()) }
                                         ),
                                     )
-                                ) {
+                                ).await {
                                     Ok(_f) => {
                                         hwa::info!("O. M23; OK");
                                     }
@@ -132,9 +138,29 @@ pub async fn control_task(
                                 }
                                 //println!("Exec M23...");
                             },
-                            #[cfg(feature = "with-sdcard")]
+                            #[cfg(feature = "with-printjob")]
                             crate::control::GCode::M24 => {
-                                _processor.write("E. M24 (Not yet properly implemented)\n").await;
+                                match _c.printer_controller.set(PrinterControllerEvent::Resume).await {
+                                    Ok(_f) => {
+                                        hwa::info!("O. M24; OK");
+                                    }
+                                    Err(_e) => {
+                                        let s = alloc::format!("echo: unable to start/resume: {:?}\n", _e);
+                                        _processor.write(s.as_str()).await;
+                                    }
+                                }
+                            },
+                            #[cfg(feature = "with-printjob")]
+                            crate::control::GCode::M25 => {
+                                match _c.printer_controller.set(PrinterControllerEvent::Pause).await {
+                                    Ok(_f) => {
+                                        hwa::info!("O. M25; OK");
+                                    }
+                                    Err(_e) => {
+                                        let s = alloc::format!("echo: unable to pause: {:?}\n", _e);
+                                        _processor.write(s.as_str()).await;
+                                    }
+                                }
                             },
                             _ => {
                                 match _processor.execute(&gc, false).await {

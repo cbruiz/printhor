@@ -1,5 +1,5 @@
 #![no_std]
-#[feature(async_fn_in_trait)]
+#![cfg_attr(feature="nightly", feature(async_fn_in_trait))]
 #[cfg(feature = "with-defmt")]
 pub use defmt::info;
 #[cfg(feature = "with-log")]
@@ -20,5 +20,8 @@ pub use tracked_static_cell::COUNTER;
 
 #[cfg(feature = "with-ui")]
 mod display;
+
 #[cfg(feature = "with-ui")]
 pub use display::DisplayScreenUI;
+
+pub mod soft_uart;
