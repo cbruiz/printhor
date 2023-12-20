@@ -139,18 +139,13 @@ pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
 
     //TODO: verify with https://www.st.com/resource/en/application_note/DM00443870-.pdf
-    //crate::info!("Initializing...");
-
-    // Modify voltage scaling range */
-    // MODIFY_REG(PWR->CR1, PWR_CR1_VOS, VoltageScaling);
-    // WAIT for PWR_SR2_VOSF
+    //hwa::info!("Initializing...");
 
     PWR.cr1().write(|w| {
         w.set_vos(pwr::vals::Vos::RANGE1);
     });
     while PWR.sr2().read().vosf() {}
 
-    defmt::info!("Enabling LSI...");
     RCC.csr().write(|w| w.set_lsion(true));
     while !RCC.csr().read().lsirdy() {}
 
@@ -158,24 +153,20 @@ pub fn init() -> embassy_stm32::Peripherals {
         w.set_sw(rcc::vals::Sw::LSI);
     });
 
-    defmt::info!("Disabling PLL...");
     RCC.cr().modify(|w| w.set_pllon(false));
     while RCC.cr().read().pllrdy() {}
 
-    defmt::info!("Disabling HSI...");
     RCC.cr().write(|w| {
         w.set_hsion(false);
         w.set_hsidiv(rcc::vals::Hsidiv::DIV1);
     });
     while RCC.cr().read().hsirdy() {}
 
-    defmt::info!("Disabling LSE...");
     RCC.bdcr().write(|w| {
         w.set_lseon(false);
     });
     while RCC.bdcr().read().lserdy() {}
 
-    defmt::info!("Proceeding...");
     let mut config = Config::default();
     config.rcc.mux = ClockSrc::PLL(
         PllConfig {
@@ -208,20 +199,11 @@ pub fn init() -> embassy_stm32::Peripherals {
         lsi: true,
         lse: None,
     };
-    let c = embassy_stm32::init(config);
-
-    /*
-    RCC.abpenr1().write(|w| {
-        w.set_usben(true);
-        w.set_crsen(true);
-    });
-    */
-    c
+    embassy_stm32::init(config)
 }
 
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
-    defmt::info!("Remapping");
     embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
         // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
         //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)

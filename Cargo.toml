@@ -111,7 +111,7 @@ mks_robin_nano_v3_1 = [
     #"nightly", "printhor-hwi_mks_robin_nano_v3_1/nightly",
     "has-extruder",
     "with-defmt", "printhor-hwi_mks_robin_nano_v3_1/with-defmt",
-    #"with-trinamic", "printhor-hwi_mks_robin_nano_v3_1/with-trinamic",
+    "with-trinamic", "printhor-hwi_mks_robin_nano_v3_1/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano_v3_1/with-motion",
     #"with-uart-port-1", "printhor-hwi_mks_robin_nano_v3_1/with-uart-port-1",
     "with-usbserial", "printhor-hwi_mks_robin_nano_v3_1/with-usbserial",

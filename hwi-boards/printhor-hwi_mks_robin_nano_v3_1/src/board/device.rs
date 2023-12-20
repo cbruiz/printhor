@@ -28,13 +28,7 @@ pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevic
 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
 
 #[cfg(feature = "with-trinamic")]
-pub type Uart4 = crate::board::usart::Uart<'static,
-    embassy_stm32::peripherals::USART4,
-    embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6
->;
-
-#[cfg(feature = "with-trinamic")]
-pub type UartTrinamic = Uart4;
+pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-spi")]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,

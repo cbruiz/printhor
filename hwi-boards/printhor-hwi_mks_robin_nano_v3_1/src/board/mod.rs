@@ -2,18 +2,19 @@
 ///
 pub mod device;
 pub mod io;
+pub mod comm;
 
 use alloc_cortex_m::CortexMHeap;
 use embassy_executor::Spawner;
 use embassy_stm32::Config;
 #[cfg(any(feature = "with-uart-port-1", feature = "with-usbserial", feature="with-trinamic"))]
 use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
+#[cfg(any(feature = "with-uart-port-1"))]
 use embassy_stm32::usart;
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 
 use embassy_sync::mutex::Mutex;
-#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
+#[cfg(any(feature = "with-uart-port-1"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
 #[cfg(feature = "with-usbserial")]
 use embassy_stm32::usb_otg;
@@ -123,7 +124,6 @@ pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
     crate::info!("Initializing...");
     let mut config = Config::default();
-    // https://community.platformio.org/t/stm32f407vet6-external-oscillator-configuration/22497
     config.rcc.hse = Some(Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
         mode: HseMode::Oscillator,
@@ -188,8 +188,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
 
-    //#[cfg(feature = "with-trinamic-wip")]
-    {
+    #[cfg(feature = "with-trinamic")]
+    let trinamic_uart = {
         // TODO: WorkInProgress Trinamic UART (when needed) requires a software usar implementation because of the wiring
 
         use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
@@ -224,8 +224,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         let _ = uart_e0.write(0b10101010u8).await;
         let _ = uart_e0.read().await;
-    }
 
+        crate::device::UartTrinamic::new()
+    };
 
     #[cfg(feature = "with-spi")]
     let spi1_device = {
