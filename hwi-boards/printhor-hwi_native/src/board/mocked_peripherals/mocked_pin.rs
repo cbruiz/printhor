@@ -1,53 +1,96 @@
-use std::marker::PhantomData;
 use embassy_time::{Duration, Timer};
+use printhor_hwa_common::TrackedStaticCell;
 use crate::device::AdcPinTrait;
+type PinsCell<T> = std::sync::Mutex<T>;
 
-pub struct MockedOutputPin<'a, T> {
-    p: PhantomData<&'a T>
+pub type PinStateRef = &'static PinsCell<PinState>;
+
+const NUM_PINS: usize = 100usize;
+/// Pin state for state persistence, inter-conexion, automation and monitoring
+/// Purpose: simulation only
+pub(crate) struct PinState {
+    digital: [bool; NUM_PINS],
+}
+impl PinState {
+    const fn new() -> Self {
+        Self {
+            digital: [false; NUM_PINS]
+        }
+    }
+
+    #[inline]
+    pub(crate) fn set(&mut self, id: u8, state: bool) {
+        self.digital[id as usize] = state
+    }
+
+    #[inline]
+    pub(crate) fn get(&self, id: u8) -> bool {
+        self.digital[id as usize]
+    }
+}
+
+static GLOBAL_PIN_STATE: TrackedStaticCell<PinsCell<PinState>> = TrackedStaticCell::new();
+
+#[inline]
+pub(crate) fn init_pin_state() -> PinStateRef {
+    GLOBAL_PIN_STATE.init("GlobaPinState", PinsCell::new(PinState::new()))
+}
+
+pub struct MockedIOPin {
+    id: u8,
+    global_state: PinStateRef,
 }
 
 #[allow(unused)]
-impl<'a, T> MockedOutputPin<'_, T> {
-    pub(crate) const fn new() -> Self {
-        Self { p: PhantomData }
+impl MockedIOPin {
+    pub(crate) const fn new(id: u8, global_state: PinStateRef) -> Self {
+        Self { id, global_state }
     }
 
     pub fn set_high(&mut self) {
-
+        match self.global_state.try_lock() {
+            Ok(mut g) => g.set(self.id, true),
+            Err(_) => {
+                panic!("TODO")
+            }
+        }
     }
 
     pub fn set_low(&mut self) {
-
+        match self.global_state.try_lock() {
+            Ok(mut g) => g.set(self.id, true),
+            Err(_) => {
+                panic!("TODO")
+            }
+        }
     }
 
     pub fn is_set_high(&mut self) -> bool {
-        false
+        self.is_high()
     }
 
     pub fn is_set_low(&mut self) -> bool {
-        false
-    }
-}
-
-pub struct MockedInputPin<'a, T> {
-    p: PhantomData<&'a T>
-}
-impl<'a, T> MockedInputPin<'a, T> {
-    #[allow(unused)]
-    pub(crate) const fn new() -> Self {
-        Self {
-            p: PhantomData,
-        }
+        self.is_low()
     }
 
     #[allow(unused)]
     pub fn is_low(&self) -> bool {
-        false
+        match self.global_state.try_lock() {
+            Ok(g) => g.get(self.id) == false,
+            Err(_) => {
+                panic!("TODO")
+            }
+        }
     }
 
     #[allow(unused)]
     pub fn is_high(&self) -> bool {
-        false
+        match self.global_state.try_lock() {
+            Ok(g) => g.get(self.id) == true,
+            Err(_) => {
+                panic!("TODO")
+            }
+        }
     }
 
     #[allow(unused)]
@@ -58,12 +101,12 @@ impl<'a, T> MockedInputPin<'a, T> {
 }
 
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-impl<'a, T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedInputPin<'a, T> {
+impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedIOPin {
 
 }
 
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-impl<'a, T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
+impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
 
 }
 
@@ -73,12 +116,12 @@ impl AdcPinTrait<u8> for u8 {
 }
 
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-impl<'a, T> AdcPinTrait<u8> for MockedInputPin<'a, T> {
+impl AdcPinTrait<u8> for MockedIOPin {
 
 }
 
 #[cfg(feature = "with-hotbed")]
-impl<'a, ADC, Word, PIN> embedded_hal::adc::OneShot<ADC, Word, PIN> for MockedInputPin<'a, PIN>
+impl<'a, ADC, Word, PIN> embedded_hal::adc::OneShot<ADC, Word, PIN> for MockedIOPin
 where PIN: embedded_hal::adc::Channel<ADC>
 {
 
@@ -91,7 +134,7 @@ where PIN: embedded_hal::adc::Channel<ADC>
 
 
 #[cfg(feature = "with-spi")]
-impl<T> embedded_hal::digital::v2::OutputPin for MockedOutputPin<'_, T> {
+impl<T> embedded_hal::digital::v2::OutputPin for MockedIOPin<'_, T> {
     type Error = core::convert::Infallible;
     fn set_low(&mut self) -> Result<(), Self::Error> {
         Ok(())

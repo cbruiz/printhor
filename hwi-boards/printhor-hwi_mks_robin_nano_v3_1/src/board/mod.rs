@@ -2,6 +2,7 @@
 ///
 pub mod device;
 pub mod io;
+#[cfg(feature = "with-trinamic")]
 pub mod comm;
 
 use alloc_cortex_m::CortexMHeap;
@@ -192,40 +193,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     let trinamic_uart = {
         // TODO: WorkInProgress Trinamic UART (when needed) requires a software usar implementation because of the wiring
 
-        use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
+        //use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
 
-        pub struct AnyPinWrapper<PIN>(embassy_stm32::gpio::Flex<'static, PIN>)
-            where PIN: embassy_stm32::gpio::Pin;
 
-        impl<PIN> printhor_hwa_common::soft_uart::IOPin for AnyPinWrapper<PIN>
-            where PIN: embassy_stm32::gpio::Pin
-        {
-            #[inline]
-            fn set_output(&mut self) {
-                self.0.set_as_output(Speed::VeryHigh);
-            }
-            #[inline]
-            fn set_input(&mut self) {
-                self.0.set_as_input(Pull::Down);
-            }
-            #[inline]
-            fn is_high(&mut self) -> bool {
-                self.0.is_high()
-            }
-            #[inline]
-            fn set_high(&mut self) { self.0.set_high() }
-            #[inline]
-            fn set_low(&mut self) { self.0.set_low() }
-        }
 
-        let mut uart_e0 = printhor_hwa_common::soft_uart::HalfDuplexSerial::new(
-            AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD5))
-        );
+        //let _ = uart_e0.write(0b10101010u8).await;
+        //let _ = uart_e0.read().await;
 
-        let _ = uart_e0.write(0b10101010u8).await;
-        let _ = uart_e0.read().await;
-
-        crate::device::UartTrinamic::new()
+        crate::device::UartTrinamic::new(p.PD5, p.PD7, p.PD4, p.PD9)
     };
 
     #[cfg(feature = "with-spi")]

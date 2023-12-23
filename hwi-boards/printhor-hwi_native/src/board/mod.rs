@@ -1,6 +1,8 @@
 ///  Native board implementation. For debugging/simulation purposes
 pub mod device;
 pub mod io;
+#[cfg(feature = "with-trinamic")]
+pub mod comm;
 
 mod mocked_peripherals;
 
@@ -10,14 +12,12 @@ use embassy_executor::Spawner;
 use device::*;
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
-#[cfg(feature = "with-trinamic")]
-use device::Uart4;
+
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
 #[cfg(feature = "with-motion")]
-use crate::board::mocked_peripherals::MockedOutputPin;
+use crate::board::mocked_peripherals::MockedIOPin;
 #[cfg(feature = "with-motion")]
-use crate::board::mocked_peripherals::MockedInputPin;
 use crate::board::mocked_peripherals::MockedPwm;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
@@ -34,6 +34,7 @@ pub(crate) const UART2_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 #[cfg(feature = "with-trinamic")]
+#[allow(unused)]
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 
@@ -105,6 +106,8 @@ pub fn init() -> HWIPeripherals {
 
 pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
+    let _pin_state = crate::board::mocked_peripherals::init_pin_state();
+
     #[cfg(all(feature = "with-uart-port-1"))]
     let (uart_port1_tx, uart_port1_rx_stream) = {
         let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
@@ -114,6 +117,16 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
                 UART_PORT1_INS.init("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
             ),
             crate::device::UartPort1RxInputStream::new(uart_port1_rx_device)
+        )
+    };
+
+    #[cfg(all(feature = "with-trinamic"))]
+        let trinamic_uart = {
+        device::UartTrinamic::new(
+            MockedIOPin::new(0, _pin_state),
+            MockedIOPin::new(1, _pin_state),
+            MockedIOPin::new(2, _pin_state),
+            MockedIOPin::new(3, _pin_state),
         )
     };
 
@@ -141,22 +154,22 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
         #[cfg(feature = "with-trinamic")]
         trinamic_uart,
         motion_pins: MotionPins {
-            x_enable_pin: MockedOutputPin::new(),
-            y_enable_pin: MockedOutputPin::new(),
-            z_enable_pin: MockedOutputPin::new(),
-            e_enable_pin: MockedOutputPin::new(),
-            x_endstop_pin: MockedInputPin::new(),
-            y_endstop_pin: MockedInputPin::new(),
-            z_endstop_pin: MockedInputPin::new(),
-            e_endstop_pin: MockedInputPin::new(),
-            x_step_pin: MockedOutputPin::new(),
-            y_step_pin: MockedOutputPin::new(),
-            z_step_pin: MockedOutputPin::new(),
-            e_step_pin: MockedOutputPin::new(),
-            x_dir_pin: MockedOutputPin::new(),
-            y_dir_pin: MockedOutputPin::new(),
-            z_dir_pin: MockedOutputPin::new(),
-            e_dir_pin: MockedOutputPin::new(),
+            x_enable_pin: MockedIOPin::new(4, _pin_state),
+            y_enable_pin: MockedIOPin::new(5, _pin_state),
+            z_enable_pin: MockedIOPin::new(6, _pin_state),
+            e_enable_pin: MockedIOPin::new(7, _pin_state),
+            x_endstop_pin: MockedIOPin::new(8, _pin_state),
+            y_endstop_pin: MockedIOPin::new(9, _pin_state),
+            z_endstop_pin: MockedIOPin::new(10, _pin_state),
+            e_endstop_pin: MockedIOPin::new(11, _pin_state),
+            x_step_pin: MockedIOPin::new(12, _pin_state),
+            y_step_pin: MockedIOPin::new(13, _pin_state),
+            z_step_pin: MockedIOPin::new(14, _pin_state),
+            e_step_pin: MockedIOPin::new(15, _pin_state),
+            x_dir_pin: MockedIOPin::new(16, _pin_state),
+            y_dir_pin: MockedIOPin::new(17, _pin_state),
+            z_dir_pin: MockedIOPin::new(18, _pin_state),
+            e_dir_pin: MockedIOPin::new(19, _pin_state),
         }
     };
     #[cfg(feature = "with-motion")]
@@ -167,7 +180,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
     let pwm_fan0_fan1_hotend_hotbed_laser = {
-        let pwm_fan0_fan1_hotend_hotbed_laser = mocked_peripherals::MockedPwm::new();
+        let pwm_fan0_fan1_hotend_hotbed_laser = mocked_peripherals::MockedPwm::new(20, _pin_state);
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLayerFan>> = TrackedStaticCell::new();
         ControllerRef::new(PWM_INST.init(
             "PwmFanFan0HotendHotbed",
@@ -181,7 +194,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
         (ControllerRef::new(PWM_LASER_INST.init(
                 "LaserPwmController",
                 ControllerMutex::new(
-                    MockedPwm::new()
+                    MockedPwm::new(21, _pin_state)
                 )
             )),
             0
@@ -201,7 +214,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
 
     #[cfg(feature = "with-probe")]
     let probe_device = {
-        let probe_pwm = device::PwmServo::new();
+        let probe_pwm = device::PwmServo::new(22, _pin_state);
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
 
         crate::device::ProbePeripherals {
@@ -246,14 +259,14 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
                 power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
                 power_channel: 0,
                 temp_adc: adc_hotend_hotbed.clone(),
-                temp_pin: MockedInputPin::new(),
+                temp_pin: MockedIOPin::new(23, _pin_state),
             },
             #[cfg(feature = "with-hotbed")]
             hotbed: device::HotbedPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
                 power_channel: 0,
                 temp_adc: adc_hotend_hotbed.clone(),
-                temp_pin: MockedInputPin::new(),
+                temp_pin: MockedIOPin::new(24, _pin_state),
             },
             #[cfg(feature = "with-fan0")]
             fan0: Fan0Peripherals {

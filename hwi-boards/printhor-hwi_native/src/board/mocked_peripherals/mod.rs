@@ -2,6 +2,7 @@
 mod mocked_adc;
 
 mod mocked_pin;
+pub(crate) use mocked_pin::init_pin_state;
 #[cfg(any(feature = "with-hotbed", feature = "with-hotend", feature = "with-fan-layer"))]
 mod mocked_pwm;
 #[cfg(feature = "with-spi")]

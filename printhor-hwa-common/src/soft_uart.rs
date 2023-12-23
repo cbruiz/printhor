@@ -6,8 +6,19 @@ use embassy_time::Duration;
 /// Serial communication error type
 #[derive(Debug)]
 pub enum SerialError {
+    /// Timeout
+    Timeout,
     /// Framing error
     Framing,
+}
+
+/// Software UART channel
+#[derive(Debug, Copy, Clone)]
+pub enum UartChannel {
+    Ch1,
+    Ch2,
+    Ch3,
+    Ch4,
 }
 
 pub trait IOPin {
@@ -22,6 +33,11 @@ pub trait IOPin {
     fn set_high(&mut self);
 
     fn set_low(&mut self);
+}
+
+pub trait MultiChannel {
+    /// Reads a single word from the serial interface
+    fn set_channel(&mut self, channel: Option<UartChannel>);
 }
 
 pub trait AsyncRead<Word> {
@@ -46,7 +62,10 @@ pub struct HalfDuplexSerial<RXTX>
         RXTX: IOPin,
 {
     rxtx: RXTX,
-    t: Duration,
+    // Bit rate period (1 / bauds)
+    bit_period: Duration,
+    // Read timeout in milliseconds.
+    timeout_ms: Option<Duration>,
 }
 
 impl<RXTX> HalfDuplexSerial<RXTX>
@@ -55,7 +74,17 @@ impl<RXTX> HalfDuplexSerial<RXTX>
 {
     pub fn new(rxtx: RXTX) -> Self {
 
-        Self { rxtx, t: Duration::from_hz(115200) }
+        Self { rxtx, bit_period: Duration::from_hz(115200), timeout_ms: None }
+    }
+
+    /// The time it takes to transfer a word (10 bits: 1 start bit + 8 bits + 1 stop bit)
+    pub fn word_transfer_duration(&self) -> Duration {
+        10 * self.bit_period
+    }
+
+    /// the timeout for R/W operation
+    pub fn set_timeout(&mut self, timeout_ms: Option<Duration>) {
+        self.timeout_ms = timeout_ms;
     }
 }
 
@@ -70,7 +99,7 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
         let mut data_out = byte;
         self.rxtx.set_output();
 
-        let mut ticker = embassy_time::Ticker::every(self.t);
+        let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
         ticker.next().await;
         for _bit in 0..8 {
@@ -101,20 +130,27 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
         self.rxtx.set_input();
         let mut data_in = 0;
 
+        let t0 = embassy_time::Instant::now();
         // wait for start bit
         while self.rxtx.is_high() {
-            Timer::after_ticks(self.t.as_ticks() << 1).await;
+            Timer::after_ticks(self.bit_period.as_ticks() << 1).await;
+            match &self.timeout_ms {
+                Some(timeout_ms) => if t0.elapsed() > *timeout_ms {
+                    return Err(Self::Error::Timeout)
+                },
+                None => {},
+            }
         }
         // Read 8 bits
         for _bit in 0..8 {
-            Timer::after_ticks(self.t.as_ticks()).await;
+            Timer::after_ticks(self.bit_period.as_ticks()).await;
             data_in <<= 1;
             if self.rxtx.is_high() {
                 data_in |= 1
             }
         }
         // wait for stop bit
-        Timer::after_ticks(self.t.as_ticks()).await;
+        Timer::after_ticks(self.bit_period.as_ticks()).await;
         if self.rxtx.is_high() {
             Ok(data_in)
         }

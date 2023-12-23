@@ -8,6 +8,8 @@ runner = "probe-rs run --chip STM32F410RBTx --connect-under-reset --log-format {
 
 [env]
 DEFMT_LOG = "info"
+RUST_LOG = "info"
+ASYNC_STD_THREAD_COUNT = "1"
 
 [profile.dev.package."*"]
 codegen-units = 1

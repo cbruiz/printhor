@@ -23,10 +23,20 @@ pub trait AdcTrait {}
 pub trait AdcPinTrait<T> {}
 
 #[cfg(feature = "with-trinamic")]
-pub type Uart4 = crate::board::mocked_peripherals::MockedUart;
+pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-trinamic")]
-pub type UartTrinamic = Uart4;
+pub use crate::board::comm::AxisChannel;
+
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh1Pin = crate::board::MockedIOPin;
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh2Pin = crate::board::MockedIOPin;
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh3Pin = crate::board::MockedIOPin;
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh4Pin = crate::board::MockedIOPin;
+
 
 #[cfg(feature = "with-spi")]
 pub type Spi = crate::board::mocked_peripherals::MockedSpi;
@@ -67,13 +77,13 @@ pub type AdcHotendHotbed = AdcImpl<u8>;
 
 
 #[cfg(feature = "with-hotend")]
-pub type AdcHotendPin = crate::board::mocked_peripherals::MockedInputPin<'static, u8>;
+pub type AdcHotendPin = crate::board::mocked_peripherals::MockedIOPin;
 
 #[cfg(feature = "with-hotbed")]
 pub type AdcHotbedPeripheral = u8;
 
 #[cfg(feature = "with-hotbed")]
-pub type AdcHotbedPin = crate::board::mocked_peripherals::MockedInputPin<'static, u8>;
+pub type AdcHotbedPin = crate::board::mocked_peripherals::MockedIOPin;
 
 pub type Watchdog = crate::board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
@@ -84,25 +94,25 @@ pub type DisplayScreen<UI> = crate::board::mocked_peripherals::SimulatorDisplayS
 
 #[cfg(feature = "with-motion")]
 pub struct MotionPins {
-    pub x_enable_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub y_enable_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub z_enable_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub e_enable_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
+    pub x_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub y_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub z_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub e_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
 
-    pub x_endstop_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
-    pub y_endstop_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
-    pub z_endstop_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
-    pub e_endstop_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
+    pub x_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub y_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub z_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub e_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
 
-    pub x_step_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub y_step_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub z_step_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub e_step_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
+    pub x_step_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub y_step_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub z_step_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub e_step_pin: crate::board::mocked_peripherals::MockedIOPin,
 
-    pub x_dir_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub y_dir_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub z_dir_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
-    pub e_dir_pin: crate::board::mocked_peripherals::MockedOutputPin<'static, u8>,
+    pub x_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub y_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub z_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub e_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
 }
 
 #[cfg(feature = "with-motion")]
@@ -160,7 +170,7 @@ pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
-    pub temp_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
+    pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
 }
 
 #[cfg(feature = "with-hotbed")]
@@ -168,7 +178,7 @@ pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
-    pub temp_pin: crate::board::mocked_peripherals::MockedInputPin<'static, u8>,
+    pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
 }
 
 #[cfg(feature = "with-fan-layer")]

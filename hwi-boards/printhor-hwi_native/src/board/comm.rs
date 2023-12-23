@@ -1,7 +1,8 @@
 //! This specialization exists because there are several ways to communicate with stepper's Trinamic UART
-use embassy_stm32::gpio::{Pin, AnyPin, Flex, Pull, Speed};
-use printhor_hwa_common::soft_uart;
-use printhor_hwa_common::soft_uart::{AsyncRead, MultiChannel, UartChannel};
+
+use printhor_hwa_common as hwa;
+use hwa::soft_uart;
+use hwa::soft_uart::{AsyncRead, MultiChannel, UartChannel};
 use crate::device;
 
 #[derive(Debug)]
@@ -10,6 +11,10 @@ pub enum Error {
     Timeout,
 }
 
+use crate::board::MockedIOPin;
+
+/// Software UART channel
+#[derive(Debug)]
 pub enum AxisChannel {
     TMCUartX,
     TMCUartY,
@@ -28,20 +33,19 @@ impl Into<UartChannel> for AxisChannel {
     }
 }
 
-pub struct AnyPinWrapper(Flex<'static, AnyPin>);
+pub struct AnyPinWrapper(MockedIOPin);
 
 impl soft_uart::IOPin for AnyPinWrapper
 {
     #[inline]
     fn set_output(&mut self) {
-        self.0.set_as_output(Speed::VeryHigh);
     }
     #[inline]
     fn set_input(&mut self) {
-        self.0.set_as_input(Pull::Down);
     }
     #[inline]
     fn is_high(&mut self) -> bool {
+
         self.0.is_high()
     }
     #[inline]
@@ -65,11 +69,11 @@ impl SingleWireSoftwareUart {
     ) -> Self {
         Self {
             tmc_uarts: [
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch1_pin.degrade()))),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch2_pin.degrade()))),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch3_pin.degrade()))),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch4_pin.degrade()))),
-            ],
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch1_pin)),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch2_pin)),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch3_pin)),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch4_pin)),
+                ],
             selected: None,
         }
     }
@@ -91,8 +95,9 @@ impl SingleWireSoftwareUart {
 
         uart.set_timeout(Some(uart.word_transfer_duration() * 10));
 
-        let _x = uart.read().await;
+        let _b = uart.read().await.map_err(|_e| Error::Timeout)?;
 
+        log::info!("Resp: {:?}", _b);
         Ok(0)
     }
 

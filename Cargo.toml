@@ -38,6 +38,7 @@ with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
 sdcard-uses-spi = []
 has-extruder = []
+trinamic-uart-multi-channel = []
 
 ili9341_parallel = []
 ili9341_spi = []
@@ -83,7 +84,7 @@ with-display = [
 native = [
     #"nightly", "printhor-hwi_native/nightly",
     "has-extruder",
-    #"with-trinamic", "printhor-hwi_native/with-trinamic",
+    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
     "with-motion", "printhor-hwi_native/with-motion",
     "with-uart-port-1", "printhor-hwi_native/with-uart-port-1",
     "with-sdcard", "printhor-hwi_native/with-sdcard",
@@ -111,7 +112,7 @@ mks_robin_nano_v3_1 = [
     #"nightly", "printhor-hwi_mks_robin_nano_v3_1/nightly",
     "has-extruder",
     "with-defmt", "printhor-hwi_mks_robin_nano_v3_1/with-defmt",
-    "with-trinamic", "printhor-hwi_mks_robin_nano_v3_1/with-trinamic",
+    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano_v3_1/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano_v3_1/with-motion",
     #"with-uart-port-1", "printhor-hwi_mks_robin_nano_v3_1/with-uart-port-1",
     "with-usbserial", "printhor-hwi_mks_robin_nano_v3_1/with-usbserial",

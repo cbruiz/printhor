@@ -43,7 +43,9 @@ unsafe impl<S> Send for TokenHolder<S> {}
 #[inline]
 pub fn launch_high_priotity<S: 'static>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
     let r = Box::new(TokenHolder {token});
-    std::thread::spawn(|| {
+    let builder = std::thread::Builder::new()
+        .name("isr-high-prio".into());
+    let _ = builder.spawn(|| {
         let executor: &'static mut embassy_executor::Executor = EXECUTOR_HIGH.init("StepperExecutor", embassy_executor::Executor::new());
         executor.run(move |spawner| {
             spawner.spawn(

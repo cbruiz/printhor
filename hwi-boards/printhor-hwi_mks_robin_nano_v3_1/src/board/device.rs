@@ -30,6 +30,18 @@ pub use crate::board::io::uart_port1::UartPort1RxInputStream;
 #[cfg(feature = "with-trinamic")]
 pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
 
+#[cfg(feature = "with-trinamic")]
+pub use crate::board::comm::AxisChannel;
+
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh1Pin = embassy_stm32::peripherals::PD5;
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh2Pin = embassy_stm32::peripherals::PD7;
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh3Pin = embassy_stm32::peripherals::PD4;
+#[cfg(feature = "with-trinamic")]
+pub type TMCUartCh4Pin = embassy_stm32::peripherals::PD9;
+
 #[cfg(feature = "with-spi")]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
     embassy_stm32::peripherals::SPI3,
@@ -73,6 +85,7 @@ pub type PwmHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM13>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
+
 
 pub type Watchdog = wdg::IndependentWatchdog<'static,
     embassy_stm32::peripherals::IWDG

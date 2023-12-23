@@ -16,6 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 # Hardware device features
 nightly = []
+with-log = []
 with-uart-port-1 = ["async-std"]
 with-printjob = []
 with-hotend = ["embedded-hal"]
