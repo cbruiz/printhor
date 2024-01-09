@@ -1,4 +1,4 @@
-use embedded_hal::Pwm;
+use embedded_hal_02::Pwm;
 use printhor_hwa_common::ControllerRef;
 use crate::hwa;
 

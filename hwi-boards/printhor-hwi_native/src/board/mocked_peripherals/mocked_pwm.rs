@@ -1,17 +1,18 @@
-use super::mocked_pin::MockedOutputPin;
-use embedded_hal::Pwm;
+use super::mocked_pin::MockedIOPin;
+use super::mocked_pin::PinStateRef;
+use embedded_hal_02::Pwm;
 
 pub type PwmChannel = u8;
 
 pub struct MockedPwm {
     #[allow(unused)]
-    p: MockedOutputPin<'static, u8>,
+    p: MockedIOPin,
 }
 impl MockedPwm {
     #[allow(unused)]
-    pub(crate) const fn new() -> Self {
+    pub(crate) const fn new(id: u8, pin_state: PinStateRef) -> Self {
         Self {
-            p: MockedOutputPin::new(),
+            p: MockedIOPin::new(id, pin_state),
         }
     }
 }

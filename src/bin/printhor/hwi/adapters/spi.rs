@@ -2,7 +2,7 @@
 use crate::hwa;
 use core::cell::RefCell;
 #[cfg(feature = "with-sdcard")]
-use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
+use embedded_hal_02::prelude::_embedded_hal_blocking_delay_DelayUs;
 #[cfg(feature = "with-sdcard")]
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 #[cfg(feature = "with-sdcard")]
@@ -12,14 +12,14 @@ use embedded_sdmmc::sdcard::AcquireOpts;
 use embedded_sdmmc::sdcard::proto::*;
 
 /// Adapter to manage multiple drivers
-pub struct SPIAdapter<PIN: embedded_hal::digital::v2::OutputPin> {
+pub struct SPIAdapter<PIN: embedded_hal_02::digital::v2::OutputPin> {
     spi: hwa::device::SpiDeviceRef,
     cs: RefCell<PIN>,
     card_type: RefCell<Option<CardType>>,
     options: AcquireOpts,
 }
 
-impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
+impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
     pub fn new(spi: hwa::device::SpiDeviceRef, cs: PIN) -> Self {
         Self {
             spi,
@@ -314,7 +314,7 @@ impl<PIN: embedded_hal::digital::v2::OutputPin> SPIAdapter<PIN> {
     }
 }
 
-impl<PIN: embedded_hal::digital::v2::OutputPin> BlockDevice for SPIAdapter<PIN> {
+impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PIN> {
     type Error = Error;
 
     fn read(&self, blocks: &mut [Block], start_block_idx: BlockIdx, _reason: &str) -> Result<(), Self::Error> {

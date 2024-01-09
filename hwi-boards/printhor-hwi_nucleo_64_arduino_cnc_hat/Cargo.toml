@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_nucleo_64_arduino_cnc_hat"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for STM32 Nucleo-64 with Arduino CNC Hat V3.x"
@@ -33,14 +33,14 @@ with-sdcard = []
 with-layer-fan = ["embedded-hal"]
 with-fan1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
-with-defmt = []
+with-defmt = ["printhor-hwa-common/with-defmt"]
 with-trinamic = []
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
 
 [dependencies]
-defmt = {version = "0.3"}
+defmt = {version = "0.3", default-features = false}
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
@@ -53,6 +53,7 @@ embassy-usb = { version = "0", features = [], optional = true, git = "https://gi
 
 printhor-hwa-common = { version = "0", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.29", default-features = false, features = [] }
-embedded-hal = { version = "0.2.7", default-features = false, optional = true, features = [] }
+futures = { version = "0.3.30", default-features = false, features = [] }
+embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
+embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
 embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }

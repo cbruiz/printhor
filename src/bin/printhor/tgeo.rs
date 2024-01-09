@@ -80,6 +80,25 @@ where T: ArithmeticOps
         }
     }
 
+    #[allow(unused)]
+    #[inline]
+    pub fn apply_coords<F>(&self, mut f: F)
+        where F: FnMut((CoordSel, &T)) -> ()
+    {
+        if let Some(v) = &self.x {
+            f((CoordSel::X, v))
+        }
+        if let Some(v) = &self.y {
+            f((CoordSel::Y, v))
+        }
+        if let Some(v) = &self.z {
+            f((CoordSel::Z, v))
+        }
+        if let Some(v) = &self.e {
+            f((CoordSel::E, v))
+        }
+    }
+
     #[inline]
     pub fn map_coord<F>(&self, coord_idx: CoordSel, f: F) -> TVector<T>
         where F: Fn(T, CoordSel) -> Option<T>, T: ArithmeticOps
@@ -449,6 +468,16 @@ impl<T> TVector<T>
             y: self.y.map_or_else(|| None, |v| Some(v.floor())),
             z: self.z.map_or_else(|| None, |v| Some(v.floor())),
             e: self.e.map_or_else(|| None, |v| Some(v.floor())),
+        }
+    }
+
+    #[allow(unused)]
+    pub fn round(&self) -> TVector<T> {
+        Self {
+            x: self.x.map_or_else(|| None, |v| Some(v.rdp(0))),
+            y: self.y.map_or_else(|| None, |v| Some(v.rdp(0))),
+            z: self.z.map_or_else(|| None, |v| Some(v.rdp(0))),
+            e: self.e.map_or_else(|| None, |v| Some(v.rdp(0))),
         }
     }
 

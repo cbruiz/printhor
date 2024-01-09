@@ -226,6 +226,20 @@ impl MotionPins {
     pub fn enable_z_stepper(&mut self) {
         self.all_enable_pin.set_low();
     }
+    #[inline]
+    pub fn disable_x_stepper(&mut self) {
+        self.all_enable_pin.set_high();
+    }
+    #[inline]
+    pub fn disable_y_stepper(&mut self) {
+        self.all_enable_pin.set_high();
+    }
+    #[inline]
+    pub fn disable_z_stepper(&mut self) {
+        self.all_enable_pin.set_high();
+    }
+    #[inline]
+    pub fn disable_e_stepper(&mut self) { self.all_enable_pin.set_high(); }
     pub fn disable_all_steppers(&mut self) {
         self.all_enable_pin.set_high();
     }

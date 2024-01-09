@@ -1,6 +1,8 @@
 //! TODO: This feature is still very experimental/preliminar
 use crate::hwa;
 use crate::hwa::device::UartTrinamic;
+#[cfg(feature = "trinamic-uart-multi-channel")]
+use crate::hwa::device::AxisChannel;
 
 pub enum TrinamicError {
     Timeout,
@@ -20,6 +22,9 @@ impl TrinamicController
 
     pub async fn init(&mut self) -> Result<(),TrinamicError> {
         hwa::info!("Trinamic_uart CMD");
+
+        #[cfg(feature = "trinamic-uart-multi-channel")]
+        self.uart.set_axis_channel(Some(AxisChannel::TMCUartX));
 
         let _status = self.read_register::<tmc2209::reg::DRV_STATUS>(0).await?;
 
@@ -47,24 +52,25 @@ impl TrinamicController
         self.raw_write(tmc2209::WriteRequest::new(slave_addr, reg).bytes()).await
     }
 
-    async fn read_register<T: tmc2209::ReadableRegister>(&mut self, slave_addr: u8) -> Result<T, TrinamicError>
+    async fn read_register<T: tmc2209::ReadableRegister + core::fmt::Debug>(&mut self, slave_addr: u8) -> Result<T, TrinamicError>
     {
         self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes()).await?;
+        hwa::debug!("Now reading...");
         let mut buff:[u8; 8] = [0; 8];
         let mut reader = tmc2209::Reader::default();
         loop {
             match embassy_time::with_timeout(
-                embassy_time::Duration::from_secs(1),
+                embassy_time::Duration::from_secs(30),
                 self.uart.read_until_idle(&mut buff)).await {
                 Ok(Ok(num_bytes_read)) => {
-                    hwa::trace!("read {} bytes", num_bytes_read);
                     if num_bytes_read > 0 {
+                        hwa::debug!("Uart read {} bytes", num_bytes_read);
                         match reader.read_response(&buff[0..num_bytes_read]) {
                             (_n, Some(response)) => {
                                 return match response.register::<T>() {
                                     Ok(r) => {
-                                        //let x = alloc::format!("{:?}", r);
-                                        //crate::info!("response[0]. l={} : {}", _n, x.as_str());
+                                        let x = alloc::format!("{:?}", r);
+                                        hwa::debug!("response[0]. l={} : {}", _n, x.as_str());
                                         Ok(r)
                                     }
                                     _ => {
@@ -74,7 +80,7 @@ impl TrinamicController
                             }
                             (n, None) => {
                                 let x = alloc::format!("{:?}", reader.awaiting());
-                                hwa::trace!("Uncompleted. (readed {}: {}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
+                                hwa::warn!("Uncompleted. (readed {}: {:?}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
                             }
                         }
                     }
@@ -93,7 +99,7 @@ impl TrinamicController
     }
 
     async fn raw_write(&mut self, bytes: &[u8]) -> Result<(), TrinamicError> {
-        hwa::debug!("Trinamic_uart sent {}", bytes);
+        hwa::debug!("Trinamic_uart sent {:?}", bytes);
         self.uart.write(bytes).await.map_err(|_| TrinamicError::WriteError)?;
         Ok(self.uart.blocking_flush().map_err(|_| TrinamicError::WriteError)?)
     }

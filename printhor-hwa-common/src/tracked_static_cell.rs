@@ -20,8 +20,8 @@ impl<T> TrackedStaticCell<T> {
 }
 
 pub(self) fn stack_reservation_increment(_element_name: &str, nbytes: usize) {
-    #[cfg(any(feature = "with-defmt", feature= "with-log"))]
-    debug!("D; statically allocated {} bytes for {}", nbytes, _element_name);
+    #[cfg(feature= "with-log")]
+    log::debug!("D; statically allocated {} bytes for {}", nbytes, _element_name);
     if nbytes > 4096 {
         panic!("Too much allocation!")
     }

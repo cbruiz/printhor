@@ -139,18 +139,13 @@ pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
 
     //TODO: verify with https://www.st.com/resource/en/application_note/DM00443870-.pdf
-    //crate::info!("Initializing...");
-
-    // Modify voltage scaling range */
-    // MODIFY_REG(PWR->CR1, PWR_CR1_VOS, VoltageScaling);
-    // WAIT for PWR_SR2_VOSF
+    //hwa::info!("Initializing...");
 
     PWR.cr1().write(|w| {
         w.set_vos(pwr::vals::Vos::RANGE1);
     });
     while PWR.sr2().read().vosf() {}
 
-    defmt::info!("Enabling LSI...");
     RCC.csr().write(|w| w.set_lsion(true));
     while !RCC.csr().read().lsirdy() {}
 
@@ -158,24 +153,6 @@ pub fn init() -> embassy_stm32::Peripherals {
         w.set_sw(rcc::vals::Sw::LSI);
     });
 
-    defmt::info!("Disabling PLL...");
-    RCC.cr().modify(|w| w.set_pllon(false));
-    while RCC.cr().read().pllrdy() {}
-
-    defmt::info!("Disabling HSI...");
-    RCC.cr().write(|w| {
-        w.set_hsion(false);
-        w.set_hsidiv(rcc::vals::Hsidiv::DIV1);
-    });
-    while RCC.cr().read().hsirdy() {}
-
-    defmt::info!("Disabling LSE...");
-    RCC.bdcr().write(|w| {
-        w.set_lseon(false);
-    });
-    while RCC.bdcr().read().lserdy() {}
-
-    defmt::info!("Proceeding...");
     let mut config = Config::default();
     config.rcc.mux = ClockSrc::PLL(
         PllConfig {
@@ -197,6 +174,13 @@ pub fn init() -> embassy_stm32::Peripherals {
             //p: None,
         }
     );
+    /*
+    config.rcc.usb_src = Some(UsbSrc::Hsi48(Hsi48Config {
+        sync_from_usb: true,
+        ..Default::default()
+    }));
+    */
+    config.rcc.usb_src = Some(UsbSrc::PllQ);
     // HCLK = {Power, AHB bus, core, memory, DMA, System timer, FCLK} = 64MHz
     config.rcc.ahb_pre = AHBPrescaler::DIV1;
     // PCLK = APB peripheral clocks = 64MHz
@@ -208,20 +192,11 @@ pub fn init() -> embassy_stm32::Peripherals {
         lsi: true,
         lse: None,
     };
-    let c = embassy_stm32::init(config);
-
-    /*
-    RCC.abpenr1().write(|w| {
-        w.set_usben(true);
-        w.set_crsen(true);
-    });
-    */
-    c
+    embassy_stm32::init(config)
 }
 
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
-    defmt::info!("Remapping");
     embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
         // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
         //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)
@@ -349,86 +324,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     };
     #[cfg(feature = "with-display")]
     crate::info!("display_device done");
-
-    // PA1(PROBE) PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo)
-    // OK for: NEO
-    /*
-    ComplementaryPwm::new(
-        p.TIM1,
-        None, // PA8 | PC8
-        None, // PA7 | PB13 | PD2
-        None, // PA9 | PB3 | PC9
-        None, // PB0 | PB14 | PD3
-        None, // PA10 | PB6 | PC10
-        None, // PB1 | PB15 | PD4
-        None, // PA11 | PC11
-        None, //
-        hz(5_000)
-
-    );
-    */
-
-
-    // Timmer for drv: 4/6/7
-    /*
-    SimplePwm::new(
-        p.TIM4,
-        None, // PB6
-        None, // PB7
-        None, // PB8
-        None, // PB9
-        hz(5_000)
-    );
-     */
-
-    // Timmer for drv: 6/7
-
-    /*
-    SimplePwm::new(
-        p.TIM14,
-        None, // PA4 | PA7 | PB1 | PC12 | PF0
-        None, //
-        None, //
-        None, //
-        hz(5_000)
-    );
-    */
-
-    // PA1(PROBE) PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo)
-    // OK: Fan2
-    /*
-    let t15 = SimplePwm::new(
-        p.TIM15,
-        None, // PA2 | PB14 | PC1
-        None, // PA3 | PB15 | PC2
-        None, //
-        None, //
-        hz(5_000)
-    );
-     */
-    /*
-    let t16 = SimplePwm::new(
-        p.TIM16,
-        None, // PA6 | PB8 | PD0
-        None, //
-        None, //
-        None, //
-        hz(5_000)
-    );
-    */
-/*
-    // PA1(PROBE) PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo)
-    let pp = ControllerRef::new(hwi::pwm::init_pwm_tool(PwmTool::new(p.TIM1,
- Some(PwmPin::new_ch1(p.PA8, OutputType::PushPull)), // NEO / LASER
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    hz(20_000))));
-*/
 
     #[cfg(feature = "with-motion")]
     let motion_devices = MotionDevice {
