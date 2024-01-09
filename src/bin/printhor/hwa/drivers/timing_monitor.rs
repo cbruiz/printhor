@@ -70,7 +70,7 @@ impl TimingsMonitor {
         let real_time = self.real_time;
         #[cfg(not(feature = "no-real-time"))]
         let real_time = now();
-        let k1 = (real_time - self.ref_time).as_micros() / 100;
+        let k1 = (real_time - self.ref_time).as_micros();
         self.timings.push((k1, self.current_state));
     }
 
@@ -80,7 +80,7 @@ impl TimingsMonitor {
         let real_time = self.real_time;
         #[cfg(not(feature = "no-real-time"))]
         let real_time = now();
-        let k1 = (real_time - self.ref_time).as_micros() / 100;
+        let k1 = (real_time - self.ref_time).as_micros();
         self.timings.push((k1, self.current_state));
     }
 
@@ -89,7 +89,7 @@ impl TimingsMonitor {
         hwa::info!("Plotting {} events", self.timings.len());
         let mut file = File::create(format!("data/timing-{}.puml", self.move_id)).unwrap();
         const PRE: &'static str = r###"@startuml
-clock "RefClock" as C0 with period 100
+clock "RefClock" as C0 with period 10000
 concise "uSegment" as US
 binary "X_ENA" as XE
 binary "Y_ENA" as YE
@@ -103,7 +103,7 @@ binary "X_STEP" as XS
 binary "Y_STEP" as YS
 binary "Z_STEP" as ZS
 binary "E_STEP" as ES
-scale 100 as 80 pixels
+scale 10000 as 80 pixels
 
 "###;
         const POS: &'static str = r###"@enduml"###;
