@@ -58,6 +58,7 @@ pub struct SingleWireSoftwareUart {
 impl SingleWireSoftwareUart {
 
     pub fn new(
+        baud_rate: u32,
         tmc_uart_ch1_pin: device::TMCUartCh1Pin,
         tmc_uart_ch2_pin: device::TMCUartCh2Pin,
         tmc_uart_ch3_pin: device::TMCUartCh3Pin,
@@ -65,10 +66,10 @@ impl SingleWireSoftwareUart {
     ) -> Self {
         Self {
             tmc_uarts: [
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch1_pin.degrade()))),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch2_pin.degrade()))),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch3_pin.degrade()))),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch4_pin.degrade()))),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch1_pin.degrade())), baud_rate),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch2_pin.degrade())), baud_rate),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch3_pin.degrade())), baud_rate),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch4_pin.degrade())), baud_rate),
             ],
             selected: None,
         }

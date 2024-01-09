@@ -3,11 +3,11 @@
 
 //#region boards
 
-#[cfg(feature = "skr_mini_e3_v3")]
-pub use printhor_hwi_skr_mini_e3_v3::*;
+#[cfg(feature = "skr_mini_e3")]
+pub use printhor_hwi_skr_mini_e3::*;
 
-#[cfg(feature = "mks_robin_nano_v3_1")]
-pub use printhor_hwi_mks_robin_nano_v3_1::*;
+#[cfg(feature = "mks_robin_nano")]
+pub use printhor_hwi_mks_robin_nano::*;
 
 #[cfg(feature = "nucleo_64_arduino_cnc_hat")]
 pub use printhor_hwi_nucleo_64_arduino_cnc_hat::*;

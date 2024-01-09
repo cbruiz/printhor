@@ -12,6 +12,9 @@ mod mocked_sdcard;
 #[cfg(feature = "with-uart-port-1")]
 mod mocked_uart;
 
+#[cfg(feature = "with-trinamic")]
+mod mocked_trinamic;
+
 #[cfg(feature = "with-display")]
 mod mocked_display;
 
@@ -29,6 +32,9 @@ pub use mocked_spi::*;
 
 #[cfg(feature = "with-sdcard")]
 pub use mocked_sdcard::*;
+
+#[cfg(feature = "with-trinamic")]
+pub use mocked_trinamic::*;
 
 #[cfg(feature = "with-display")]
 pub use mocked_display::*;

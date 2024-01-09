@@ -12,8 +12,8 @@ pub type PublisherType = embassy_sync::pubsub::Publisher<'static, ChannelMutexTy
 pub type SubscriberType<'a> = embassy_sync::pubsub::Subscriber<'a, ChannelMutexType, EventFlags, 1, 6, 1>;
 
 bitflags! {
+    //#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
     #[derive(Debug, Clone, Copy, PartialEq)]
-    #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
     pub struct EventFlags: u16 {
         const SYS_BOOTING      = 0b1000000000000000;
         const SYS_BOOT_FAILURE = 0b0100000000000000;
@@ -167,7 +167,6 @@ impl Clone for EventBusRef {
     }
 }
 
-#[cfg_attr(all(not(feature = "native"),feature = "with-defmt"), derive(defmt::Format))]
 #[derive(Debug, Clone, Copy)]
 pub struct EventStatus {
     pub flags: EventFlags,

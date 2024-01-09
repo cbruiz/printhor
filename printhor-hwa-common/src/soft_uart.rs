@@ -4,7 +4,7 @@ use embassy_time::Timer;
 use embassy_time::Duration;
 
 /// Serial communication error type
-#[derive(Debug)]
+#[cfg_attr(feature = "with-log", derive(Debug))]
 pub enum SerialError {
     /// Timeout
     Timeout,
@@ -13,7 +13,8 @@ pub enum SerialError {
 }
 
 /// Software UART channel
-#[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "with-log", derive(Debug))]
+#[derive(Copy, Clone)]
 pub enum UartChannel {
     Ch1,
     Ch2,
@@ -72,9 +73,9 @@ impl<RXTX> HalfDuplexSerial<RXTX>
     where
         RXTX: IOPin,
 {
-    pub fn new(rxtx: RXTX) -> Self {
+    pub fn new(rxtx: RXTX, baud_rate: u32) -> Self {
 
-        Self { rxtx, bit_period: Duration::from_hz(115200), timeout_ms: None }
+        Self { rxtx, bit_period: Duration::from_hz(baud_rate as u64), timeout_ms: None }
     }
 
     /// The time it takes to transfer a word (10 bits: 1 start bit + 8 bits + 1 stop bit)
@@ -99,21 +100,28 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
         let mut data_out = byte;
         self.rxtx.set_output();
 
+        #[cfg(feature = "with-log")]
+        log::trace!(">: {:08b}", byte);
+
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
         ticker.next().await;
         for _bit in 0..8 {
             if data_out & 1 == 1 {
+                #[cfg(feature = "with-log")]
+                log::trace!("W {:08b} [1]", data_out);
                 self.rxtx.set_high();
             } else {
+                #[cfg(feature = "with-log")]
+                log::trace!("W {:08b} [0]", data_out);
                 self.rxtx.set_low();
             }
             data_out >>= 1;
+
             ticker.next().await;
         }
         self.rxtx.set_high(); // stop bit
         ticker.next().await;
-        self.rxtx.set_low();
         self.rxtx.set_input(); // safety
         Ok(())
     }
@@ -131,9 +139,10 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
         let mut data_in = 0;
 
         let t0 = embassy_time::Instant::now();
+
         // wait for start bit
         while self.rxtx.is_high() {
-            Timer::after_ticks(self.bit_period.as_ticks() << 1).await;
+            Timer::after_ticks(self.bit_period.as_ticks() >> 16).await;
             match &self.timeout_ms {
                 Some(timeout_ms) => if t0.elapsed() > *timeout_ms {
                     return Err(Self::Error::Timeout)
@@ -141,20 +150,32 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
                 None => {},
             }
         }
+        // Align to pulse center assuming start bit is detected closely after rising edge
+        Timer::after_ticks(self.bit_period.as_ticks() + (self.bit_period.as_ticks() >> 1)).await;
         // Read 8 bits
         for _bit in 0..8 {
-            Timer::after_ticks(self.bit_period.as_ticks()).await;
             data_in <<= 1;
             if self.rxtx.is_high() {
-                data_in |= 1
+                data_in |= 0b1;
+                #[cfg(feature = "with-log")]
+                log::trace!("R {:08b} [1]", data_in);
             }
+            else {
+                #[cfg(feature = "with-log")]
+                log::trace!("R {:08b} [0]", data_in);
+            }
+
+            Timer::after_ticks(self.bit_period.as_ticks()).await;
         }
         // wait for stop bit
-        Timer::after_ticks(self.bit_period.as_ticks()).await;
         if self.rxtx.is_high() {
+            #[cfg(feature = "with-log")]
+            log::trace!("R {:08b}", data_in);
             Ok(data_in)
         }
         else {
+            #[cfg(feature = "with-log")]
+            log::trace!("E {:08b}", data_in);
             Err(Self::Error::Framing)
         }
     }

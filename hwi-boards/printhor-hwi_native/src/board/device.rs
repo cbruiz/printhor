@@ -26,6 +26,9 @@ pub trait AdcPinTrait<T> {}
 pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-trinamic")]
+pub use crate::board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};
+
+#[cfg(feature = "with-trinamic")]
 pub use crate::board::comm::AxisChannel;
 
 #[cfg(feature = "with-trinamic")]
@@ -130,9 +133,21 @@ impl MotionPins {
         self.z_enable_pin.set_low();
     }
     #[inline]
-    pub fn enable_e_stepper(&mut self) {
-        self.e_enable_pin.set_low();
+    pub fn enable_e_stepper(&mut self) { self.e_enable_pin.set_low(); }
+    #[inline]
+    pub fn disable_x_stepper(&mut self) {
+        self.x_enable_pin.set_high();
     }
+    #[inline]
+    pub fn disable_y_stepper(&mut self) {
+        self.y_enable_pin.set_high();
+    }
+    #[inline]
+    pub fn disable_z_stepper(&mut self) {
+        self.z_enable_pin.set_high();
+    }
+    #[inline]
+    pub fn disable_e_stepper(&mut self) { self.e_enable_pin.set_high(); }
     #[inline]
     pub fn disable_all_steppers(&mut self) {
         self.x_enable_pin.set_high();

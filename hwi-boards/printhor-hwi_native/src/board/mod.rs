@@ -27,15 +27,14 @@ pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
-pub const MAX_STATIC_MEMORY: u32 = 4096;
+pub const MAX_STATIC_MEMORY: u32 = 8192;
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-uart2")]
 pub(crate) const UART2_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 #[cfg(feature = "with-trinamic")]
-#[allow(unused)]
-pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
+pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 
 /// Shared controllers
@@ -123,12 +122,37 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
     #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
         device::UartTrinamic::new(
+            TRINAMIC_UART_BAUD_RATE,
             MockedIOPin::new(0, _pin_state),
             MockedIOPin::new(1, _pin_state),
             MockedIOPin::new(2, _pin_state),
             MockedIOPin::new(3, _pin_state),
         )
     };
+
+    #[cfg(all(feature = "with-trinamic"))]
+    {
+        static EXECUTOR: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
+
+        let builder = std::thread::Builder::new()
+            .name("trinamic-uart-driver-sym".into());
+        let _ = builder.spawn(move || {
+            let executor: &'static mut embassy_executor::Executor = EXECUTOR.init("X", embassy_executor::Executor::new());
+            executor.run(move |s| {
+                s.spawn(
+                    device::trinamic_driver_simulator(
+                        device::MockedTrinamicDriver::new(
+                            MockedIOPin::new(0, _pin_state),
+                            MockedIOPin::new(1, _pin_state),
+                            MockedIOPin::new(2, _pin_state),
+                            MockedIOPin::new(3, _pin_state),
+                        )
+                    )
+                ).unwrap();
+            });
+        });
+    }
+
 
     #[allow(unused)]
     #[cfg(feature = "with-spi")]

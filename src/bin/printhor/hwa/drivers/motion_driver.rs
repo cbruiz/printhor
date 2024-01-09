@@ -58,10 +58,16 @@ impl MotionDriver {
         }
     }
 
+    #[cfg(feature="no-real-time")]
+    #[inline]
+    pub fn update_clock(&mut self, real_time: embassy_time::Instant) {
+        self.tmon.set_clock(real_time)
+    }
+
     #[cfg(feature = "native")]
     #[inline]
-    pub fn start_segment(&mut self, ref_time: embassy_time::Instant) {
-        self.tmon.reset(ref_time)
+    pub fn start_segment(&mut self, ref_time: embassy_time::Instant, real_time: embassy_time::Instant) {
+        self.tmon.reset(ref_time, real_time)
     }
     #[cfg(feature = "native")]
     #[inline]
@@ -78,30 +84,64 @@ impl MotionDriver {
     #[inline(always)]
     pub fn enable_x_stepper(&mut self) {
         #[cfg(feature = "native")]
-        self.tmon.update(PinState::X_ENA, true);
+        self.tmon.update(PinState::X_ENA, false);
         self.pins.enable_x_stepper()
+    }
+
+    #[allow(unused)]
+    #[inline(always)]
+    pub fn disable_x_stepper(&mut self) {
+        #[cfg(feature = "native")]
+        self.tmon.update(PinState::X_ENA, true);
+        self.pins.disable_x_stepper()
     }
 
     #[inline(always)]
     pub fn enable_y_stepper(&mut self) {
         #[cfg(feature = "native")]
-        self.tmon.update(PinState::Y_ENA, true);
+        self.tmon.update(PinState::Y_ENA, false);
         self.pins.enable_y_stepper()
+    }
+
+    #[allow(unused)]
+    #[inline(always)]
+    pub fn disable_y_stepper(&mut self) {
+        #[cfg(feature = "native")]
+        self.tmon.update(PinState::Y_ENA, true);
+        self.pins.disable_y_stepper()
     }
 
     #[inline(always)]
     pub fn enable_z_stepper(&mut self) {
         #[cfg(feature = "native")]
-        self.tmon.update(PinState::Z_ENA, true);
+        self.tmon.update(PinState::Z_ENA, false);
         self.pins.enable_z_stepper()
+    }
+
+    #[allow(unused)]
+    #[inline(always)]
+    pub fn disable_z_stepper(&mut self) {
+        #[cfg(feature = "native")]
+        self.tmon.update(PinState::Z_ENA, true);
+        self.pins.disable_z_stepper()
     }
 
     #[cfg(feature = "has-extruder")]
     #[inline(always)]
     pub fn enable_e_stepper(&mut self) {
         #[cfg(feature = "native")]
-        self.tmon.update(PinState::E_ENA, true);
+        self.tmon.update(PinState::E_ENA, false);
         self.pins.enable_e_stepper()
+    }
+
+
+    #[cfg(feature = "has-extruder")]
+    #[allow(unused)]
+    #[inline(always)]
+    pub fn disable_e_stepper(&mut self) {
+        #[cfg(feature = "native")]
+        self.tmon.update(PinState::E_ENA, true);
+        self.pins.disable_e_stepper()
     }
 
     #[inline(always)]

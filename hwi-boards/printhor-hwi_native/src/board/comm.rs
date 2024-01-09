@@ -3,6 +3,7 @@
 use printhor_hwa_common as hwa;
 use hwa::soft_uart;
 use hwa::soft_uart::{AsyncRead, MultiChannel, UartChannel};
+use printhor_hwa_common::soft_uart::{AsyncWrite, SerialError};
 use crate::device;
 
 #[derive(Debug)]
@@ -45,7 +46,6 @@ impl soft_uart::IOPin for AnyPinWrapper
     }
     #[inline]
     fn is_high(&mut self) -> bool {
-
         self.0.is_high()
     }
     #[inline]
@@ -62,17 +62,22 @@ pub struct SingleWireSoftwareUart {
 impl SingleWireSoftwareUart {
 
     pub fn new(
-        tmc_uart_ch1_pin: device::TMCUartCh1Pin,
-        tmc_uart_ch2_pin: device::TMCUartCh2Pin,
-        tmc_uart_ch3_pin: device::TMCUartCh3Pin,
-        tmc_uart_ch4_pin: device::TMCUartCh4Pin,
+        baud_rate: u32,
+        mut tmc_uart_ch1_pin: device::TMCUartCh1Pin,
+        mut tmc_uart_ch2_pin: device::TMCUartCh2Pin,
+        mut tmc_uart_ch3_pin: device::TMCUartCh3Pin,
+        mut tmc_uart_ch4_pin: device::TMCUartCh4Pin,
     ) -> Self {
+        tmc_uart_ch1_pin.set_high();
+        tmc_uart_ch2_pin.set_high();
+        tmc_uart_ch3_pin.set_high();
+        tmc_uart_ch4_pin.set_high();
         Self {
             tmc_uarts: [
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch1_pin)),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch2_pin)),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch3_pin)),
-                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch4_pin)),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch1_pin), baud_rate),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch2_pin), baud_rate),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch3_pin), baud_rate),
+                soft_uart::HalfDuplexSerial::new(AnyPinWrapper(tmc_uart_ch4_pin), baud_rate),
                 ],
             selected: None,
         }
@@ -93,15 +98,43 @@ impl SingleWireSoftwareUart {
             UartChannel::Ch4=> &mut self.tmc_uarts[3],
         };
 
-        uart.set_timeout(Some(uart.word_transfer_duration() * 10));
-
-        let _b = uart.read().await.map_err(|_e| Error::Timeout)?;
-
-        log::info!("Resp: {:?}", _b);
-        Ok(0)
+        uart.set_timeout(Some(uart.word_transfer_duration()));
+        let mut read_idx: usize = 0;
+        loop {
+            if read_idx >= _buffer.len() {
+                return Ok(read_idx)
+            }
+            match uart.read().await {
+                Ok(b) => {
+                    _buffer[read_idx] = b;
+                    read_idx += 1;
+                },
+                Err(SerialError::Timeout) => {
+                    if read_idx > 0 {
+                        return Ok(read_idx)
+                    }
+                    else {
+                        return Err(Error::Timeout)
+                    }
+                },
+                _e => {
+                    return Err(Error::Uninit)   // FIXME: Proper codes
+                }
+            }
+        }
     }
 
     pub async fn write(&mut self, _buffer: &[u8]) -> Result<(), Error> {
+        let uart = match self.selected.as_ref().ok_or(Error::Uninit)? {
+            UartChannel::Ch1 => &mut self.tmc_uarts[0],
+            UartChannel::Ch2=> &mut self.tmc_uarts[1],
+            UartChannel::Ch3=> &mut self.tmc_uarts[2],
+            UartChannel::Ch4=> &mut self.tmc_uarts[3],
+        };
+        for b in _buffer {
+            uart.write(*b).await.map_err(|_e| Error::Timeout)?;
+        }
+        log::trace!("Written {:?}", _buffer);
         Ok(())
     }
 

@@ -52,9 +52,10 @@ impl TrinamicController
         self.raw_write(tmc2209::WriteRequest::new(slave_addr, reg).bytes()).await
     }
 
-    async fn read_register<T: tmc2209::ReadableRegister>(&mut self, slave_addr: u8) -> Result<T, TrinamicError>
+    async fn read_register<T: tmc2209::ReadableRegister + core::fmt::Debug>(&mut self, slave_addr: u8) -> Result<T, TrinamicError>
     {
         self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes()).await?;
+        hwa::debug!("Now reading...");
         let mut buff:[u8; 8] = [0; 8];
         let mut reader = tmc2209::Reader::default();
         loop {
@@ -62,14 +63,14 @@ impl TrinamicController
                 embassy_time::Duration::from_secs(30),
                 self.uart.read_until_idle(&mut buff)).await {
                 Ok(Ok(num_bytes_read)) => {
-                    hwa::trace!("read {} bytes", num_bytes_read);
                     if num_bytes_read > 0 {
+                        hwa::debug!("Uart read {} bytes", num_bytes_read);
                         match reader.read_response(&buff[0..num_bytes_read]) {
                             (_n, Some(response)) => {
                                 return match response.register::<T>() {
                                     Ok(r) => {
-                                        //let x = alloc::format!("{:?}", r);
-                                        //crate::info!("response[0]. l={} : {}", _n, x.as_str());
+                                        let x = alloc::format!("{:?}", r);
+                                        hwa::debug!("response[0]. l={} : {}", _n, x.as_str());
                                         Ok(r)
                                     }
                                     _ => {
@@ -79,7 +80,7 @@ impl TrinamicController
                             }
                             (n, None) => {
                                 let x = alloc::format!("{:?}", reader.awaiting());
-                                hwa::trace!("Uncompleted. (readed {}: {:?}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
+                                hwa::warn!("Uncompleted. (readed {}: {:?}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
                             }
                         }
                     }

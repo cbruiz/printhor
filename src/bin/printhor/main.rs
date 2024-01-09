@@ -123,7 +123,6 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     #[cfg(all(feature = "with-sdcard", not(feature = "sdcard-uses-spi")))]
         let sdcard_adapter = devices.sdcard_device;
 
-
     #[cfg(feature = "with-sdcard")]
         let sdcard_controller = CardController::new(
         sdcard_adapter
@@ -280,13 +279,17 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         layer_fan: layer_fan_controller.clone(),
         #[cfg(feature = "with-laser")]
         laser: laser_controller,
-
     });
+
     #[cfg(feature = "with-motion")]
     {
+
+        #[cfg(feature = "with-trinamic")]
+        let _ = motion_planer.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
+
         motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(400), Some(400), Some(400), Some(400))).await;
-        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(50), Some(50), Some(50), Some(50))).await;
-        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(100), Some(100), Some(100), Some(100))).await;
+        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(800), Some(800), Some(800), Some(800))).await;
+        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(64000), Some(64000), Some(64000), Some(64000))).await;
         motion_planer.set_default_travel_speed(400).await;
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;

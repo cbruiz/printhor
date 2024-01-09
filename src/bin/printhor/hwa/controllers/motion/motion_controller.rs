@@ -537,8 +537,8 @@ impl MotionPlanner {
     }
 
     #[cfg(feature="native")]
-    pub async fn start_segment(&self, ref_time: embassy_time::Instant) {
-        self.motion_driver.lock().await.start_segment(ref_time)
+    pub async fn start_segment(&self, ref_time: embassy_time::Instant, real_time: embassy_time::Instant) {
+        self.motion_driver.lock().await.start_segment(ref_time, real_time)
     }
 
     #[cfg(feature="native")]

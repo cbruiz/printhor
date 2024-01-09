@@ -1,4 +1,4 @@
-![Minimum Rust: Beta](https://img.shields.io/badge/Minimum%20Rust%20Version-beta-orange.svg)
+![Minimum Rust: 1.75](https://img.shields.io/badge/Minimum%20Rust%20Version-1.75-orange.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)

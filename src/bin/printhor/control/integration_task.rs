@@ -92,7 +92,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
         let g1_code = GCode::G1(crate::control::XYZEFS {
             ln: None,
-            x: Some(Real::new(10, 0)),
+            x: Some(Real::new(1, 0)),
             y: None,
             z: None,
             e: None,

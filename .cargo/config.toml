@@ -1,8 +1,8 @@
 [target.'cfg(all(target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s};@{F}:{l}"
-#runner = "probe-rs run --chip STM32L476RG"
-#runner = "probe-rs run --chip STM32G0B1RETx"
-#runner = "probe-rs run --chip STM32F407VETx"
+#runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset --log-format {L}{s};@{F}:{l}"
+#runner = "probe-rs run --chip STM32L476RG --disable-progressbars"
+#runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars"
+runner = "probe-rs run --chip STM32F407VETx --disable-progressbars"
 
 [build]
 
@@ -14,7 +14,7 @@ ASYNC_STD_THREAD_COUNT = "1"
 [profile.dev.package."*"]
 codegen-units = 1
 incremental = false
-opt-level = "s"
+#opt-level = "s"
 debug = 2
 debug-assertions = true
 overflow-checks = true
@@ -26,7 +26,3 @@ opt-level = "s"
 debug = 2
 debug-assertions = false
 overflow-checks = false
-
-#[unstable]
-#build-std = ["core"]
-#build-std-features = ["panic_immediate_abort"]

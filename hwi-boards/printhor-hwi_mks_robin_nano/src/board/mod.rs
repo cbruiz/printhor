@@ -48,6 +48,8 @@ pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 #[cfg(feature = "with-spi")]
 pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
+#[cfg(feature = "with-trinamic")]
+pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 9600;
 
 /// Shared controllers
 pub struct Controllers {
@@ -200,7 +202,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         //let _ = uart_e0.write(0b10101010u8).await;
         //let _ = uart_e0.read().await;
 
-        crate::device::UartTrinamic::new(p.PD5, p.PD7, p.PD4, p.PD9)
+        crate::device::UartTrinamic::new(TRINAMIC_UART_BAUD_RATE, p.PD5, p.PD7, p.PD4, p.PD9)
     };
 
     #[cfg(feature = "with-spi")]

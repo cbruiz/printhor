@@ -153,20 +153,6 @@ pub fn init() -> embassy_stm32::Peripherals {
         w.set_sw(rcc::vals::Sw::LSI);
     });
 
-    RCC.cr().modify(|w| w.set_pllon(false));
-    while RCC.cr().read().pllrdy() {}
-
-    RCC.cr().write(|w| {
-        w.set_hsion(false);
-        w.set_hsidiv(rcc::vals::Hsidiv::DIV1);
-    });
-    while RCC.cr().read().hsirdy() {}
-
-    RCC.bdcr().write(|w| {
-        w.set_lseon(false);
-    });
-    while RCC.bdcr().read().lserdy() {}
-
     let mut config = Config::default();
     config.rcc.mux = ClockSrc::PLL(
         PllConfig {
@@ -188,6 +174,13 @@ pub fn init() -> embassy_stm32::Peripherals {
             //p: None,
         }
     );
+    /*
+    config.rcc.usb_src = Some(UsbSrc::Hsi48(Hsi48Config {
+        sync_from_usb: true,
+        ..Default::default()
+    }));
+    */
+    config.rcc.usb_src = Some(UsbSrc::PllQ);
     // HCLK = {Power, AHB bus, core, memory, DMA, System timer, FCLK} = 64MHz
     config.rcc.ahb_pre = AHBPrescaler::DIV1;
     // PCLK = APB peripheral clocks = 64MHz

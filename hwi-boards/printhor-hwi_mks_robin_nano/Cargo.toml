@@ -1,6 +1,6 @@
 [package]
-name = "printhor-hwi_mks_robin_nano_v3_1"
-version = "0.0.1"
+name = "printhor-hwi_mks_robin_nano"
+version = "0.0.2"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for MKS Robin Nano v3.1 board"
@@ -27,19 +27,19 @@ with-endstops = []
 with-sdcard = []
 with-fan-layer-fan1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
-with-defmt = []
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt"]
 with-trinamic = []
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
 
 [dependencies]
-defmt = {version = "0.3"}
+defmt = {version = "0.3", default-features = false, optional = true}
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-stm32 = { version = "0", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
 embassy-sync = { version = "0", features = [] }
 embassy-time = { version = "0", features = ["tick-hz-1_000_000"] }
 embassy-futures = { version = "0", features = [] }
@@ -47,5 +47,5 @@ embassy-usb = { version = "0", features = [], optional = true, git = "https://gi
 
 printhor-hwa-common = { version = "0"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.29", default-features = false, features = [] }
+futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-hal = { version = "0.2.7", default-features = false, optional = true }

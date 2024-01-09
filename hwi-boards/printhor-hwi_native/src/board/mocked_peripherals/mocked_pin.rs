@@ -48,19 +48,23 @@ impl MockedIOPin {
     }
 
     pub fn set_high(&mut self) {
-        match self.global_state.try_lock() {
-            Ok(mut g) => g.set(self.id, true),
-            Err(_) => {
-                panic!("TODO")
+        loop {
+            match self.global_state.try_lock() {
+                Ok(mut g) => return g.set(self.id, true),
+                Err(_e) => {
+                    //panic!("Error setting high: {:?}", _e)
+                }
             }
         }
     }
 
     pub fn set_low(&mut self) {
-        match self.global_state.try_lock() {
-            Ok(mut g) => g.set(self.id, true),
-            Err(_) => {
-                panic!("TODO")
+        loop {
+            match self.global_state.try_lock() {
+                Ok(mut g) => return g.set(self.id, false),
+                Err(_e) => {
+                    //panic!("Error setting low: {:?}", _e)
+                }
             }
         }
     }
@@ -75,20 +79,24 @@ impl MockedIOPin {
 
     #[allow(unused)]
     pub fn is_low(&self) -> bool {
-        match self.global_state.try_lock() {
-            Ok(g) => g.get(self.id) == false,
-            Err(_) => {
-                panic!("TODO")
+        loop {
+            match self.global_state.try_lock() {
+                Ok(g) => return g.get(self.id) == false,
+                Err(_e) => {
+                    //panic!("Error getting low: {:?}", _e)
+                }
             }
         }
     }
 
     #[allow(unused)]
     pub fn is_high(&self) -> bool {
-        match self.global_state.try_lock() {
-            Ok(g) => g.get(self.id) == true,
-            Err(_) => {
-                panic!("TODO")
+        loop {
+            match self.global_state.try_lock() {
+                Ok(g) => return g.get(self.id) == true,
+                Err(_e) => {
+                    //panic!("Error getting high: {:?}", _e)
+                }
             }
         }
     }
