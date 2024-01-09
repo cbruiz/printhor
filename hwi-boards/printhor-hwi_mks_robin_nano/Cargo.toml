@@ -48,4 +48,5 @@ embassy-usb = { version = "0", features = [], optional = true, git = "https://gi
 printhor-hwa-common = { version = "0"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }
-embedded-hal = { version = "0.2.7", default-features = false, optional = true }
+embedded-hal = { version = "1", default-features = false, optional = true }
+embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }

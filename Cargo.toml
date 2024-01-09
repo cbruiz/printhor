@@ -214,7 +214,8 @@ embassy-futures = { version = "0", features = [] }
 embassy-embedded-hal = { version = "0", features = [], optional = true }
 
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
-embedded-hal = { version = "0.2.7", default-features = false, optional = true }
+embedded-hal = { version = "1", default-features = false, optional = true }
+embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
 embedded-graphics = { version = "0.7.1", optional = true}
 
 display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}

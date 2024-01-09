@@ -1,6 +1,6 @@
 use super::mocked_pin::MockedIOPin;
 use super::mocked_pin::PinStateRef;
-use embedded_hal::Pwm;
+use embedded_hal_02::Pwm;
 
 pub type PwmChannel = u8;
 

@@ -45,7 +45,8 @@ embassy-time = { version = "0", features = ["defmt", "tick-hz-100_000"] }
 embassy-futures = { version = "0", features = [] }
 embassy-usb = { version = "0", features = [], optional = true, git = "https://github.com/cbruiz/embassy.git", branch="main" }
 
-embedded-hal = { version = "0.2.7", default-features = false, optional = true }
+embedded-hal = { version = "1", default-features = false, optional = true }
+embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
 printhor-hwa-common = { version = "0"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }

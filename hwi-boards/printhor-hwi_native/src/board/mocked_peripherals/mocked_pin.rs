@@ -129,8 +129,8 @@ impl AdcPinTrait<u8> for MockedIOPin {
 }
 
 #[cfg(feature = "with-hotbed")]
-impl<'a, ADC, Word, PIN> embedded_hal::adc::OneShot<ADC, Word, PIN> for MockedIOPin
-where PIN: embedded_hal::adc::Channel<ADC>
+impl<'a, ADC, Word, PIN> embedded_hal_02::adc::OneShot<ADC, Word, PIN> for MockedIOPin
+where PIN: embedded_hal_02::adc::Channel<ADC>
 {
 
     type Error = u8;

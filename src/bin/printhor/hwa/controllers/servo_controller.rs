@@ -4,7 +4,7 @@ use crate::hwa;
 use crate::hwa::device::PwmChannel;
 use crate::hwa::device::PwmServo;
 #[allow(unused)]
-use embedded_hal::Pwm;
+use embedded_hal_02::Pwm;
 pub trait ProbeTrait {
     async fn probe_pin_down(&mut self, sleep_us: u64);
     async fn probe_pin_up(&mut self, sleep_us: u64);

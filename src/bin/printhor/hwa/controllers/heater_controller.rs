@@ -12,8 +12,8 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
     where
         AdcPeri: AdcTrait + 'static,
         AdcPin: AdcPinTrait<AdcPeri>,
-        PwmHwaDevice: embedded_hal::Pwm<Duty=u16> + 'static,
-        <PwmHwaDevice as embedded_hal::Pwm>::Channel: Copy
+        PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
+        <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
 
 {
     adc: ControllerRef<AdcImpl<AdcPeri>>,
@@ -29,8 +29,8 @@ impl<AdcPeri, AdcPin, PwmHwaDevice> HeaterController<AdcPeri, AdcPin, PwmHwaDevi
 where
     AdcPeri: AdcTrait + 'static,
     AdcPin: AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal::Pwm<Duty=u16> + 'static,
-    <PwmHwaDevice as embedded_hal::Pwm>::Channel: Copy
+    PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
+    <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
 {
     pub fn new(adc: AdcControllerRef<AdcPeri>, adc_pin: AdcPin, pwm: PwmController<PwmHwaDevice>) -> Self {
         Self {
