@@ -143,13 +143,13 @@ Firmware is around to 140Kb, and expecting to be around 100Kb with the core funt
 The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
 
 ```shell
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
 ### Minimal-size binary image production
 
 ```shell
-DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 ## Extra utilery
 
