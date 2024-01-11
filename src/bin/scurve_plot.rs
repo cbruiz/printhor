@@ -8,17 +8,18 @@ pub use math::RealInclusiveRange;
 mod tgeo;
 pub use tgeo::*;
 
-#[path = "printhor/ctrl.rs"]
-pub mod ctrl;
+#[path = "printhor/control/planner/mod.rs"]
+pub(crate) mod p;
 
-#[path = "printhor/planner/mod.rs"]
-pub mod planner;
+mod control {
+    pub(crate) use super::p as planner;
+}
 
 #[path = "printhor/hwa/controllers/motion/motion_segment.rs"]
 mod motion_segment;
 
 use motion_segment::{Segment, SegmentData};
-use planner::{Constraints, PlanProfile, SCurveMotionProfile};
+use crate::control::planner::{Constraints, PlanProfile, SCurveMotionProfile};
 #[allow(unused)]
 use crate::math::{ONE, ZERO};
 
@@ -40,32 +41,32 @@ fn main() {
     let speed_rate = Real::one();
     let max_speed = TVector::from_coords(
         Some(Real::from_f32(800.0)),
-        Some(Real::from_f32(8.0)),
-        Some(Real::from_f32(8.0)),
-        Some(Real::from_f32(2.0)),
+        Some(Real::from_f32(800.0)),
+        Some(Real::from_f32(800.0)),
+        Some(Real::from_f32(100.0)),
     );
     let max_accel = TVector::from_coords(
-        Some(Real::from_f32(64.0)),
-        Some(Real::from_f32(64.0)),
-        Some(Real::from_f32(64.0)),
-        Some(Real::from_f32(16.0)),
+        Some(Real::from_f32(1000.0)),
+        Some(Real::from_f32(1000.0)),
+        Some(Real::from_f32(1000.0)),
+        Some(Real::from_f32(2000.0)),
     );
 
     let max_jerk = TVector::from_coords(
-        Some(Real::from_f32(128.0)),
-        Some(Real::from_f32(128.0)),
-        Some(Real::from_f32(128.0)),
-        Some(Real::from_f32(32.0)),
+        Some(Real::from_f32(2000.0)),
+        Some(Real::from_f32(2000.0)),
+        Some(Real::from_f32(2000.0)),
+        Some(Real::from_f32(8000.0)),
     );
 
     let requested_motion_speed = Some(Real::from_f32(700.0f32));
 
     let p0: TVector<Real> = TVector::zero();
     let p1: TVector<Real> = TVector::from_coords(
-        Some(Real::from_f32(20.0)),
+        Some(Real::from_f32(100.0)),
         None,
         None,
-        Some(Real::from_f32(1.0)));
+        Some(Real::from_f32(10.0)));
 
     // Compute distance and decompose as unit vector and module.
     // When dist is zero, value is map to None (NaN).
@@ -147,7 +148,7 @@ fn main() {
                 hwa::info!("--");
                 hwa::info!("plan computed in : {} us", (t3-t2).as_micros());
 
-                PlanProfile::new(segment.motion_profile, Real::from_f32(0.01))
+                PlanProfile::new(segment.motion_profile, Real::from_f32(0.005))
                     .plot(true, true, true, true);
             },
             false => {

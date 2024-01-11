@@ -311,6 +311,71 @@ where T: ArithmeticOps
         m
     }
 
+    /// Evaluates when a vector has all coordinates bounded by other
+    /// Meaning that every x, y, z ... of Self is lower than other's
+    #[allow(unused)]
+    #[inline]
+    pub fn bounded_by(&self, rhs: &TVector<T>) -> bool {
+        let mut matching_point = true;
+        match self.x {
+            None => {},
+            Some(lv) => match rhs.x {
+                None => if !lv.is_zero() {return false},
+                Some(rv) => {
+                    if lv > rv { // coordinate exceeding
+                        return false;
+                    }
+                    if lv < rv { // coordinate preceeding
+                        matching_point = false;
+                    }
+                }
+            }
+        }
+        match self.y {
+            None => {},
+            Some(lv) => match rhs.y {
+                None => if !lv.is_zero() {return false},
+                Some(rv) => {
+                    if lv > rv { // coordinate exceeding
+                        return false;
+                    }
+                    if lv < rv { // coordinate preceeding
+                        matching_point = false;
+                    }
+                }
+            }
+        }
+        match self.z {
+            None => {},
+            Some(lv) => match rhs.z {
+                None => if !lv.is_zero() {return false},
+                Some(rv) => {
+                    if lv > rv { // coordinate exceeding
+                        return false;
+                    }
+                    if lv < rv { // coordinate preceeding
+                        matching_point = false;
+                    }
+                }
+            }
+        }
+        match self.e {
+            None => {},
+            Some(lv) => match rhs.e {
+                None => if !lv.is_zero() {return false},
+                Some(rv) => {
+                    if lv > rv { // coordinate exceeding
+                        return false;
+                    }
+                    if lv < rv { // coordinate preceeding
+                        matching_point = false;
+                    }
+                }
+            }
+        }
+        return !matching_point;
+    }
+
     #[inline]
     pub const fn nan() -> Self {
         Self {

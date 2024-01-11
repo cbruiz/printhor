@@ -3,7 +3,6 @@
 #![allow(stable_features)]
 use embassy_stm32::interrupt;
 use embassy_executor::InterruptExecutor;
-
 pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
 

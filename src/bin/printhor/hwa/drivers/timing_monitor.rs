@@ -3,7 +3,7 @@ use std::io::Write;
 use bitflags::bitflags;
 use embassy_time::Instant;
 use crate::hwa;
-use crate::stepper_isr::now;
+use crate::control::task_stepper_isr::now;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -103,13 +103,13 @@ binary "X_STEP" as XS
 binary "Y_STEP" as YS
 binary "Z_STEP" as ZS
 binary "E_STEP" as ES
-scale 10000 as 80 pixels
+scale 1000 as 50 pixels
 
 "###;
         const POS: &'static str = r###"@enduml"###;
         file.write(PRE.as_bytes()).unwrap();
         file.write(format!(r###"@{}
-US is {{-}}
+US is uSeg
 XE is 1
 YE is 1
 ZE is 1
@@ -141,7 +141,7 @@ ES is 0
             write_state(&mut file, &mut state, &t.1, PinState::E_ENA, "EE", "0", "1");
             write_state(&mut file, &mut state, &t.1, PinState::E_DIR, "ED", "0", "1");
             write_state(&mut file, &mut state, &t.1, PinState::E_STEP, "ES", "0", "1");
-            write_state(&mut file, &mut state, &t.1, PinState::USCLK, "US", "O", "E");
+            write_state(&mut file, &mut state, &t.1, PinState::USCLK, "US", "uSeg", "uSeg");
         }
         file.write(POS.as_bytes()).unwrap();
         file.sync_all().unwrap();

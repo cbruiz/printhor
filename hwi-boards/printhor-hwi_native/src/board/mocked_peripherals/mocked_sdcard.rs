@@ -6,7 +6,9 @@ use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
 #[derive(Debug, Clone)]
 enum Error {
+    #[allow(unused)]
     Filesystem(embedded_sdmmc::Error<embedded_sdmmc::SdCardError>),
+    #[allow(unused)]
     Disk(embedded_sdmmc::SdCardError),
 }
 

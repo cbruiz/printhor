@@ -405,3 +405,21 @@ impl<STREAM> GCodeLineParser<STREAM>
     pub async fn close(&mut self) {
     }
 }
+
+/// This trait is just a hack to give backward compatibility with unpatched async-gcode 0.3.0
+/// Normally, won't be used as it is patched in cargo.toml
+/// Purpose of this trait and impl is just to be able to publish printhor in crates.io
+trait FixedAdaptor {
+    fn integer_part(&self) -> i32;
+    fn scale(&self) -> u8;
+}
+
+impl FixedAdaptor for f64 {
+    fn integer_part(&self) -> i32 {
+        panic!("Please, use patched async-gcode instead")
+    }
+
+    fn scale(&self) -> u8 {
+        panic!("Please, use patched async-gcode instead")
+    }
+}

@@ -1,7 +1,7 @@
 //! TODO: This feature is still incomplete
 use crate::hwa;
 use crate::control::parser::{GCodeLineParser, GCodeLineParserError};
-use embassy_time::Timer;
+use embassy_time::{Instant, Timer};
 use embassy_time::Duration;
 
 use crate::hwa::controllers::PrinterController;
@@ -12,7 +12,7 @@ use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
 use printhor_hwa_common::EventBusSubscriber;
 use crate::control::GCode;
-use crate::ctrl::{CodeExecutionFailure, CodeExecutionSuccess};
+use crate::control::planner::{CodeExecutionFailure, CodeExecutionSuccess};
 
 #[allow(unused_mut)]
 #[allow(unreachable_patterns)]
@@ -31,6 +31,7 @@ pub(crate) async fn printer_task(
 
     let mut print_job_parser = None;
     let mut current_line = 0;
+    let mut job_time = Duration::from_ticks(0);
 
     loop {
         hwa::debug!("Waiting for event");
@@ -38,6 +39,7 @@ pub(crate) async fn printer_task(
             PrinterControllerEvent::SetFile(file_path) => {
                 hwa::info!("SetFile: {}", file_path.as_str());
                 current_line = 0;
+                job_time = Duration::from_ticks(0);
                 print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
                     Ok(stream) => {
                         Some(GCodeLineParser::new(stream))
@@ -64,6 +66,7 @@ pub(crate) async fn printer_task(
             PrinterControllerEvent::Resume => {
                 let mut interrupted = false;
                 let mut fatal_error = false;
+                let job_t0 = Instant::now();
                 loop {
                     current_line += 1;
                     match gcode_pull(&mut print_job_parser).await {
@@ -77,7 +80,9 @@ pub(crate) async fn printer_task(
                                     hwa::debug!("Line {}: QUEUED {}", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
-                                    hwa::debug!("Line {}: DEFERRED {}", current_line, gcode);
+                                    hwa::info!("Line {}: DEFERRED {}", current_line, gcode);
+                                    subscriber.wait_for(_status).await;
+                                    hwa::info!("Line {}: OK {}", current_line, gcode);
                                 }
                                 Err(CodeExecutionFailure::BUSY) => {
                                     fatal_error = true;
@@ -103,14 +108,19 @@ pub(crate) async fn printer_task(
                             break;
                         }
                         Err(GCodeLineParserError::FatalError) => { // Fatal
+                            fatal_error = true;
                             hwa::error!("Line {}: Fatal error", current_line);
                             break;
                         }
                         Err(GCodeLineParserError::GCodeNotImplemented(_ln, _gcode)) => { // Fatal
                             hwa::warn!("Line {}: Ignoring GCode not supported {}", current_line, _gcode.as_str());
                         }
+                        Err(GCodeLineParserError::ParseError(_ln)) => {
+                            hwa::warn!("Line {}: Parse error", current_line);
+                        }
                         Err(_e) => {
                             hwa::warn!("Line {}: Internal error: {:?}", current_line, _e);
+                            fatal_error = true;
                             break;
                         }
                     }
@@ -120,6 +130,8 @@ pub(crate) async fn printer_task(
                         break;
                     }
                 }
+                subscriber.wait_until(EventFlags::MOV_QUEUE_EMPTY).await;
+                job_time += job_t0.elapsed();
                 if fatal_error {
                     printer_controller.set(PrinterControllerEvent::Abort).await.unwrap();
                 }
@@ -133,7 +145,7 @@ pub(crate) async fn printer_task(
                         }
                     }
                     current_line = 0;
-                    hwa::info!("Job completed");
+                    hwa::info!("Job completed in {:03} seconds", job_time.as_millis() as f64 / 1000.0);
                 }
             }
             PrinterControllerEvent::Abort => {

@@ -4,7 +4,9 @@ use crate::{hwa, hwi};
 use crate::hwa::ControllerRef;
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
-#[cfg(feature = "native")]
+use crate::math::Real;
+use crate::tgeo::TVector;
+#[cfg(all(feature = "native", feature = "plot"))]
 use super::timing_monitor::*;
 
 #[cfg(feature = "with-motion")]
@@ -34,7 +36,7 @@ pub struct MotionDriver {
     pub layer_fan_controller: ControllerRef<hwa::controllers::LayerPwmController>,
     #[cfg(feature = "with-laser")]
     pub laser_controller: ControllerRef<hwa::controllers::LaserPwmController>,
-    #[cfg(feature = "native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     tmon: TimingsMonitor,
 }
 
@@ -53,29 +55,29 @@ impl MotionDriver {
             layer_fan_controller: params.layer_fan_controller,
             #[cfg(feature = "with-laser")]
             laser_controller: params.laser_controller,
-            #[cfg(feature = "native")]
+            #[cfg(all(feature = "native", feature = "plot"))]
             tmon: TimingsMonitor::new(),
         }
     }
 
-    #[cfg(feature="no-real-time")]
+    #[cfg(all(feature = "native", feature = "plot", feature = "no-real-time"))]
     #[inline]
     pub fn update_clock(&mut self, real_time: embassy_time::Instant) {
         self.tmon.set_clock(real_time)
     }
 
-    #[cfg(feature = "native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     #[inline]
     pub fn start_segment(&mut self, ref_time: embassy_time::Instant, real_time: embassy_time::Instant) {
         self.tmon.reset(ref_time, real_time)
     }
-    #[cfg(feature = "native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     #[inline]
     pub fn end_segment(&mut self) {
         self.tmon.commit()
     }
 
-    #[cfg(feature = "native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     #[inline]
     pub fn mark_microsegment(&mut self) {
         self.tmon.swap(PinState::USCLK)
@@ -83,7 +85,7 @@ impl MotionDriver {
 
     #[inline(always)]
     pub fn enable_x_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::X_ENA, false);
         self.pins.enable_x_stepper()
     }
@@ -91,14 +93,14 @@ impl MotionDriver {
     #[allow(unused)]
     #[inline(always)]
     pub fn disable_x_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::X_ENA, true);
         self.pins.disable_x_stepper()
     }
 
     #[inline(always)]
     pub fn enable_y_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Y_ENA, false);
         self.pins.enable_y_stepper()
     }
@@ -106,14 +108,14 @@ impl MotionDriver {
     #[allow(unused)]
     #[inline(always)]
     pub fn disable_y_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Y_ENA, true);
         self.pins.disable_y_stepper()
     }
 
     #[inline(always)]
     pub fn enable_z_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Z_ENA, false);
         self.pins.enable_z_stepper()
     }
@@ -121,7 +123,7 @@ impl MotionDriver {
     #[allow(unused)]
     #[inline(always)]
     pub fn disable_z_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Z_ENA, true);
         self.pins.disable_z_stepper()
     }
@@ -129,7 +131,7 @@ impl MotionDriver {
     #[cfg(feature = "has-extruder")]
     #[inline(always)]
     pub fn enable_e_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::E_ENA, false);
         self.pins.enable_e_stepper()
     }
@@ -139,28 +141,28 @@ impl MotionDriver {
     #[allow(unused)]
     #[inline(always)]
     pub fn disable_e_stepper(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::E_ENA, true);
         self.pins.disable_e_stepper()
     }
 
     #[inline(always)]
     pub fn x_dir_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::X_DIR, true);
         self.pins.x_dir_pin.set_high();
     }
 
     #[inline(always)]
     pub fn y_dir_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Y_DIR, true);
         self.pins.y_dir_pin.set_high();
     }
 
     #[inline(always)]
     pub fn z_dir_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Z_DIR, true);
         self.pins.z_dir_pin.set_high();
     }
@@ -168,28 +170,28 @@ impl MotionDriver {
     #[cfg(feature = "has-extruder")]
     #[inline(always)]
     pub fn e_dir_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::E_DIR, true);
         self.pins.e_dir_pin.set_high();
     }
 
     #[inline(always)]
     pub fn x_dir_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::X_DIR, false);
         self.pins.x_dir_pin.set_low();
     }
 
     #[inline(always)]
     pub fn y_dir_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Y_DIR, false);
         self.pins.y_dir_pin.set_low();
     }
 
     #[inline(always)]
     pub fn z_dir_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Z_DIR, false);
         self.pins.z_dir_pin.set_low();
     }
@@ -197,28 +199,28 @@ impl MotionDriver {
     #[cfg(feature = "has-extruder")]
     #[inline(always)]
     pub fn e_dir_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::E_DIR, false);
         self.pins.e_dir_pin.set_low();
     }
 
     #[inline(always)]
     pub fn x_step_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::X_STEP, true);
         self.pins.x_step_pin.set_high();
     }
 
     #[inline(always)]
     pub fn y_step_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Y_STEP, true);
         self.pins.y_step_pin.set_high();
     }
 
     #[inline(always)]
     pub fn z_step_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Z_STEP, true);
         self.pins.z_step_pin.set_high();
     }
@@ -226,28 +228,28 @@ impl MotionDriver {
     #[cfg(feature = "has-extruder")]
     #[inline(always)]
     pub fn e_step_pin_high(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::E_STEP, true);
         self.pins.e_step_pin.set_high();
     }
 
     #[inline(always)]
     pub fn x_step_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::X_STEP, false);
         self.pins.x_step_pin.set_low();
     }
 
     #[inline(always)]
     pub fn y_step_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Y_STEP, false);
         self.pins.y_step_pin.set_low();
     }
 
     #[inline(always)]
     pub fn z_step_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::Z_STEP, false);
         self.pins.z_step_pin.set_low();
     }
@@ -255,9 +257,44 @@ impl MotionDriver {
     #[cfg(feature = "has-extruder")]
     #[inline(always)]
     pub fn e_step_pin_low(&mut self) {
-        #[cfg(feature = "native")]
+        #[cfg(all(feature = "native", feature = "plot"))]
         self.tmon.update(PinState::E_STEP, false);
         self.pins.e_step_pin.set_low();
+    }
+
+    #[inline]
+    pub fn enable_and_set_dir(&mut self, vdir: &TVector<Real>) {
+        self.enable_x_stepper();
+        self.enable_y_stepper();
+        self.enable_z_stepper();
+        #[cfg(feature = "has-extruder")]
+        self.enable_e_stepper();
+
+        if vdir.x.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
+            self.x_dir_pin_high();
+        }
+        else {
+            self.x_dir_pin_low();
+        }
+        if vdir.y.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
+            self.y_dir_pin_high();
+        }
+        else {
+            self.y_dir_pin_low();
+        }
+        if vdir.z.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
+            self.z_dir_pin_high();
+        }
+        else {
+            self.z_dir_pin_low();
+        }
+        #[cfg(feature = "has-extruder")]
+        if vdir.e.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
+            self.e_dir_pin_high();
+        }
+        else {
+            self.e_dir_pin_low();
+        }
     }
 
     pub async fn homing_action(&mut self) -> Result<(), ()>{
@@ -308,6 +345,5 @@ impl MotionDriver {
             Ok(())
         }
     }
-
 
 }

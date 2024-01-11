@@ -1,5 +1,6 @@
 use embassy_time::{Duration, Timer};
 use printhor_hwa_common::TrackedStaticCell;
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 use crate::device::AdcPinTrait;
 type PinsCell<T> = std::sync::Mutex<T>;
 

@@ -37,12 +37,12 @@ with-display = [
 
 [dependencies]
 
-embassy-executor = { version = "0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-24576"] }
-embassy-sync = { version = "0", features = ["std"] }
-embassy-time = { version = "0", features = ["std", "generic-queue-32"] }
-embassy-futures = { version = "0", features = [] }
-embassy-embedded-hal = { version = "0", features = [] }
-embassy-usb = { version = "0", features = [], optional = true }
+embassy-executor = { version = "0.5.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-24576"] }
+embassy-sync = { version = "0.5.0", features = ["std"] }
+embassy-time = { version = "0.3.0", features = ["std", "generic-queue-32"] }
+embassy-futures = { version = "0.1.1", features = [] }
+embassy-embedded-hal = { version = "0.1.0", features = [] }
+embassy-usb = { version = "0.1.0", features = [], optional = true }
 
 embedded-io-async = { version = "0.6.0", optional = true }
 embedded-io = { version = "0.6.1", optional = true }
@@ -52,10 +52,10 @@ gnuplot = {version = "0.0.38", default-features = false, features=[], optional =
 embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
-printhor-hwa-common = { version = "0"}
+printhor-hwa-common = { version = "0.0.2"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
-embedded-hal = { version = "1", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
+embedded-hal = { version = "1.0.0", default-features = false, optional = true }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ] }
 futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 
@@ -64,11 +64,12 @@ embedded-graphics = { version = "0.7.1", optional = true}
 embedded-graphics-core = {version = "0.3.3", optional = true }
 nb = {version = "1.1.0", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
+thread-priority = { version = "0.15"}
 
-[patch.crates-io]
-embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+#[patch.crates-io]
+#embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
+#embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
+#embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+#embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+#embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+#embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

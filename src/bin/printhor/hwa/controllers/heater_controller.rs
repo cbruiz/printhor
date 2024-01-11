@@ -22,6 +22,7 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
     pwm: PwmController<PwmHwaDevice>,
     target_temp: f32,
     current_temp: f32,
+    on: bool,
 }
 
 #[allow(dead_code)]
@@ -40,6 +41,7 @@ where
             pwm,
             target_temp: 0.0f32,
             current_temp: 0.0f32,
+            on: false,
         }
     }
     pub async fn init(&mut self) {
@@ -112,6 +114,14 @@ where
 
     #[inline]
     pub fn is_on(&self) -> bool {
-        self.pwm.is_on()
+        self.on
+    }
+    #[inline]
+    pub fn on(&mut self) {
+        self.on = true;
+    }
+    #[inline]
+    pub fn off(&mut self) {
+        self.on = false;
     }
 }

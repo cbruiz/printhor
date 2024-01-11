@@ -18,16 +18,12 @@ pub(crate) mod geometry;
 pub(crate) mod machine;
 
 pub(crate) mod sync;
-pub(crate) mod planner;
 #[cfg(feature = "with-display")]
 pub(crate) mod display;
-#[cfg(feature = "with-motion")]
-mod stepper_isr;
 pub mod tgeo;
-pub mod ctrl;
 pub mod math;
 
-use crate::control::control_task::ControlTaskControllers;
+use crate::control::task_control::ControlTaskControllers;
 use embassy_executor::Spawner;
 #[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
@@ -287,14 +283,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         #[cfg(feature = "with-trinamic")]
         let _ = motion_planer.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
 
-        motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(400), Some(400), Some(400), Some(400))).await;
-        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(800), Some(800), Some(800), Some(800))).await;
-        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(64000), Some(64000), Some(64000), Some(64000))).await;
+        motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
+        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(1000), Some(1000), Some(1000), Some(1000))).await;
+        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(18000), Some(18000), Some(18000), Some(18000))).await;
         motion_planer.set_default_travel_speed(400).await;
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        hwa::launch_high_priotity( stepper_isr::stepper_task(
+        hwa::launch_high_priotity( control::task_stepper_isr::stepper_task(
             motion_planer, _wd
         )).and_then(|_| {
             hwa::debug!("stepper_start() spawned");
@@ -303,8 +299,8 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     }
 
     #[cfg(feature = "integration-test")]
-    spawner.spawn(control::integration_task::integration_task(
-        control::integration_task::IntegrationaskParams {
+    spawner.spawn(control::task_integration::integration_task(
+        control::task_integration::IntegrationaskParams {
             processor: processor.clone(),
             #[cfg(feature = "with-printjob")]
             printer_controller: printer_controller.clone(),
@@ -312,9 +308,9 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
 
     )).map_err(|_| ())?;
 
-    spawner.spawn(control::control_task::control_task(
+    spawner.spawn(control::task_control::control_task(
         processor.clone(),
-        control::control_task::ControlTaskDevices {
+        control::task_control::ControlTaskDevices {
             #[cfg(feature = "with-usbserial")]
             usb_serial_rx: devices.usbserial_rx_stream,
             #[cfg(feature = "with-uart-port-1")]
@@ -329,14 +325,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     )).map_err(|_| ())?;
 
     #[cfg(feature = "with-printjob")]
-    spawner.spawn(control::printer_task::printer_task(
+    spawner.spawn(control::task_printjob::printer_task(
         processor.clone(),
         printer_controller,
         sdcard_controller,
     )).map_err(|_| ())?;
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-    spawner.spawn(control::temperature_task::temp_task(
+    spawner.spawn(control::task_temperature::temp_task(
         event_bus.clone(),
         hotend_controller,
     )).map_err(|_| ())?;
@@ -348,7 +344,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     )).map_err(|_| ())?;
 
     #[cfg(feature = "with-motion")]
-    spawner.spawn(control::deferr_task::defer_task(
+    spawner.spawn(control::task_deferr::defer_task(
         processor,
     )).map_err(|_| ())?;
 

@@ -124,19 +124,58 @@ pending to be matured.
 RUST_LOG=info cargo run --features integration-test --bin printhor
 ```
 
-## MKS Robin Nano V3.1
+## MKS Robin Nano (Currently v3.1 only)
 
-TODO: Work in progress
+This board (https://www.makerbase.store/pages/mks-robin-nano-v3-1-intro) is still work in progress
+
+### Binary image production (standard with defmt)
+
+The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
+
+```shell
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor -- -O binary firmware.bin
+```
+
+Firmware size if 200kB as of now with previous settings.
+
+### Minimal-size binary image production
+
+```shell
+DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor -- -O binary firmware.bin
+```
+
+Firmware size if 164kB as of now with previous settings.
+
+### Run with JLink/SWD device
+
+DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="mks_robin_nano"' cargo run --release --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor
 
 ## Nucleo-64
 
-TODO: Work in progress
+There are two base boards supported in this category.
+The assumption/requirement is to use any of these generic purpose development board with the Arduino CNC Shield v3 (hat):
+![alt text](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3/Arduino-CNC-Shield-Pinout-V3.XX.jpeg "Arduino CNC Shield v3")
 
-## SKR Mini E3 V3
+In these development boards, flash and run can be directly performed with probe-rs just connecting USB as they have a built-in SWD/JTAG interface:
+
+### nucleo-f410rb
+Please, note that this board is very limited in terms of flash and memory (48kB SRAM, 128kB flash).
+You might not assume that a firwmare not optimized for size (LTO, etc...) will fit in flash.
+
+```shell
+DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-f410rb"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-f410rb --target thumbv7em-none-eabihf --bin printhor
+```
+
+### nucleo-l476rg
+This one is a bit slower but much more RAM and flash. Enough even though with non very optimized firmware and may features
+
+```shell
+DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-l476rg"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-l476rg --target thumbv7em-none-eabihf --bin printhor
+```
+
+## SKR Mini E3 (currently v3.0 only)
 
 This board (https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3) is quite functional
-
-Firmware is around to 140Kb, and expecting to be around 100Kb with the core funtions and components (except, for instance: display, which is likely to increase it beyond the 110KB limit for 128KB flash size microcontrollers)
 
 ### Binary image production (standard with defmt)
 
@@ -146,11 +185,21 @@ The firmware.bin file ready to be uploaded to the SD can be produced with the fo
 DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
+Firmware size if 196kB as of now with previous settings.
+
 ### Minimal-size binary image production
 
 ```shell
 DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
+
+Firmware size if 164kB as of now with previous settings.
+
+### Run with JLink/SWD device
+
+DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3"' cargo run --release --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor
+
+
 ## Extra utilery
 
 A simple stand-alone std binary to experiment with motion plan (kind of playground):
