@@ -24,11 +24,11 @@ with-defmt = ["defmt"]
 portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.0.0",  default-features = false, features = [] }
 
-embassy-sync = { version = "0", features = [] }
-embassy-time = { version = "0", features = [] }
+embassy-sync = { version = "0.5.0", features = [] }
+embassy-time = { version = "0.3.0", features = [] }
 
-embedded-hal = { version = "1", default-features = false }
-embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
+embedded-hal = { version = "1.0.0", default-features = false }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
 
 embedded-graphics-core = {version = "0.3.3", optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }

@@ -3,7 +3,7 @@ use crate::hwa;
 use crate::control::GCode;
 #[allow(unused)]
 use crate::math::Real;
-use crate::ctrl::*;
+use crate::control::planner::*;
 use printhor_hwa_common::{EventBusSubscriber, EventFlags};
 
 pub struct IntegrationaskParams {
@@ -128,6 +128,47 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         }
     }
 
+    #[cfg(feature = "integration-test-move-boundaries-1")]
+    {
+        hwa::info!("Testing G1 retract");
+
+        let g1_code = GCode::G1(crate::control::XYZEFS {
+            ln: None,
+            x: None,
+            y: None,
+            z: None,
+            e: Some(Real::new(-310, 2)),
+            f: None,
+            s: None
+        });
+
+        if let Some(_evt) = params.processor.execute(&g1_code, false).await.and_then(expect_immediate).ok() {
+            hwa::info!("-- G1 retract OK");
+        } else {
+            hwa::error!("G1 Unexpected state");
+        }
+        hwa::info!("Testing G1 retract");
+    }
+
+    #[cfg(feature = "integration-test-move-boundaries")]
+    {
+        let g1_code = GCode::G1(crate::control::XYZEFS {
+            ln: None,
+            x: Some(Real::new(7414, 2)),
+            y: Some(Real::new(9066, 2)),
+            z: None,
+            e: Some(Real::new(335, 4)),
+            f: None,
+            s: None
+        });
+
+        if let Some(_evt) = params.processor.execute(&g1_code, false).await.and_then(expect_immediate).ok() {
+            hwa::info!("-- G1 retract OK");
+        } else {
+            hwa::error!("G1 Unexpected state");
+        }
+    }
+
     #[cfg(feature = "integration-test-dwell")]
     {
         hwa::info!("Testing G4");
@@ -167,11 +208,40 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
                 subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
             }
             Err(_) => {
-                hwa::error!("Timeout engraving");
+                hwa::error!("Timeout dispatching engraving job");
             }
         }
 
     }
+    #[cfg(feature = "integration-test-benchy")]
+    {
+        use crate::hwa::controllers::PrinterControllerEvent;
+
+        hwa::info!("Testing GCODE for benchy FDM print");
+        params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("benchy.g"))).await.unwrap();
+        match embassy_time::with_timeout(
+            embassy_time::Duration::from_secs(5),
+            subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+        ).await {
+            Ok(_) => {
+                // command resume (eq: M24)
+                params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
+                // wait for job completion
+                subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
+            }
+            Err(_) => {
+                hwa::error!("Timeout dispatching benchy job");
+            }
+        }
+
+    }
+    subscriber.wait_for(
+        printhor_hwa_common::EventStatus::not_containing(EventFlags::JOB_PRINTING)
+            .and_not_containing(EventFlags::MOVING)
+            .and_containing(EventFlags::MOV_QUEUE_EMPTY)
+    ).await;
     hwa::info!("D; Integration task END");
+    #[cfg(feature = "native")]
+    std::process::exit(0)
 }
 

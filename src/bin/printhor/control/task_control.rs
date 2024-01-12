@@ -4,7 +4,7 @@ use printhor_hwa_common::EventBusSubscriber;
 use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
 #[allow(unused)]
-use crate::ctrl::*;
+use crate::control::planner::*;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
 

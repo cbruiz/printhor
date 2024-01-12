@@ -7,14 +7,17 @@ use strum::Display;
 use strum::{AsRefStr, EnumVariantNames};
 use alloc::string::String;
 pub(crate) mod processor;
-pub(crate) mod control_task;
-#[cfg(feature = "with-printjob")] pub(crate) mod printer_task;
-#[cfg(feature = "integration-test")] pub(crate) mod integration_task;
+pub(crate) mod planner;
 pub(crate) mod parser;
+pub(crate) mod task_control;
+#[cfg(feature = "with-printjob")] pub(crate) mod task_printjob;
+#[cfg(feature = "integration-test")] pub(crate) mod task_integration;
 #[cfg(feature = "with-motion")]
-pub(crate) mod deferr_task;
+pub(crate) mod task_deferr;
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-pub(crate) mod temperature_task;
+pub(crate) mod task_temperature;
+#[cfg(feature = "with-motion")]
+pub mod task_stepper_isr;
 
 #[allow(dead_code)]
 #[derive(Clone, Default)]

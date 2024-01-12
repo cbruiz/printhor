@@ -10,9 +10,11 @@ use embassy_stm32::Config;
 use embassy_stm32::{bind_interrupts};
 #[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart;
+#[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 #[cfg(any(feature = "with-probe", feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan1"))]
 use embassy_stm32::gpio::OutputType;
+#[allow(unused)]
 use embassy_sync::mutex::Mutex;
 #[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
@@ -22,6 +24,7 @@ use embassy_stm32::usb;
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
+#[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 use embassy_stm32::rcc::*;

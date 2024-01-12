@@ -6,7 +6,7 @@ use crate::machine::MACHINE_INFO;
 use crate::hwa;
 #[cfg(feature = "with-motion")]
 use crate::{hwa::controllers::{DeferEvent, DeferType}};
-use crate::ctrl::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
+use crate::control::planner::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::math::Real;
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
@@ -275,7 +275,9 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-hotend")]
             GCode::M109(s) => {
-                self.hotend.lock().await.set_target_temp((s.s.and_then(|v| v.to_i32()).unwrap_or(0)) as f32);
+                let mut he = self.hotend.lock().await;
+                he.set_target_temp((s.s.and_then(|v| v.to_i32()).unwrap_or(0)) as f32);
+                he.on();
                 Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(EventFlags::HOTEND_TEMP_OK)))
             }
             #[cfg(feature = "with-motion")]

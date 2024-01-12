@@ -5,13 +5,14 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use core::ops::{Div, Neg};
 use core::ops::Mul;
-#[cfg(feature = "native")]
+//use embassy_time::{Instant, Duration};
+#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use num_traits::float::FloatCore;
 use crate::{math::Real, math::RealInclusiveRange};
-#[cfg(feature = "native")]
+#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use rust_decimal::prelude::ToPrimitive;
-use crate::ctrl::CodeExecutionFailure;
 use crate::math::{FOUR, HALF, ONE, SIX, THREE, TWO, ZERO};
+use crate::control::planner::CodeExecutionFailure;
 
 #[derive(Clone, Default)]
 pub struct Boundaries {
@@ -311,7 +312,40 @@ impl SCurveMotionProfile {
             None
         }
     }
+
+    /*
+    pub fn iterate(&self, ref_time: Instant, offset: Duration) -> SCurveRealTimeIterator {
+        SCurveRealTimeIterator::new(self, ref_time, offset)
+    }
+     */
 }
+
+/*
+pub struct SCurveRealTimeIterator<'a> {
+    profile: &'a SCurveMotionProfile,
+    ref_time: Instant,
+    offset: Duration,
+    exhausted: bool,
+}
+impl<'a> SCurveRealTimeIterator<'a> {
+    pub const fn new(profile: &'a SCurveMotionProfile, ref_time: Instant, offset: Duration) -> Self {
+        Self {
+            profile,
+            ref_time,
+            offset,
+            exhausted: false,
+        }
+    }
+}
+
+impl<'a> Iterator for SCurveRealTimeIterator<'a> {
+    type Item = Real;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!("WIP")
+    }
+}
+*/
 
 #[cfg(feature = "native")]
 impl Display for SCurveMotionProfile {
@@ -370,7 +404,7 @@ impl PlanProfile
 
     #[allow(unused)]
     #[allow(dead_code)]
-    #[cfg(feature = "plot")]
+    #[cfg(feature = "native")]
     pub fn plot(&mut self, plot_pos: bool, plot_vel: bool, plot_accel: bool, plot_jerk: bool) {
 
         use gnuplot::{AxesCommon, Figure};

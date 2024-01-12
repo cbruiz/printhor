@@ -5,13 +5,12 @@ use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use printhor_hwa_common::{EventBusRef, EventFlags, EventStatus};
 use crate::control::GCode;
-use crate::planner::{Constraints, SCurveMotionProfile};
+use crate::control::planner::{Constraints, SCurveMotionProfile, CodeExecutionSuccess, CodeExecutionFailure};
 use crate::math::{ONE_HUNDRED, Real, ZERO};
 use crate::sync::config::Config;
 use crate::tgeo::TVector;
 use crate::tgeo::CoordSel;
 
-use crate::ctrl::*;
 use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
 
 /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
@@ -44,7 +43,7 @@ pub struct MotionConfig {
     pub(crate) microsteps: TVector<u8>,
     pub(crate) max_accel: TVector<u16>,
     pub(crate) max_speed: TVector<u16>,
-    pub(crate) max_jerk: TVector<u16>,
+    pub(crate) max_jerk: TVector<u32>,
     pub(crate) default_travel_speed: u16,
     pub(crate) flow_rate: u8,
     pub(crate) speed_rate: u8,
@@ -341,7 +340,7 @@ impl MotionPlanner {
         self.motion_cfg.lock().await.max_accel.map_coords(|c| Some(Real::new(c as i64, 0)))
     }
 
-    pub async fn set_max_jerk(&self, jerk: TVector<u16>) {
+    pub async fn set_max_jerk(&self, jerk: TVector<u32>) {
         self.motion_cfg.lock().await.max_jerk.assign(CoordSel::all(), &jerk);
     }
 
@@ -425,16 +424,18 @@ impl MotionPlanner {
 
         // Compute the speed module applying speed_rate factor
         let speed_module = requested_motion_speed.unwrap_or(dts) * speed_rate;
-        // Compute per-axis target speed
-        let speed_vector: TVector<Real> = vdir.abs() * speed_module;
+        // Compute per-axis distance
+        let disp_vector: TVector<Real> = vdir.abs() * speed_module;
         // Clamp per-axis target speed to the physical restrictions
-        let clamped_speed = speed_vector.clamp(max_speed);
+        let clamped_speed = (vdir.map_val(Real::one()) * speed_module).clamp(max_speed);
+        // Compute max time
+        let max_time = (disp_vector / clamped_speed).max().unwrap_or(ZERO);
         // Finally, per-axis relative speed
-        let speed_rate = clamped_speed / speed_vector;
+        let speed_vector = disp_vector / max_time;
 
-        let module_target_speed = clamped_speed.min().unwrap_or(ZERO);
-        let module_target_accel = (max_accel * speed_rate).min().unwrap_or(ZERO);
-        let module_target_jerk = (max_jerk * speed_rate).min().unwrap_or(ZERO);
+        let module_target_speed = speed_vector.norm2().unwrap_or(ZERO);
+        let module_target_accel = (max_accel * speed_vector).norm2().unwrap_or(ZERO);
+        let module_target_jerk = (max_jerk * speed_vector).norm2().unwrap_or(ZERO);
 
         let t2 = embassy_time::Instant::now();
 
@@ -460,7 +461,6 @@ impl MotionPlanner {
                     hwa::error!("vdir: {} mm/s", vdir.rdp(4));
                     hwa::error!("speed_vector: {} mm/s", speed_vector.rdp(4));
                     hwa::error!("clamped_speed: {} mm/s", clamped_speed.rdp(4));
-                    hwa::error!("clamped_speed: {} mm/s", clamped_speed.rdp(4));
 
                     None
                 }
@@ -482,7 +482,7 @@ impl MotionPlanner {
                         speed_exit_mms: 0,
                         displacement_u: (module_target_distance * Real::from_lit(1000, 0)) .to_i32().unwrap_or(0) as u32,
                         vdir,
-                        dest_pos: Default::default(),
+                        dest_pos: p1,
                     };
                     let r = self.schedule_raw_move(
                         ScheduledMove::Move(segment_data, profile),
@@ -536,17 +536,17 @@ impl MotionPlanner {
         r
     }
 
-    #[cfg(feature="native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     pub async fn start_segment(&self, ref_time: embassy_time::Instant, real_time: embassy_time::Instant) {
         self.motion_driver.lock().await.start_segment(ref_time, real_time)
     }
 
-    #[cfg(feature="native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     pub async fn end_segment(&self) {
         self.motion_driver.lock().await.end_segment()
     }
 
-    #[cfg(feature="native")]
+    #[cfg(all(feature = "native", feature = "plot"))]
     pub async fn mark_microsegment(&self) {
         self.motion_driver.lock().await.mark_microsegment();
     }

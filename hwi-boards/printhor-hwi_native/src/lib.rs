@@ -31,6 +31,7 @@ const USBSERIAL_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-uart-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;
 
+
 static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
 
 struct TokenHolder<S> {
@@ -42,10 +43,12 @@ unsafe impl<S> Send for TokenHolder<S> {}
 
 #[inline]
 pub fn launch_high_priotity<S: 'static>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+    use thread_priority::*;
+
     let r = Box::new(TokenHolder {token});
     let builder = std::thread::Builder::new()
-        .name("isr-high-prio".into());
-    let _ = builder.spawn(|| {
+        .name("isr-high-prio".to_owned());
+    let _ = builder.spawn_with_priority(ThreadPriority::Max,|_| {
         let executor: &'static mut embassy_executor::Executor = EXECUTOR_HIGH.init("StepperExecutor", embassy_executor::Executor::new());
         executor.run(move |spawner| {
             spawner.spawn(

@@ -12,8 +12,9 @@ use embassy_stm32::Config;
 use embassy_stm32::{bind_interrupts};
 #[cfg(any(feature = "with-uart-port-1"))]
 use embassy_stm32::usart;
+#[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
-
+#[allow(unused)]
 use embassy_sync::mutex::Mutex;
 #[cfg(any(feature = "with-uart-port-1"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
@@ -23,13 +24,13 @@ use embassy_stm32::usb_otg;
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
+#[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 use embassy_stm32::rcc::*;
 
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
-
 
 #[global_allocator]
 static HEAP: CortexMHeap = CortexMHeap::empty();
