@@ -203,7 +203,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
         static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let usbserial_tx_controller = ControllerRef::new(
-            USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
+            USB_INST.init("USBSerialTxController", ControllerMutex::new(sender))
         );
         (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
@@ -237,7 +237,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let uart_port1_tx = ControllerRef::new(
-            UART_PORT1_INST.init("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
+            UART_PORT1_INST.init("UartPort1", ControllerMutex::new(uart_port1_tx_device))
         );
         (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };

@@ -5,10 +5,10 @@
 //!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`], disable all steppers
 //!   - If motion segment is execution-ready, dequeue it and then:
 //!     - Enable all steppers
-//!     - Evaluate the motion profile displacement at [`MICROSEGMENT_PERIOD_HZ`]
+//!     - Evaluate the motion profile displacement at [`MICRO_SEGMENT_PERIOD_HZ`]
 //!     - Compute number of steps to do in each axis (independently)
 //!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`]
-//!     - Consume a microsegment until iterator is exhausted
+//!     - Consume a micro-segment until iterator is exhausted
 //!     - Notify segment as completed
 //!
 //! TODO: This is a work still in progress
@@ -19,27 +19,31 @@
 use crate::control::planner::StepperChannel;
 #[allow(unused)]
 use crate::math::{Real, ONE_MILLION, ONE_THOUSAND};
+#[allow(unused_imports)]
 use crate::tgeo::{CoordSel, TVector};
 #[allow(unused)]
 use embassy_time::{Instant, Duration, with_timeout};
 #[cfg(feature = "with-motion")]
+#[allow(unused_imports)]
 use crate::{hwa, hwa::controllers::{DeferEvent, DeferType}};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
+#[allow(unused_imports)]
+use crate::math::ONE_HUNDRED;
 
-/// Microsegment sampling frequency in Hz
-const MICROSEGMENT_PERIOD_HZ: u64 = 200;
+/// Micro-segment sampling frequency in Hz
+const MICRO_SEGMENT_PERIOD_HZ: u64 = 200;
 /// Stepper pulse period in microseconds
-const STEPPER_PULSE_WIDTH_US: Duration = Duration::from_micros(1);
+const STEPPER_PULSE_WIDTH_US: Duration = Duration::from_micros(Duration::from_hz(embassy_time::TICK_HZ).as_micros());
 /// Inactivity Timeout until steppers are disabled
 const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Precomputed microsegment period in microseconds
-const MICROSEGMENT_PERIOD_US: u32 = Duration::from_hz(MICROSEGMENT_PERIOD_HZ).as_micros() as u32;
-/// Precomputed microsegment period in ticks
-const MICROSEGMENT_PERIOD_TICKS: u32 = Duration::from_hz(MICROSEGMENT_PERIOD_HZ).as_ticks() as u32;
-/// Precomputed microsegment period in milliseconds
-const PERIOD_MS: i32 = (MICROSEGMENT_PERIOD_US / 1000) as i32;
+/// Precomputed micro-segment period in microseconds
+const MICRO_SEGMENT_PERIOD_US: u32 = Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_micros() as u32;
+/// Precomputed micro-segment period in ticks
+const MICRO_SEGMENT_PERIOD_TICKS: u32 = Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_ticks() as u32;
+/// Precomputed micro-segment period in milliseconds
+const PERIOD_MS: i32 = (MICRO_SEGMENT_PERIOD_US / 1000) as i32;
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {
@@ -66,12 +70,12 @@ pub fn now() -> Instant {
     return Instant::now();
 }
 
-/// An utility to feed forward equispaced pulses (uniformly distributed) at different rate by channel
+/// An utility to feed forward a uniformly distributed pulse train at different rates by channel
 ///
 /// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
 /// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](MultiTimer::new())
 ///
-/// In order for the pulses to be equispaced. Assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
+/// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
 /// - Each pulse period (pulse width) is: **`t=T/x`**.
 /// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
 /// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
@@ -155,7 +159,7 @@ pub async fn stepper_task(
     let mut s = motion_planner.event_bus.subscriber().await;
     s.wait_while(EventFlags::HOMMING).await;
 
-    hwa::info!("Microsegment controller starting with {} us ({} ticks) period", MICROSEGMENT_PERIOD_US, MICROSEGMENT_PERIOD_TICKS);
+    hwa::info!("Micro-segment controller starting with {} us ({} ticks) micro-segment period and {} us step hold", MICRO_SEGMENT_PERIOD_US, MICRO_SEGMENT_PERIOD_TICKS, STEPPER_PULSE_WIDTH_US.as_micros());
     motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
 
     loop {
@@ -165,7 +169,13 @@ pub async fn stepper_task(
             Ok(Some(segment)) => {
                 hwa::debug!("Segment init");
                 let t_segment_start = now();
+
+                let mut duty = Duration::from_ticks(0);
+
+                duty += t_segment_start.elapsed();
                 motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOVING)).await;
+
+                let mut t0 = now();
                 // TODO: Get from conf
                 let to_ustep: Real = Real::from_lit(32, 0);
 
@@ -190,7 +200,7 @@ pub async fn stepper_task(
 
                 ////////////////////////////////////////
                 // segment metronome
-                let mut absolute_ticker = embassy_time::Ticker::every(Duration::from_hz(MICROSEGMENT_PERIOD_HZ));
+                let mut absolute_ticker = embassy_time::Ticker::every(Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ));
 
                 // global axis advance counter
                 let mut axis_steps_advanced_precise: TVector<Real> = TVector::zero();
@@ -204,25 +214,31 @@ pub async fn stepper_task(
 
                 let mut t_tick = now();
 
+                duty += t0.elapsed();
+
                 motion_planner.motion_driver.lock().await.enable_and_set_dir(&segment.segment_data.vdir);
+                steppers_off = false;
 
                 /* WIP
-                let offset = Duration::from_ticks(MICROSEGMENT_PERIOD_TICKS.into());
+                let offset = Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS.into());
                 for _ps in segment.motion_profile.iterate(t_segment_start, offset) {
-                    embassy_time::Timer::after_ticks(MICROSEGMENT_PERIOD_TICKS.into()).await;
+                    embassy_time::Timer::after_ticks(MICRO_SEGMENT_PERIOD_TICKS.into()).await;
                 }
                 */
 
                 loop { // Iterate on segment
+
                     // Feed watchdog because this high prio task could cause CPU starvation
-                    let t_microsegment_start = now();
+                    let t_micro_segment_start = now();
                     watchdog.lock().await.pet();
 
-                    let time = Real::from_lit((t_tick + Duration::from_ticks(MICROSEGMENT_PERIOD_TICKS as u64)).duration_since(t_segment_start).as_millis() as i64, 3);
-                    hwa::debug!("\ttick #{} at t = {}", tick_id, time);
-                    t_ref += Duration::from_ticks(MICROSEGMENT_PERIOD_TICKS as u64);
+                    t0 = now();
 
-                    // Interpolate as microsegments
+                    let time = Real::from_lit((t_tick + Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS as u64)).duration_since(t_segment_start).as_millis() as i64, 3);
+                    hwa::debug!("\ttick #{} at t = {}", tick_id, time);
+                    t_ref += Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS as u64);
+
+                    // Interpolate as micro-segments
 
                     // TODO: Convert to an iterator to simplify logic
                     let next_position = if let Some(estimated_position) = segment.motion_profile.eval_position(time) {
@@ -248,16 +264,15 @@ pub async fn stepper_task(
                         axial_pos.rdp(4), step_pos.rdp(4), steps_to_advance_precise.rdp(0), steps_to_advance_precise.rdp(4));
 
                         let tick_period_by_axis = (steps_to_advance_precise
-                            .map_val(Real::from_lit((MICROSEGMENT_PERIOD_TICKS) as i64, 0)) / steps_to_advance_precise
+                            .map_val(Real::from_lit((MICRO_SEGMENT_PERIOD_TICKS) as i64, 0)) / steps_to_advance_precise
                         ).round();
 
-                        steppers_off = false;
 
                         hwa::debug!("\ttick #{} ustep period {}", tick_id, tick_period_by_axis);
-                        // The default rate is larger than a microsegment period when there is not move in an axis, so no pulses are driven
-                        let default_rate = (MICROSEGMENT_PERIOD_TICKS + MICROSEGMENT_PERIOD_TICKS) as u64;
+                        // The default rate is larger than a micro-segment period when there is not move in an axis, so no pulses are driven
+                        let default_rate = (MICRO_SEGMENT_PERIOD_TICKS + MICRO_SEGMENT_PERIOD_TICKS) as u64;
                         let mut multi_timer = MultiTimer::new(
-                            MICROSEGMENT_PERIOD_TICKS as u64,
+                            MICRO_SEGMENT_PERIOD_TICKS as u64,
                             [
                                 ChannelStatus::new(StepperChannel::X, tick_period_by_axis.x.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default_rate)),
                                 ChannelStatus::new(StepperChannel::Y, tick_period_by_axis.y.and_then(|cv| cv.to_i64().and_then(|v| Some(v as u64))).unwrap_or(default_rate)),
@@ -267,13 +282,15 @@ pub async fn stepper_task(
                             ],
                         );
 
-                        hwa::debug!("\tcomputing_time: {} us", t_microsegment_start.elapsed().as_micros());
+                        hwa::debug!("\tcomputing_time: {} us", t_micro_segment_start.elapsed().as_micros());
+                        duty += t0.elapsed();
 
                         let mut drv = motion_planner.motion_driver.lock().await;
+                        t0 = now();
                         #[cfg(feature = "no-real-time")]
                         drv.update_clock(t_tick);
                         #[cfg(feature = "no-real-time")]
-                        let mut t_microsegment = t_tick;
+                        let mut t_micro_segment = t_tick;
                         loop {
                             match multi_timer.next() {
                                 None => {
@@ -285,8 +302,8 @@ pub async fn stepper_task(
 
                                     #[cfg(feature = "no-real-time")]
                                     {
-                                        t_microsegment += Duration::from_ticks(_delay.as_ticks());
-                                        drv.update_clock(t_microsegment);
+                                        t_micro_segment += Duration::from_ticks(_delay.as_ticks());
+                                        drv.update_clock(t_micro_segment);
                                     }
 
                                     //drv.laser_controller.lock().await.set_power(1.0f32).await;
@@ -310,8 +327,8 @@ pub async fn stepper_task(
 
                                     #[cfg(feature = "no-real-time")]
                                     {
-                                        t_microsegment += STEPPER_PULSE_WIDTH_US;
-                                        drv.update_clock(t_microsegment);
+                                        t_micro_segment += STEPPER_PULSE_WIDTH_US;
+                                        drv.update_clock(t_micro_segment);
                                     }
                                     s_block_for(STEPPER_PULSE_WIDTH_US);
                                     if channel.contains(StepperChannel::X) {
@@ -342,12 +359,14 @@ pub async fn stepper_task(
                         if !usteps_advanced.bounded_by(&usteps_to_advance) {
                             //let _rpos = usteps_advanced.map_coords(|c| { Some(Real::from_lit(c as i64, 0)) }) / to_ustep;
                             //hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment_start.elapsed().as_millis(), axial_pos.rdp(4), _rpos  );
-                            #[cfg(feature = "native")]
+                            //#[cfg(feature = "native")]
                             {
-                                let t_sec = t_segment_start.elapsed().as_millis() as f64 / 1000.0;
-                                let s_mm = segment.segment_data.displacement_u as f64 / 1000.0;
-                                hwa::info!("# Segment of length {:>6.02} mm completed in {:>5.03} sec ({:>7.03} mm/s).", s_mm, t_sec, s_mm / t_sec  );
+                                let t_sec = Real::from_lit(t_segment_start.elapsed().as_millis().try_into().unwrap_or(0), 3);
+                                let s_mm = Real::from_lit(segment.segment_data.displacement_u.try_into().unwrap_or(0), 3);
+                                let rate = if s_mm.is_zero() { Real::zero() } else {s_mm / t_sec};
+                                hwa::info!("# Segment of length {} mm completed in {} sec ({} mm/s).", s_mm.rdp(4), t_sec.rdp(4), rate.rdp(3)  );
                             }
+                            duty += t0.elapsed();
                             motion_planner.consume_current_segment_data().await;
                             motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
                             break;
@@ -355,29 +374,34 @@ pub async fn stepper_task(
                     }
                     else {
                         // Reached end-of-segment, but still missing any step
-                        #[cfg(feature = "native")]
+                        //#[cfg(feature = "native")]
                         {
-                            let t_sec = t_segment_start.elapsed().as_millis() as f64 / 1000.0;
-                            let s_mm = segment.segment_data.displacement_u as f64 / 1000.0;
+                            let t_sec = Real::from_lit(t_segment_start.elapsed().as_millis().try_into().unwrap(), 3);
+                            let s_mm = Real::from_lit(segment.segment_data.displacement_u.try_into().unwrap(), 3);
                             let missing = (usteps_to_advance - usteps_advanced).map_coords(|c| if c > 0 { Some(c) } else { None });
-                            hwa::warn!("# Segment of length {:>6.02} mm truncated after {:>5.03} sec ({:>7.03} mm/s). Missing: {}", s_mm, t_sec, s_mm / t_sec, missing  );
+                            let rate = if t_sec.is_zero() {Real::zero() } else {s_mm / t_sec};
+                            hwa::warn!("# Segment of length {} mm truncated after {} sec ({} mm/s). Missing: {}", s_mm, t_sec, rate, missing  );
                         }
+                        duty += t0.elapsed();
                         motion_planner.consume_current_segment_data().await;
                         motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
                         break;
                     }
 
-                    let t_tick_elapsed = now().duration_since(t_microsegment_start);
+                    t0 = now();
+
+                    let t_tick_elapsed = now().duration_since(t_micro_segment_start);
                     let rem = PERIOD_MS - t_tick_elapsed.as_millis() as i32;
                     hwa::debug!("== t = {} ms took {} ms. pend = {} ms. tot = {} ms", t_tick.as_millis(), t_tick_elapsed.as_millis(), rem, (t_tick_elapsed).as_millis() as i32 + rem);
                     tick_id += 1;
 
-                    t_tick += Duration::from_ticks(MICROSEGMENT_PERIOD_TICKS as u64);
+                    t_tick += Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS as u64);
                     #[cfg(feature = "no-real-time")]
                     {
                         let mut drv = motion_planner.motion_driver.lock().await;
                         drv.update_clock(t_tick);
                     }
+                    duty += t0.elapsed();
 
                     absolute_ticker.next().await;
 
@@ -387,6 +411,10 @@ pub async fn stepper_task(
                 #[cfg(all(feature = "native", feature = "plot"))]
                 motion_planner.end_segment().await;
                 hwa::debug!("Segment done");
+                let segment_ms = Real::from_lit(t_segment_start.elapsed().as_micros().try_into().unwrap_or(0), 3).rdp(3);
+                let duty_ms = Real::from_lit(duty.as_micros().try_into().unwrap_or(0), 3).rdp(3);
+                let rate = if segment_ms.is_zero() { Real::zero() } else{ ( duty_ms * ONE_HUNDRED)  / segment_ms}.rdp(2);
+                hwa::info!("ISR CPU LOAD: {}% (total: {} ms, taken_up: {} ms)", rate, segment_ms, duty_ms);
                 motion_planner.event_bus.publish_event(EventStatus::not_containing(EventFlags::MOVING)).await;
             }
             // Homing

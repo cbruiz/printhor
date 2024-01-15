@@ -6,8 +6,8 @@ fn main() {
     }
     #[cfg(feature = "with-defmt")]
     println!("cargo:rustc-link-arg-bins=-Tdefmt.x");
-    // TODO: make native lvgl more platform independent
-    #[cfg(feature="native")]
-    println!("cargo:rustc-link-arg-bins=-L/opt/homebrew/lib");
+    // make native lvgl more platform independent
+    //#[cfg(feature="native")]
+    //println!("cargo:rustc-link-arg-bins=-L/opt/homebrew/lib");
 
 }

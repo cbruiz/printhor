@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_nucleo_64_arduino_cnc_hat"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for STM32 Nucleo-64 with Arduino CNC Hat V3.x"
@@ -17,7 +17,7 @@ homepage = "https://github.com/cbruiz/printhor"
 nightly = ["printhor-hwa-common/nightly"]
 #default = ["nucleo64-l476rg"]
 # Board kind
-nucleo64-l476rg = ["embassy-stm32/defmt", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-32_768", "embassy-executor/task-arena-size-16384"]
+nucleo64-l476rg = ["embassy-stm32/defmt", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384"]
 nucleo64-f410rb = ["embassy-stm32/defmt", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9", "embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384"]
 # Hardware device features
 with-usbserial = ["embassy-usb"]

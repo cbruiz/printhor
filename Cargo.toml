@@ -2,7 +2,7 @@
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 edition = "2021"
 name = "printhor"
-version = "0.0.2"
+version = "0.0.3"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/cbruiz/printhor"
@@ -49,7 +49,7 @@ integration-test = [
     "integration-test-move-ortho",
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
-    #"integration-test-benchy",
+    "integration-test-benchy",
     #"integration-test-laser-engrave",
     "plot-timings",
 ]
@@ -250,7 +250,7 @@ printhor-hwa-common = { version = "0.0.2", default-features = false, features = 
 printhor-hwi_native = {version = "0.0.2", optional = true}
 printhor-hwi_skr_mini_e3 = {version = "0.0.2", optional = true}
 printhor-hwi_mks_robin_nano = {version = "0.0.2", optional = true}
-printhor-hwi_nucleo_64_arduino_cnc_hat = {version = "0.0.2", optional = true}
+printhor-hwi_nucleo_64_arduino_cnc_hat = {version = "0.0.3", optional = true}
 
 gnuplot = {version = "0.0.39", default-features = false, features=[], optional = true}
 # Display
@@ -261,7 +261,6 @@ embedded-graphics-core = {version = "0.3.3", optional = true }
 
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = [] }
-#itertools = { version = "0", optional = true }
 
 [build-dependencies]
 #proc-macro2 = "1.0."
@@ -273,7 +272,7 @@ strip = false
 incremental = false
 debug-assertions = true
 #opt-level = "s"
-lto = 'fat'
+lto = true
 panic = "unwind"
 
 [profile.release]
@@ -283,7 +282,7 @@ strip = false
 incremental = false
 debug-assertions = false
 opt-level = "s"
-lto = 'fat'
+lto = true
 panic = "abort"
 
 [profile.release-opt]
@@ -295,7 +294,7 @@ debug-assertions = false
 overflow-checks = false
 strip = false
 opt-level = "s"
-lto = 'fat'
+lto = true
 panic = "abort"
 
 [patch.crates-io]
