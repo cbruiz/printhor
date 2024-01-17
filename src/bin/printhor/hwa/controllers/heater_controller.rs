@@ -4,7 +4,6 @@ use hwa::devices::*;
 use crate::hwa::controllers::pwm_controller::PwmController;
 use crate::hwa::VREF_SAMPLE;
 
-
 type AdcControllerRef<AdcPeri> = ControllerRef<AdcImpl<AdcPeri>>;
 
 #[allow(dead_code)]

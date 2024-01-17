@@ -1,11 +1,7 @@
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
 
-#![allow(incomplete_features)]
 #![allow(stable_features)]
-#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
-#![cfg_attr(feature="nightly", feature(async_closure))]
-#![cfg_attr(feature="nightly", feature(trait_alias))]
 
 extern crate alloc;
 extern crate core;

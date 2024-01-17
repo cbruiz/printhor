@@ -18,6 +18,8 @@ pub(crate) mod task_deferr;
 pub(crate) mod task_temperature;
 #[cfg(feature = "with-motion")]
 pub mod task_stepper_isr;
+#[cfg(feature = "with-motion")]
+pub(crate) mod motion_timing;
 
 #[allow(dead_code)]
 #[derive(Clone, Default)]

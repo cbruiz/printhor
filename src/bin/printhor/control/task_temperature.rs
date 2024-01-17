@@ -3,24 +3,25 @@
 //! Currently, this is a very naive approach using a simple control pid,
 //! but willing to improve with a formal method.
 //!
+//!
 //! AS-IS:
 //!
+//! ```
 //! --+--> power -> pid -> diff --+
 //!   |                           |
 //!   +---------------------------+
+//! ```
 //!
 //! TO-BE:
 //!
-//! 1. Mathematical model
-//! The differential equation describing the temperature  $\(T(t)\)$ respecting the time $\(t\)$ is the following:
-//!
-//! $ \[C \frac{dT(t)}{dt} = P(t) - R \cdot [T(t) - T_{\text{amb}}]\] $
-//!
-//! To solve the differential equation and obtain an expression for \(T(t)\), we separate variables and integrate the first order differential equation.
-//! Assuming initial conditions $\(T(0) = T_0\)$, The general solution:
-//!
-//! $ \[T(t) = T_{\text{amb}} + [T_0 - T_{\text{amb}}] \cdot e^{-\frac{t}{\tau}} + \frac{P_{\text{max}}}{R} \cdot \left(1 - e^{-\frac{t}{\tau}}\right)\] $
-//!
+//! <dl>
+//!   <dt>1. Mathematical model</dt>
+//!   <dd>The differential equation describing the temperature  $\(T(t)\)$ respecting the time $\(t\)$ is the following:
+//!     <p>$ \[C \frac{dT(t)}{dt} = P(t) - R \cdot [T(t) - T_{\text{amb}}]\] $</p>
+//!     <p>To solve the differential equation and obtain an expression for \(T(t)\), we separate variables and integrate the first order differential equation.</p>
+//!     <p>Assuming initial conditions $\(T(0) = T_0\)$, The general solution:</p>
+//!     <p>$ \[T(t) = T_{\text{amb}} + [T_0 - T_{\text{amb}}] \cdot e^{-\frac{t}{\tau}} + \frac{P_{\text{max}}}{R} \cdot \left(1 - e^{-\frac{t}{\tau}}\right)\] $</p>
+//!     <p>
 //! Where:
 //!
 //! - \(T_{\text{amb}}\) is the ambient temperature.
@@ -30,6 +31,9 @@
 //!
 //! The equation provides a description of how the temperature evolves \(T(t)\) with the time \(t\) in response of the heating power \(P(t)\)
 //!
+//!     </p>
+//!   </dd>
+//! </dl>
 //! 2. Temperature sensor
 //!  2.1. ADC mV Sampling with vref callibration if harware supports it
 //!  2.2. Computation of thermistor resistive value (R_0) depending on circuit model.
@@ -57,7 +61,6 @@
 //!
 //! - \(\text{PWM}(e(t))\) the function that converts the error in a PWM duty cycle (between 0 and 1).
 //! - \(P_{\text{max}}\) the maximum power that electric resitor can supply.
-
 use crate::hwa;
 use embassy_time::{Duration, Ticker};
 #[cfg(not(feature = "native"))]

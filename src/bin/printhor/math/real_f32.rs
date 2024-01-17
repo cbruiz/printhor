@@ -48,7 +48,7 @@ impl Real {
     }
 
     #[inline]
-    pub(crate) const fn is_positive(&self) -> bool {
+    pub(crate) fn is_positive(&self) -> bool {
         !self.0.is_sign_negative()
     }
     #[inline]
@@ -116,7 +116,7 @@ impl Real {
         y * (1.5 - (number * 0.5 * y * y))
     }
 
-    fn iterative_sqrt(number: f32) -> f32 {
+    fn iterative_sqrt(_number: f32) -> f32 {
         /* TODO: migrate
         https://www.pertinentdetail.org/sqrt
         https://github.com/SolraBizna/ieee-apsqrt/blob/main/src/lib.rs
@@ -143,7 +143,7 @@ impl Real {
         }
 
          */
-        0.0f32
+        todo!("Not implemented")
     }
 
     #[inline]
@@ -161,7 +161,7 @@ impl Real {
 
     #[inline]
     pub(crate) fn sign(self) -> Self {
-        let s = self.0.signum();
+        let s = F32Ext::signum(self.0);
         if s.is_zero() {Real::one()} else {Real(s)}
     }
 

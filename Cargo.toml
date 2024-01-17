@@ -49,7 +49,7 @@ integration-test = [
     "integration-test-move-ortho",
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
-    "integration-test-benchy",
+    #"integration-test-benchy",
     #"integration-test-laser-engrave",
     "plot-timings",
 ]
@@ -158,9 +158,9 @@ nucleo_64_arduino_cnc_hat = [
     #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-layer-fan",
     "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
 
-    #"float-point-f32-impl",
+    "float-point-f32-impl",
     #"float-point-f64-impl",
-    "fixed-point-128-impl",
+    #"fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_nucleo_64_arduino_cnc_hat",

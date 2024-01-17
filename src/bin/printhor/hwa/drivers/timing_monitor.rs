@@ -3,7 +3,7 @@ use std::io::Write;
 use bitflags::bitflags;
 use embassy_time::Instant;
 use crate::hwa;
-use crate::control::task_stepper_isr::now;
+use crate::control::motion_timing::now;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -89,7 +89,7 @@ impl TimingsMonitor {
         hwa::info!("Plotting {} events", self.timings.len());
         let mut file = File::create(format!("data/timing-{}.puml", self.move_id)).unwrap();
         const PRE: &'static str = r###"@startuml
-clock "RefClock" as C0 with period 10000
+clock "RefClock" as C0 with period 20000
 concise "uSegment" as US
 binary "X_ENA" as XE
 binary "Y_ENA" as YE
@@ -103,7 +103,7 @@ binary "X_STEP" as XS
 binary "Y_STEP" as YS
 binary "Z_STEP" as ZS
 binary "E_STEP" as ES
-scale 1000 as 50 pixels
+scale 2000 as 50 pixels
 
 "###;
         const POS: &'static str = r###"@enduml"###;

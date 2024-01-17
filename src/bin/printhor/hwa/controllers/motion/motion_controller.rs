@@ -536,17 +536,17 @@ impl MotionPlanner {
         r
     }
 
-    #[cfg(all(feature = "native", feature = "plot"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     pub async fn start_segment(&self, ref_time: embassy_time::Instant, real_time: embassy_time::Instant) {
         self.motion_driver.lock().await.start_segment(ref_time, real_time)
     }
 
-    #[cfg(all(feature = "native", feature = "plot"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     pub async fn end_segment(&self) {
         self.motion_driver.lock().await.end_segment()
     }
 
-    #[cfg(all(feature = "native", feature = "plot"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     pub async fn mark_microsegment(&self) {
         self.motion_driver.lock().await.mark_microsegment();
     }
