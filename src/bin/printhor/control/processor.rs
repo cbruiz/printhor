@@ -115,6 +115,16 @@ impl GCodeProcessor
     #[allow(unused)]
     pub(crate) async fn execute(&mut self, gc: &GCode, blocking: bool) -> CodeExecutionResult {
         let result = match gc {
+            GCode::GRBLCMD => {
+                let str = format!("[VER:1.1 {} v{}:]\n[MSG: Machine: {} {}]\n",
+                                  MACHINE_INFO.firmware_name,
+                                  MACHINE_INFO.firmware_version,
+                                  MACHINE_INFO.machine_board,
+                                  MACHINE_INFO.machine_type,
+                );
+                self.write(str.as_str()).await;
+                Ok(CodeExecutionSuccess::OK)
+            }
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
                     let _ = self.write("echo: ").await;
@@ -132,6 +142,9 @@ impl GCodeProcessor
                     CodeExecutionSuccess::OK => {
                         hwa::debug!("G1 OK");
                     }
+                    CodeExecutionSuccess::CONSUMED => {
+                        hwa::debug!("G1 OK");
+                    }
                     CodeExecutionSuccess::QUEUED => {
                         hwa::debug!("G1 QUEUED");
                     }
@@ -147,6 +160,12 @@ impl GCodeProcessor
                     self.motion_planner.defer_channel.send(DeferEvent::Dwell(DeferType::AwaitRequested)).await;
                 }
                 Ok(self.motion_planner.plan(&gc, blocking).await?)
+            }
+            GCode::G10 => {
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCode::G17 => {
+                Ok(CodeExecutionSuccess::OK)
             }
             GCode::G21 => {
                 Ok(CodeExecutionSuccess::OK)
@@ -191,9 +210,17 @@ impl GCodeProcessor
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::G90 => {
+                self.motion_planner.set_absolute_positioning(true).await;
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCode::G91 => {
+                self.motion_planner.set_absolute_positioning(false).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::G92 => {
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCode::G94 => {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M => {
@@ -201,6 +228,12 @@ impl GCodeProcessor
                     let _ = self.write("echo: ").await;
                     let _ = self.writeln(x).await;
                 }
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCode::M3 => {
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCode::M5 => {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M73 => {
@@ -252,25 +285,63 @@ impl GCodeProcessor
             }
             #[cfg(feature = "with-hotend")]
             GCode::M104(s) => {
-                self.hotend.lock().await.set_target_temp(s.s.and_then(|v| v.to_i32()).unwrap_or(0) as f32);
+                let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
+                let mut h = self.hotend.lock().await;
+                h.set_target_temp(val as f32);
+                if val > 0 {
+                    h.on();
+                }
+                else {
+                    h.off();
+                }
                 Ok(CodeExecutionSuccess::OK)
             }
-            #[cfg(feature = "with-hotend")]
+            #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
             GCode::M105 => {
-                let z = format!("M105 {}\n", self.hotend.lock().await.get_current_temp());
-                let _ = self.write(z.as_str()).await;
-                Ok(CodeExecutionSuccess::OK)
+
+                let hotend_temp_report = {
+                    #[cfg(feature = "with-hotend")]
+                    {
+                        let mut h = self.hotend.lock().await;
+                        format!(" T:{} /{} T@:{}",
+                                h.get_current_temp(),
+                                h.get_target_temp(),
+                                h.get_current_power().await,
+                        )
+                    }
+                    #[cfg(not(feature = "with-hotend"))]
+                    alloc::string::String::new()
+                };
+                let hotbed_temp_report = {
+                    #[cfg(feature = "with-hotbed")]
+                    {
+                        let mut h = self.hotbed.lock().await;
+                        format!(" B:{} /{} B@:{}",
+                                h.get_current_temp(),
+                                h.get_target_temp(),
+                                h.get_current_power().await,
+                        )
+                    }
+                    #[cfg(not(feature = "with-hotbed"))]
+                    alloc::string::String::new()
+                };
+                let report = format!("ok{}{}\n",
+                                     hotend_temp_report,
+                                     hotbed_temp_report,
+                );
+                let _ = self.write(report.as_str()).await;
+                Ok(CodeExecutionSuccess::CONSUMED)
             }
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M106 => {
                 //crate::info!("M106 BEGIN");
-                self.layer_fan.lock().await.set_power(1.0f32).await;
+                self.layer_fan.lock().await.set_power(255).await;
                 //crate::info!("M106 END");
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M107 => {
-                 self.layer_fan.lock().await.set_power(0.0f32).await;
+                 self.layer_fan.lock().await.set_power(0).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]
@@ -322,7 +393,17 @@ impl GCodeProcessor
                 let _ = self.write(z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M140 => {
+            #[cfg(feature = "with-hotbed")]
+            GCode::M140(s) => {
+                let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
+                let mut h = self.hotbed.lock().await;
+                h.set_target_temp(val as f32);
+                if val > 0 {
+                    h.on();
+                }
+                else {
+                    h.off();
+                }
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M190 => {
@@ -340,10 +421,10 @@ impl GCodeProcessor
             GCode::M205 => {
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M220 => {
+            GCode::M220(_) => {
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M221 => {
+            GCode::M221(_) => {
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-trinamic")]
@@ -353,10 +434,10 @@ impl GCodeProcessor
                         .trinamic_controller.init().await.is_ok()
                 };
                 if success {
-                    let _ = self.write("O. M502\n").await;
+                    let _ = self.write("ok; M502\n").await;
                 }
                 else {
-                    let _ = self.write("E. M502 (fail)\n").await;
+                    let _ = self.write("error; M502 (internal error)\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }

@@ -39,6 +39,7 @@ with-trinamic = ["tmc2209"]
 sdcard-uses-spi = []
 has-extruder = []
 trinamic-uart-multi-channel = []
+timing-stats = []
 
 ili9341_parallel = []
 ili9341_spi = []
@@ -72,7 +73,6 @@ float-point-f64-impl = []
 # baremetal
 std = []
 arch-std = []
-nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly"]
 _arch = []
 # no-real-time is a technical development feature uses a non monotonic timming to facilitate debugging
 no-real-time = []
@@ -90,11 +90,10 @@ with-display = [
 ]
 
 native = [
-    #"nightly", "printhor-hwi_native/nightly",
-    "has-extruder",
+    "timing-stats",
     #"no-real-time",
     #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
-    "with-motion", "printhor-hwi_native/with-motion",
+    "with-motion", "has-extruder", "printhor-hwi_native/with-motion",
     "with-uart-port-1", "printhor-hwi_native/with-uart-port-1",
     "with-sdcard", "printhor-hwi_native/with-sdcard",
     "with-printjob", "printhor-hwi_native/with-printjob",
@@ -145,7 +144,7 @@ mks_robin_nano = [
     "embassy-time/generic-queue",
 ]
 nucleo_64_arduino_cnc_hat = [
-    #"nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat/nightly",
+    "timing-stats",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     "with-uart-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-uart-port-1",
@@ -156,7 +155,7 @@ nucleo_64_arduino_cnc_hat = [
     #"with-hotend", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotend",
     #"with-hotbed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotbed",
     #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-layer-fan",
-    "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
+    #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -171,7 +170,7 @@ nucleo64-l476rg = ["printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg"]
 nucleo64-f410rb = ["printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-f410rb"]
 
 skr_mini_e3 = [
-    #"nightly", "printhor-hwi_skr_mini_e3/nightly",
+    "timing-stats",
     "with-defmt", "printhor-hwi_skr_mini_e3/with-defmt",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
@@ -203,7 +202,6 @@ skr_mini_e3 = [
 
 [dependencies]
 # Optional baremetal
-
 defmt = {version = "0.3.5", optional = true}
 panic-probe = { version = "0.3.1", features = ["print-defmt"], optional = true}
 defmt-rtt = { version = "0.4.0", optional = true }
@@ -299,7 +297,8 @@ panic = "abort"
 
 [patch.crates-io]
 
-async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
+#async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
+async-gcode = { path = "../async-gcode" }
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path= "printhor-hwa-common" }

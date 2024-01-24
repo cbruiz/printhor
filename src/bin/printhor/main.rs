@@ -1,8 +1,7 @@
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
-
 #![allow(stable_features)]
-
+#![allow(nonstandard_style)]
 extern crate alloc;
 extern crate core;
 mod hwi;
@@ -26,6 +25,7 @@ use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
 use printhor_hwa_common::{EventBusRef, TrackedStaticCell};
 use hwa::{Controllers, IODevices, MotionDevices, PwmDevices};
+#[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 use hwa::{GCodeProcessor};
 #[cfg(feature = "with-motion")]
@@ -40,8 +40,8 @@ use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::PrinterController;
 
-////
-
+//noinspection RsUnresolvedReference
+/// Entry point
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) -> ! {
 
@@ -286,7 +286,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        hwa::launch_high_priotity( control::task_stepper_isr::stepper_task(
+        hwa::launch_high_priotity( control::task_stepper::stepper_task(
             motion_planer, _wd
         )).and_then(|_| {
             hwa::debug!("stepper_start() spawned");
@@ -301,7 +301,6 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
             #[cfg(feature = "with-printjob")]
             printer_controller: printer_controller.clone(),
         }
-
     )).map_err(|_| ())?;
 
     spawner.spawn(control::task_control::control_task(
@@ -330,7 +329,10 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     spawner.spawn(control::task_temperature::temp_task(
         event_bus.clone(),
+        #[cfg(feature = "with-hotend")]
         hotend_controller,
+        #[cfg(feature = "with-hotbed")]
+        hotbed_controller,
     )).map_err(|_| ())?;
 
     #[cfg(feature = "with-display")]

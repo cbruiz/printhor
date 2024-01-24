@@ -1,4 +1,4 @@
-//! TODO: This feature is still very experimental
+//! This feature is being stabilized
 use crate::hwa;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
@@ -63,15 +63,19 @@ impl MotionConfig {
     }
 }
 
-#[allow(unused)]
 pub struct MotionStatus {
+    #[allow(unused)]
+    pub(crate) current_pos_steps: Option<TVector<u32>>,
     pub(crate) last_planned_pos: Option<TVector<Real>>,
+    pub(crate) absolute_positioning: bool,
 }
 
 impl MotionStatus {
     pub const fn new() -> Self {
         Self {
+            current_pos_steps: None,
             last_planned_pos: None,
+            absolute_positioning: true,
         }
     }
 }
@@ -266,6 +270,15 @@ impl MotionPlanner {
         &self.motion_cfg
     }
 
+    pub async fn set_absolute_positioning(&self, absolute_is_set: bool) {
+        let mut st = self.motion_st.lock().await;
+        st.absolute_positioning = absolute_is_set;
+    }
+
+    pub async fn is_absolute_positioning(&self) -> bool {
+        self.motion_st.lock().await.absolute_positioning
+    }
+
     pub async fn get_last_planned_pos(&self) -> Option<TVector<Real>> {
         self.motion_st.lock().await.last_planned_pos.clone()
     }
@@ -385,6 +398,7 @@ impl MotionPlanner {
         let t0 = embassy_time::Instant::now();
 
         let p0 = self.get_last_planned_pos().await.ok_or(CodeExecutionFailure::HomingRequired)?;
+        let p1 = if self.is_absolute_positioning().await { p0 + p1 } else { p1 };
 
         let cfg = self.motion_cfg();
         let cfg_g = cfg.lock().await;

@@ -22,8 +22,6 @@ impl<TimPeri> PwmController<TimPeri>
         }
     }
 
-    #[allow(unused)]
-    #[inline]
     pub async fn set_power(&mut self, power: u8)
     {
         let mut mg = self.pwm.lock().await;
@@ -47,9 +45,20 @@ impl<TimPeri> PwmController<TimPeri>
             self.enabled = false;
         }
     }
+    pub async fn get_power(&mut self) -> f32
+    {
+        let mg = self.pwm.lock().await;
+        let duty_result: Result<f32, _> = ((mg.get_duty(self.pwm_chan) as f32 * 255f32) / (mg.get_max_duty() as f32)).try_into();
+        hwa::debug!("Computing power: ({} * {}) / {} = {:?}",
+            mg.get_duty(self.pwm_chan) as f32,
+            255f32,
+            mg.get_max_duty(),
+            duty_result,
+        );
+        duty_result.unwrap_or(0.0f32)
+    }
 
     #[inline]
-    #[allow(unused)]
     pub fn is_on(&self) -> bool {
         self.enabled
     }

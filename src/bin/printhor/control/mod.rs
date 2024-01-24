@@ -17,7 +17,7 @@ pub(crate) mod task_deferr;
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 pub(crate) mod task_temperature;
 #[cfg(feature = "with-motion")]
-pub mod task_stepper_isr;
+pub mod task_stepper;
 #[cfg(feature = "with-motion")]
 pub(crate) mod motion_timing;
 
@@ -134,6 +134,10 @@ pub enum GCode {
     /// No Operation
     #[default]
     NOP,
+    /// GRBL compat status
+    STATUS,
+    /// GRBL compat cmd
+    GRBLCMD,
     /// List supported G-Codes
     G,
     /// Rapid move
@@ -142,6 +146,7 @@ pub enum GCode {
     G1(XYZEFS),
     /// Dwell
     G4,
+    /// Set coordinate system data
     G10, G11, // retraction
     G17, G18, G19, // CNC Plane selection
     G21, // Settings
@@ -163,7 +168,10 @@ pub enum GCode {
     G32,
     #[strum(serialize = "G38.2")]
     G38_2, #[strum(serialize = "G38.3")] G38_3, #[strum(serialize = "G38.4")] G38_4, #[strum(serialize = "G38.5")] G38_5, G80, G81, G82, // Probing
-    G90, G91,
+    /// Set to Absolute Positioning
+    G90,
+    /// Set to Relative Positioning
+    G91,
     /// Set position
     G92,
     #[strum(serialize = "G92.1")]
@@ -209,7 +217,7 @@ pub enum GCode {
     M100,
     /// Set Hotend Temperature
     M104(S),
-    /// Get Extruder Temperature
+    /// Get Hotend Temperature
     M105,
     /// Fan On
     M106,
@@ -235,9 +243,9 @@ pub enum GCode {
     /// Get Endstop Status
     M119,
     M120, M121, // Endstops get/set
-    /// Set bed temperature
-    M140,
-    /// Wait for bed temperature
+    /// Set hotbed temperature
+    M140(S),
+    /// Wait for hotbed temperature
     M190,
     M200,
     /// Print / Travel Move Limits
@@ -247,9 +255,9 @@ pub enum GCode {
     /// Set Advanced Settings
     M205, M206, M207, M208, M209, M210, M211, M212, M218, // Settings
     /// Set Feedrate percentage
-    M220,
+    M220(S),
     /// Set Flow Percentage
-    M221,
+    M221(S),
     M290, // Babystepping
     M302, M305, M350, M360, // Settings
     /// Wait for moves and finish

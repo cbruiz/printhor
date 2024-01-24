@@ -76,6 +76,9 @@ pub(crate) async fn printer_task(
                                 Ok(CodeExecutionSuccess::OK) => {
                                     hwa::debug!("Line {}: OK {}", current_line, gcode);
                                 }
+                                Ok(CodeExecutionSuccess::CONSUMED) => {
+                                    hwa::debug!("Line {}: OK {}", current_line, gcode);
+                                }
                                 Ok(CodeExecutionSuccess::QUEUED) => {
                                     hwa::debug!("Line {}: QUEUED {}", current_line, gcode);
                                 }

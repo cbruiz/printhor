@@ -64,15 +64,16 @@ impl<STREAM> GCodeLineParser<STREAM>
         loop {
             match self.raw_parser.next().await {
                 None => {
-                    hwa::trace!("EOF");
+                    hwa::warn!("EOF reading from stream");
                     return Ok(None);
                 }
                 Some(result) => {
-                    hwa::trace!("got some");
                     match result {
                         Ok(g) => {
-                            //debug!("got something!");
                             match g {
+                                async_gcode::GCode::StatusCommand => {
+                                    return Ok(Some(GCode::STATUS))
+                                }
                                 async_gcode::GCode::BlockDelete => {
                                     skip_gcode = true;
                                     //crate::debug!("BlockDelete");
@@ -94,9 +95,12 @@ impl<STREAM> GCodeLineParser<STREAM>
                                         match &mut current_gcode_value {
                                             None => {
                                                 raw_gcode_spec.replace((ch.to_ascii_uppercase(), frx));
-                                                //info!("D; GC: {} {}", ch, frx);
+                                                hwa::debug!("GC: {} {:?}", ch, frx);
 
                                                 current_gcode_value = match (ch, frx) {
+                                                    ('$', None) => {
+                                                        Some(GCode::GRBLCMD)
+                                                    },
                                                     ('g', None) => {
                                                         Some(GCode::G)
                                                     },
@@ -122,6 +126,12 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     }
                                                     ('g', Some((4, 0))) => {
                                                         Some(GCode::G4)
+                                                    }
+                                                    ('g', Some((10, 0))) => {
+                                                        Some(GCode::G10)
+                                                    }
+                                                    ('g', Some((17, 0))) => {
+                                                        Some(GCode::G17)
                                                     }
                                                     ('g', Some((21, 0))) => {
                                                         Some(GCode::G21)
@@ -153,6 +163,9 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     ('g', Some((92, 0))) => {
                                                         Some(GCode::G92)
                                                     }
+                                                    ('g', Some((94, 0))) => {
+                                                        Some(GCode::G94)
+                                                    }
                                                     ('g', Some((291, 1))) => {
                                                         Some(GCode::G29_1)
                                                     }
@@ -161,6 +174,12 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     }
                                                     ('m', None) => {
                                                         Some(GCode::M)
+                                                    }
+                                                    ('m', Some((3, 0))) => {
+                                                        Some(GCode::M3)
+                                                    }
+                                                    ('m', Some((5, 0))) => {
+                                                        Some(GCode::M5)
                                                     }
                                                     ('m', Some((20, 0))) => {
                                                         Some(GCode::M20(None))
@@ -228,7 +247,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                         Some(GCode::M119)
                                                     }
                                                     ('m', Some((140, 0))) => {
-                                                        Some(GCode::M140)
+                                                        Some(GCode::M140(S{ln: None, s: None}))
                                                     }
                                                     ('m', Some((190, 0))) => {
                                                         Some(GCode::M190)
@@ -245,8 +264,11 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     ('m', Some((205, 0))) => {
                                                         Some(GCode::M205)
                                                     }
+                                                    ('m', Some((220, 0))) => {
+                                                        Some(GCode::M220(S{ ln: None, s: None }))
+                                                    }
                                                     ('m', Some((221, 0))) => {
-                                                        Some(GCode::M221)
+                                                        Some(GCode::M221(S{ ln: None, s: None }))
                                                     }
                                                     ('m', Some((502, 0))) => {
                                                         Some(GCode::M502)
@@ -271,6 +293,14 @@ impl<STREAM> GCodeLineParser<STREAM>
                                             }
                                             Some(current_gcode) => {
                                                 match current_gcode {
+                                                    GCode::STATUS => {
+                                                        match (ch, frx) {
+                                                            ('I', Some(val)) => {
+                                                                hwa::warn!("TODO!!");
+                                                            },
+                                                            _ => {}
+                                                        }
+                                                    }
                                                     GCode::G0(coord) => {
                                                         match (ch, frx) {
                                                             ('x', Some(val)) => {
@@ -333,7 +363,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             }
                                                         }
                                                     }
-                                                    GCode::M104(coord) | GCode::M109(coord) => {
+                                                    GCode::M104(coord) | GCode::M109(coord) | GCode::M140(coord)  | GCode::M220(coord) => {
                                                         match (ch, frx) {
                                                             ('s', Some(val)) => {
                                                                 coord.s.replace(helpers::to_fixed(val));
@@ -373,6 +403,9 @@ impl<STREAM> GCodeLineParser<STREAM>
                                         },
                                         Some(cgv) => return Ok(Some(cgv)),
                                     }
+                                }
+                                _ => {
+                                    return Err(GCodeLineParserError::GCodeNotImplemented(self.current_line, alloc::string::String::from("N/A")))
                                 }
                             }
                         }

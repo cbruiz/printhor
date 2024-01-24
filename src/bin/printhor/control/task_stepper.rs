@@ -1,6 +1,6 @@
-//! Interpolator Step Rate (ISR) algorithm and proper (high prio) task.
+//! Interpolator Step algorithm and proper (high prio) task.
 //!
-//! The ISR algorithm works the following way:
+//! The IS algorithm works the following way:
 //! - Try to retrieve an execution-ready motion segment from the motion queue
 //!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`], disable all steppers
 //!   - If motion segment is execution-ready, dequeue it and then:
@@ -18,7 +18,7 @@
 //! Average Error Deviation in runtime: around 10us (Still pending to measure precisely)
 use crate::control::planner::StepperChannel;
 #[allow(unused)]
-use crate::math::{Real, ONE_MILLION, ONE_THOUSAND};
+use crate::math::{Real, ONE_MILLION, ONE_THOUSAND, ONE_HUNDRED};
 #[allow(unused_imports)]
 use crate::tgeo::{CoordSel, TVector};
 #[allow(unused)]
@@ -27,8 +27,8 @@ use embassy_time::{Instant, Duration, with_timeout};
 use crate::{hwa, hwa::controllers::{DeferEvent, DeferType}};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
-#[allow(unused_imports)]
-use crate::math::ONE_HUNDRED;
+#[cfg(feature = "timing-stats")]
+use hwa::drivers::timing_stats::Timings;
 
 use super::motion_timing::*;
 
@@ -45,120 +45,6 @@ const MICRO_SEGMENT_PERIOD_US: u32 = Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).
 const MICRO_SEGMENT_PERIOD_TICKS: u32 = Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_ticks() as u32;
 /// Precomputed micro-segment period in milliseconds
 const PERIOD_MS: i32 = (MICRO_SEGMENT_PERIOD_US / 1000) as i32;
-
-struct Timings {
-    // Segment reference time
-    t_segment: Instant,
-    // Micro-segment reference time
-    t_u_segment: Instant,
-    // Time to prepare a segment
-    t_segment_preparation: Duration,
-    t_segment_execution: Duration,
-    // Aggregated computation for every micro-segment
-    t_u_segment_computation_agg: Duration,
-    // Aggregated stepping time for every micro-segment
-    t_u_segment_stepping_agg: Duration,
-    // Aggregated remaining time for every micro-segment
-    t_u_segment_remaining_agg: Duration,
-    // Min computation for every micro-segment
-    t_u_segment_computation_min: Duration,
-    // Min stepping time for every micro-segment
-    t_u_segment_stepping_min: Duration,
-    // Min remaining time for every micro-segment
-    t_u_segment_remaining_min: Duration,
-    // Max computation for every micro-segment
-    t_u_segment_computation_max: Duration,
-    // Max stepping time for every micro-segment
-    t_u_segment_stepping_max: Duration,
-    // Max remaining time for every micro-segment
-    t_u_segment_remaining_max: Duration,
-    t_segment_remaining: Duration,
-}
-
-impl Timings {
-    fn new() -> Self {
-        Self {
-            t_segment: Instant::now(),
-            t_u_segment: Instant::now(),
-            t_segment_preparation: Duration::from_ticks(0),
-            t_segment_execution: Duration::from_ticks(0),
-            t_u_segment_computation_agg: Duration::from_ticks(0),
-            t_u_segment_stepping_agg: Duration::from_ticks(0),
-            t_u_segment_remaining_agg: Duration::from_ticks(0),
-            t_u_segment_computation_min: Duration::from_ticks(999999999),
-            t_u_segment_stepping_min: Duration::from_ticks(999999999),
-            t_u_segment_remaining_min: Duration::from_ticks(999999999),
-            t_u_segment_computation_max: Duration::from_ticks(0),
-            t_u_segment_stepping_max: Duration::from_ticks(0),
-            t_u_segment_remaining_max: Duration::from_ticks(0),
-            t_segment_remaining: Duration::from_ticks(0),
-        }
-    }
-    fn u_reset(&mut self) {
-        self.t_u_segment = Instant::now();
-    }
-
-    fn set_prep(&mut self) {
-        self.t_segment_preparation = self.t_segment.elapsed();
-    }
-
-    fn add_u_comp(&mut self) {
-        let elapsed = self.t_u_segment.elapsed();
-        self.t_u_segment_computation_min = self.t_u_segment_computation_min.min(elapsed);
-        self.t_u_segment_computation_max = self.t_u_segment_computation_max.max(elapsed);
-        self.t_u_segment_computation_agg += elapsed;
-        self.u_reset();
-    }
-
-    fn add_u_stepping(&mut self) {
-        let elapsed = self.t_u_segment.elapsed();
-        self.t_u_segment_stepping_min = self.t_u_segment_stepping_min.min(elapsed);
-        self.t_u_segment_stepping_max = self.t_u_segment_stepping_max.max(elapsed);
-        self.t_u_segment_stepping_agg += elapsed;
-        self.u_reset();
-    }
-
-    fn add_u_remaining(&mut self) {
-        let elapsed = self.t_u_segment.elapsed();
-        self.t_u_segment_remaining_min = self.t_u_segment_remaining_min.min(elapsed);
-        self.t_u_segment_remaining_max = self.t_u_segment_remaining_max.max(elapsed);
-        self.t_u_segment_remaining_agg += elapsed;
-        self.u_reset();
-    }
-
-    fn set_execution(&mut self) {
-        self.t_segment_execution = self.t_segment.elapsed();
-    }
-
-    fn set_remaining(&mut self) {
-        self.t_segment_remaining = self.t_segment.elapsed() - self.t_segment_execution;
-    }
-
-    fn report(&self) {
-        hwa::info!("Segment timings: {} + {} + {} = {}",
-            self.t_segment_preparation.as_micros(),
-            self.t_segment_execution.as_micros(),
-            self.t_segment_remaining.as_micros(),
-            (self.t_segment_preparation + self.t_segment_execution + self.t_segment_remaining).as_micros()
-        );
-        hwa::info!("\tMicro-segment timings: {} + {} + {} = {}",
-            self.t_u_segment_computation_agg.as_micros(),
-            self.t_u_segment_stepping_agg.as_micros(),
-            self.t_u_segment_remaining_agg.as_micros(),
-            (self.t_u_segment_computation_agg + self.t_u_segment_stepping_agg + self.t_u_segment_remaining_agg).as_micros()
-        );
-        hwa::info!("\tMicro-segment ranges: [{} .. {}] + [{} .. {}] + [{} .. {}] = [{} .. {}]",
-            self.t_u_segment_computation_min.as_micros(),
-            self.t_u_segment_computation_max.as_micros(),
-            self.t_u_segment_stepping_min.as_micros(),
-            self.t_u_segment_stepping_max.as_micros(),
-            self.t_u_segment_remaining_min.as_micros(),
-            self.t_u_segment_remaining_max.as_micros(),
-            (self.t_u_segment_computation_min + self.t_u_segment_stepping_min + self.t_u_segment_remaining_min).as_micros(),
-            (self.t_u_segment_computation_max + self.t_u_segment_stepping_max + self.t_u_segment_remaining_max).as_micros(),
-        );
-    }
-}
 
 /***
 This task feeds watchdog to ensure no reset happen due high CPU starvation when feed rate is very high
@@ -183,6 +69,7 @@ pub async fn stepper_task(
             Ok(Some(segment)) => {
                 hwa::debug!("Segment init");
 
+                #[cfg(feature = "timing-stats")]
                 let mut timings = Timings::new();
 
                 // segment metronome
@@ -235,6 +122,7 @@ pub async fn stepper_task(
                 }
                 steppers_off = false;
 
+                #[cfg(feature = "timing-stats")]
                 timings.set_prep();
 
                 /* WIP
@@ -251,9 +139,11 @@ pub async fn stepper_task(
 
                     // Feed watchdog because this high prio task could cause CPU starvation
                     let t_micro_segment_start = now();
+                    #[cfg(feature = "timing-stats")]
                     timings.u_reset();
 
                     watchdog.lock().await.pet();
+                    #[cfg(feature = "timing-stats")]
                     timings.add_u_comp();
 
                     t0 = now();
@@ -311,6 +201,7 @@ pub async fn stepper_task(
                         hwa::debug!("\tcomputing_time: {} us", t_micro_segment_start.elapsed().as_micros());
                         duty += t0.elapsed();
 
+                        #[cfg(feature = "timing-stats")]
                         timings.add_u_comp();
 
                         let mut drv = motion_planner.motion_driver.lock().await;
@@ -319,6 +210,7 @@ pub async fn stepper_task(
                         drv.update_clock(t_tick);
                         #[cfg(feature = "no-real-time")]
                         let mut t_micro_segment = t_tick;
+                        #[cfg(feature = "timing-stats")]
                         timings.add_u_remaining();
                         loop {
                             match multi_timer.next() {
@@ -381,6 +273,7 @@ pub async fn stepper_task(
                                 },
                             }
                         }
+                        #[cfg(feature = "timing-stats")]
                         timings.add_u_stepping();
 
                         //hwa::debug!("\tInterpolation task took {} ms", tx.elapsed().as_millis());
@@ -388,7 +281,7 @@ pub async fn stepper_task(
 
                         if (eof && usteps_advanced.is_nan_or_zero()) || !usteps_advanced.bounded_by(&usteps_to_advance) {
                             //let _rpos = usteps_advanced.map_coords(|c| { Some(Real::from_lit(c as i64, 0)) }) / to_ustep;
-                            //hwa::info!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment_start.elapsed().as_millis(), axial_pos.rdp(4), _rpos  );
+                            //hwa::debug!("<< Segment completed in {} ms. axial_pos: {} mm real_pos: {} mm", t_segment_start.elapsed().as_millis(), axial_pos.rdp(4), _rpos  );
                             //#[cfg(feature = "native")]
                             {
                                 let t_sec = Real::from_lit(t_segment_start.elapsed().as_millis().try_into().unwrap_or(0), 3);
@@ -401,6 +294,7 @@ pub async fn stepper_task(
                             motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
                             break;
                         }
+                        #[cfg(feature = "timing-stats")]
                         timings.add_u_remaining();
                     }
                     else {
@@ -416,6 +310,7 @@ pub async fn stepper_task(
                         duty += t0.elapsed();
                         motion_planner.consume_current_segment_data().await;
                         motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
+                        #[cfg(feature = "timing-stats")]
                         timings.add_u_remaining();
                         break;
                     }
@@ -424,7 +319,7 @@ pub async fn stepper_task(
 
                     let t_tick_elapsed = now().duration_since(t_micro_segment_start);
                     let rem = PERIOD_MS - t_tick_elapsed.as_millis() as i32;
-                    hwa::info!("== t = {} ms took {} ms. pend = {} ms. tot = {} ms",
+                    hwa::debug!("== t = {} ms took {} ms. pend = {} ms. tot = {} ms",
                         t_tick.as_millis(),
                         t_tick_elapsed.as_millis(),
                         rem,
@@ -449,7 +344,7 @@ pub async fn stepper_task(
                         let pend = absolute_ticker_period - elapsed;
                         absolute_ticker_start = tn + pend;
                         embassy_time::Timer::after(pend).await;
-                        hwa::info!("uSegment {} (not)waiting {} us (elapsed: {} us, period: {} us) eof: {}", tick_id, (absolute_ticker_period - elapsed).as_micros(), elapsed.as_micros(), absolute_ticker_period.as_micros(), eof);
+                        hwa::debug!("uSegment {} waiting {} us (elapsed: {} us, period: {} us) eof: {}", tick_id, (absolute_ticker_period - elapsed).as_micros(), elapsed.as_micros(), absolute_ticker_period.as_micros(), eof);
                     }
                     else {
                         absolute_ticker_start = tn;
@@ -460,8 +355,10 @@ pub async fn stepper_task(
 ////////////////////////
                     #[cfg(all(feature = "native", feature = "plot-timings"))]
                     motion_planner.mark_microsegment().await;
+                    #[cfg(feature = "timing-stats")]
                     timings.add_u_remaining();
                 }
+                #[cfg(feature = "timing-stats")]
                 timings.set_execution();
 
                 #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -470,9 +367,11 @@ pub async fn stepper_task(
                 let segment_ms = Real::from_lit(t_segment_start.elapsed().as_micros().try_into().unwrap_or(0), 3).rdp(3);
                 let duty_ms = Real::from_lit(duty.as_micros().try_into().unwrap_or(0), 3).rdp(3);
                 let rate = if segment_ms.is_zero() { Real::zero() } else{ ( duty_ms * ONE_HUNDRED)  / segment_ms}.rdp(2);
-                hwa::info!("ISR CPU LOAD: {}% (total: {} ms, taken_up: {} ms)", rate, segment_ms, duty_ms);
+                hwa::debug!("ISR CPU LOAD: {}% (total: {} ms, taken_up: {} ms)", rate, segment_ms, duty_ms);
                 motion_planner.event_bus.publish_event(EventStatus::not_containing(EventFlags::MOVING)).await;
+                #[cfg(feature = "timing-stats")]
                 timings.set_remaining();
+                #[cfg(feature = "timing-stats")]
                 timings.report();
             }
             // Homing

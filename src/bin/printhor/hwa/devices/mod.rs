@@ -1,12 +1,3 @@
-#[cfg(feature="with-usbserial")]
-pub use crate::hwi::device::USBSerialDeviceInputStream;
-
-#[cfg(feature="with-uart-port-1")]
-pub use crate::hwi::device::UartPort1RxInputStream;
-
-#[cfg(any(feature="with-hotend", feature = "with-hotbed"))]
-pub use crate::hwa::device::{AdcImpl, AdcTrait, AdcPinTrait};
-
 #[cfg(feature="with-hotend")]
 pub use crate::hwa::device::{AdcHotendPeripheral, AdcHotendPin, PwmHotend};
 

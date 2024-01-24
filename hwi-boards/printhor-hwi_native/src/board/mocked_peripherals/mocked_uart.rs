@@ -4,22 +4,33 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
 use futures::Stream;
 use core::pin::Pin;
+use async_std::io::ReadExt;
 use futures::task::Context;
 use futures::task::Poll;
 use futures::Future;
-use async_std::io::ReadExt;
 
-pub(crate) static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, 256> = Pipe::<CriticalSectionRawMutex, 256>::new();
+pub(crate) static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
 
 #[embassy_executor::task(pool_size=1)]
 pub async fn processor() {
 
-    let mut stream = async_std::io::stdin();
-
+    // byte-to-byte reading is required for stdin for it to work unbuffered with simple I/O management.
+    // Another solution could be leveraging a wrapper/crate on top of native select() with the proper ioctl on stdin, but is not worthy in this case.
+    // Unbuffered I/O requirement for piping simulator with Universal Gcode Sender and others by socat.
     loop {
-        let mut buf = [0u8; 256];
-        let n = stream.read(&mut buf).await.unwrap();
-        SERIAL_PIPE.write(&buf[..n]).await;
+        let mut stream = async_std::io::stdin();
+        let mut buf = [0u8; 1];
+
+        loop {
+            match stream.read_exact(&mut buf).await {
+                Ok(_) => {
+                    SERIAL_PIPE.write(&buf[..1]).await;
+                }
+                Err(_e) => {
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -51,6 +62,7 @@ impl MockedUartRx {
         }
     }
     pub async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, ()> {
+        log::trace!("Reading from pipe");
         Ok(SERIAL_PIPE.read(buffer).await)
     }
 }
