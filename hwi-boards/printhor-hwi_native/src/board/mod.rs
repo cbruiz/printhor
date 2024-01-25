@@ -213,16 +213,14 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
     };
 
     #[cfg(any(feature = "with-laser"))]
-    let (pwm_laser, pwm_laser_channel) = {
+    let pwm_laser = {
         static PWM_LASER_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
-        (ControllerRef::new(PWM_LASER_INST.init(
+        ControllerRef::new(PWM_LASER_INST.init(
                 "LaserPwmController",
                 ControllerMutex::new(
                     MockedPwm::new(21, _pin_state)
                 )
-            )),
-            0
-        )
+            ))
     };
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
@@ -237,14 +235,10 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
     };
 
     #[cfg(feature = "with-probe")]
-    let probe_device = {
-        let probe_pwm = device::PwmServo::new(22, _pin_state);
+    let probe_pwm = {
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
-
-        crate::device::ProbePeripherals {
-            power_pwm: ControllerRef::new(PWM_INST.init("ProbePwm", ControllerMutex::new(probe_pwm))),
-            power_channel: 0,
-        }
+        ControllerRef::new(PWM_INST.init("ProbePwm", ControllerMutex::new(
+            device::PwmServo::new(22, _pin_state))))
     };
 
     #[cfg(feature = "with-motion")]
@@ -277,35 +271,38 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
         },
         pwm: PwmDevices {
             #[cfg(feature = "with-probe")]
-            probe: probe_device,
+            probe: device::ProbePeripherals {
+                power_pwm: probe_pwm,
+                power_channel: 0,
+            },
             #[cfg(feature = "with-hotend")]
             hotend: device::HotendPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
-                power_channel: 0,
+                power_channel: 1,
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: MockedIOPin::new(23, _pin_state),
             },
             #[cfg(feature = "with-hotbed")]
             hotbed: device::HotbedPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
-                power_channel: 0,
+                power_channel: 2,
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: MockedIOPin::new(24, _pin_state),
             },
             #[cfg(feature = "with-fan0")]
             fan0: Fan0Peripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: pwm_fan0_channel,
+                power_channel: 3,
             },
             #[cfg(feature = "with-fan-layer")]
             layer_fan: device::FanLayerPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
-                power_channel: 0u8,
+                power_channel: 4,
             },
             #[cfg(feature = "with-laser")]
             laser: device::LaserPeripherals {
                 power_pwm: pwm_laser.clone(),
-                power_channel: pwm_laser_channel,
+                power_channel: 5,
             },
         }
     }

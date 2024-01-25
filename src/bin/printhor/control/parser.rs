@@ -160,6 +160,9 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     ('g', Some((90, 0))) => {
                                                         Some(GCode::G90)
                                                     }
+                                                    ('g', Some((91, 0))) => {
+                                                        Some(GCode::G91)
+                                                    }
                                                     ('g', Some((92, 0))) => {
                                                         Some(GCode::G92)
                                                     }

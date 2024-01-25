@@ -54,16 +54,18 @@ pub async fn control_task(
     loop {
         match code_parser.next_gcode().await {
             Err(err) => {
-                hwa::error!("GCode LineParser error");
                 match err {
                     crate::control::parser::GCodeLineParserError::ParseError(_x) => {
+                        hwa::error!("GCode N/A ParserError");
                         _processor.write("error; (ParserError)\n").await;
                     }
                     crate::control::parser::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name) => {
+                        hwa::error!("GCode {} (NotImplemented)\n", _gcode_name);
                         let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                         _processor.write(&s).await;
                     }
                     crate::control::parser::GCodeLineParserError::FatalError => {
+                        hwa::error!("GCode N/A (Internal error)\n");
                         let s = "error; Internal error\n";
                         _processor.write(s).await;
                     }

@@ -29,6 +29,7 @@ impl<TimPeri> PwmController<TimPeri>
             let duty_result: Result<u16, _> = ((power as u32 * (mg.get_max_duty() as u32)) / 255u32).try_into();
             match duty_result {
                 Ok(duty) => {
+                    hwa::trace!("Set duty: {}", duty);
                     mg.set_duty(self.pwm_chan, duty as <TimPeri as Pwm>::Duty);
                     mg.enable(self.pwm_chan);
                     self.enabled = true;
@@ -48,8 +49,8 @@ impl<TimPeri> PwmController<TimPeri>
     pub async fn get_power(&mut self) -> f32
     {
         let mg = self.pwm.lock().await;
-        let duty_result: Result<f32, _> = ((mg.get_duty(self.pwm_chan) as f32 * 255f32) / (mg.get_max_duty() as f32)).try_into();
-        hwa::debug!("Computing power: ({} * {}) / {} = {:?}",
+        let duty_result: Result<f32, _> = ((mg.get_duty(self.pwm_chan) as f32 * 255.0f32) / (mg.get_max_duty() as f32)).try_into();
+        hwa::info!("Computing power: ({} * {}) / {} = {:?}",
             mg.get_duty(self.pwm_chan) as f32,
             255f32,
             mg.get_max_duty(),

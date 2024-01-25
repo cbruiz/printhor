@@ -136,7 +136,12 @@ impl HeaterStateMachine {
         ctrl.lock().await.init().await;
     }
 
-    async fn update<AdcPeri, AdcPin, PwmHwaDevice>(&mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>, event_bus: &EventBusRef)
+    async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
+        &mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
+        event_bus: &EventBusRef,
+        temperature_flag: EventFlags,
+
+    )
         where
             AdcPeri: hwa::device::AdcTrait + 'static,
             AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
@@ -151,12 +156,19 @@ impl HeaterStateMachine {
             {
                 const EXPECTED_TIME: f32 = 20.0f32;
                 let elapsed = self.t0.elapsed().as_secs() as f32;
-                if elapsed < EXPECTED_TIME {
-                    // Perfect linear
-                    self.current_temp = (elapsed / EXPECTED_TIME) * m.get_target_temp();
+                // Add some noise as temp_deviation * cos( w * t)
+                // for instance: temp_deviation: deg, w: frequency
+                let noise = 10.0f32 * (0.1f32 * elapsed).cos();
+                if m.is_on() {
+                    if elapsed < EXPECTED_TIME {
+                        // Simulated linear ramp to reach temp
+                        self.current_temp = (elapsed / EXPECTED_TIME) * m.get_target_temp() + noise;
+                    } else {
+                        self.current_temp = m.get_target_temp() + noise;
+                    }
                 }
                 else {
-                    self.current_temp = m.get_target_temp();
+                    self.current_temp = 25.0f32 + noise;
                 }
             }
 
@@ -206,17 +218,17 @@ impl HeaterStateMachine {
                     {
                         self.t0 = embassy_time::Instant::now();
                     }
-                    event_bus.publish_event(EventStatus::not_containing(EventFlags::HOTEND_TEMP_OK)).await;
+                    event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
                 State::Maintaining => {
-                    event_bus.publish_event(EventStatus::containing(EventFlags::HOTEND_TEMP_OK)).await;
+                    event_bus.publish_event(EventStatus::containing(temperature_flag)).await;
                 }
                 State::Targeting => {
                     #[cfg(feature = "native")]
                     {
                         self.t0 = embassy_time::Instant::now();
                     }
-                    event_bus.publish_event(EventStatus::not_containing(EventFlags::HOTEND_TEMP_OK)).await;
+                    event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
             }
             self.state = new_state;
@@ -227,22 +239,30 @@ impl HeaterStateMachine {
 #[embassy_executor::task(pool_size=1)]
 pub async fn temp_task(
     event_bus: EventBusRef,
+    #[cfg(feature = "with-hotend")]
     hotend_controller: hwa::controllers::HotendControllerRef,
+    #[cfg(feature = "with-hotbed")]
     hotbed_controller: hwa::controllers::HotbedControllerRef,
 ) -> ! {
     hwa::debug!("temperature_task started");
 
     let mut ticker = Ticker::every(Duration::from_secs(2));
 
+    #[cfg(feature = "with-hotend")]
     let mut hotend_sm = HeaterStateMachine::new();
+    #[cfg(feature = "with-hotbed")]
     let mut hotbed_sm = HeaterStateMachine::new();
 
+    #[cfg(feature = "with-hotend")]
     hotend_sm.init(&hotend_controller).await;
+    #[cfg(feature = "with-hotbed")]
     hotbed_sm.init(&hotbed_controller).await;
 
     loop {
         ticker.next().await;
-        hotend_sm.update(&hotend_controller, &event_bus).await;
-        hotbed_sm.update(&hotbed_controller, &event_bus).await;
+        #[cfg(feature = "with-hotend")]
+        hotend_sm.update(&hotend_controller, &event_bus, EventFlags::HOTEND_TEMP_OK).await;
+        #[cfg(feature = "with-hotbed")]
+        hotbed_sm.update(&hotbed_controller, &event_bus, EventFlags::HOTBED_TEMP_OK).await;
     }
 }

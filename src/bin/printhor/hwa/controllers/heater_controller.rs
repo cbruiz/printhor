@@ -70,7 +70,6 @@ where
     #[inline]
     pub fn set_target_temp(&mut self, target_temp: f32) {
         self.target_temp = target_temp;
-
     }
 
     #[inline]
@@ -116,6 +115,7 @@ where
         ((u32::from(sample) * VREFINT_MV) / u32::from(self.vref_sample)) as u16
     }
 
+    // Checks if heater is enabled
     #[inline]
     pub fn is_on(&self) -> bool {
         self.on
@@ -125,7 +125,8 @@ where
         self.on = true;
     }
     #[inline]
-    pub fn off(&mut self) {
+    pub async fn off(&mut self) {
         self.on = false;
+        self.pwm.set_power(0).await;
     }
 }

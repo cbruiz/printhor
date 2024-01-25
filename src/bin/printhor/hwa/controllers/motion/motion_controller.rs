@@ -398,7 +398,7 @@ impl MotionPlanner {
         let t0 = embassy_time::Instant::now();
 
         let p0 = self.get_last_planned_pos().await.ok_or(CodeExecutionFailure::HomingRequired)?;
-        let p1 = if self.is_absolute_positioning().await { p0 + p1 } else { p1 };
+        let p1 = if self.is_absolute_positioning().await { p1 } else { p0 + p1 };
 
         let cfg = self.motion_cfg();
         let cfg_g = cfg.lock().await;

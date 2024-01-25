@@ -6,11 +6,9 @@ extern crate alloc;
 extern crate core;
 mod hwi;
 mod hwa;
-
 pub(crate) mod helpers;
 pub(crate) mod control;
 pub(crate) mod machine;
-
 pub(crate) mod sync;
 #[cfg(feature = "with-display")]
 pub(crate) mod display;
