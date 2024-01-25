@@ -9,7 +9,6 @@ mod hwa;
 
 pub(crate) mod helpers;
 pub(crate) mod control;
-pub(crate) mod geometry;
 pub(crate) mod machine;
 
 pub(crate) mod sync;
@@ -233,7 +232,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         static MPS : TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
         MotionPlannerRef {
             inner: MPS.init("MotionPlanner",
-                            hwa::controllers::MotionPlanner::new(
+                            MotionPlanner::new(
                                 event_bus.clone(),
                                 hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
                                     motion_device: _motion_device.motion_devices,
@@ -279,9 +278,9 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         #[cfg(feature = "with-trinamic")]
         let _ = motion_planer.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
 
-        motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
-        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(1000), Some(1000), Some(1000), Some(1000))).await;
-        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(18000), Some(18000), Some(18000), Some(18000))).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(1000), Some(1000), Some(1000), Some(1000))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(18000), Some(18000), Some(18000), Some(18000))).await;
         motion_planer.set_default_travel_speed(400).await;
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;

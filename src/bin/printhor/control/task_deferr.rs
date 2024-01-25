@@ -29,7 +29,7 @@ pub async fn defer_task(
                 if num_homes > 0 {
                     num_homes -= 1;
                     // FIXME: Control when a confirmation is needed from specific channel
-                    processor.write("ok; G28 (Completed @defer_task)\n").await;
+                    processor.write("ok; G28 completed (@defer_task)\n").await;
                 }
             }
             DeferEvent::Dwell(DeferType::AwaitRequested) => {
@@ -39,7 +39,7 @@ pub async fn defer_task(
             DeferEvent::Dwell(DeferType::Completed) => {
                 if num_dwell > 0 {
                     num_dwell -= 1;
-                    processor.write("ok; G4 (Completed @defer_task)\n").await;
+                    processor.write("ok; G4 completed (@defer_task)\n").await;
                 }
             }
             DeferEvent::LinearMove(DeferType::AwaitRequested) => {
@@ -49,7 +49,7 @@ pub async fn defer_task(
             DeferEvent::LinearMove(DeferType::Completed) => {
                 if num_linear > 0 {
                     num_linear -= 1;
-                    processor.write("O. G1 (Completed @defer_task)\n").await;
+                    processor.write("echo: G1 completed (@defer_task)\n").await;
                 }
             }
             DeferEvent::RapidMove(DeferType::AwaitRequested) => {
@@ -58,7 +58,7 @@ pub async fn defer_task(
             DeferEvent::RapidMove(DeferType::Completed) => {
                 if num_rapid > 0 {
                     num_rapid -= 1;
-                    processor.write("ok; G0 (Completed @defer_task)\n").await;
+                    processor.write("echo: G0 completed (@defer_task)\n").await;
                 }
             }
             DeferEvent::HotendTemperature(DeferType::AwaitRequested) => {

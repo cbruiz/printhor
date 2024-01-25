@@ -58,7 +58,8 @@ where
     #[inline]
     pub async fn read_temp(&mut self) -> f32 {
         let mut bus  = self.adc.lock().await;
-        self.convert_to_celcius(bus.read(&self.adc_pin).into())
+        let value = bus.read(&mut self.adc_pin);
+        self.convert_to_celcius(value.into())
     }
 
     #[inline]
