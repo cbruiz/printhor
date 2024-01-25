@@ -60,7 +60,7 @@ pub async fn control_task(
                         _processor.write("error; (ParserError)\n").await;
                     }
                     crate::control::parser::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name) => {
-                        hwa::error!("GCode {} (NotImplemented)\n", _gcode_name);
+                        hwa::error!("GCode {} (NotImplemented)\n", _gcode_name.as_str());
                         let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                         _processor.write(&s).await;
                     }
@@ -80,8 +80,8 @@ pub async fn control_task(
                     Some(gc) => {
                         match gc {
                             GCode::STATUS => {
-                                _processor.write("<Idle|MPos:151.000,149.000,-1.000|Pn:XP|FS:0,0|WCO:12.000,28.000,78.000>
-").await;
+                                // TODO provide GRBL compatibility status
+                                _processor.write("<Idle|MPos:0.000,0.000,0.000|Pn:XP|FS:0,0|WCO:0.000,0.000,0.000>\n").await;
                             }
                             #[cfg(feature = "with-sdcard")]
                             GCode::M20(path) => {

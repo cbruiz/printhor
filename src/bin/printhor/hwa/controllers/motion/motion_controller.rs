@@ -27,7 +27,9 @@ pub enum DeferEvent {
     RapidMove(DeferType),
     LinearMove(DeferType),
     Dwell(DeferType),
+    #[cfg(feature = "with-hotend")]
     HotendTemperature(DeferType),
+    #[cfg(feature = "with-hotbed")]
     HotbedTemperature(DeferType),
 }
 
@@ -606,8 +608,6 @@ impl Default for PlanEntry {
         PlanEntry::Empty
     }
 }
-
-
 
 #[derive(Clone)]
 pub struct MotionPlannerRef {

@@ -71,6 +71,8 @@ impl<STREAM> GCodeLineParser<STREAM>
                     match result {
                         Ok(g) => {
                             match g {
+                                // FIXME Undo this hacky temporary solution in async-gcode.
+                                // A sub-protocol approach is preferred
                                 async_gcode::GCode::StatusCommand => {
                                     return Ok(Some(GCode::STATUS))
                                 }
