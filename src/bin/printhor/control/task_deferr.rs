@@ -4,7 +4,7 @@
 // Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
 use crate::hwa;
 #[cfg(feature = "with-motion")]
-use crate::hwa::controllers::{DeferEvent, DeferType};
+use printhor_hwa_common::{DeferEvent, DeferType};
 #[allow(unused)]
 #[allow(unreachable_patterns)]
 #[embassy_executor::task(pool_size=1)]
@@ -48,7 +48,7 @@ pub async fn defer_task(
             DeferEvent::LinearMove(DeferType::Completed) => {
                 if num_linear > 0 {
                     num_linear -= 1;
-                    processor.write("ok; G1 completed (@defer_task)\n").await;
+                    //processor.write("ok; G1 completed (@defer_task)\n").await;
                 }
             }
             DeferEvent::RapidMove(DeferType::AwaitRequested) => {
@@ -57,7 +57,7 @@ pub async fn defer_task(
             DeferEvent::RapidMove(DeferType::Completed) => {
                 if num_rapid > 0 {
                     num_rapid -= 1;
-                    processor.write("ok; G0 completed (@defer_task)\n").await;
+                    //processor.write("ok; G0 completed (@defer_task)\n").await;
                 }
             }
             #[cfg(feature = "with-hotend")]

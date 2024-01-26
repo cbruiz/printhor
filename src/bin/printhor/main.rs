@@ -58,10 +58,12 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         EventStatus::containing(EventFlags::SYS_BOOTING)
     ).await;
 
+    let defer_channel: DeferChannelRef = printhor_hwa_common::init_defer_channel();
+
     let wdt = context.controllers.sys_watchdog.clone();
     wdt.lock().await.unleash();
 
-    if spawn_tasks(spawner, event_bus.clone(),
+    if spawn_tasks(spawner, event_bus.clone(), defer_channel,
                    context.controllers,
                    context.devices,
                    context.motion,
@@ -100,7 +102,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 }
 
 #[inline(never)]
-async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
+async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: DeferChannelRef,
                      controllers: Controllers, devices: IODevices,
                      _motion_device: MotionDevices,
                      _pwm_devices: PwmDevices,
@@ -232,6 +234,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
             inner: MPS.init("MotionPlanner",
                             MotionPlanner::new(
                                 event_bus.clone(),
+                                defer_channel.clone(),
                                 hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
                                     motion_device: _motion_device.motion_devices,
                                     #[cfg(feature = "with-probe")]
@@ -326,6 +329,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     spawner.spawn(control::task_temperature::temp_task(
         event_bus.clone(),
+        defer_channel.clone(),
         #[cfg(feature = "with-hotend")]
         hotend_controller,
         #[cfg(feature = "with-hotbed")]
@@ -360,3 +364,4 @@ use defmt_rtt as _;
 #[allow(unused)]
 #[cfg(feature = "with-defmt")]
 use panic_probe as _;
+use printhor_hwa_common::DeferChannelRef;

@@ -1,9 +1,9 @@
 //! This feature is being stabilized
 use crate::hwa;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
-use printhor_hwa_common::{EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::{DeferChannelRef, EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::{DeferEvent, DeferType};
 use crate::control::GCode;
 use crate::control::planner::{Constraints, SCurveMotionProfile, CodeExecutionSuccess, CodeExecutionFailure};
 use crate::math::{ONE_HUNDRED, Real, ZERO};
@@ -15,23 +15,6 @@ use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
 
 /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
 const SEGMENT_QUEUE_SIZE: u8 = 4;
-pub enum DeferType {
-    AwaitRequested,
-    Completed,
-}
-
-///! These are the Events that can be deferred
-#[allow(unused)]
-pub enum DeferEvent {
-    Homing(DeferType),
-    RapidMove(DeferType),
-    LinearMove(DeferType),
-    Dwell(DeferType),
-    #[cfg(feature = "with-hotend")]
-    HotendTemperature(DeferType),
-    #[cfg(feature = "with-hotbed")]
-    HotbedTemperature(DeferType),
-}
 
 pub enum ScheduledMove {
     Move(SegmentData, SCurveMotionProfile),
@@ -86,7 +69,9 @@ impl MotionStatus {
 #[allow(unused)]
 pub struct MotionPlanner {
     pub event_bus: EventBusRef,
-    pub defer_channel: Channel<CriticalSectionRawMutex, DeferEvent, 4>,
+    // The channel to send deferred events
+    pub defer_channel: printhor_hwa_common::DeferChannelRef,
+
     pub(self) ringbuffer: Mutex<CriticalSectionRawMutex, RingBuffer>,
     pub(self) move_planned: Config<CriticalSectionRawMutex, bool>,
     pub(self) available: Config<CriticalSectionRawMutex, bool>,
@@ -97,10 +82,10 @@ pub struct MotionPlanner {
 
 #[allow(unused)]
 impl MotionPlanner {
-    pub const fn new(event_bus: EventBusRef, motion_driver: hwa::drivers::MotionDriver) -> Self {
+    pub const fn new(event_bus: EventBusRef, defer_channel: DeferChannelRef, motion_driver: hwa::drivers::MotionDriver) -> Self {
         Self {
-            defer_channel: Channel::new(),
             event_bus,
+            defer_channel,
             ringbuffer: Mutex::new(RingBuffer::new()),
             move_planned: Config::new(),
             available: Config::new(),

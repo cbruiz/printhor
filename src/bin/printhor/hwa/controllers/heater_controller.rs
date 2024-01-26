@@ -67,9 +67,14 @@ where
         self.target_temp
     }
 
-    #[inline]
-    pub fn set_target_temp(&mut self, target_temp: f32) {
+    pub async fn set_target_temp(&mut self, target_temp: f32) {
         self.target_temp = target_temp;
+        if target_temp > 0.0f32 {
+            self.on();
+        }
+        else {
+            self.off().await;
+        }
     }
 
     #[inline]
@@ -97,6 +102,7 @@ where
     /// 1 - Compute the resistance of the thermistor
     /// 2 - Compute the temperature applying the β parameter Steinhart–Hart equation
     fn convert_to_celcius(&self, sample: u16) -> f32 {
+        #[const_env::from_env("HOTEND_TERM_BETA")]
         const B: f32 = 3950.0; // B value of the thermistor
         const R0: f32 = 10000.0; // Nominal NTC Value
         const R1: f32 = 9850.0;

@@ -520,13 +520,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">M104</td>
         <td>FFF</td>
-        <td>Set Extruder Temperature</td>
+        <td>Set Hotend Temperature</td>
         <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M105</td>
         <td>FFF</td>
-        <td>Get Extruder Temperature</td>
+        <td>Get Hotend and/or Hotbed Temperature</td>
         <td>DONE</td>
     </tr>
     <tr>
@@ -616,7 +616,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">M140</td>
         <td>*</td>
-        <td>Set Bed Temperature (Fast)</td>
+        <td>Set hotbed Temperature (Fast)</td>
+        <td>DONE</td>
+    </tr>
+    <tr>
+        <td rowspan="1">M190</td>
+        <td>*</td>
+        <td>Wait for hotbed temperature</td>
         <td>DONE</td>
     </tr>
     <tr>

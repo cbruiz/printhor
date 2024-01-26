@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_native"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction native std for debugging/playgrounding/analysis"
@@ -19,9 +19,9 @@ nightly = []
 with-log = ["printhor-hwa-common/with-log"]
 with-uart-port-1 = ["async-std"]
 with-printjob = []
-with-hotend = ["embedded-hal"]
-with-hotbed = ["embedded-hal"]
-with-motion = []
+with-hotend = ["embedded-hal", "printhor-hwa-common/with-hotend"]
+with-hotbed = ["embedded-hal", "printhor-hwa-common/with-hotbed"]
+with-motion = ["printhor-hwa-common/with-motion"]
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = ["embedded-sdmmc"]
@@ -52,7 +52,7 @@ gnuplot = {version = "0.0.38", default-features = false, features=[], optional =
 embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
-printhor-hwa-common = { version = "0.0.2"}
+printhor-hwa-common = { version = "0.0.3"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ] }

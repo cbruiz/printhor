@@ -45,7 +45,6 @@ impl Pwm for MockedPwm {
 
     }
     fn disable(&mut self, channel: <Self as Pwm>::Channel) {
-        log::info!("disable({})", channel);
         self.duty_map.insert(channel, 0);
     }
     type Duty = u16;

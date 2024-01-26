@@ -18,6 +18,9 @@ DEFMT_LOG = "info"
 RUST_LOG = "info"
 ASYNC_STD_THREAD_COUNT = "1"
 
+# BETA value of the hotend thermistor
+#HOTEND_TERM_BETA = "3950.0"
+
 [profile.dev.package."*"]
 codegen-units = 1
 incremental = false

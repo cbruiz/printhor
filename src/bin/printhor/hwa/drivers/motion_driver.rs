@@ -301,7 +301,7 @@ impl MotionDriver {
         hwa::debug!("Do homing");
 
         #[cfg(feature="with-laser")]
-        let _on = self.laser_controller.lock().await.is_on();
+        self.laser_controller.lock().await.set_power(0).await;
 
         self.pins.enable_z_stepper();
 

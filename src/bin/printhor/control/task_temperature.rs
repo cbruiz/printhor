@@ -82,9 +82,10 @@ use embassy_time::{Duration, Ticker};
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
-use printhor_hwa_common::{ControllerRef, EventBusRef};
+use printhor_hwa_common::{ControllerRef, DeferEvent, DeferType, EventBusRef};
 use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
+use printhor_hwa_common::DeferChannelRef;
 
 use pid;
 use crate::hwa::controllers::HeaterController;
@@ -126,6 +127,7 @@ impl HeaterStateMachine {
             state: State::Duty,
         }
     }
+
     async fn init<AdcPeri, AdcPin, PwmHwaDevice>(&mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>)
         where
             AdcPeri: hwa::device::AdcTrait + 'static,
@@ -139,8 +141,9 @@ impl HeaterStateMachine {
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
         event_bus: &EventBusRef,
+        defer_channel: &DeferChannelRef,
         temperature_flag: EventFlags,
-
+        defer_flag: DeferEvent,
     )
         where
             AdcPeri: hwa::device::AdcTrait + 'static,
@@ -149,28 +152,9 @@ impl HeaterStateMachine {
             <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
     {
         let mut m = ctrl.lock().await;
-        let new_state = {
 
-            self.current_temp = m.read_temp().await;
-            #[cfg(feature = "native")]
-            {
-                const EXPECTED_TIME: f32 = 20.0f32;
-                let elapsed = self.t0.elapsed().as_secs() as f32;
-                // Add some noise as temp_deviation * cos( w * t)
-                // for instance: temp_deviation: deg, w: frequency
-                let noise = 10.0f32 * (0.1f32 * elapsed).cos();
-                if m.is_on() {
-                    if elapsed < EXPECTED_TIME {
-                        // Simulated linear ramp to reach temp
-                        self.current_temp = (elapsed / EXPECTED_TIME) * m.get_target_temp() + noise;
-                    } else {
-                        self.current_temp = m.get_target_temp() + noise;
-                    }
-                }
-                else {
-                    self.current_temp = 25.0f32 + noise;
-                }
-            }
+        self.current_temp = m.read_temp().await;
+        let new_state = {
 
             hwa::trace!("MEASURED_TEMP: {}", self.current_temp);
 
@@ -192,9 +176,9 @@ impl HeaterStateMachine {
                 } else {
                     0.0f32
                 };
-                hwa::trace!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
+                hwa::info!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
 
-                m.set_power((power * 255.0f32).to_u8().unwrap_or(0)).await;
+                m.set_power((power * 100.0f32).to_u8().unwrap_or(0)).await;
 
                 if (self.current_temp - m.get_target_temp()).abs() / target_temp < 0.25 {
                     State::Maintaining
@@ -221,17 +205,26 @@ impl HeaterStateMachine {
                     event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
                 State::Maintaining => {
+                    defer_channel.send(defer_flag).await;
                     event_bus.publish_event(EventStatus::containing(temperature_flag)).await;
                 }
                 State::Targeting => {
                     #[cfg(feature = "native")]
                     {
                         self.t0 = embassy_time::Instant::now();
+                        hwa::info!("Temp reatched. Firing {:?}", temperature_flag);
                     }
                     event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
             }
             self.state = new_state;
+        }
+        else if self.state == State::Maintaining {
+            // There could be deferred commands subscribed after
+            // * temp target was set
+            // * and temp is currently maintaining
+            // ... so there is not state change but it's needed to flush them
+            defer_channel.send(defer_flag).await;
         }
     }
 }
@@ -239,6 +232,7 @@ impl HeaterStateMachine {
 #[embassy_executor::task(pool_size=1)]
 pub async fn temp_task(
     event_bus: EventBusRef,
+    defer_channel: DeferChannelRef,
     #[cfg(feature = "with-hotend")]
     hotend_controller: hwa::controllers::HotendControllerRef,
     #[cfg(feature = "with-hotbed")]
@@ -261,8 +255,8 @@ pub async fn temp_task(
     loop {
         ticker.next().await;
         #[cfg(feature = "with-hotend")]
-        hotend_sm.update(&hotend_controller, &event_bus, EventFlags::HOTEND_TEMP_OK).await;
+        hotend_sm.update(&hotend_controller, &event_bus, &defer_channel, EventFlags::HOTEND_TEMP_OK, DeferEvent::HotendTemperature(DeferType::Completed)).await;
         #[cfg(feature = "with-hotbed")]
-        hotbed_sm.update(&hotbed_controller, &event_bus, EventFlags::HOTBED_TEMP_OK).await;
+        hotbed_sm.update(&hotbed_controller, &event_bus, &defer_channel, EventFlags::HOTBED_TEMP_OK, DeferEvent::HotbedTemperature(DeferType::Completed)).await;
     }
 }

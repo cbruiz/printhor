@@ -58,20 +58,6 @@ pub struct XYZ {
     pub(crate) z: Option<Real>,
 }
 
-impl XYZ {
-    /*
-    pub fn to_vector(&self) -> Vector {
-        Vector {
-            x: self.x,
-            y: self.y,
-            z: self.z,
-            e: None
-        }
-    }
-
-     */
-}
-
 #[cfg(feature = "with-defmt")]
 impl crate::hwa::defmt::Format for XYZ {
     fn format(&self, fmt: crate::hwa::defmt::Formatter) {
@@ -217,7 +203,7 @@ pub enum GCode {
     M100,
     /// Set Hotend Temperature
     M104(S),
-    /// Get Hotend Temperature
+    /// Get Hotend and/or Hotbed Temperature
     M105,
     /// Fan On
     M106,

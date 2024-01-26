@@ -2,7 +2,6 @@
 #[path = "printhor/math/mod.rs"]
 mod math;
 pub type Real = math::Real;
-pub use math::RealInclusiveRange;
 
 #[path = "printhor/tgeo.rs"]
 mod tgeo;
@@ -26,9 +25,6 @@ use crate::math::{ONE, ZERO};
 mod hwa {
     pub use printhor_hwi_native::*;
 }
-
-#[path = "printhor/geometry.rs"]
-mod geometry;
 
 extern crate alloc;
 

@@ -24,7 +24,8 @@ use crate::tgeo::{CoordSel, TVector};
 #[allow(unused)]
 use embassy_time::{Instant, Duration, with_timeout};
 #[allow(unused_imports)]
-use crate::{hwa, hwa::controllers::{DeferEvent, DeferType}};
+use crate::hwa;
+use printhor_hwa_common::{DeferEvent, DeferType};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 #[cfg(feature = "timing-stats")]

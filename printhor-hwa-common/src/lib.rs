@@ -1,14 +1,17 @@
 #![no_std]
 #![cfg_attr(feature="nightly", feature(async_fn_in_trait))]
-#[cfg(feature = "with-defmt")]
+#[cfg(all(feature = "with-defmt", not(feature = "with-log")))]
 pub use defmt::info;
-#[cfg(feature = "with-log")]
+#[cfg(all(feature = "with-log", not(feature = "with-defmt")))]
 pub use log::info;
 
 mod tracked_static_cell;
 pub use tracked_static_cell::TrackedStaticCell;
 mod event_bus;
 pub use event_bus::*;
+
+mod defer_channel;
+pub use defer_channel::*;
 
 mod shared_controller;
 pub use shared_controller::*;
