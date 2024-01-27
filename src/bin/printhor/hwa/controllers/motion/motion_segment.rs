@@ -15,6 +15,8 @@ pub struct SegmentData {
 
     pub vdir: TVector<Real>,
     pub dest_pos: TVector<Real>,
+
+    pub tool_power: u8,
 }
 
 #[allow(unused)]

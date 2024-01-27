@@ -176,7 +176,7 @@ impl HeaterStateMachine {
                 } else {
                     0.0f32
                 };
-                hwa::info!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
+                hwa::debug!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
 
                 m.set_power((power * 100.0f32).to_u8().unwrap_or(0)).await;
 

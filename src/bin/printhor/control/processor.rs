@@ -282,7 +282,6 @@ impl GCodeProcessor {
                 h.set_target_temp(val as f32).await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
             GCode::M105 => {
                 let hotend_temp_report = {
                     #[cfg(feature = "with-hotend")]

@@ -37,6 +37,8 @@ use super::motion_timing::*;
 const MICRO_SEGMENT_PERIOD_HZ: u64 = 50;
 /// Stepper pulse period in microseconds
 const STEPPER_PULSE_WIDTH_US: Duration = Duration::from_micros(Duration::from_hz(embassy_time::TICK_HZ).as_micros());
+const STEPPER_PULSE_WIDTH_TICKS: u32 = Duration::from_hz(embassy_time::TICK_HZ).as_ticks() as u32;
+
 /// Inactivity Timeout until steppers are disabled
 const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -180,10 +182,12 @@ pub async fn stepper_task(
                         hwa::debug!("\ttick #{} \\Delta_pos {}, \\Delta_axis {} \\Delta_us: {} \\delta_us: {} {}", tick_id, estimated_position.rdp(4),
                         axial_pos.rdp(4), step_pos.rdp(4), steps_to_advance_precise.rdp(0), steps_to_advance_precise.rdp(4));
 
+                        // FIXME: review precision of this approach:
+                        // tick period by axis is reduced to exclude one last [STEPPER_PULSE_WIDTH_TICKS]
+                        // this (or better approach) is needed to avoid the last maintained pulse (DIR UP, DIR LOW) to exceed interval period and hence causing lag
                         let tick_period_by_axis = (steps_to_advance_precise
-                            .map_val(Real::from_lit((MICRO_SEGMENT_PERIOD_TICKS) as i64, 0)) / steps_to_advance_precise
+                            .map_val(Real::from_lit((MICRO_SEGMENT_PERIOD_TICKS - STEPPER_PULSE_WIDTH_TICKS) as i64, 0)) / steps_to_advance_precise
                         ).round();
-
 
                         hwa::debug!("\ttick #{} ustep period {}", tick_id, tick_period_by_axis);
                         // The default rate is larger than a micro-segment period when there is not move in an axis, so no pulses are driven

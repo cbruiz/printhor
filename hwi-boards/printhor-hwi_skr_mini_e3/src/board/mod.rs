@@ -141,60 +141,60 @@ pub fn init() -> embassy_stm32::Peripherals {
     use embassy_stm32::pac::*;
     init_heap();
 
-    //TODO: verify with https://www.st.com/resource/en/application_note/DM00443870-.pdf
-    //hwa::info!("Initializing...");
-
     PWR.cr1().write(|w| {
         w.set_vos(pwr::vals::Vos::RANGE1);
     });
     while PWR.sr2().read().vosf() {}
 
-    RCC.csr().write(|w| w.set_lsion(true));
-    while !RCC.csr().read().lsirdy() {}
-
-    RCC.cfgr().modify(|w| {
-        w.set_sw(rcc::vals::Sw::LSI);
-    });
-
     let mut config = Config::default();
-    config.rcc.mux = ClockSrc::PLL(
-        PllConfig {
-            // HSI = 16MHz
-            source: PllSource::HSI,
-            // HSE = 8MHz. Setting still not available in embassy_stm32
-            //source: PllSource::HSE(embassy_stm32::time::Hertz(8_000_000), HseMode::Oscillator),
-            m: Pllm::DIV1,
-            // n = 12 for HSI
-            n: Plln::MUL12,
-            // n = 24 por HSE
-            // n: Plln::MUL24,
-            // SysClk = 8 / 1 * n / 3 = 64MHz
-            r: Pllr::DIV3,
-            // PLLQ = 8 / 1 * n / 4 = 48MHz
-            q: Some(Pllq::DIV2),
-            // PLLP = 8 / 1 * n / 2 = 64MHz
-            p: Some(Pllp::DIV3),
-            //p: None,
-        }
-    );
-    /*
-    config.rcc.usb_src = Some(UsbSrc::Hsi48(Hsi48Config {
-        sync_from_usb: true,
-        ..Default::default()
-    }));
-    */
-    config.rcc.usb_src = Some(UsbSrc::PllQ);
+    #[cfg(feature = "use-hsi")]
+    {
+        config.rcc.mux = ClockSrc::PLL(
+            PllConfig {
+                // HSI = 16MHz
+                source: PllSource::HSI,
+                m: Pllm::DIV1,
+                n: Plln::MUL12,
+                // SysClk = 16 / 1 * 12 / 3 = 64MHz
+                r: Pllr::DIV3,
+                // PLLQ = 16 / 1 * 12 / 4 = 48MHz
+                q: Some(Pllq::DIV2),
+                // PLLP = 16 / 1 * 12 / 3 = 64MHz
+                p: Some(Pllp::DIV3),
+            }
+        );
+        config.rcc.usb_src = Some(UsbSrc::Hsi48(
+            Hsi48Config {
+                sync_from_usb: true,
+                ..Default::default()
+            }
+        ));
+    }
+    #[cfg(not(feature = "use-hsi"))]
+    {
+        config.rcc.mux = ClockSrc::PLL(
+            PllConfig {
+                // HSE = 8MHz
+                source: PllSource::HSE(embassy_stm32::time::Hertz(8_000_000), HseMode::Oscillator),
+                m: Pllm::DIV1,
+                n: Plln::MUL24,
+                // SysClk = 8 / 1 * 24 / 3 = 64MHz
+                r: Pllr::DIV3,
+                // PLLQ = 8 / 1 * 24 / 4 = 48MHz
+                q: Some(Pllq::DIV4),
+                // PLLP = 8 / 1 * 24 / 3 = 64MHz
+                p: Some(Pllp::DIV3),
+            }
+        );
+        config.rcc.usb_src = Some(UsbSrc::PllQ);
+    }
+
     // HCLK = {Power, AHB bus, core, memory, DMA, System timer, FCLK} = 64MHz
     config.rcc.ahb_pre = AHBPrescaler::DIV1;
     // PCLK = APB peripheral clocks = 64MHz
     // TPCLK = APOB timer clocks = 64MHz
     config.rcc.apb_pre = APBPrescaler::DIV1;
     config.rcc.low_power_run = false;
-    config.rcc.ls = LsConfig {
-        rtc: RtcClockSource::LSI,
-        lsi: true,
-        lse: None,
-    };
     embassy_stm32::init(config)
 }
 
@@ -267,10 +267,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
 
-    defmt::info!("Waiting a little bit...");
+    //defmt::info!("Waiting a little bit...");
     // Wait for usb task to startup
-    embassy_time::Timer::after_secs(10).await;
-    defmt::info!("Waiting Done");
+    //embassy_time::Timer::after_secs(10).await;
+    //defmt::info!("Waiting Done");
 
     #[cfg(feature = "with-uart-port-1")]
     let (uart_port1_tx, uart_port1_rx_stream) = {
@@ -422,7 +422,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     let adc_hotend_hotbed = {
-        let mut adc_hotend_hotbed = AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
+        let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
         adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
@@ -494,31 +494,31 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-probe")]
             probe: probe_device,
             #[cfg(feature = "with-hotend")]
-            hotend: HotendPeripherals {
+            hotend: device::HotendPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_hotend_channel,
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: adc_hotend_pin,
             },
             #[cfg(feature = "with-hotbed")]
-            hotbed: HotbedPeripherals {
+            hotbed: device::HotbedPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_hotbed_channel,
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: adc_hotbed_pin,
             },
             #[cfg(feature = "with-fan-layer-fan0")]
-            layer_fan: FanLayerPeripherals {
+            layer_fan: device::FanLayerPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_fan1_channel,
             },
             #[cfg(feature = "with-fan1")]
-            fan1: Fan1Peripherals {
+            fan1: device::Fan1Peripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_fan1_channel,
             },
             #[cfg(feature = "with-laser")]
-            laser: LaserPeripherals {
+            laser: device::LaserPeripherals {
                 power_pwm: pwm_laser.clone(),
                 power_channel: pwm_laser_channel,
             },

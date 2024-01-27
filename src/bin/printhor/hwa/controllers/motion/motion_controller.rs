@@ -53,6 +53,9 @@ pub struct MotionStatus {
     pub(crate) current_pos_steps: Option<TVector<u32>>,
     pub(crate) last_planned_pos: Option<TVector<Real>>,
     pub(crate) absolute_positioning: bool,
+    #[cfg(feature="with-laser")]
+    #[allow(unused)]
+    pub(crate) laser: bool,
 }
 
 impl MotionStatus {
@@ -61,6 +64,8 @@ impl MotionStatus {
             current_pos_steps: None,
             last_planned_pos: None,
             absolute_positioning: true,
+            #[cfg(feature="with-laser")]
+            laser: false,
         }
     }
 }
@@ -484,6 +489,7 @@ impl MotionPlanner {
                         displacement_u: (module_target_distance * Real::from_lit(1000, 0)) .to_i32().unwrap_or(0) as u32,
                         vdir,
                         dest_pos: p1,
+                        tool_power: 0,
                     };
                     let r = self.schedule_raw_move(
                         ScheduledMove::Move(segment_data, profile),

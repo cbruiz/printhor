@@ -188,9 +188,9 @@ skr_mini_e3 = [
     #"with-display",
     #"with-lvgl",
 
-    #"float-point-f32-impl",
+    "float-point-f32-impl",
     #"float-point-f64-impl",
-    "fixed-point-128-impl",
+    #"fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_skr_mini_e3",
@@ -314,6 +314,13 @@ printhor-hwi_nucleo_64_arduino_cnc_hat = { path = "hwi-boards/printhor-hwi_nucle
 #embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
 #embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
 #embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+
+#embassy-stm32 = { path = "../embassy/embassy-stm32" }
+#embassy-executor = { path = "../embassy/embassy-executor" }
+#embassy-sync = { path = "../embassy/embassy-sync" }
+#embassy-time = { path = "../embassy/embassy-time" }
+#embassy-futures = { path = "../embassy/embassy-futures" }
+#embassy-embedded-hal = { path = "../embassy/embassy-embedded-hal" }
 
 #[workspace.vars]
 # TBD

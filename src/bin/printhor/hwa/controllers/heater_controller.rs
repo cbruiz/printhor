@@ -14,12 +14,17 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
         <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
 
 {
+    // Shared Analog-Digital Converter controller to measure temperature
     adc: ControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>,
     adc_pin: AdcPin,
     vref_sample: u16,
+    // Shared PWM controller to apply heating power
     pwm: PwmController<PwmHwaDevice>,
+    // The target/expected temperature value (in celsius)
     target_temp: f32,
+    // Cache of last temperature value measure (in celsius)
     current_temp: f32,
+    // Cache of controller state
     on: bool,
 }
 
@@ -55,6 +60,7 @@ where
         hwa::debug!("ADC Initiallized: vref_sample = {}", self.vref_sample);
     }
 
+    // Read temperature in celsius degrees
     #[inline]
     pub async fn read_temp(&mut self) -> f32 {
         let mut bus  = self.adc.lock().await;
@@ -77,21 +83,25 @@ where
         }
     }
 
+    // Updates the latest measured temperature in celsius degrees
     #[inline]
     pub fn set_current_temp(&mut self, current_temp: f32) {
         self.current_temp = current_temp;
     }
 
+    // Gets the latest measured temperature in celsius degrees
     #[inline]
     pub fn get_current_temp(&mut self) -> f32 {
         self.current_temp
     }
 
+    // Sets the applied power in scale between 0 and 100
     #[inline]
     pub async fn set_power(&mut self, power: u8) {
         self.pwm.set_power(power).await;
     }
 
+    // Gets the applied power in scale between 0.0 and 1.0
     #[inline]
     pub async fn get_current_power(&mut self) -> f32 {
         self.pwm.get_power().await

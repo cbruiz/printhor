@@ -17,13 +17,13 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
     #[allow(unused)]
     let expect_immediate = |res| match res {
-        CodeExecutionSuccess::OK => Ok(CodeExecutionSuccess::OK),
+        CodeExecutionSuccess::OK | CodeExecutionSuccess::CONSUMED => Ok(CodeExecutionSuccess::OK),
         CodeExecutionSuccess::QUEUED => Ok(CodeExecutionSuccess::OK),
         CodeExecutionSuccess::DEFERRED(_) => Err(CodeExecutionFailure::ERR),
     };
     #[allow(unused)]
     let expect_deferred = |res| match res {
-        CodeExecutionSuccess::OK => Err(CodeExecutionFailure::ERR),
+        CodeExecutionSuccess::OK | CodeExecutionSuccess::CONSUMED => Err(CodeExecutionFailure::ERR),
         CodeExecutionSuccess::QUEUED => Err(CodeExecutionFailure::ERR),
         CodeExecutionSuccess::DEFERRED(evt) => Ok(evt),
     };
