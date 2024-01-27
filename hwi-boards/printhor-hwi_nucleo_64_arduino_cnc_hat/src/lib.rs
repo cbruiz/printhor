@@ -10,7 +10,6 @@ pub use defmt;
 mod board;
 
 pub use board::device;
-pub use board::consts;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;

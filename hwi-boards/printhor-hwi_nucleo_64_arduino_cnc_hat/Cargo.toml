@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_nucleo_64_arduino_cnc_hat"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for STM32 Nucleo-64 with Arduino CNC Hat V3.x"
@@ -17,8 +17,8 @@ homepage = "https://github.com/cbruiz/printhor"
 nightly = ["printhor-hwa-common/nightly"]
 #default = ["nucleo64-l476rg"]
 # Board kind
-nucleo64-l476rg = ["embassy-stm32/defmt", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5", "embassy-time/tick-hz-32_768", "embassy-executor/task-arena-size-16384"]
-nucleo64-f410rb = ["embassy-stm32/defmt", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9", "embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384"]
+nucleo64-l476rg = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
+nucleo64-f410rb = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
 # Hardware device features
 with-usbserial = ["embassy-usb"]
 with-printjob = []
@@ -33,7 +33,7 @@ with-sdcard = []
 with-layer-fan = ["embedded-hal"]
 with-fan1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
-with-defmt = ["printhor-hwa-common/with-defmt"]
+with-defmt = ["printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = []
 sdcard-uses-spi = []
 ili9341_parallel = []
@@ -44,14 +44,14 @@ defmt = {version = "0.3", default-features = false}
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
-embassy-stm32 = { version = "0", default-features = false, features = ["defmt", "rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0", default-features = false, features = ["defmt", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-stm32 = { version = "0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0", features = ["defmt"] }
 embassy-time = { version = "0", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }
 embassy-usb = { version = "0", features = [], optional = true }
 
-printhor-hwa-common = { version = "0", features = [] }
+printhor-hwa-common = { version = "0.0.3", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }

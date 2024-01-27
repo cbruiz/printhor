@@ -1,5 +1,6 @@
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars"
+runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset"
+rustflags = [ "-C", "linker=flip-link" ]
 
 [target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32L476RG --disable-progressbars"
@@ -17,10 +18,13 @@ DEFMT_LOG = "info"
 RUST_LOG = "info"
 ASYNC_STD_THREAD_COUNT = "1"
 
+# BETA value of the hotend thermistor
+#HOTEND_TERM_BETA = "3950.0"
+
 [profile.dev.package."*"]
 codegen-units = 1
 incremental = false
-#opt-level = "s"
+#opt-level = "z"
 debug = 2
 debug-assertions = true
 overflow-checks = true
@@ -28,7 +32,15 @@ overflow-checks = true
 [profile.release.package."*"]
 codegen-units = 1
 incremental = false
-opt-level = "s"
+opt-level = "z"
 debug = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.release-opt.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 0
 debug-assertions = false
 overflow-checks = false

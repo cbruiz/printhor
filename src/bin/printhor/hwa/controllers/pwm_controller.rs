@@ -7,7 +7,6 @@ where TimPeri: Pwm + 'static
 {
     pwm: ControllerRef<TimPeri>,
     pwm_chan: <TimPeri as Pwm>::Channel,
-    enabled: bool,
 }
 
 impl<TimPeri> PwmController<TimPeri>
@@ -18,39 +17,40 @@ impl<TimPeri> PwmController<TimPeri>
         Self {
             pwm,
             pwm_chan,
-            enabled: false,
         }
     }
 
-    #[allow(unused)]
-    #[inline]
     pub async fn set_power(&mut self, power: u8)
     {
         let mut mg = self.pwm.lock().await;
         if power > 0 {
-            let duty_result: Result<u16, _> = ((power as u32 * (mg.get_max_duty() as u32)) / 255u32).try_into();
+            let duty_result: Result<u16, _> = ((power as u32 * (mg.get_max_duty() as u32)) / 100u32).try_into();
             match duty_result {
                 Ok(duty) => {
+                    hwa::trace!("Set duty: {}", duty);
                     mg.set_duty(self.pwm_chan, duty as <TimPeri as Pwm>::Duty);
                     mg.enable(self.pwm_chan);
-                    self.enabled = true;
                 }
                 _ => {
                     mg.disable(self.pwm_chan);
-                    self.enabled = false;
                     hwa::error!("Unable to set power");
                 }
             }
         }
         else {
             mg.disable(self.pwm_chan);
-            self.enabled = false;
         }
     }
-
-    #[inline]
-    #[allow(unused)]
-    pub fn is_on(&self) -> bool {
-        self.enabled
+    pub async fn get_power(&mut self) -> f32
+    {
+        let mg = self.pwm.lock().await;
+        let duty_result: Result<f32, _> = ((mg.get_duty(self.pwm_chan) as f32 * 100.0f32) / (mg.get_max_duty() as f32)).try_into();
+        hwa::info!("Computing power: ({} * {}) / {} = {:?}",
+            mg.get_duty(self.pwm_chan) as f32,
+            100f32,
+            mg.get_max_duty(),
+            duty_result,
+        );
+        duty_result.unwrap_or(0.0f32)
     }
 }

@@ -195,7 +195,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let mut config = embassy_stm32::usb_otg::Config::default();
         config.vbus_detection = true;
 
-                // Maybe OTG_FS is not the right peripheral...
+        // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
         let driver = usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
         let mut usb_serial_device = USBSerialDevice::new(driver);
@@ -203,7 +203,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
         static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let usbserial_tx_controller = ControllerRef::new(
-            USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
+            USB_INST.init("USBSerialTxController", ControllerMutex::new(sender))
         );
         (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
@@ -237,7 +237,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let uart_port1_tx = ControllerRef::new(
-            UART_PORT1_INST.init("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
+            UART_PORT1_INST.init("UartPort1", ControllerMutex::new(uart_port1_tx_device))
         );
         (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
@@ -552,11 +552,4 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             layer_fan: layer_fan_device,
         }
     }
-
-}
-
-#[allow(unused)]
-pub mod consts {
-    /// 50ms to enqueue ~28 motion gcodes at 115200 bps
-    pub(crate) const LINGER_MS: u64 = 10000;
 }

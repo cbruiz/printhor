@@ -124,6 +124,13 @@ pending to be matured.
 RUST_LOG=info cargo run --features integration-test --bin printhor
 ```
 
+Testing with GCode sender though socat
+
+```shell
+RUST_LOG=info cargo build --bin printhor
+socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
+```
+
 ## MKS Robin Nano (Currently v3.1 only)
 
 This board (https://www.makerbase.store/pages/mks-robin-nano-v3-1-intro) is still work in progress
@@ -161,6 +168,11 @@ In these development boards, flash and run can be directly performed with probe-
 ### nucleo-f410rb
 Please, note that this board is very limited in terms of flash and memory (48kB SRAM, 128kB flash).
 You might not assume that a firwmare not optimized for size (LTO, etc...) will fit in flash.
+
+Note: This target uses flip-link by default, requiring flip-link tool. To change this behavior please check .cargo/config.toml
+```shell
+cargo install flip-link
+```
 
 ```shell
 DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-f410rb"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-f410rb --target thumbv7em-none-eabihf --bin printhor
@@ -508,14 +520,14 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">M104</td>
         <td>FFF</td>
-        <td>Set Extruder Temperature</td>
-        <td>WIP</td>
+        <td>Set Hotend Temperature</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M105</td>
         <td>FFF</td>
-        <td>Get Extruder Temperature</td>
-        <td>WIP</td>
+        <td>Get Hotend and/or Hotbed Temperature</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M106</td>
@@ -557,7 +569,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M114</td>
         <td>*</td>
         <td>Get Current Position</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M115</td>
@@ -604,8 +616,14 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">M140</td>
         <td>*</td>
-        <td>Set Bed Temperature (Fast)</td>
-        <td>WIP</td>
+        <td>Set hotbed Temperature (Fast)</td>
+        <td>DONE</td>
+    </tr>
+    <tr>
+        <td rowspan="1">M190</td>
+        <td>*</td>
+        <td>Wait for hotbed temperature</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M200</td>
@@ -940,7 +958,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">G10</td>
         <td>*</td>
-        <td>Retract</td>
+        <td>Retract/Set coordinate system</td>
         <td>ILT</td>
     </tr>
     <tr>
@@ -1067,13 +1085,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">G90</td>
         <td>*</td>
         <td>Set to Absolute Positioning</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">G91</td>
         <td>*</td>
         <td>Set to Relative Positioning</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">G92</td>

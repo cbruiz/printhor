@@ -376,6 +376,22 @@ where T: ArithmeticOps
         return !matching_point;
     }
 
+    pub fn is_nan_or_zero(&self) -> bool {
+        if let Some(v) = self.x {
+            if !v.is_zero() { return false }
+        }
+        if let Some(v) = self.y {
+            if !v.is_zero() { return false }
+        }
+        if let Some(v) = self.z {
+            if !v.is_zero() { return false }
+        }
+        if let Some(v) = self.e {
+            if !v.is_zero() { return false }
+        }
+        return true;
+    }
+
     #[inline]
     pub const fn nan() -> Self {
         Self {

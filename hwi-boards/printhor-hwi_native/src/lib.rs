@@ -31,7 +31,6 @@ const USBSERIAL_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-uart-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;
 
-
 static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
 
 struct TokenHolder<S> {

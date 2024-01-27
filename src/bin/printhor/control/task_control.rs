@@ -5,6 +5,8 @@ use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
 #[allow(unused)]
 use crate::control::planner::*;
+#[cfg(any(feature = "grbl-compat", feature = "with-printjob", feature = "with-sdcard"))]
+use crate::control::GCode;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
 
@@ -13,9 +15,9 @@ use crate::hwa::controllers::sdcard_controller::SDEntryType;
 
 pub struct ControlTaskDevices {
     #[cfg(feature = "with-usbserial")]
-    pub usb_serial_rx: hwa::devices::USBSerialDeviceInputStream,
+    pub usb_serial_rx: hwa::device::USBSerialDeviceInputStream,
     #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_rx_stream: hwa::devices::UartPort1RxInputStream,
+    pub uart_port1_rx_stream: hwa::device::UartPort1RxInputStream,
 }
 
 pub struct ControlTaskControllers {
@@ -53,17 +55,20 @@ pub async fn control_task(
     loop {
         match code_parser.next_gcode().await {
             Err(err) => {
-                hwa::error!("GCODE ERR");
                 match err {
                     crate::control::parser::GCodeLineParserError::ParseError(_x) => {
-                        _processor.write("E. (ParserError)\n").await;
+                        hwa::error!("GCode N/A ParserError");
+                        _processor.write("error; (ParserError)\n").await;
                     }
                     crate::control::parser::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name) => {
-                        let s = alloc::format!("E. {} (NotImplemented)\n", _gcode_name);
+                        hwa::error!("GCode {} (NotImplemented)\n", _gcode_name.as_str());
+                        let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                         _processor.write(&s).await;
                     }
                     crate::control::parser::GCodeLineParserError::FatalError => {
-                        // TODO
+                        hwa::error!("GCode N/A (Internal error)\n");
+                        let s = "error; Internal error\n";
+                        _processor.write(s).await;
                     }
                 }
             }
@@ -75,8 +80,13 @@ pub async fn control_task(
                     }
                     Some(gc) => {
                         match gc {
+                            #[cfg(feature = "grbl-compat")]
+                            GCode::STATUS => {
+                                // TODO provide GRBL compatibility status
+                                _processor.write("<Idle|MPos:0.000,0.000,0.000|Pn:XP|FS:0,0|WCO:0.000,0.000,0.000>\n").await;
+                            }
                             #[cfg(feature = "with-sdcard")]
-                            crate::control::GCode::M20(path) => {
+                            GCode::M20(path) => {
                                 let path = path.unwrap_or(alloc::string::String::from("/"));
                                 match _c.card_controller.list_dir(path.as_str()).await {
                                     Ok(mut it) => {
@@ -87,7 +97,7 @@ pub async fn control_task(
                                                     //crate::debug!("got a result");
                                                     match result {
                                                         Some(entry) => {
-                                                            let s = alloc::format!("O. M20 F\"{}\" {} {}\n",
+                                                            let s = alloc::format!("echo: F\"{}\" {} {} ; M20 \n",
                                                                                    entry.name,
                                                                                    match entry.entry_type {
                                                                                        SDEntryType::FILE => "A",
@@ -105,22 +115,22 @@ pub async fn control_task(
                                                     }
                                                 },
                                                 Err(_e) => {
-                                                    let s = alloc::format!("E. M20; Error listing: {:?}\n", _e);
+                                                    let s = alloc::format!("error; M20; Error listing: {:?}\n", _e);
                                                     _processor.write(s.as_str()).await;
                                                 }
                                             }
                                         }
                                         it.close().await;
-                                        _processor.write("O. M20\n").await;
+                                        _processor.write("ok; M20\n").await;
                                     },
                                     Err(_e) => {
-                                        let s = alloc::format!("E. M20 (Unable to list: {:?})\n", _e);
+                                        let s = alloc::format!("error; M20 (Unable to list: {:?})\n", _e);
                                         _processor.write(s.as_str()).await;
                                     }
                                 }
                             },
                             #[cfg(feature = "with-printjob")]
-                            crate::control::GCode::M23(f) => {
+                            GCode::M23(f) => {
                                 match _c.printer_controller.set(
                                     PrinterControllerEvent::SetFile(
                                         f.map_or(alloc::string::String::from("default"),
@@ -129,20 +139,19 @@ pub async fn control_task(
                                     )
                                 ).await {
                                     Ok(_f) => {
-                                        hwa::info!("O. M23; OK");
+                                        hwa::info!("ok; M23");
                                     }
                                     Err(_e) => {
                                         let s = alloc::format!("E. M23; Unable to set: {:?}\n", _e);
                                         _processor.write(s.as_str()).await;
                                     }
                                 }
-                                //println!("Exec M23...");
                             },
                             #[cfg(feature = "with-printjob")]
-                            crate::control::GCode::M24 => {
+                            GCode::M24 => {
                                 match _c.printer_controller.set(PrinterControllerEvent::Resume).await {
                                     Ok(_f) => {
-                                        hwa::info!("O. M24; OK");
+                                        hwa::info!("ok; M24");
                                     }
                                     Err(_e) => {
                                         let s = alloc::format!("echo: unable to start/resume: {:?}\n", _e);
@@ -151,10 +160,10 @@ pub async fn control_task(
                                 }
                             },
                             #[cfg(feature = "with-printjob")]
-                            crate::control::GCode::M25 => {
+                            GCode::M25 => {
                                 match _c.printer_controller.set(PrinterControllerEvent::Pause).await {
                                     Ok(_f) => {
-                                        hwa::info!("O. M25; OK");
+                                        hwa::info!("ok. M25");
                                     }
                                     Err(_e) => {
                                         let s = alloc::format!("echo: unable to pause: {:?}\n", _e);
@@ -165,15 +174,15 @@ pub async fn control_task(
                             _ => {
                                 match _processor.execute(&gc, false).await {
                                     Ok(CodeExecutionSuccess::OK) => {
-                                        let s = alloc::format!("O. {} (OK)\n", gc.as_ref());
+                                        let s = alloc::format!("ok; {}\n", gc.as_ref());
                                         _processor.write(s.as_str()).await;
                                     }
                                     Ok(CodeExecutionSuccess::QUEUED) => {
-                                        let s = alloc::format!("O. {} (QUEUED)\n", gc.as_ref());
+                                        let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
                                         _processor.write(s.as_str()).await;
                                     }
                                     Err(_e) => {
-                                        let s = alloc::format!("E. {} ({:?})\n", gc.as_ref(), _e);
+                                        let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
                                         _processor.write(s.as_str()).await;
                                     }
                                     _ => { // Deferred

@@ -1,9 +1,9 @@
-//! TODO: This feature is still very experimental
+//! This feature is being stabilized
 use crate::hwa;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
-use printhor_hwa_common::{EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::{DeferChannelRef, EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::{DeferEvent, DeferType};
 use crate::control::GCode;
 use crate::control::planner::{Constraints, SCurveMotionProfile, CodeExecutionSuccess, CodeExecutionFailure};
 use crate::math::{ONE_HUNDRED, Real, ZERO};
@@ -15,21 +15,6 @@ use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
 
 /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
 const SEGMENT_QUEUE_SIZE: u8 = 4;
-pub enum DeferType {
-    AwaitRequested,
-    Completed,
-}
-
-///! These are the Events that can be deferred
-#[allow(unused)]
-pub enum DeferEvent {
-    Homing(DeferType),
-    RapidMove(DeferType),
-    LinearMove(DeferType),
-    Dwell(DeferType),
-    HotendTemperature(DeferType),
-    HotbedTemperature(DeferType),
-}
 
 pub enum ScheduledMove {
     Move(SegmentData, SCurveMotionProfile),
@@ -63,15 +48,19 @@ impl MotionConfig {
     }
 }
 
-#[allow(unused)]
 pub struct MotionStatus {
+    #[allow(unused)]
+    pub(crate) current_pos_steps: Option<TVector<u32>>,
     pub(crate) last_planned_pos: Option<TVector<Real>>,
+    pub(crate) absolute_positioning: bool,
 }
 
 impl MotionStatus {
     pub const fn new() -> Self {
         Self {
+            current_pos_steps: None,
             last_planned_pos: None,
+            absolute_positioning: true,
         }
     }
 }
@@ -80,7 +69,9 @@ impl MotionStatus {
 #[allow(unused)]
 pub struct MotionPlanner {
     pub event_bus: EventBusRef,
-    pub defer_channel: Channel<CriticalSectionRawMutex, DeferEvent, 4>,
+    // The channel to send deferred events
+    pub defer_channel: printhor_hwa_common::DeferChannelRef,
+
     pub(self) ringbuffer: Mutex<CriticalSectionRawMutex, RingBuffer>,
     pub(self) move_planned: Config<CriticalSectionRawMutex, bool>,
     pub(self) available: Config<CriticalSectionRawMutex, bool>,
@@ -91,10 +82,10 @@ pub struct MotionPlanner {
 
 #[allow(unused)]
 impl MotionPlanner {
-    pub const fn new(event_bus: EventBusRef, motion_driver: hwa::drivers::MotionDriver) -> Self {
+    pub const fn new(event_bus: EventBusRef, defer_channel: DeferChannelRef, motion_driver: hwa::drivers::MotionDriver) -> Self {
         Self {
-            defer_channel: Channel::new(),
             event_bus,
+            defer_channel,
             ringbuffer: Mutex::new(RingBuffer::new()),
             move_planned: Config::new(),
             available: Config::new(),
@@ -266,6 +257,15 @@ impl MotionPlanner {
         &self.motion_cfg
     }
 
+    pub async fn set_absolute_positioning(&self, absolute_is_set: bool) {
+        let mut st = self.motion_st.lock().await;
+        st.absolute_positioning = absolute_is_set;
+    }
+
+    pub async fn is_absolute_positioning(&self) -> bool {
+        self.motion_st.lock().await.absolute_positioning
+    }
+
     pub async fn get_last_planned_pos(&self) -> Option<TVector<Real>> {
         self.motion_st.lock().await.last_planned_pos.clone()
     }
@@ -385,6 +385,7 @@ impl MotionPlanner {
         let t0 = embassy_time::Instant::now();
 
         let p0 = self.get_last_planned_pos().await.ok_or(CodeExecutionFailure::HomingRequired)?;
+        let p1 = if self.is_absolute_positioning().await { p1 } else { p0 + p1 };
 
         let cfg = self.motion_cfg();
         let cfg_g = cfg.lock().await;
@@ -536,17 +537,17 @@ impl MotionPlanner {
         r
     }
 
-    #[cfg(all(feature = "native", feature = "plot"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     pub async fn start_segment(&self, ref_time: embassy_time::Instant, real_time: embassy_time::Instant) {
         self.motion_driver.lock().await.start_segment(ref_time, real_time)
     }
 
-    #[cfg(all(feature = "native", feature = "plot"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     pub async fn end_segment(&self) {
         self.motion_driver.lock().await.end_segment()
     }
 
-    #[cfg(all(feature = "native", feature = "plot"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     pub async fn mark_microsegment(&self) {
         self.motion_driver.lock().await.mark_microsegment();
     }
@@ -592,8 +593,6 @@ impl Default for PlanEntry {
         PlanEntry::Empty
     }
 }
-
-
 
 #[derive(Clone)]
 pub struct MotionPlannerRef {

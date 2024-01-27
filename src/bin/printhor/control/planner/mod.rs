@@ -24,6 +24,8 @@ use printhor_hwa_common::EventStatus;
 pub enum CodeExecutionSuccess {
     /// Immediately executed
     OK,
+    /// Immediately executed and reported
+    CONSUMED,
     /// Queued but assumed it will be executed not too long, so practically same as OK
     QUEUED,
     /// Executed but it will take time to get a final response. EventStatus contains the needed flags to wait for

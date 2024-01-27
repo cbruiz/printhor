@@ -1,22 +1,14 @@
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
-
-#![allow(incomplete_features)]
 #![allow(stable_features)]
-#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
-#![cfg_attr(feature="nightly", feature(async_closure))]
-#![cfg_attr(feature="nightly", feature(trait_alias))]
-
+#![allow(nonstandard_style)]
 extern crate alloc;
 extern crate core;
 mod hwi;
 mod hwa;
-
 pub(crate) mod helpers;
 pub(crate) mod control;
-pub(crate) mod geometry;
 pub(crate) mod machine;
-
 pub(crate) mod sync;
 #[cfg(feature = "with-display")]
 pub(crate) mod display;
@@ -30,6 +22,7 @@ use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
 use printhor_hwa_common::{EventBusRef, TrackedStaticCell};
 use hwa::{Controllers, IODevices, MotionDevices, PwmDevices};
+#[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 use hwa::{GCodeProcessor};
 #[cfg(feature = "with-motion")]
@@ -44,8 +37,8 @@ use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::PrinterController;
 
-////
-
+//noinspection RsUnresolvedReference
+/// Entry point
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) -> ! {
 
@@ -65,10 +58,12 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         EventStatus::containing(EventFlags::SYS_BOOTING)
     ).await;
 
+    let defer_channel: DeferChannelRef = printhor_hwa_common::init_defer_channel();
+
     let wdt = context.controllers.sys_watchdog.clone();
     wdt.lock().await.unleash();
 
-    if spawn_tasks(spawner, event_bus.clone(),
+    if spawn_tasks(spawner, event_bus.clone(), defer_channel,
                    context.controllers,
                    context.devices,
                    context.motion,
@@ -107,7 +102,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 }
 
 #[inline(never)]
-async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
+async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: DeferChannelRef,
                      controllers: Controllers, devices: IODevices,
                      _motion_device: MotionDevices,
                      _pwm_devices: PwmDevices,
@@ -237,8 +232,9 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         static MPS : TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
         MotionPlannerRef {
             inner: MPS.init("MotionPlanner",
-                            hwa::controllers::MotionPlanner::new(
+                            MotionPlanner::new(
                                 event_bus.clone(),
+                                defer_channel.clone(),
                                 hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
                                     motion_device: _motion_device.motion_devices,
                                     #[cfg(feature = "with-probe")]
@@ -283,14 +279,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
         #[cfg(feature = "with-trinamic")]
         let _ = motion_planer.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
 
-        motion_planer.set_max_speed(crate::tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
-        motion_planer.set_max_accel(crate::tgeo::TVector::from_coords(Some(1000), Some(1000), Some(1000), Some(1000))).await;
-        motion_planer.set_max_jerk(crate::tgeo::TVector::from_coords(Some(18000), Some(18000), Some(18000), Some(18000))).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(1000), Some(1000), Some(1000), Some(1000))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(18000), Some(18000), Some(18000), Some(18000))).await;
         motion_planer.set_default_travel_speed(400).await;
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        hwa::launch_high_priotity( control::task_stepper_isr::stepper_task(
+        hwa::launch_high_priotity( control::task_stepper::stepper_task(
             motion_planer, _wd
         )).and_then(|_| {
             hwa::debug!("stepper_start() spawned");
@@ -305,7 +301,6 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
             #[cfg(feature = "with-printjob")]
             printer_controller: printer_controller.clone(),
         }
-
     )).map_err(|_| ())?;
 
     spawner.spawn(control::task_control::control_task(
@@ -334,7 +329,11 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef,
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     spawner.spawn(control::task_temperature::temp_task(
         event_bus.clone(),
+        defer_channel.clone(),
+        #[cfg(feature = "with-hotend")]
         hotend_controller,
+        #[cfg(feature = "with-hotbed")]
+        hotbed_controller,
     )).map_err(|_| ())?;
 
     #[cfg(feature = "with-display")]
@@ -365,3 +364,4 @@ use defmt_rtt as _;
 #[allow(unused)]
 #[cfg(feature = "with-defmt")]
 use panic_probe as _;
+use printhor_hwa_common::DeferChannelRef;
