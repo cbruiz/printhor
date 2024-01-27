@@ -1,4 +1,4 @@
-//! TODO: Pending to review after intense refactor
+//! TODO: This feature is still in incubation
 
 use core::pin::Pin;
 use futures::task::{Context, Poll};

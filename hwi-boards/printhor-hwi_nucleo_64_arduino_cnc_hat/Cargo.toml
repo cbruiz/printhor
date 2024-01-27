@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_nucleo_64_arduino_cnc_hat"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for STM32 Nucleo-64 with Arduino CNC Hat V3.x"
@@ -51,7 +51,7 @@ embassy-time = { version = "0", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }
 embassy-usb = { version = "0", features = [], optional = true }
 
-printhor-hwa-common = { version = "0.0.3", features = [] }
+printhor-hwa-common = { version = "0.0", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }

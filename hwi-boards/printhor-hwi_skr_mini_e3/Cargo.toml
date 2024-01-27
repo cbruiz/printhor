@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_skr_mini_e3"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for SK3 Mini E3 V2 board"
@@ -36,7 +36,7 @@ ili9341_spi = ["with-spi"]
 [dependencies]
 defmt = {version = "0.3", default-features = false }
 
-printhor-hwa-common = { version = "0.0.3"}
+printhor-hwa-common = { version = "0.0"}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "stm32g0b1re", "rt", "memory-x", "unstable-pac", "time-driver-tim4"] }
 embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "executor-interrupt", "executor-thread", "arch-cortex-m"] }

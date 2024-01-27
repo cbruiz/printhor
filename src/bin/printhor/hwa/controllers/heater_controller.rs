@@ -1,6 +1,6 @@
+//! TODO: This feature is still in incubation
 use crate::hwa;
-#[allow(unused)]
-use printhor_hwa_common::{ControllerMutexType, ControllerRef};
+use printhor_hwa_common::ControllerRef;
 use crate::hwa::controllers::pwm_controller::PwmController;
 use crate::hwa::VREF_SAMPLE;
 

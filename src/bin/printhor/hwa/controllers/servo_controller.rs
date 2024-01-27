@@ -1,8 +1,6 @@
-//! TODO: Pending to review after intense refactor
+//! TODO: This feature is still in incubation
 use printhor_hwa_common::ControllerRef;
 use crate::hwa;
-use crate::hwa::device::PwmChannel;
-use crate::hwa::device::PwmServo;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
 pub trait ProbeTrait {
@@ -14,13 +12,13 @@ pub trait ProbeTrait {
 }
 
 pub struct ServoController {
-    servo: ControllerRef<PwmServo>,
-    channel: PwmChannel,
+    servo: ControllerRef<hwa::device::PwmServo>,
+    channel: hwa::device::PwmChannel,
 }
 
 impl ServoController {
 
-    pub fn new(servo: ControllerRef<PwmServo>, channel: PwmChannel) -> Self {
+    pub fn new(servo: ControllerRef<hwa::device::PwmServo>, channel: hwa::device::PwmChannel) -> Self {
         Self {servo, channel}
     }
 

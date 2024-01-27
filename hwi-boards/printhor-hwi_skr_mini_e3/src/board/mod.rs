@@ -107,7 +107,7 @@ pub fn heap_current_size() -> u32 {
 #[inline]
 pub fn stack_reservation_current_size() -> u32 {
     unsafe {
-        core::ptr::read_volatile(&printhor_hwa_common::COUNTER) as u32
+        core::ptr::read_volatile(core::ptr::addr_of!(printhor_hwa_common::COUNTER)) as u32
     }
 }
 

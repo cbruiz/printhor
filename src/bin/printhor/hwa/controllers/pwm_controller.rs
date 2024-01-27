@@ -1,3 +1,4 @@
+//! TODO: This feature is still in incubation
 use embedded_hal_02::Pwm;
 use printhor_hwa_common::ControllerRef;
 use crate::hwa;
@@ -20,6 +21,7 @@ impl<TimPeri> PwmController<TimPeri>
         }
     }
 
+    // Gets the applied power in scale between 0 and 100
     pub async fn set_power(&mut self, power: u8)
     {
         let mut mg = self.pwm.lock().await;
@@ -41,15 +43,15 @@ impl<TimPeri> PwmController<TimPeri>
             mg.disable(self.pwm_chan);
         }
     }
+
+    // Gets the applied power in scale between 0.0 and 1.0
     pub async fn get_power(&mut self) -> f32
     {
         let mg = self.pwm.lock().await;
         let duty_result: Result<f32, _> = ((mg.get_duty(self.pwm_chan) as f32 * 100.0f32) / (mg.get_max_duty() as f32)).try_into();
-        hwa::info!("Computing power: ({} * {}) / {} = {:?}",
+        hwa::debug!("Computing power: ({} * {}) / {} = {:?}",
             mg.get_duty(self.pwm_chan) as f32,
-            100f32,
-            mg.get_max_duty(),
-            duty_result,
+            100f32, mg.get_max_duty(), duty_result,
         );
         duty_result.unwrap_or(0.0f32)
     }

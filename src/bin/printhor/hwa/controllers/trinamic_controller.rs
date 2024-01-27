@@ -1,8 +1,5 @@
 //! TODO: This feature is still very experimental/preliminar
 use crate::hwa;
-use crate::hwa::device::UartTrinamic;
-#[cfg(feature = "trinamic-uart-multi-channel")]
-use crate::hwa::device::AxisChannel;
 
 pub enum TrinamicError {
     Timeout,
@@ -12,11 +9,11 @@ pub enum TrinamicError {
 
 pub struct TrinamicController
 {
-    uart: UartTrinamic,
+    uart: hwa::device::UartTrinamic,
 }
 impl TrinamicController
 {
-    pub fn new(uart: UartTrinamic) -> Self {
+    pub fn new(uart: hwa::device::UartTrinamic) -> Self {
         Self{uart}
     }
 
@@ -24,7 +21,7 @@ impl TrinamicController
         hwa::info!("Trinamic_uart CMD");
 
         #[cfg(feature = "trinamic-uart-multi-channel")]
-        self.uart.set_axis_channel(Some(AxisChannel::TMCUartX));
+        self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartX));
 
         let _status = self.read_register::<tmc2209::reg::DRV_STATUS>(0).await?;
 

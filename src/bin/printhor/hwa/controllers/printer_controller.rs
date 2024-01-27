@@ -1,5 +1,4 @@
-//! TODO: This feature is still very experimental
-//! TODO: Pending to review after intense refactor
+//! TODO: This feature is still in incubation
 use printhor_hwa_common::TrackedStaticCell;
 use printhor_hwa_common::EventBusRef;
 use crate::hwa;
