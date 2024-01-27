@@ -298,8 +298,8 @@ panic = "abort"
 
 [patch.crates-io]
 
-#async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
-async-gcode = { path = "../async-gcode" }
+async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
+#async-gcode = { path = "../async-gcode" }
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path= "printhor-hwa-common" }

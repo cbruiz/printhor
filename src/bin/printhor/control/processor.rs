@@ -118,6 +118,7 @@ impl GCodeProcessor {
     #[allow(unused)]
     pub(crate) async fn execute(&mut self, gc: &GCode, blocking: bool) -> CodeExecutionResult {
         let result = match gc {
+            #[cfg(feature = "grbl-compat")]
             GCode::GRBLCMD => {
                 let str = format!(
                     "[VER:1.1 {} v{}:]\n[MSG: Machine: {} {}]\n",

@@ -120,8 +120,10 @@ pub enum GCode {
     /// No Operation
     #[default]
     NOP,
+    #[cfg(feature = "grbl-compat")]
     /// GRBL compat status
     STATUS,
+    #[cfg(feature = "grbl-compat")]
     /// GRBL compat cmd
     GRBLCMD,
     /// List supported G-Codes

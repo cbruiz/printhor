@@ -5,6 +5,7 @@ use printhor_hwa_common::EventStatus;
 use printhor_hwa_common::EventFlags;
 #[allow(unused)]
 use crate::control::planner::*;
+#[cfg(any(feature = "grbl-compat", feature = "with-printjob", feature = "with-sdcard"))]
 use crate::control::GCode;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
@@ -79,6 +80,7 @@ pub async fn control_task(
                     }
                     Some(gc) => {
                         match gc {
+                            #[cfg(feature = "grbl-compat")]
                             GCode::STATUS => {
                                 // TODO provide GRBL compatibility status
                                 _processor.write("<Idle|MPos:0.000,0.000,0.000|Pn:XP|FS:0,0|WCO:0.000,0.000,0.000>\n").await;

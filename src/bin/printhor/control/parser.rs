@@ -73,6 +73,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                             match g {
                                 // FIXME Undo this hacky temporary solution in async-gcode.
                                 // A sub-protocol approach is preferred
+                                #[cfg(feature = "grbl-compat")]
                                 async_gcode::GCode::StatusCommand => {
                                     return Ok(Some(GCode::STATUS))
                                 }
@@ -100,6 +101,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                 hwa::debug!("GC: {} {:?}", ch, frx);
 
                                                 current_gcode_value = match (ch, frx) {
+                                                    #[cfg(feature = "grbl-compat")]
                                                     ('$', None) => {
                                                         Some(GCode::GRBLCMD)
                                                     },
@@ -298,6 +300,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                             }
                                             Some(current_gcode) => {
                                                 match current_gcode {
+                                                    #[cfg(feature = "grbl-compat")]
                                                     GCode::STATUS => {
                                                         match (ch, frx) {
                                                             ('I', Some(val)) => {
