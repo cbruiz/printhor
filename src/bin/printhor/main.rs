@@ -49,7 +49,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     hwa::debug!("Peripherals initialized");
 
     let context = hwa::setup(spawner, peripherals).await;
-    hwa::info!("Hardware setup completed. Allocated {} bytes for context.", core::mem::size_of_val(&context));
+    hwa::info!("HWI setup completed. Allocated {} bytes for context.", core::mem::size_of_val(&context));
 
     let event_bus: EventBusRef = printhor_hwa_common::init_event_bus();
     #[cfg(feature = "with-motion")]
@@ -108,6 +108,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
                      _pwm_devices: PwmDevices,
                      _wd: hwa::WatchdogRef
 ) -> Result<(), ()> {
+
     #[cfg(all(feature = "with-sdcard", feature = "sdcard-uses-spi"))]
         let sdcard_adapter = hwa::adapters::SPIAdapter::new(devices.sdcard_device, devices.sdcard_cs_pin);
 
@@ -273,6 +274,8 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         laser: laser_controller,
     });
 
+    hwa::info!("HWA setup completed.");
+
     #[cfg(feature = "with-motion")]
     {
 
@@ -280,13 +283,13 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         let _ = motion_planer.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
 
         motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
-        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(1000), Some(1000), Some(1000), Some(1000))).await;
-        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(18000), Some(18000), Some(18000), Some(18000))).await;
-        motion_planer.set_default_travel_speed(400).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(600), Some(600), Some(600), Some(600))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(900), Some(900), Some(900), Some(900))).await;
+        motion_planer.set_default_travel_speed(300).await;
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        hwa::launch_high_priotity( control::task_stepper::stepper_task(
+        hwa::launch_high_priotity( control::task_stepper::task_stepper(
             motion_planer, _wd
         )).and_then(|_| {
             hwa::debug!("stepper_start() spawned");
@@ -295,7 +298,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
     }
 
     #[cfg(feature = "integration-test")]
-    spawner.spawn(control::task_integration::integration_task(
+    spawner.spawn(control::task_integration::task_integration(
         control::task_integration::IntegrationaskParams {
             processor: processor.clone(),
             #[cfg(feature = "with-printjob")]
@@ -303,7 +306,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         }
     )).map_err(|_| ())?;
 
-    spawner.spawn(control::task_control::control_task(
+    spawner.spawn(control::task_control::task_control(
         processor.clone(),
         control::task_control::ControlTaskDevices {
             #[cfg(feature = "with-usbserial")]
@@ -320,14 +323,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
     )).map_err(|_| ())?;
 
     #[cfg(feature = "with-printjob")]
-    spawner.spawn(control::task_printjob::printer_task(
+    spawner.spawn(control::task_printjob::task_printjob(
         processor.clone(),
         printer_controller,
         sdcard_controller,
     )).map_err(|_| ())?;
 
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-    spawner.spawn(control::task_temperature::temp_task(
+    spawner.spawn(control::task_temperature::task_temperature(
         event_bus.clone(),
         defer_channel.clone(),
         #[cfg(feature = "with-hotend")]
@@ -343,7 +346,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
     )).map_err(|_| ())?;
 
     #[cfg(feature = "with-motion")]
-    spawner.spawn(control::task_deferr::defer_task(
+    spawner.spawn(control::task_defer::task_defer(
         processor,
     )).map_err(|_| ())?;
 

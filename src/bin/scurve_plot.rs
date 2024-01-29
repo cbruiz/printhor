@@ -126,6 +126,7 @@ fn main() {
                         displacement_u: (module_target_distance / Real::from_lit(1000, 0)).to_i32().unwrap_or(0) as u32,
                         vdir,
                         dest_pos: Default::default(),
+                        tool_power: 0,
                     },
                     SCurveMotionProfile::compute(
                         module_target_distance, ZERO, ZERO,

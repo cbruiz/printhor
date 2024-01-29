@@ -139,12 +139,16 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCode::G0(_) | GCode::G1(_) => {
+                hwa::debug!("Processor planning BEGIN");
                 let result = self.motion_planner.plan(&gc, blocking).await?;
+                hwa::debug!("Processor planning END with Success");
                 if !blocking {
+                    hwa::debug!("Processor sending defer rq BEGIN");
                     self.motion_planner
                         .defer_channel
                         .send(DeferEvent::LinearMove(DeferType::AwaitRequested))
                         .await;
+                    hwa::debug!("Processor sending defer rq END");
                 }
                 match result {
                     CodeExecutionSuccess::OK => {
@@ -160,6 +164,7 @@ impl GCodeProcessor {
                         hwa::debug!("G1 DEFERRED");
                     }
                 }
+                hwa::debug!("Processor returning OK");
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]

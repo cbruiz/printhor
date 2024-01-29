@@ -6,64 +6,69 @@ use embassy_stm32::{
     timer::simple_pwm::SimplePwm
 };
 
-#[cfg(feature = "with-usbserial")]
-pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
+cfg_if::cfg_if! {
+    if #[cfg(feature="nucleo64-f410rb")] {
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-uart-port-1")] {
+                type UartPort1Peri = embassy_stm32::peripherals::USART2;
+                type UartPort1TxDma = embassy_stm32::peripherals::DMA1_CH6;
+                type UartPort1RxDma = embassy_stm32::peripherals::DMA1_CH5;
+                pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, UartPort1TxDma, UartPort1RxDma>;
+                pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, UartPort1TxDma>;
+                pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, UartPort1RxDma>;
+                pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
 
-#[cfg(feature = "with-usbserial")]
-pub use crate::board::io::usbserial::*;
+                pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
+                pub use crate::board::io::uart_port1::UartPort1RxInputStream;
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-usbserial")] {
+                pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
+                pub use crate::board::io::usbserial::*;
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-trinamic")] {
+                type UartTrinamicPeri = embassy_stm32::peripherals::USART4;
+                type UartTrinamicTxDma = embassy_stm32::peripherals::DMA1_CH7;
+                type UartTrinamicRxDma = embassy_stm32::peripherals::DMA1_CH6;
+                pub type UartTrinamic = crate::board::usart::Uart<'static,UartTrinamicPeri, UartTrinamicTxDma, UartTrinamicRxDma>;
+            }
+        }
 
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
-pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
-    embassy_stm32::peripherals::USART2,
-    embassy_stm32::peripherals::DMA1_CH6, embassy_stm32::peripherals::DMA1_CH5
->;
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
-pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
-    embassy_stm32::peripherals::USART2,
-    embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6
->;
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
-pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
->;
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
-pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH7
->;
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
-pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH5
->;
+    }
+    else if #[cfg(feature="nucleo64-l476rg")] {
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-uart-port-1")] {
+                type UartPort1Peri = embassy_stm32::peripherals::USART2;
+                type UartPort1TxDma = embassy_stm32::peripherals::DMA1_CH7;
+                type UartPort1RxDma = embassy_stm32::peripherals::DMA1_CH6;
+                pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, UartPort1TxDma, UartPort1RxDma>;
+                pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, UartPort1TxDma>;
+                pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, UartPort1RxDma>;
+                pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
 
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-f410rb"))]
-pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH5
->;
-
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
-pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
->;
-
-#[cfg(all(feature = "with-uart-port-1", feature="nucleo64-l476rg"))]
-pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static,
-    embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA1_CH6
->;
-
-#[cfg(feature = "with-uart-port-1")]
-pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
-#[cfg(feature = "with-uart-port-1")]
-pub use crate::board::io::uart_port1::UartPort1RxInputStream;
-
-
-#[cfg(feature = "with-trinamic")]
-pub type Uart4 = crate::board::usart::Uart<'static,
-    embassy_stm32::peripherals::USART4,
-    embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6
->;
-
-#[cfg(feature = "with-trinamic")]
-pub type UartTrinamic = Uart4;
+                pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
+                pub use crate::board::io::uart_port1::UartPort1RxInputStream;
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-usbserial")] {
+                pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
+                pub use crate::board::io::usbserial::*;
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-trinamic")] {
+                type UartTrinamicPeri = embassy_stm32::peripherals::USART4;
+                type UartTrinamicTxDma = embassy_stm32::peripherals::DMA1_CH7;
+                type UartTrinamicRxDma = embassy_stm32::peripherals::DMA1_CH6;
+                pub type UartTrinamic = crate::board::usart::Uart<'static,UartTrinamicPeri, UartTrinamicTxDma, UartTrinamicRxDma>;
+            }
+        }
+    }
+}
 
 #[cfg(all(feature = "with-spi", feature = "nucleo64-f410rb"))]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
@@ -194,22 +199,51 @@ pub struct LayerFanPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
     pub power_channel: PwmChannel,
 }
+cfg_if::cfg_if! {
+    if #[cfg(feature="upstream-embassy")] {
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-motion")] {
+                pub struct MotionPins {
+                    pub all_enable_pin: Output<'static>, // D8
 
-#[cfg(feature = "with-motion")]
-pub struct MotionPins {
-    pub all_enable_pin: Output<'static, embassy_stm32::peripherals::PA9>, // D8
+                    pub x_endstop_pin: Input<'static>, // D9
+                    pub y_endstop_pin: Input<'static>, // D10
+                    pub z_endstop_pin: Input<'static>, // D11
 
-    pub x_endstop_pin: Input<'static, embassy_stm32::peripherals::PC7>, // D9
-    pub y_endstop_pin: Input<'static, embassy_stm32::peripherals::PB6>, // D10
-    pub z_endstop_pin: Input<'static, embassy_stm32::peripherals::PA7>, // D11
+                    pub x_step_pin: Output<'static>, // D2
+                    pub y_step_pin: Output<'static>, // D3
+                    pub z_step_pin: Output<'static>, // D4
 
-    pub x_step_pin: Output<'static, embassy_stm32::peripherals::PA10>, // D2
-    pub y_step_pin: Output<'static, embassy_stm32::peripherals::PB3>, // D3
-    pub z_step_pin: Output<'static, embassy_stm32::peripherals::PB5>, // D4
+                    pub x_dir_pin: Output<'static>, // D5
+                    pub y_dir_pin: Output<'static>, // D6
+                    pub z_dir_pin: Output<'static>, // D7
+                }
+            }
+        }
+    }
+    else {
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-motion")] {
+                pub struct MotionPins {
+                    pub all_enable_pin: Output<'static, embassy_stm32::peripherals::PA9>, // D8
 
-    pub x_dir_pin: Output<'static, embassy_stm32::peripherals::PB4>, // D5
-    pub y_dir_pin: Output<'static, embassy_stm32::peripherals::PB10>, // D6
-    pub z_dir_pin: Output<'static, embassy_stm32::peripherals::PA8>, // D7
+                    pub x_endstop_pin: Input<'static, embassy_stm32::peripherals::PC7>, // D9
+                    pub y_endstop_pin: Input<'static, embassy_stm32::peripherals::PB6>, // D10
+                    pub z_endstop_pin: Input<'static, embassy_stm32::peripherals::PA7>, // D11
+
+                    pub x_step_pin: Output<'static, embassy_stm32::peripherals::PA10>, // D2
+                    pub y_step_pin: Output<'static, embassy_stm32::peripherals::PB3>, // D3
+                    pub z_step_pin: Output<'static, embassy_stm32::peripherals::PB5>, // D4
+
+                    pub x_dir_pin: Output<'static, embassy_stm32::peripherals::PB4>, // D5
+                    pub y_dir_pin: Output<'static, embassy_stm32::peripherals::PB10>, // D6
+                    pub z_dir_pin: Output<'static, embassy_stm32::peripherals::PA8>, // D7
+                }
+            }
+        }
+
+
+    }
 }
 
 #[cfg(feature = "with-motion")]

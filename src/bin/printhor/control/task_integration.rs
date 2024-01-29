@@ -1,6 +1,6 @@
 use crate::hwa;
 #[allow(unused)]
-use crate::control::GCode;
+use crate::control::*;
 #[allow(unused)]
 use crate::math::Real;
 use crate::control::planner::*;
@@ -12,7 +12,7 @@ pub struct IntegrationaskParams {
     pub printer_controller: hwa::controllers::PrinterController,
 }
 #[embassy_executor::task(pool_size=1)]
-pub(crate) async fn integration_task(mut params: IntegrationaskParams)
+pub(crate) async fn task_integration(mut params: IntegrationaskParams)
 {
 
     #[allow(unused)]
@@ -53,6 +53,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         }
     }
 
+    #[cfg(feature = "integration-test-trinamic")]
     {
         hwa::info!("Testing M502");
         if params.processor.execute(&GCode::M502, false).await.and_then(expect_immediate).is_err() {

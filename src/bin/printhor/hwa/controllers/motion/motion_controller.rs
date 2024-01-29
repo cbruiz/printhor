@@ -81,7 +81,7 @@ pub struct MotionPlanner {
     pub(self) move_planned: Config<CriticalSectionRawMutex, bool>,
     pub(self) available: Config<CriticalSectionRawMutex, bool>,
     pub(self) motion_cfg: Mutex<CriticalSectionRawMutex, MotionConfig>,
-    pub(self) motion_st: Mutex<CriticalSectionRawMutex, MotionStatus>,
+    motion_st: Mutex<CriticalSectionRawMutex, MotionStatus>,
     pub motion_driver: Mutex<CriticalSectionRawMutex, hwa::drivers::MotionDriver>,
 }
 
@@ -144,7 +144,6 @@ impl MotionPlanner {
     }
 
     pub async fn consume_current_segment_data(&self) {
-
         let mut rb = self.ringbuffer.lock().await;
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
@@ -176,12 +175,12 @@ impl MotionPlanner {
     }
 
     pub async fn schedule_raw_move(&self, move_type: ScheduledMove, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
-
+        // FIXME: Better to set subscription to defer channel from here to avoid msg loss
+        hwa::debug!("schedule_raw_move() BEGIN");
         loop {
             self.available.wait().await;
             {
                 let mut rb = self.ringbuffer.lock().await;
-
                 let mut must_defer = true;
 
                 if rb.used < (SEGMENT_QUEUE_SIZE as u8) {
@@ -241,9 +240,11 @@ impl MotionPlanner {
                     self.move_planned.signal(true);
                     if must_defer || (rb.used == (SEGMENT_QUEUE_SIZE as u8)) {
                         // Shall wait for one deallocation in order to enqueue more
+                        hwa::debug!("schedule_raw_move() END - Finally deferred");
                         return Ok(CodeExecutionSuccess::DEFERRED(event))
                     }
                     else {
+                        hwa::debug!("schedule_raw_move() END - Finally queued");
                         return Ok(CodeExecutionSuccess::QUEUED)
                     }
 
@@ -251,11 +252,16 @@ impl MotionPlanner {
                     self.available.reset();
                     if !blocking {
                         hwa::warn!("Mov rejected: {} / {} h={}", rb.used, SEGMENT_QUEUE_SIZE, rb.head);
+                        hwa::info!("schedule_raw_move() END - Finally busy");
                         return Err(CodeExecutionFailure::BUSY)
+                    }
+                    else {
+                        hwa::trace!("schedule_raw_move() Looping again");
                     }
                 }
             }
         }
+        hwa::debug!("schedule_raw_move() END");
     }
 
     pub fn motion_cfg(&self) -> &'_ Mutex<CriticalSectionRawMutex,MotionConfig> {

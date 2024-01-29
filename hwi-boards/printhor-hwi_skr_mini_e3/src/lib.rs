@@ -12,7 +12,6 @@ pub use defmt;
 mod board;
 
 pub use board::device;
-pub use board::consts;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;
@@ -21,7 +20,6 @@ pub use board::PwmDevices;
 pub use board::init;
 pub use board::setup;
 pub use board::heap_current_size;
-pub use board::heap_current_usage_percentage;
 pub use board::stack_reservation_current_size;
 pub use board::MACHINE_BOARD;
 pub use board::MACHINE_TYPE;
@@ -40,18 +38,40 @@ const UART_PORT1_BAUD_RATE: u32 = 115200;
 
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
-#[interrupt]
-unsafe fn CEC() {
-    EXECUTOR_HIGH.on_interrupt()
-}
+cfg_if::cfg_if! {
+    if #[cfg(feature="sk3_mini_e3_v2")] {
+        #[interrupt]
+        unsafe fn RTC() {
+            EXECUTOR_HIGH.on_interrupt()
+        }
 
-#[inline]
-pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-    interrupt::USB_UCPD1_2.set_priority(Priority::P3);
-    interrupt::CEC.set_priority(Priority::P2);
+        #[inline]
+        pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+            #[cfg(feature = "with-usbserial")]
+            interrupt::USB_LP_CAN1_RX0.set_priority(Priority::P3);
+            interrupt::RTC.set_priority(Priority::P2);
 
-    let spawner = EXECUTOR_HIGH.start(interrupt::CEC);
-    spawner.spawn(token).map_err(|_| ())
+            let spawner = EXECUTOR_HIGH.start(interrupt::RTC);
+            spawner.spawn(token).map_err(|_| ())
+        }
+    }
+    else if #[cfg(feature="sk3_mini_e3_v3")] {
+        #[interrupt]
+        unsafe fn CEC() {
+            EXECUTOR_HIGH.on_interrupt()
+        }
+
+        #[inline]
+        pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+
+            #[cfg(feature = "with-usbserial")]
+            interrupt::USB_UCPD1_2.set_priority(Priority::P3);
+            interrupt::CEC.set_priority(Priority::P2);
+
+            let spawner = EXECUTOR_HIGH.start(interrupt::CEC);
+            spawner.spawn(token).map_err(|_| ())
+        }
+    }
 }
 
 #[inline]

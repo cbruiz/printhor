@@ -102,11 +102,6 @@ pub fn stack_reservation_current_size() -> u32 {
     }
 }
 
-#[inline]
-pub fn heap_current_usage_percentage() -> f32 {
-    100.0f32 * (heap_current_size() as f32) / (HEAP_SIZE_BYTES as f32)
-}
-
 #[cfg(feature = "with-usbserial")]
 bind_interrupts!(struct UsbIrqs {
     OTG_FS => usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;

@@ -230,7 +230,7 @@ impl HeaterStateMachine {
 }
 
 #[embassy_executor::task(pool_size=1)]
-pub async fn temp_task(
+pub async fn task_temperature(
     event_bus: EventBusRef,
     defer_channel: DeferChannelRef,
     #[cfg(feature = "with-hotend")]

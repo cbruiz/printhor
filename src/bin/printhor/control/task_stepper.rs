@@ -15,7 +15,7 @@
 //!
 //! TODO: Refactor pending
 //!
-//! Average Error Deviation in runtime: around 10us (Still pending to measure precisely)
+//! Average Error Deviation in runtime: around 200us (Still pending to measure precisely)
 use crate::control::planner::StepperChannel;
 #[allow(unused)]
 use crate::math::{Real, ONE_MILLION, ONE_THOUSAND, ONE_HUNDRED};
@@ -37,7 +37,7 @@ use super::motion_timing::*;
 const MICRO_SEGMENT_PERIOD_HZ: u64 = 50;
 /// Stepper pulse period in microseconds
 const STEPPER_PULSE_WIDTH_US: Duration = Duration::from_micros(Duration::from_hz(embassy_time::TICK_HZ).as_micros());
-const STEPPER_PULSE_WIDTH_TICKS: u32 = Duration::from_hz(embassy_time::TICK_HZ).as_ticks() as u32;
+const STEPPER_PULSE_WIDTH_TICKS: u32 = STEPPER_PULSE_WIDTH_US.as_ticks() as u32;
 
 /// Inactivity Timeout until steppers are disabled
 const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(20);
@@ -53,7 +53,7 @@ const PERIOD_MS: i32 = (MICRO_SEGMENT_PERIOD_US / 1000) as i32;
 This task feeds watchdog to ensure no reset happen due high CPU starvation when feed rate is very high
  */
 #[embassy_executor::task]
-pub async fn stepper_task(
+pub async fn task_stepper(
     motion_planner: hwa::controllers::MotionPlannerRef, watchdog: hwa::WatchdogRef)
 {
     let mut steppers_off = true;
@@ -68,6 +68,16 @@ pub async fn stepper_task(
 
     loop {
         match with_timeout(STEPPER_INACTIVITY_TIMEOUT, motion_planner.get_current_segment_data()).await {
+            // Timeout
+            Err(_) => {
+                hwa::trace!("stepper_task timeout");
+                if !steppers_off {
+                    hwa::info!("Timeout. Powering steppers off");
+                    let mut drv = motion_planner.motion_driver.lock().await;
+                    drv.pins.disable_all_steppers();
+                    steppers_off = true;
+                }
+            }
             // Process segment plan
             Ok(Some(segment)) => {
                 hwa::debug!("Segment init");
@@ -76,11 +86,10 @@ pub async fn stepper_task(
                 let mut timings = Timings::new();
 
                 // segment metronome
-                //let mut absolute_ticker = embassy_time::Ticker::every(Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ));
                 let absolute_ticker_period = Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS.into());
                 let mut absolute_ticker_start = now();
                 let t_segment_start = now();
-                // Annotate how many time in ticks the executor is duty in this segment
+                // Annotate how much time in ticks the executor is duty in this segment
                 let mut duty = Duration::from_ticks(0);
 
                 duty += t_segment_start.elapsed();
@@ -270,7 +279,6 @@ pub async fn stepper_task(
                                     if channel.contains(StepperChannel::E) {
                                         drv.e_step_pin_low();
                                     }
-                                    s_block_for(STEPPER_PULSE_WIDTH_US);
                                     #[cfg(feature = "no-real-time")]
                                     {
                                         multi_timer.sync_clock(STEPPER_PULSE_WIDTH_US);
@@ -292,7 +300,7 @@ pub async fn stepper_task(
                                 let t_sec = Real::from_lit(t_segment_start.elapsed().as_millis().try_into().unwrap_or(0), 3);
                                 let s_mm = Real::from_lit(segment.segment_data.displacement_u.try_into().unwrap_or(0), 3);
                                 let rate = if s_mm.is_zero() { Real::zero() } else {s_mm / t_sec};
-                                hwa::info!("# Segment of length {} mm completed in {} sec ({} mm/s).", s_mm.rdp(4), t_sec.rdp(4), rate.rdp(3)  );
+                                hwa::debug!("# Segment of length {} mm completed in {} sec ({} mm/s).", s_mm.rdp(4), t_sec.rdp(4), rate.rdp(3)  );
                             }
                             duty += t0.elapsed();
                             motion_planner.consume_current_segment_data().await;
@@ -349,6 +357,7 @@ pub async fn stepper_task(
                         let pend = absolute_ticker_period - elapsed;
                         absolute_ticker_start = tn + pend;
                         embassy_time::Timer::after(pend).await;
+                        //s_block_for(pend);
                         hwa::debug!("uSegment {} waiting {} us (elapsed: {} us, period: {} us) eof: {}", tick_id, (absolute_ticker_period - elapsed).as_micros(), elapsed.as_micros(), absolute_ticker_period.as_micros(), eof);
                     }
                     else {
@@ -387,15 +396,6 @@ pub async fn stepper_task(
                 }
                 motion_planner.consume_current_segment_data().await;
                 hwa::debug!("Homing done");
-            }
-            // Timeout
-            Err(_) => {
-                if !steppers_off {
-                    hwa::info!("Timeout. Powering steppers off");
-                    let mut drv = motion_planner.motion_driver.lock().await;
-                    drv.pins.disable_all_steppers();
-                    steppers_off = true;
-                }
             }
         }
     }

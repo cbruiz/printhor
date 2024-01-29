@@ -40,18 +40,21 @@ static HEAP: CortexMHeap = CortexMHeap::empty();
 pub const MACHINE_TYPE: &str = "NUCLEO64";
 pub const MACHINE_BOARD: &str = "NUCLEO64_Arduino_CNC_Hat_v3.x";
 
-#[cfg(feature="nucleo64-f410rb")]
-/// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
-pub const MACHINE_PROCESSOR: &str = "STM32F410RB";
-#[cfg(feature="nucleo64-l476rg")]
-/// ARM Cortex M4F @80MHZ, 128kB SRAM, 1024kB Program
-pub const MACHINE_PROCESSOR: &str = "STM32L476RG";
-#[cfg(feature="nucleo64-f410rb")]
-#[allow(unused)]
-pub const PROCESSOR_SYS_CK_MHZ: &str = "100_000_000";
-#[cfg(feature="nucleo64-l476rg")]
-#[allow(unused)]
-pub const PROCESSOR_SYS_CK_MHZ: &str = "80_000_000";
+cfg_if::cfg_if! {
+    if #[cfg(feature="nucleo64-f410rb")] {
+        /// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
+        pub const MACHINE_PROCESSOR: &str = "STM32F410RB";
+        #[allow(unused)]
+        pub const PROCESSOR_SYS_CK_MHZ: &str = "100_000_000";
+
+    }
+    else if #[cfg(feature="nucleo64-l476rg")] {
+        /// ARM Cortex M4F @80MHZ, 128kB SRAM, 1024kB Program
+        pub const MACHINE_PROCESSOR: &str = "STM32L476RG";
+        #[allow(unused)]
+        pub const PROCESSOR_SYS_CK_MHZ: &str = "80_000_000";
+    }
+}
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: u32 = 4096;
@@ -110,11 +113,6 @@ pub fn stack_reservation_current_size() -> u32 {
     unsafe {
         core::ptr::read_volatile(core::ptr::addr_of!(printhor_hwa_common::COUNTER)) as u32
     }
-}
-
-#[inline]
-pub fn heap_current_usage_percentage() -> f32 {
-    100.0f32 * (heap_current_size() as f32) / (HEAP_SIZE_BYTES as f32)
 }
 
 #[cfg(feature = "with-usbserial")]
@@ -186,6 +184,9 @@ pub fn init() -> embassy_stm32::Peripherals {
 }
 
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
+
+    //defmt::warn!("Wait a few...");
+    //embassy_time::Timer::after_secs(5).await;
 
     #[cfg(feature = "with-usbserial")]
     let (usbserial_tx, usbserial_rx_stream) = {

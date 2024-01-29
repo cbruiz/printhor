@@ -18,7 +18,6 @@ pub use board::PwmDevices;
 pub use board::init;
 pub use board::setup;
 pub use board::heap_current_size;
-pub use board::heap_current_usage_percentage;
 pub use board::stack_reservation_current_size;
 pub use board::MACHINE_BOARD;
 pub use board::MACHINE_TYPE;

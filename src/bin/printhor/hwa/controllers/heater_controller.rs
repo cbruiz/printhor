@@ -64,7 +64,14 @@ where
     #[inline]
     pub async fn read_temp(&mut self) -> f32 {
         let mut bus  = self.adc.lock().await;
-        let value = bus.read(&mut self.adc_pin);
+        cfg_if::cfg_if! {
+            if #[cfg(feature="adc-is-async")] {
+                let value = bus.read(&mut self.adc_pin).await;
+            }
+            else {
+                let value = bus.read(&mut self.adc_pin);
+            }
+        }
         self.convert_to_celcius(value.into())
     }
 

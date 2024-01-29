@@ -17,7 +17,7 @@ use crate::control::planner::{CodeExecutionFailure, CodeExecutionSuccess};
 #[allow(unused_mut)]
 #[allow(unreachable_patterns)]
 #[embassy_executor::task(pool_size=1)]
-pub(crate) async fn printer_task(
+pub(crate) async fn task_printjob(
     mut processor: hwa::GCodeProcessor,
     mut printer_controller: PrinterController,
     mut card_controller: hwa::controllers::CardController,

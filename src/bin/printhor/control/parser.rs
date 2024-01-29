@@ -64,7 +64,7 @@ impl<STREAM> GCodeLineParser<STREAM>
         loop {
             match self.raw_parser.next().await {
                 None => {
-                    hwa::warn!("EOF reading from stream");
+                    hwa::debug!("EOF reading from stream");
                     return Ok(None);
                 }
                 Some(result) => {

@@ -13,7 +13,7 @@ pub(crate) mod task_control;
 #[cfg(feature = "with-printjob")] pub(crate) mod task_printjob;
 #[cfg(feature = "integration-test")] pub(crate) mod task_integration;
 #[cfg(feature = "with-motion")]
-pub(crate) mod task_deferr;
+pub(crate) mod task_defer;
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 pub(crate) mod task_temperature;
 #[cfg(feature = "with-motion")]

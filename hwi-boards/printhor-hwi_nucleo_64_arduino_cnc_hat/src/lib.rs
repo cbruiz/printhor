@@ -1,6 +1,4 @@
 #![no_std]
-#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
-#![allow(stable_features)]
 use embassy_stm32::interrupt;
 use embassy_executor::InterruptExecutor;
 
@@ -18,7 +16,6 @@ pub use board::PwmDevices;
 pub use board::init;
 pub use board::setup;
 pub use board::heap_current_size;
-pub use board::heap_current_usage_percentage;
 pub use board::stack_reservation_current_size;
 pub use board::MACHINE_BOARD;
 pub use board::MACHINE_TYPE;
@@ -44,6 +41,8 @@ unsafe fn RNG() {
 
 #[inline]
 pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+    use embassy_stm32::interrupt::InterruptExt;
+    interrupt::RNG.set_priority(embassy_stm32::interrupt::Priority::P8);
     let spawner = EXECUTOR_HIGH.start(interrupt::RNG);
     spawner.spawn(token).map_err(|_| ())
 }
