@@ -29,11 +29,11 @@ pub use board::MAX_STATIC_MEMORY;
 pub use board::VREF_SAMPLE;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 const USBSERIAL_BUFFER_SIZE: usize = 32;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
 
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();

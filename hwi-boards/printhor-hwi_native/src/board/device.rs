@@ -1,17 +1,21 @@
-
-#[cfg(feature = "with-uart-port-1")]
-pub(crate) type UartPort1Device = crate::board::mocked_peripherals::MockedUart;
-
-#[cfg(feature = "with-uart-port-1")]
-pub type UartPort1Tx = crate::board::mocked_peripherals::MockedUartTx;
-
-#[cfg(feature = "with-uart-port-1")]
-pub type UartPort1Rx = crate::board::mocked_peripherals::MockedUartRx;
-
-#[cfg(feature = "with-uart-port-1")]
-pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1Tx>;
-#[cfg(feature = "with-uart-port-1")]
-pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-1")] {
+        pub type UartPort1Device = crate::board::mocked_peripherals::MockedUart;
+        pub type UartPort1Tx = crate::board::mocked_peripherals::MockedUartTx;
+        pub type UartPort1Rx = crate::board::mocked_peripherals::MockedUartRx;
+        pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1Tx>;
+        pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-2")] {
+        pub type UartPort2Device = crate::board::mocked_peripherals::MockedUartSink;
+        pub type UartPort2Tx = crate::board::mocked_peripherals::MockedUartSinkTx;
+        pub type UartPort2Rx = crate::board::mocked_peripherals::MockedUartSinkRx;
+        pub type UartPort2TxControllerRef = crate::board::ControllerRef<UartPort2Tx>;
+        pub type UartPort2RxInputStream = crate::board::mocked_peripherals::MockedUartSinkRxInputStream;
+    }
+}
 
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 pub type AdcImpl<T> = crate::board::mocked_peripherals::MockedAdc<T>;

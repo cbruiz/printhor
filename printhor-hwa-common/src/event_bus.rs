@@ -2,7 +2,6 @@
 //!
 //! This module provides a global asynchronous event bus.
 use core::ops::{BitAnd, BitOr, BitXor};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use crate::{TrackedStaticCell, ControllerMutex, ControllerRef};
 use bitflags::bitflags;
 
@@ -15,10 +14,10 @@ bitflags! {
     //#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct EventFlags: u32 {
-        const SYS_BOOTING      = 0b1000000000000000000000000000000;
-        const SYS_BOOT_FAILURE = 0b0100000000000000000000000000000;
-        const SYS_READY        = 0b0010000000000000000000000000000;
-        const SYS_ALARM        = 0b0001000000000000000000000000000;
+        const SYS_ALARM        = 0b1000000000000000000000000000000;
+        const SYS_BOOTING      = 0b01000000000000000000000000000000;
+        const SYS_BOOT_FAILURE = 0b00100000000000000000000000000000;
+        const SYS_READY        = 0b00010000000000000000000000000000;
         const ATX_ON           = 0b0000100000000000000000000000000;
         const HOMMING          = 0b0000010000000000000000000000000;
         const MOVING           = 0b0000001000000000000000000000000;
@@ -64,7 +63,7 @@ impl EventBus {
 }
 
 pub struct EventBusRef {
-    instance: ControllerRef<EventBus, CriticalSectionRawMutex>,
+    instance: ControllerRef<EventBus, ChannelMutexType>,
 }
 
 pub struct EventBusSubscriber<'a> {
@@ -126,15 +125,13 @@ impl EventBusSubscriber<'_> {
         status
     }
 
-    #[inline]
+    /// // Use [Self::ft_wait_for] instead
+    #[deprecated]
     pub async fn wait_for(&mut self, what: EventStatus) {
         let wanted = what.flags.bitand(what.mask);
         if let Some(msg) = self.inner.try_next_message_pure() {
             //crate::trace!("last_status = {:?}", msg);
             self.last_status = msg;
-        }
-        else {
-            //crate::trace!("last_status = {:?}", self.last_status);
         }
         loop {
             let relevant_bits = self.last_status.bitand(what.mask);
@@ -145,12 +142,53 @@ impl EventBusSubscriber<'_> {
         }
     }
 
+    /// Waits until desired event(s) occur or SYS_ALARM is triggered
+    /// Returns:
+    /// * Ok when event occur.
+    /// * Err when SYS_ALARM is set
+    /// Special cases:
+    /// * If SYS_ALARM is addressed (mentioned) in the expected event, No error is returned and simply will wait for desired condition
+    pub async fn ft_wait_for(&mut self, what: EventStatus) -> Result<(),()> {
+        let wanted = what.flags.bitand(what.mask);
+        if let Some(msg) = self.inner.try_next_message_pure() {
+            //crate::trace!("last_status = {:?}", msg);
+            self.last_status = msg;
+        }
+        loop {
+            // Check SYS_ALARM condition unless SYS_ALARM is explicitly mentioned
+            if !what.mask.contains(EventFlags::SYS_ALARM) && self.last_status.contains(EventFlags::SYS_ALARM) {
+                return Err(())
+            }
+            let relevant_bits = self.last_status.bitand(what.mask);
+            if wanted.eq(&relevant_bits) {
+                return Ok(());
+            }
+            self.last_status = self.inner.next_message_pure().await;
+        }
+    }
+
     #[inline]
+    pub async fn ft_wait_until(&mut self, flags: EventFlags)  -> Result<(),()> {
+        self.ft_wait_for(EventStatus::containing(flags)).await
+    }
+
+    // Use [Self::ft_wait_until] instead
+    #[inline]
+    #[deprecated]
+    #[allow(deprecated)]
     pub async fn wait_until(&mut self, flags: EventFlags) {
         self.wait_for(EventStatus::containing(flags)).await
     }
 
     #[inline]
+    pub async fn ft_wait_while(&mut self, flags: EventFlags) -> Result<(),()> {
+        self.ft_wait_for(EventStatus::not_containing(flags)).await
+    }
+
+    // Use [Self::ft_wait_while] instead
+    #[inline]
+    #[deprecated]
+    #[allow(deprecated)]
     pub async fn wait_while(&mut self, flags: EventFlags) {
         self.wait_for(EventStatus::not_containing(flags)).await
     }

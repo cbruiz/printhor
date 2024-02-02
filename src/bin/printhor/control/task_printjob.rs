@@ -1,6 +1,6 @@
 //! TODO: This feature is still incomplete
 use crate::hwa;
-use crate::control::parser::{GCodeLineParser, GCodeLineParserError};
+use crate::control::{GCodeLineParser, GCodeLineParserError};
 use embassy_time::{Instant, Timer};
 use embassy_time::Duration;
 
@@ -8,11 +8,11 @@ use crate::hwa::controllers::PrinterController;
 use crate::hwa::controllers::PrinterControllerEvent;
 use crate::hwa::controllers::sdcard_controller::SDCardStream;
 use crate::hwa::controllers::sdcard_controller::SDCardError;
-use printhor_hwa_common::EventStatus;
+use printhor_hwa_common::{CommChannel, EventStatus};
 use printhor_hwa_common::EventFlags;
 use printhor_hwa_common::EventBusSubscriber;
 use crate::control::GCode;
-use crate::control::planner::{CodeExecutionFailure, CodeExecutionSuccess};
+use crate::control::motion_planning::{CodeExecutionFailure, CodeExecutionSuccess};
 
 #[allow(unused_mut)]
 #[allow(unreachable_patterns)]
@@ -24,7 +24,9 @@ pub(crate) async fn task_printjob(
 ) -> ! {
 
     let mut subscriber: EventBusSubscriber<'static> = hwa::task_allocations::init_printer_subscriber(processor.event_bus.clone()).await;
-    subscriber.wait_for(EventStatus::not_containing(EventFlags::SYS_BOOTING)).await;
+    if subscriber.ft_wait_for(EventStatus::not_containing(EventFlags::SYS_BOOTING)).await.is_err() {
+        crate::initialization_error();
+    }
 
     hwa::debug!("printer_task started");
     hwa::debug!("SDCardStream takes {} bytes", core::mem::size_of::<SDCardStream>());
@@ -72,20 +74,25 @@ pub(crate) async fn task_printjob(
                     match gcode_pull(&mut print_job_parser).await {
                         Ok(Some(gcode)) => {
                             hwa::debug!("Line {}: Executing {}", current_line, gcode);
-                            match processor.execute(&gcode, true).await {
+                            match processor.execute(CommChannel::Internal, &gcode, true).await {
                                 Ok(CodeExecutionSuccess::OK) => {
-                                    hwa::debug!("Line {}: OK {}", current_line, gcode);
+                                    hwa::info!("Line {}: OK {} (I)", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::CONSUMED) => {
-                                    hwa::debug!("Line {}: OK {}", current_line, gcode);
+                                    hwa::info!("Line {}: OK {} (C)", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::QUEUED) => {
-                                    hwa::debug!("Line {}: QUEUED {}", current_line, gcode);
+                                    hwa::info!("Line {}: OK {} (Q)", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
-                                    hwa::info!("Line {}: DEFERRED {}", current_line, gcode);
-                                    subscriber.wait_for(_status).await;
-                                    hwa::info!("Line {}: OK {}", current_line, gcode);
+                                    //hwa::info!("Line {}: DEFERRED {}", current_line, gcode);
+                                    if subscriber.ft_wait_for(_status).await.is_err() {
+                                        // Must pause. Recoverable when SYS_ALARM go down
+                                        break;
+                                    }
+                                    else {
+                                        hwa::info!("Line {}: OK {} (D)", current_line, gcode);
+                                    }
                                 }
                                 Err(CodeExecutionFailure::BUSY) => {
                                     fatal_error = true;
@@ -103,6 +110,11 @@ pub(crate) async fn task_printjob(
                                 Err(CodeExecutionFailure::HomingRequired) => {
                                     fatal_error = true;
                                     hwa::error!("Line {}: Unexpected HomingRequired before {}", current_line, gcode);
+                                    break;
+                                }
+                                Err(CodeExecutionFailure::PowerRequired) => {
+                                    fatal_error = true;
+                                    hwa::error!("Line {}: Unexpected PowerRequired before {}", current_line, gcode);
                                     break;
                                 }
                             }
@@ -133,7 +145,9 @@ pub(crate) async fn task_printjob(
                         break;
                     }
                 }
-                subscriber.wait_until(EventFlags::MOV_QUEUE_EMPTY).await;
+                if subscriber.ft_wait_until(EventFlags::MOV_QUEUE_EMPTY).await.is_err() {
+                    hwa::warn!("SYS_ALARM raised");
+                }
                 job_time += job_t0.elapsed();
                 if fatal_error {
                     printer_controller.set(PrinterControllerEvent::Abort).await.unwrap();

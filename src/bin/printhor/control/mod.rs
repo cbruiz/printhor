@@ -6,9 +6,12 @@ use crate::math::Real;
 use strum::Display;
 use strum::{AsRefStr, EnumVariantNames};
 use alloc::string::String;
-pub(crate) mod processor;
-pub(crate) mod planner;
-pub(crate) mod parser;
+pub(crate) mod motion_planning;
+#[cfg(feature = "with-motion")]
+pub(crate) mod motion_timing;
+mod processing;
+pub use processing::*;
+
 pub(crate) mod task_control;
 #[cfg(feature = "with-printjob")] pub(crate) mod task_printjob;
 #[cfg(feature = "integration-test")] pub(crate) mod task_integration;
@@ -18,8 +21,6 @@ pub(crate) mod task_defer;
 pub(crate) mod task_temperature;
 #[cfg(feature = "with-motion")]
 pub mod task_stepper;
-#[cfg(feature = "with-motion")]
-pub(crate) mod motion_timing;
 
 #[allow(dead_code)]
 #[derive(Clone, Default)]

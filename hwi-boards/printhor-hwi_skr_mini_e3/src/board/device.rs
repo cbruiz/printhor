@@ -5,7 +5,7 @@ use embassy_stm32::timer::simple_pwm::SimplePwm;
 
 // Common for both boards
 cfg_if::cfg_if! {
-    if #[cfg(feature="with-usbserial")] {
+    if #[cfg(feature="with-serial-usb")] {
         pub type USBDrv = embassy_stm32::usb::Driver<'static, embassy_stm32::peripherals::USB>;
         pub use crate::board::io::usbserial::*;
     }
@@ -32,7 +32,7 @@ cfg_if::cfg_if! {
         }
 
         cfg_if::cfg_if! {
-            if #[cfg(feature="with-uart-port-1")] {
+            if #[cfg(feature="with-serial-port-1")] {
                 type UsartPort1Peri = embassy_stm32::peripherals::USART2;
                 type UsartPort1TxDma = embassy_stm32::peripherals::DMA1_CH7;
                 type UsartPort1RxDma = embassy_stm32::peripherals::DMA1_CH6;
@@ -95,23 +95,23 @@ cfg_if::cfg_if! {
             embassy_stm32::peripherals::USART4,
             embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6>;
 
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
             embassy_stm32::peripherals::USART2,
             embassy_stm32::peripherals::DMA2_CH2, embassy_stm32::peripherals::DMA2_CH1>;
 
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
             embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA2_CH2>;
 
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
             embassy_stm32::peripherals::USART2, embassy_stm32::peripherals::DMA2_CH1>;
 
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
 
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         pub use crate::board::io::uart_port1::UartPort1RxInputStream;
 
         #[cfg(feature = "with-spi")]

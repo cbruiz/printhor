@@ -21,10 +21,12 @@ default = ["native"]
 
 # Hardware device features
 with-defmt = ["defmt", "defmt-rtt", "panic-probe"]
-with-usbserial = []
+with-serial-usb = []
+with-serial-port-1 = []
+with-serial-port-2 = []
 with-uart-port-1 = []
+with-uart-port-2 = []
 with-printjob = []
-with-uart2 = []
 with-spi = ["embedded-hal"]
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]
@@ -46,15 +48,15 @@ ili9341_parallel = []
 ili9341_spi = []
 
 integration-test = [
-    #"integration-test-m100",
-    #"integration-test-power-on", "integration-test-homing",
-    #"integration-test-move-ortho",
-    #"integration-test-move-oblique",
-    #"integration-test-move-boundaries",
+    "integration-test-m100",
+    "integration-test-power-on", "integration-test-homing",
+    "integration-test-move-ortho",
+    "integration-test-move-oblique",
+    "integration-test-move-boundaries",
     #"integration-test-trinamic",
     #"integration-test-benchy",
-    "integration-test-laser-engrave",
-    #"plot-timings",
+    #"integration-test-laser-engrave",
+    "plot-timings",
     #"timing-stats",
     #"no-real-time",
 ]
@@ -69,7 +71,6 @@ integration-test-laser-engrave = []
 integration-test-benchy = []
 integration-test-move-boundaries = []
 integration-test-trinamic = []
-
 
 fixed-point-128-impl = []
 float-point-f32-impl = []
@@ -97,7 +98,8 @@ with-display = [
 native = [
     #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
     "with-motion", "has-extruder", "printhor-hwi_native/with-motion", "printhor-hwa-common/with-motion",
-    "with-uart-port-1", "printhor-hwi_native/with-uart-port-1",
+    "with-serial-port-1", "printhor-hwi_native/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
+    "with-serial-port-2", "printhor-hwi_native/with-serial-port-2", "printhor-hwa-common/with-serial-port-2",
     "with-sdcard", "printhor-hwi_native/with-sdcard",
     "with-printjob", "printhor-hwi_native/with-printjob",
     "with-probe", "printhor-hwi_native/with-probe",
@@ -125,8 +127,9 @@ mks_robin_nano = [
     "with-defmt", "printhor-hwi_mks_robin_nano/with-defmt",
     "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano/with-motion", "printhor-hwa-common/with-motion",
-    #"with-uart-port-1", "printhor-hwi_mks_robin_nano/with-uart-port-1",
-    "with-usbserial", "printhor-hwi_mks_robin_nano/with-usbserial",
+
+    "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
+    "with-serial-usb", "printhor-hwi_mks_robin_nano/with-serial-usb", "printhor-hwa-common/with-serial-usb",
     "with-spi", "printhor-hwi_mks_robin_nano/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
@@ -149,7 +152,7 @@ nucleo_64_arduino_cnc_hat = [
     #"printhor-hwi_nucleo_64_arduino_cnc_hat/upstream-embassy",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion", "printhor-hwa-common/with-motion",
-    "with-uart-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-uart-port-1",
+    "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
     #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
@@ -183,8 +186,8 @@ nucleo64-f410rb = [
 sk3_mini_e3_v2 = [
     "adc-is-async",
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/sk3_mini_e3_v2",
-    "with-usbserial", "printhor-hwi_skr_mini_e3/with-usbserial",
-    "with-uart-port-1", "printhor-hwi_skr_mini_e3/with-uart-port-1",
+    "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", "printhor-hwa-common/with-serial-usb",
+    "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     "with-hotend", "printhor-hwi_skr_mini_e3/with-hotend", "printhor-hwa-common/with-hotend",
@@ -195,7 +198,7 @@ sk3_mini_e3_v2 = [
 sk3_mini_e3_v3 = [
     #"timing-stats",
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/sk3_mini_e3_v3",
-    "with-usbserial", "printhor-hwi_skr_mini_e3/with-usbserial",
+    "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", "printhor-hwa-common/with-serial-usb",
     #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     "with-hotend", "printhor-hwi_skr_mini_e3/with-hotend", "printhor-hwa-common/with-hotend",
@@ -205,9 +208,9 @@ sk3_mini_e3_v3 = [
 ]
 
 skr_mini_e3 = [
-    "with-defmt", "printhor-hwi_skr_mini_e3/with-defmt",
+    "with-defmt", "printhor-hwi_skr_mini_e3/with-defmt", "printhor-hwa-common/with-defmt",
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion", "printhor-hwa-common/with-motion",
-    #"with-uart-port-1", "printhor-hwi_skr_mini_e3/with-uart-port-1",
+    #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", "printhor-hwa-common/with-serial-port-usb",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
@@ -253,11 +256,13 @@ display-interface-parallel-gpio = {version = "0.6.0", default-features = false, 
 ili9341 = {version = "0.5.0", default-features = false, optional = true}
 
 futures = { version = "0.3.30", default-features = false, features = [] }
+futures-util = { version = "0.3.30", default-features = false, features = [] }
 heapless = { version = "0.8.0", default-features = false, features = [] }
 
 async-gcode = {version = "0.3", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"]}
 
 strum = { version = "0.25.0", default-features = false, features = ["derive"] }
+
 rust_decimal = { version = "1.33.1", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { version = "1.33.1" }
 pid = { version = "4.0.0", default-features = false, features = []}
@@ -289,6 +294,7 @@ bitflags = { version = "2.4.1", default-features = false, features = [] }
 
 const_env = "0.1"
 cfg-if = { version = "1.0.0" }
+
 
 [build-dependencies]
 #proc-macro2 = "1.0."

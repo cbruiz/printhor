@@ -7,18 +7,18 @@ pub type Real = math::Real;
 mod tgeo;
 pub use tgeo::*;
 
-#[path = "printhor/control/planner/mod.rs"]
-pub(crate) mod p;
+#[path = "printhor/control/motion_planning/mod.rs"]
+mod _planing_mod;
 
 mod control {
-    pub(crate) use super::p as planner;
+    pub(crate) use super::_planing_mod as motion_planning;
 }
 
 #[path = "printhor/hwa/controllers/motion/motion_segment.rs"]
 mod motion_segment;
 
 use motion_segment::{Segment, SegmentData};
-use crate::control::planner::{Constraints, PlanProfile, SCurveMotionProfile};
+use crate::control::motion_planning::{Constraints, PlanProfile, SCurveMotionProfile};
 #[allow(unused)]
 use crate::math::{ONE, ZERO};
 

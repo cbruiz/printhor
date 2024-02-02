@@ -16,7 +16,7 @@
 //! TODO: Refactor pending
 //!
 //! Average Error Deviation in runtime: around 200us (Still pending to measure precisely)
-use crate::control::planner::StepperChannel;
+use crate::control::motion_planning::StepperChannel;
 #[allow(unused)]
 use crate::math::{Real, ONE_MILLION, ONE_THOUSAND, ONE_HUNDRED};
 #[allow(unused_imports)]
@@ -25,7 +25,7 @@ use crate::tgeo::{CoordSel, TVector};
 use embassy_time::{Instant, Duration, with_timeout};
 #[allow(unused_imports)]
 use crate::hwa;
-use printhor_hwa_common::{DeferEvent, DeferType};
+use printhor_hwa_common::{DeferAction, DeferEvent};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 #[cfg(feature = "timing-stats")]
@@ -61,12 +61,28 @@ pub async fn task_stepper(
     motion_planner.start().await;
 
     let mut s = motion_planner.event_bus.subscriber().await;
-    s.wait_while(EventFlags::HOMMING).await;
 
     hwa::info!("Micro-segment controller starting with {} us ({} ticks) micro-segment period and {} us step hold", MICRO_SEGMENT_PERIOD_US, MICRO_SEGMENT_PERIOD_TICKS, STEPPER_PULSE_WIDTH_US.as_micros());
     motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
 
     loop {
+        let mut wait_for_sysalarm = false;
+        if !s.get_status().await.contains(EventFlags::ATX_ON) {
+            hwa::info!("task_stepper waiting for ATX_ON");
+            if s.ft_wait_until(EventFlags::ATX_ON).await.is_err() {
+                hwa::info!("Interrupted waiting for ATX_ON. SYS_ALARM?");
+                wait_for_sysalarm = true;
+            }
+            else {
+                hwa::info!("task_stepper got ATX_ON. Continuing.");
+            }
+        }
+        if wait_for_sysalarm || s.get_status().await.contains(EventFlags::SYS_ALARM) {
+            hwa::warn!("task stepper waiting for SYS_ALARM release");
+            if s.ft_wait_while(EventFlags::SYS_ALARM).await.is_err() {
+                panic!("Unexpected situation");
+            }
+        }
         match with_timeout(STEPPER_INACTIVITY_TIMEOUT, motion_planner.get_current_segment_data()).await {
             // Timeout
             Err(_) => {
@@ -79,7 +95,7 @@ pub async fn task_stepper(
                 }
             }
             // Process segment plan
-            Ok(Some(segment)) => {
+            Ok(Some((segment, channel))) => {
                 hwa::debug!("Segment init");
 
                 #[cfg(feature = "timing-stats")]
@@ -304,7 +320,7 @@ pub async fn task_stepper(
                             }
                             duty += t0.elapsed();
                             motion_planner.consume_current_segment_data().await;
-                            motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
+                            motion_planner.defer_channel.send(DeferEvent::Completed(DeferAction::LinearMove, channel)).await;
                             break;
                         }
                         #[cfg(feature = "timing-stats")]
@@ -318,11 +334,11 @@ pub async fn task_stepper(
                             let s_mm = Real::from_lit(segment.segment_data.displacement_u.try_into().unwrap(), 3);
                             let missing = (usteps_to_advance - usteps_advanced).map_coords(|c| if c > 0 { Some(c) } else { None });
                             let rate = if t_sec.is_zero() {Real::zero() } else {s_mm / t_sec};
-                            hwa::warn!("# Segment of length {} mm truncated after {} sec ({} mm/s). Missing: {}", s_mm, t_sec, rate, missing  );
+                            hwa::debug!("# Segment of length {} mm truncated after {} sec ({} mm/s). Missing: {}", s_mm, t_sec, rate, missing  );
                         }
                         duty += t0.elapsed();
                         motion_planner.consume_current_segment_data().await;
-                        motion_planner.defer_channel.send(DeferEvent::LinearMove(DeferType::Completed)).await;
+                        motion_planner.defer_channel.send(DeferEvent::Completed(DeferAction::LinearMove, channel)).await;
                         #[cfg(feature = "timing-stats")]
                         timings.add_u_remaining();
                         break;
@@ -362,7 +378,7 @@ pub async fn task_stepper(
                     }
                     else {
                         absolute_ticker_start = tn;
-                        hwa::warn!("uSegment {} lagging {} us (elapsed: {}, period: {})", tick_id, (elapsed - absolute_ticker_period).as_micros(), elapsed.as_ticks(), absolute_ticker_period.as_ticks());
+                        hwa::debug!("uSegment {} lagging {} us (elapsed: {}, period: {})", tick_id, (elapsed - absolute_ticker_period).as_micros(), elapsed.as_ticks(), absolute_ticker_period.as_ticks());
                     }
 ////////////////////////
 // PREEMPTION END

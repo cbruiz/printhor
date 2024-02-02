@@ -19,9 +19,9 @@ sk3_mini_e3_v2 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-s
 sk3_mini_e3_v3 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["printhor-hwa-common/defmt"]
 # Hardware device features
-with-usbserial = ["embassy-usb"]
+with-serial-usb = ["embassy-usb"]
 with-printjob = []
-with-uart-port-1 = []
+with-serial-port-1 = []
 with-spi = ["embedded-hal"]
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]

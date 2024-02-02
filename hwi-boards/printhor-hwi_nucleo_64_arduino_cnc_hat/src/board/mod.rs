@@ -7,20 +7,20 @@ pub mod io;
 use alloc_cortex_m::CortexMHeap;
 use embassy_executor::Spawner;
 use embassy_stm32::Config;
-#[cfg(any(feature = "with-uart-port-1", feature = "with-usbserial", feature="with-trinamic"))]
+#[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
+#[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 
 #[allow(unused)]
 use embassy_sync::mutex::Mutex;
-#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
+#[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 use embassy_stm32::usb_otg;
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
@@ -68,18 +68,18 @@ pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
 /// Shared controllers
 pub struct Controllers {
     pub sys_watchdog: ControllerRef<device::Watchdog>,
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_tx: device::USBSerialTxControllerRef,
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_tx: device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-usb")]
+    pub serial_usb_tx: device::USBSerialTxControllerRef,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_tx: device::UartPort1TxControllerRef,
 }
 
 pub struct IODevices {
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_rx_stream: device::USBSerialDeviceInputStream,
+    #[cfg(feature = "with-serial-usb")]
+    pub serial_usb_tx_stream: device::USBSerialDeviceInputStream,
     /// Only single owner allowed
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_rx_stream: device::UartPort1RxInputStream,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature = "with-sdcard")]
     pub sdcard_device: device::SpiCardDeviceRef,
     #[cfg(feature = "with-sdcard")]
@@ -115,15 +115,15 @@ pub fn stack_reservation_current_size() -> u32 {
     }
 }
 
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 bind_interrupts!(struct UsbIrqs {
     OTG_FS => usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
 });
-#[cfg(all(feature = "nucleo64-l476rg", feature = "with-uart-port-1"))]
+#[cfg(all(feature = "nucleo64-l476rg", feature = "with-serial-port-1"))]
 bind_interrupts!(struct UartPort1Irqs {
     USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
 });
-#[cfg(all(feature = "nucleo64-f410rb", feature = "with-uart-port-1"))]
+#[cfg(all(feature = "nucleo64-f410rb", feature = "with-serial-port-1"))]
 bind_interrupts!(struct UartPort1Irqs {
     USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
 });
@@ -188,8 +188,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     //defmt::warn!("Wait a few...");
     //embassy_time::Timer::after_secs(5).await;
 
-    #[cfg(feature = "with-usbserial")]
-    let (usbserial_tx, usbserial_rx_stream) = {
+    #[cfg(feature = "with-serial-usb")]
+    let (serial_usb_tx, serial_usb_rx_stream) = {
         static EP_OUT_BUFFER_INST: TrackedStaticCell<[u8; 256]> =  TrackedStaticCell::new();
         let ep_out_buffer = EP_OUT_BUFFER_INST.init("USBEPBuffer", [0u8; 256]);
         defmt::info!("Creating USB Driver");
@@ -206,12 +206,12 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let usbserial_tx_controller = ControllerRef::new(
             USB_INST.init("USBSerialTxController", ControllerMutex::new(sender))
         );
-        (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
+        (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
 
 
-    #[cfg(feature = "with-uart-port-1")]
-    let (uart_port1_tx, uart_port1_rx_stream) = {
+    #[cfg(feature = "with-serial-port-1")]
+    let (serial_port1_tx, serial_port1_rx_stream) = {
         let mut cfg = usart::Config::default();
         cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
         cfg.data_bits = DataBits::DataBits8;
@@ -237,10 +237,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ).expect("Ready").split();
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
-        let uart_port1_tx = ControllerRef::new(
+        let serial_port1_tx = ControllerRef::new(
             UART_PORT1_INST.init("UartPort1", ControllerMutex::new(uart_port1_tx_device))
         );
-        (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
+        (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
 
     #[cfg(feature = "with-spi")]
@@ -521,16 +521,16 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     MachineContext {
         controllers: Controllers {
             sys_watchdog,
-            #[cfg(feature = "with-usbserial")]
-            usbserial_tx,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_tx,
+            #[cfg(feature = "with-serial-usb")]
+            serial_usb_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_tx,
         },
         devices: IODevices {
-            #[cfg(feature = "with-usbserial")]
-            usbserial_rx_stream,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_rx_stream,
+            #[cfg(feature = "with-serial-usb")]
+            serial_usb_rx_stream,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_rx_stream,
             #[cfg(feature = "with-sdcard")]
             sdcard_device,
             #[cfg(feature = "with-sdcard")]

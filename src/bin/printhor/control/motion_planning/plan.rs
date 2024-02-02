@@ -12,7 +12,7 @@ use crate::{math::Real, math::RealInclusiveRange};
 #[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use rust_decimal::prelude::ToPrimitive;
 use crate::math::{FOUR, HALF, ONE, SIX, THREE, TWO, ZERO};
-use crate::control::planner::CodeExecutionFailure;
+use crate::control::motion_planning::CodeExecutionFailure;
 
 #[derive(Clone, Default)]
 pub struct Boundaries {

@@ -1,4 +1,4 @@
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub mod usbserial {
     use crate::board::device::USBDrv;
     use futures::Stream;
@@ -159,7 +159,7 @@ pub mod usbserial {
     }
 }
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub mod uart_port1 {
     use crate::device::UartPort1RxDevice;
     use crate::device::UartPort1RingBufferedRxDevice;

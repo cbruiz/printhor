@@ -3,28 +3,28 @@ use embassy_stm32::wdg;
 use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::timer::simple_pwm::SimplePwm;
 
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
 
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub use crate::board::io::usbserial::*;
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
     embassy_stm32::peripherals::USART1,
     embassy_stm32::peripherals::DMA2_CH7, embassy_stm32::peripherals::DMA2_CH5
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
     embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH7
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
     embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
 
 #[cfg(feature = "with-trinamic")]

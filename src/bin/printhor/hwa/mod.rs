@@ -1,6 +1,6 @@
 use crate::hwi;
 pub use printhor_hwa_common::*;
-pub use crate::control::processor::GCodeProcessor;
+pub use crate::control::GCodeProcessor;
 
 #[cfg(feature = "with-defmt")]
 pub use defmt;

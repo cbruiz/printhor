@@ -2,10 +2,10 @@
 use crate::hwa;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-use printhor_hwa_common::{DeferChannelRef, EventBusRef, EventFlags, EventStatus};
-use printhor_hwa_common::{DeferEvent, DeferType};
+use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef, EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::DeferEvent;
 use crate::control::GCode;
-use crate::control::planner::{Constraints, SCurveMotionProfile, CodeExecutionSuccess, CodeExecutionFailure};
+use crate::control::motion_planning::{Constraints, SCurveMotionProfile, CodeExecutionSuccess, CodeExecutionFailure};
 use crate::math::{ONE_HUNDRED, Real, ZERO};
 use crate::sync::config::Config;
 use crate::tgeo::TVector;
@@ -106,7 +106,7 @@ impl MotionPlanner {
         self.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
     }
 
-    pub async fn get_current_segment_data(&self) -> Option<Segment> {
+    pub async fn get_current_segment_data(&self) -> Option<(Segment, CommChannel)> {
         loop {
             let _ = self.move_planned.wait().await;
             let mut do_dwell = false;
@@ -117,18 +117,18 @@ impl MotionPlanner {
                     PlanEntry::Empty => {
                         self.move_planned.reset();
                     },
-                    PlanEntry::Dwell => {
-                        rb.data[head] = PlanEntry::Executing(MovType::Dwell);
+                    PlanEntry::Dwell(channel) => {
+                        rb.data[head] = PlanEntry::Executing(MovType::Dwell(channel));
                         do_dwell = true;
                     },
-                    PlanEntry::PlannedMove(planned_data) => {
+                    PlanEntry::PlannedMove(planned_data, channel) => {
                         hwa::debug!("Exec starting: {} / {} h={}", rb.used, SEGMENT_QUEUE_SIZE, head);
-                        rb.data[head] = PlanEntry::Executing(MovType::Move);
-                        return Some(planned_data);
+                        rb.data[head] = PlanEntry::Executing(MovType::Move(channel));
+                        return Some((planned_data, channel));
                     },
-                    PlanEntry::Homing => {
+                    PlanEntry::Homing(channel) => {
                         self.event_bus.publish_event(EventStatus::containing(EventFlags::HOMMING)).await;
-                        rb.data[head] = PlanEntry::Executing(MovType::Homing);
+                        rb.data[head] = PlanEntry::Executing(MovType::Homing(channel));
                         return None;
                     },
                     PlanEntry::Executing(_) => {
@@ -148,14 +148,14 @@ impl MotionPlanner {
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
         match & rb.data[head as usize] {
-            PlanEntry::Executing(MovType::Homing) => {
+            PlanEntry::Executing(MovType::Homing(channel)) => {
                 self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING)).await;
-                self.defer_channel.send(DeferEvent::Homing(DeferType::Completed)).await;
+                self.defer_channel.send(DeferEvent::Completed(DeferAction::Homing, *channel)).await;
             }
-            PlanEntry::Executing(MovType::Dwell) => {
-                self.defer_channel.send(DeferEvent::Dwell(DeferType::Completed)).await;
+            PlanEntry::Executing(MovType::Dwell(channel)) => {
+                self.defer_channel.send(DeferEvent::Completed(DeferAction::Homing, *channel)).await;
             }
-            PlanEntry::Executing(MovType::Move) => {
+            PlanEntry::Executing(MovType::Move(channel)) => {
             }
             _ => {
                 panic!("cound not happen")
@@ -174,7 +174,7 @@ impl MotionPlanner {
         self.available.signal(true);
     }
 
-    pub async fn schedule_raw_move(&self, move_type: ScheduledMove, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
+    pub async fn schedule_raw_move(&self, channel: CommChannel, move_type: ScheduledMove, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
         // FIXME: Better to set subscription to defer channel from here to avoid msg loss
         hwa::debug!("schedule_raw_move() BEGIN");
         loop {
@@ -193,14 +193,14 @@ impl MotionPlanner {
                             could_replan = true;
                             must_defer = false;
                             self.update_last_planned_pos(&segment_data.dest_pos).await;
-                            (PlanEntry::PlannedMove(Segment::new(segment_data, motion_profile)), EventStatus::new())
+                            (PlanEntry::PlannedMove(Segment::new(segment_data, motion_profile), channel), EventStatus::new())
                         }
                         ScheduledMove::Homing => {
                             self.set_last_planned_pos(&TVector::zero()).await;
-                            (PlanEntry::Homing, EventStatus::not_containing(EventFlags::HOMMING))
+                            (PlanEntry::Homing(channel), EventStatus::not_containing(EventFlags::HOMMING))
                         }
                         ScheduledMove::Dwell => {
-                            (PlanEntry::Dwell, EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY))
+                            (PlanEntry::Dwell(channel), EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY))
                         }
                     };
 
@@ -223,10 +223,10 @@ impl MotionPlanner {
                         hwa::debug!(" - check_replan {}", last_inserted_idx);
                         let current_slot = &mut rb.data[last_inserted_idx as usize];
                         match current_slot {
-                            PlanEntry::Executing(_) | PlanEntry::Homing | PlanEntry::Empty => {
+                            PlanEntry::Executing(_) | PlanEntry::Homing(_) | PlanEntry::Empty => {
                                 hwa::debug!(" -- not chained")
                             }
-                            PlanEntry::PlannedMove(old_data) => {
+                            PlanEntry::PlannedMove(old_data, _channel) => {
                                 old_data.motion_profile.recalculate();
                                 hwa::debug!(" -- chained")
                             }
@@ -355,26 +355,26 @@ impl MotionPlanner {
         self.motion_cfg.lock().await.max_jerk.assign(CoordSel::all(), &jerk);
     }
 
-    pub async fn plan(&self, gc: &GCode, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure>{
+    pub async fn plan(&self, channel: CommChannel, gc: &GCode, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure>{
         match gc {
             GCode::G0(t) => {
-                Ok(self.schedule_move(TVector{
+                Ok(self.schedule_move(channel, TVector{
                     x: t.x, y: t.y, z: t.z, e: None,
                 }, t.f, blocking).await?)
             }
             GCode::G1(t) => {
-                Ok(self.schedule_move(TVector{
+                Ok(self.schedule_move(channel, TVector{
                     x: t.x, y: t.y, z: t.z, e: t.e
                 }, t.f, blocking).await?)
             }
             GCode::G4 => {
-                Ok(self.schedule_raw_move(ScheduledMove::Dwell, blocking).await?)
+                Ok(self.schedule_raw_move(channel, ScheduledMove::Dwell, blocking).await?)
             }
             GCode::G28(_x) => {
                 // FIXME Remove when complete
-                self.defer_channel.send(DeferEvent::Homing(DeferType::AwaitRequested)).await;
+                self.defer_channel.send(DeferEvent::AwaitRequested(DeferAction::Homing,channel)).await;
                 self.event_bus.publish_event(EventStatus::containing(EventFlags::HOMMING)).await;
-                Ok(self.schedule_raw_move(ScheduledMove::Homing, blocking).await?)
+                Ok(self.schedule_raw_move(channel, ScheduledMove::Homing, blocking).await?)
             }
             GCode::G29 => {
                 Ok(CodeExecutionSuccess::OK)
@@ -391,7 +391,7 @@ impl MotionPlanner {
         }
     }
 
-    async fn schedule_move(&self, p1: TVector<Real>, requested_motion_speed: Option<Real>, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
+    async fn schedule_move(&self, channel: CommChannel, p1: TVector<Real>, requested_motion_speed: Option<Real>, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
 
         let t0 = embassy_time::Instant::now();
 
@@ -498,6 +498,7 @@ impl MotionPlanner {
                         tool_power: 0,
                     };
                     let r = self.schedule_raw_move(
+                        channel,
                         ScheduledMove::Move(segment_data, profile),
                         blocking
                     ).await?;
@@ -537,14 +538,14 @@ impl MotionPlanner {
         }
     }
 
-    #[inline(always)]
     pub async fn do_homing(&self) -> Result<(), ()>{
         let r = self.motion_driver.lock().await.homing_action().await;
         if r.is_err() {
-            self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM));
+            hwa::error!("Unable to complete homming. Raising SYS_ALARM");
+            self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
         }
         else {
-            self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING));
+            self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING)).await;
         }
         r
     }
@@ -585,18 +586,18 @@ impl RingBuffer {
 
 #[derive(Clone, Copy)]
 pub enum MovType {
-    Move,
-    Homing,
-    Dwell,
+    Move(CommChannel),
+    Homing(CommChannel),
+    Dwell(CommChannel),
 }
 
 #[allow(unused)]
 #[derive(Clone, Copy)]
 pub enum PlanEntry {
     Empty,
-    PlannedMove(Segment),
-    Homing,
-    Dwell,
+    PlannedMove(Segment, CommChannel),
+    Homing(CommChannel),
+    Dwell(CommChannel),
     Executing(MovType),
 }
 

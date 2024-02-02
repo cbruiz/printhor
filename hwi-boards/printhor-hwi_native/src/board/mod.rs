@@ -3,15 +3,9 @@ pub mod device;
 pub mod io;
 #[cfg(feature = "with-trinamic")]
 pub mod comm;
-
-mod mocked_peripherals;
-
+pub mod mocked_peripherals;
 use embassy_executor::Spawner;
-
-#[cfg(feature = "with-usbserial")]
-use device::*;
-use printhor_hwa_common::{ControllerMutex, ControllerRef};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext};
+use printhor_hwa_common::{ControllerMutex, ControllerRef, TrackedStaticCell, MachineContext};
 
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
@@ -29,8 +23,6 @@ pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: u32 = 8192;
 pub const VREF_SAMPLE: u16 = 1210u16;
-#[cfg(feature = "with-uart2")]
-pub(crate) const UART2_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 #[cfg(feature = "with-trinamic")]
@@ -40,18 +32,18 @@ pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 /// Shared controllers
 pub struct Controllers {
     pub sys_watchdog: ControllerRef<device::Watchdog>,
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_tx: device::USBSerialTxControllerRef,
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_tx: device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_tx: device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-port-2")]
+    pub serial_port2_tx: device::UartPort2TxControllerRef,
 }
 
 pub struct IODevices {
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_rx_stream: device::USBSerialDeviceInputStream,
     /// Only single owner allowed
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_rx_stream: device::UartPort1RxInputStream,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_rx_stream: device::UartPort1RxInputStream,
+    #[cfg(feature = "with-serial-port-2")]
+    pub serial_port2_rx_stream: device::UartPort2RxInputStream,
     #[cfg(feature  ="with-display")]
     pub display_device: device::DisplayDevice,
     #[cfg(feature = "with-sdcard")]
@@ -98,21 +90,31 @@ pub fn init() -> HWIPeripherals {
     HWIPeripherals{}
 }
 
-pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
+pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
-    let _pin_state = crate::board::mocked_peripherals::init_pin_state();
+    let _pin_state = mocked_peripherals::init_pin_state();
 
-    #[cfg(all(feature = "with-uart-port-1"))]
-    let (uart_port1_tx, uart_port1_rx_stream) = {
-        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
-        static UART_PORT1_INS: TrackedStaticCell<ControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
-        (
-            ControllerRef::new(
+    cfg_if::cfg_if!{
+        if #[cfg(all(feature = "with-serial-port-1"))] {
+            let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
+            static UART_PORT1_INS: TrackedStaticCell<ControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
+            let serial_port1_tx = ControllerRef::new(
                 UART_PORT1_INS.init("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
-            ),
-            crate::device::UartPort1RxInputStream::new(uart_port1_rx_device)
-        )
-    };
+            );
+            let serial_port1_rx_stream = device::UartPort1RxInputStream::new(uart_port1_rx_device);
+        }
+    }
+
+    cfg_if::cfg_if!{
+        if #[cfg(all(feature = "with-serial-port-2"))] {
+            let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new().split();
+            static UART_PORT2_INS: TrackedStaticCell<ControllerMutex<device::UartPort2Tx>> = TrackedStaticCell::new();
+            let serial_port2_tx = ControllerRef::new(
+                UART_PORT2_INS.init("UartPort1Tx", ControllerMutex::new(uart_port2_tx_device))
+            );
+            let serial_port2_rx_stream = device::UartPort2RxInputStream::new(uart_port2_rx_device);
+        }
+    }
 
     #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
@@ -245,16 +247,16 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
     MachineContext {
         controllers: Controllers {
             sys_watchdog,
-            #[cfg(feature = "with-usbserial")]
-            usbserial_tx,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port2_tx,
         },
         devices: IODevices {
-            #[cfg(feature = "with-usbserial")]
-            usbserial_rx_stream,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_rx_stream,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_rx_stream,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port2_rx_stream,
             #[cfg(feature = "with-display")]
             display_device,
             #[cfg(feature = "with-sdcard")]
@@ -301,11 +303,4 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> printhor_hwa_common
             },
         }
     }
-
-}
-
-#[allow(unused)]
-pub mod consts {
-    /// 50ms to enqueue ~28 motion gcodes at 115200 bps
-    pub(crate) const LINGER_MS: u64 = 10000;
 }

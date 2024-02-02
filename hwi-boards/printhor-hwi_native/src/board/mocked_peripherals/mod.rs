@@ -9,8 +9,10 @@ mod mocked_pwm;
 mod mocked_spi;
 #[cfg(feature = "with-sdcard")]
 mod mocked_sdcard;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(any(feature = "with-serial-port-1",feature = "with-serial-usb"))]
 mod mocked_uart;
+#[cfg(feature = "with-serial-port-2")]
+mod mocked_uart_sink;
 
 #[cfg(feature = "with-trinamic")]
 mod mocked_trinamic;
@@ -24,8 +26,11 @@ mod mocked_wdt;
 pub use mocked_pin::*;
 pub use mocked_wdt::*;
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub use mocked_uart::*;
+
+#[cfg(feature = "with-serial-port-2")]
+pub use mocked_uart_sink::*;
 
 #[cfg(feature = "with-spi")]
 pub use mocked_spi::*;

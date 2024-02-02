@@ -1,5 +1,5 @@
 use embassy_time::{Duration, Instant};
-use crate::control::planner::StepperChannel;
+use crate::control::motion_planning::StepperChannel;
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {

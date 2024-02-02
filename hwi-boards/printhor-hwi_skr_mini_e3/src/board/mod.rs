@@ -5,19 +5,19 @@ pub mod io;
 
 use alloc_cortex_m::CortexMHeap;
 use embassy_executor::Spawner;
-#[cfg(any(feature = "with-uart-port-1", feature = "with-usbserial", feature="with-trinamic"))]
+#[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
+#[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull, OutputType};
 #[allow(unused)]
 use embassy_sync::mutex::Mutex;
-#[cfg(any(feature = "with-uart-port-1", feature="with-trinamic"))]
+#[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 use embassy_stm32::usb;
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
@@ -65,18 +65,18 @@ pub(crate) const SPI_FREQUENCY_HZ: u32 = 1_000_000;
 /// Shared controllers
 pub struct Controllers {
     pub sys_watchdog: ControllerRef<device::Watchdog>,
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_tx: device::USBSerialTxControllerRef,
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_tx: device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-usb")]
+    pub serial_usb_tx: device::USBSerialTxControllerRef,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_tx: device::UartPort1TxControllerRef,
 }
 
 pub struct IODevices {
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_rx_stream: device::USBSerialDeviceInputStream,
+    #[cfg(feature = "with-serial-usb")]
+    pub serial_usb_rx_stream: device::USBSerialDeviceInputStream,
     /// Only single owner allowed
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_rx_stream: device::UartPort1RxInputStream,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature  ="with-display")]
     pub display_device: device::DisplayDevice,
     #[cfg(feature = "with-sdcard")]
@@ -119,11 +119,11 @@ pub fn stack_reservation_current_size() -> u32 {
 // Interrupt mappings
 cfg_if::cfg_if! {
     if #[cfg(feature="sk3_mini_e3_v2")] {
-        #[cfg(feature = "with-usbserial")]
+        #[cfg(feature = "with-serial-usb")]
         bind_interrupts!(struct UsbIrqs {
             USB_LP_CAN1_RX0 => usb::InterruptHandler<embassy_stm32::peripherals::USB>;
         });
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         bind_interrupts!(struct UartPort1Irqs {
             USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
         });
@@ -133,11 +133,11 @@ cfg_if::cfg_if! {
         });
     }
     else if #[cfg(feature="sk3_mini_e3_v3")] {
-        #[cfg(feature = "with-usbserial")]
+        #[cfg(feature = "with-serial-usb")]
         bind_interrupts!(struct UsbIrqs {
             USB_UCPD1_2 => usb::InterruptHandler<embassy_stm32::peripherals::USB>;
         });
-        #[cfg(feature = "with-uart-port-1")]
+        #[cfg(feature = "with-serial-port-1")]
         bind_interrupts!(struct UartPort1Irqs {
             USART2_LPUART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
         });
@@ -267,8 +267,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             };
 
             // Use UART1 instead of USB CDC Serial
-            #[cfg(feature = "with-usbserial")]
-            let (usbserial_tx, usbserial_rx_stream) = {
+            #[cfg(feature = "with-serial-usb")]
+            let (serial_usb_tx, serial_usb_rx_stream) = {
 
                 defmt::info!("Creating USB Driver");
                 let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
@@ -276,15 +276,15 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 usb_serial_device.spawn(_spawner);
                 let (usb_serial_rx_device, sender) = usb_serial_device.split();
                 static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
-                let usbserial_tx_controller = ControllerRef::new(
+                let serial_usb_tx = ControllerRef::new(
                     USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
                 );
 
-                (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
+                (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
             };
 
-            #[cfg(feature = "with-uart-port-1")]
-            let (uart_port1_tx, uart_port1_rx_stream) = {
+            #[cfg(feature = "with-serial-port-1")]
+            let (serial_port1_tx, serial_port1_rx_stream) = {
 
                 let mut cfg = usart::Config::default();
                 cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
@@ -300,10 +300,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                                                                     cfg).expect("Ready").split();
 
                 static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
-                let uart_port1_tx = ControllerRef::new(
+                let serial_port1_tx = ControllerRef::new(
                     UART_PORT1_INST.init("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
                 );
-                (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
+                (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
             };
 
             #[cfg(all(feature = "with-trinamic"))]
@@ -523,8 +523,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         };
 
         // Use UART1 instead of USB CDC Serial
-        #[cfg(feature = "with-usbserial")]
-        let (usbserial_tx, usbserial_rx_stream) = {
+        #[cfg(feature = "with-serial-usb")]
+        let (serial_usb_tx, serial_usb_rx_stream) = {
 
             defmt::info!("Creating USB Driver");
             let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
@@ -532,15 +532,15 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             usb_serial_device.spawn(_spawner);
             let (usb_serial_rx_device, sender) = usb_serial_device.split();
             static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
-            let usbserial_tx_controller = ControllerRef::new(
+            let serial_usb_tx = ControllerRef::new(
                 USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
             );
 
-            (usbserial_tx_controller, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
+            (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
         };
 
-        #[cfg(feature = "with-uart-port-1")]
-        let (uart_port1_tx, uart_port1_rx_stream) = {
+        #[cfg(feature = "with-serial-port-1")]
+        let (serial_port1_tx, serial_port1_rx_stream) = {
 
             let mut cfg = usart::Config::default();
             cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
@@ -556,10 +556,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                                                                 cfg).expect("Ready").split();
 
             static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
-            let uart_port1_tx = ControllerRef::new(
+            let serial_port1_tx = ControllerRef::new(
                 UART_PORT1_INST.init("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
             );
-            (uart_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
+            (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
         };
 
         #[cfg(all(feature = "with-trinamic"))]
@@ -739,16 +739,16 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     MachineContext {
         controllers: Controllers {
             sys_watchdog,
-            #[cfg(feature = "with-usbserial")]
-            usbserial_tx,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_tx,
+            #[cfg(feature = "with-serial-usb")]
+            serial_usb_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_tx,
         },
         devices: IODevices {
-            #[cfg(feature = "with-usbserial")]
-            usbserial_rx_stream,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_rx_stream,
+            #[cfg(feature = "with-serial-usb")]
+            serial_usb_rx_stream,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_rx_stream,
             #[cfg(feature = "with-display")]
             display_device,
             #[cfg(feature = "with-sdcard")]

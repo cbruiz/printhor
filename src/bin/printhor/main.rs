@@ -27,7 +27,7 @@ use printhor_hwa_common::{EventStatus, EventFlags};
 use hwa::{GCodeProcessor};
 #[cfg(feature = "with-motion")]
 use hwa::controllers::{MotionPlanner, MotionPlannerRef};
-use crate::control::processor::GCodeProcessorParams;
+use crate::control::GCodeProcessorParams;
 #[cfg(feature = "with-sdcard")]
 use crate::hwa::controllers::CardController;
 #[cfg(feature = "with-hotend")]
@@ -73,8 +73,15 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         event_bus.publish_event(
             EventStatus::not_containing(EventFlags::SYS_BOOTING)
         ).await;
-        #[cfg(feature = "with-motion")]
-        event_suscriber.wait_until(EventFlags::MOV_QUEUE_EMPTY).await;
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-motion")] {
+                if event_suscriber.ft_wait_until(EventFlags::MOV_QUEUE_EMPTY).await.is_err() {
+                    initialization_error()
+                }
+            }
+        }
+
         hwa::info!("Tasks spawned. Allocated {} bytes for shared state. Firing SYS_READY.",
             crate::hwa::mem::stack_reservation_current_size(),
         );
@@ -256,10 +263,12 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         event_bus: event_bus.clone(),
         #[cfg(feature = "with-motion")]
         motion_planner: motion_planer.clone(),
-        #[cfg(feature = "with-usbserial")]
-        usbserial_tx: controllers.usbserial_tx,
-        #[cfg(feature = "with-uart-port-1")]
-        uart_port1_tx: controllers.uart_port1_tx,
+        #[cfg(feature = "with-serial-usb")]
+        serial_usb_tx: controllers.serial_usb_tx,
+        #[cfg(feature = "with-serial-port-1")]
+        serial_port1_tx: controllers.serial_port1_tx,
+        #[cfg(feature = "with-serial-port-2")]
+        serial_port2_tx: controllers.serial_port2_tx,
         #[cfg(feature = "with-probe")]
         probe: probe_controller,
         #[cfg(feature = "with-hotend")]
@@ -308,12 +317,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
 
     spawner.spawn(control::task_control::task_control(
         processor.clone(),
-        control::task_control::ControlTaskDevices {
-            #[cfg(feature = "with-usbserial")]
-            usb_serial_rx: devices.usbserial_rx_stream,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_rx_stream: devices.uart_port1_rx_stream,
-        },
+        control::GCodeMultiplexedInputStream::new(
+            #[cfg(feature = "with-serial-usb")]
+                devices.serial_usb_rx_stream,
+            #[cfg(feature = "with-serial-port-1")]
+                devices.serial_port1_rx_stream,
+            #[cfg(feature = "with-serial-port-2")]
+                devices.serial_port2_rx_stream,
+        ),
         ControlTaskControllers {
             #[cfg(feature="with-printjob")]
             printer_controller: printer_controller.clone(),
@@ -351,6 +362,13 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
     )).map_err(|_| ())?;
 
     Ok(())
+}
+
+
+pub fn initialization_error() {
+    let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
+    hwa::error!("{}", msg);
+    panic!("{}", msg);
 }
 
 #[cfg(all(not(feature="native"), not(feature = "with-defmt")))]

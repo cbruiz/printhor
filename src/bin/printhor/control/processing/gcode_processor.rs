@@ -1,4 +1,4 @@
-use crate::control::planner::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
+use crate::control::motion_planning::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::control::GCode;
 use crate::hwa;
 #[cfg(feature = "with-probe")]
@@ -7,19 +7,22 @@ use crate::machine::MACHINE_INFO;
 use crate::math::Real;
 use alloc::format;
 #[cfg(feature = "with-motion")]
-use printhor_hwa_common::{DeferEvent, DeferType};
-use printhor_hwa_common::{EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::DeferEvent;
+use printhor_hwa_common::{CommChannel, DeferAction, EventBusRef, EventFlags, EventStatus};
 use strum::VariantNames;
+use crate::tgeo::TVector;
 
 pub struct GCodeProcessorParams {
     pub event_bus: EventBusRef,
 
     #[cfg(feature = "with-motion")]
     pub motion_planner: hwa::controllers::MotionPlannerRef,
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_tx: hwa::device::USBSerialTxControllerRef,
-    #[cfg(feature = "with-uart-port-1")]
-    pub(crate) uart_port1_tx: hwa::device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-usb")]
+    pub serial_usb_tx: hwa::device::USBSerialTxControllerRef,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_tx: hwa::device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-port-2")]
+    pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hotend")]
@@ -40,10 +43,12 @@ pub struct GCodeProcessor {
 
     #[cfg(feature = "with-motion")]
     pub motion_planner: hwa::controllers::MotionPlannerRef,
-    #[cfg(feature = "with-usbserial")]
-    pub usbserial_tx: hwa::device::USBSerialTxControllerRef,
-    #[cfg(feature = "with-uart-port-1")]
-    pub uart_port1_tx: hwa::device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-usb")]
+    pub serial_usb_tx: hwa::device::USBSerialTxControllerRef,
+    #[cfg(feature = "with-serial-port-1")]
+    pub serial_port1_tx: hwa::device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-port-2")]
+    pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hotend")]
@@ -61,12 +66,14 @@ pub struct GCodeProcessor {
 impl GCodeProcessor {
     pub(crate) fn new(params: GCodeProcessorParams) -> Self {
         Self {
-            #[cfg(feature = "with-usbserial")]
-            usbserial_tx: params.usbserial_tx,
+            #[cfg(feature = "with-serial-usb")]
+            serial_usb_tx: params.serial_usb_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_tx: params.serial_port1_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port2_tx: params.serial_port2_tx,
             #[cfg(feature = "with-motion")]
             motion_planner: params.motion_planner,
-            #[cfg(feature = "with-uart-port-1")]
-            uart_port1_tx: params.uart_port1_tx,
             #[cfg(feature = "with-probe")]
             probe: params.probe,
             #[cfg(feature = "with-fan")]
@@ -86,37 +93,54 @@ impl GCodeProcessor {
         }
     }
 
-    pub(crate) async fn write(&self, _msg: &str) {
-        #[cfg(feature = "with-uart-port-1")]
-        let _ = self.uart_port1_tx.lock().await.write(_msg.as_bytes()).await;
-        #[cfg(feature = "with-usbserial")]
-        let _ = self
-            .usbserial_tx
-            .lock()
-            .await
-            .write_packet(_msg.as_bytes())
-            .await;
+    pub(crate) async fn write(&self, channel: CommChannel, _msg: &str) {
+        match channel {
+            #[cfg(feature = "with-serial-usb")]
+            CommChannel::SerialUsb => {
+                let _ = self.serial_usb_tx.lock().await.write_packet(_msg.as_bytes()).await;
+            }
+            #[cfg(feature = "with-serial-port-1")]
+            CommChannel::SerialPort1 => {
+                let _ = self.serial_port1_tx.lock().await.write(_msg.as_bytes()).await;
+            }
+            #[cfg(feature = "with-serial-port-2")]
+            CommChannel::SerialPort2 => {
+                let _ = self.serial_port2_tx.lock().await.write(_msg.as_bytes()).await;
+            }
+            CommChannel::Internal => {}
+        }
     }
 
     #[allow(unused)]
-    pub(crate) async fn flush(&self) {
-        #[cfg(feature = "with-uart-port-1")]
-        let _ = self.uart_port1_tx.lock().await.blocking_flush();
-        #[cfg(feature = "with-usbserial")]
-        let _ = self.usbserial_tx.lock().await.write_packet(b"").await;
+    pub(crate) async fn flush(&self, channel: CommChannel) {
+        match channel {
+            #[cfg(feature = "with-serial-usb")]
+            CommChannel::SerialUsb => {
+                let _ = self.serial_usb_tx.lock().await.write_packet(b"").await;
+            }
+            #[cfg(feature = "with-serial-port-1")]
+            CommChannel::SerialPort1 => {
+                let _ = self.serial_port1_tx.lock().await.blocking_flush();
+            }
+            #[cfg(feature = "with-serial-port-2")]
+            CommChannel::SerialPort2 => {
+                let _ = self.serial_port2_tx.lock().await.blocking_flush();
+            }
+            CommChannel::Internal => {}
+        }
     }
 
     #[allow(unused)]
-    pub(crate) async fn writeln(&self, msg: &str) {
-        let _ = self.write(msg).await;
-        let _ = self.write("\n").await;
+    pub(crate) async fn writeln(&self, channel: CommChannel, msg: &str) {
+        let _ = self.write(channel, msg).await;
+        let _ = self.write(channel, "\n").await;
     }
 
     /***
 
     */
     #[allow(unused)]
-    pub(crate) async fn execute(&mut self, gc: &GCode, blocking: bool) -> CodeExecutionResult {
+    pub(crate) async fn execute(&mut self, channel: CommChannel, gc: &GCode, blocking: bool) -> CodeExecutionResult {
         let result = match gc {
             #[cfg(feature = "grbl-compat")]
             GCode::GRBLCMD => {
@@ -132,21 +156,24 @@ impl GCodeProcessor {
             }
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
-                    let _ = self.write("echo: ").await;
-                    let _ = self.writeln(x).await;
+                    let _ = self.write(channel, "echo: ").await;
+                    let _ = self.writeln(channel, x).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCode::G0(_) | GCode::G1(_) => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 hwa::debug!("Processor planning BEGIN");
-                let result = self.motion_planner.plan(&gc, blocking).await?;
+                let result = self.motion_planner.plan(channel, &gc, blocking).await?;
                 hwa::debug!("Processor planning END with Success");
                 if !blocking {
                     hwa::debug!("Processor sending defer rq BEGIN");
                     self.motion_planner
                         .defer_channel
-                        .send(DeferEvent::LinearMove(DeferType::AwaitRequested))
+                        .send(DeferEvent::AwaitRequested(DeferAction::LinearMove, channel))
                         .await;
                     hwa::debug!("Processor sending defer rq END");
                 }
@@ -172,10 +199,10 @@ impl GCodeProcessor {
                 if !blocking {
                     self.motion_planner
                         .defer_channel
-                        .send(DeferEvent::Dwell(DeferType::AwaitRequested))
+                        .send(DeferEvent::AwaitRequested(DeferAction::Dwell, channel))
                         .await;
                 }
-                Ok(self.motion_planner.plan(&gc, blocking).await?)
+                Ok(self.motion_planner.plan(channel, &gc, blocking).await?)
             }
             GCode::G10 => Ok(CodeExecutionSuccess::OK),
             GCode::G17 => Ok(CodeExecutionSuccess::OK),
@@ -184,8 +211,11 @@ impl GCodeProcessor {
             GCode::G28(_) => match self.event_bus.has_flags(EventFlags::HOMMING).await {
                 true => Err(CodeExecutionFailure::BUSY),
                 false => {
+                    if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                        return Err(CodeExecutionFailure::PowerRequired)
+                    }
                     hwa::debug!("Planing homing");
-                    let result = self.motion_planner.plan(&gc, blocking).await;
+                    let result = self.motion_planner.plan(channel, &gc, blocking).await;
                     hwa::debug!("Homing planned");
                     result
                 }
@@ -195,6 +225,9 @@ impl GCodeProcessor {
                 if self.event_bus.has_flags(EventFlags::HOMMING).await {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
+                    if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                        return Err(CodeExecutionFailure::PowerRequired)
+                    }
                     let md = self.motion_planner.motion_driver.lock().await;
                     md.probe_controller.lock().await.probe_pin_up(300_000).await;
                     Ok(CodeExecutionSuccess::OK)
@@ -205,6 +238,9 @@ impl GCodeProcessor {
                 if self.event_bus.has_flags(EventFlags::HOMMING).await {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
+                    if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                        return Err(CodeExecutionFailure::PowerRequired)
+                    }
                     let md = self.motion_planner.motion_driver.lock().await;
                     md.probe_controller
                         .lock()
@@ -227,8 +263,8 @@ impl GCodeProcessor {
             GCode::G94 => Ok(CodeExecutionSuccess::OK),
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
-                    let _ = self.write("echo: ").await;
-                    let _ = self.writeln(x).await;
+                    let _ = self.write(channel,"echo: ").await;
+                    let _ = self.writeln(channel, x).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -236,8 +272,8 @@ impl GCodeProcessor {
             GCode::M5 => Ok(CodeExecutionSuccess::OK),
             GCode::M73 => Ok(CodeExecutionSuccess::OK),
             GCode::M79 => {
-                let _ = self.write("D; Software reset\n").await;
-                self.flush().await;
+                let _ = self.write(channel, "D; Software reset\n").await;
+                self.flush(channel).await;
                 hwa::sys_reset();
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -269,7 +305,7 @@ impl GCodeProcessor {
                     heap_max,
                     Real::from_f32(100.0f32 * heap_current as f32 / heap_max as f32).rdp(4),
                 );
-                self.write(z1.as_str()).await;
+                self.write(channel, z1.as_str()).await;
 
                 let z2 = format!(
                     "echo: {}/{} {}% of stack reservation\n",
@@ -277,11 +313,14 @@ impl GCodeProcessor {
                     stack_max,
                     Real::from_f32(100.0f32 * stack_current as f32 / stack_max as f32).rdp(4),
                 );
-                self.write(z2.as_str()).await;
+                self.write(channel, z2.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotend")]
             GCode::M104(s) => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
                 let mut h = self.hotend.lock().await;
                 h.set_target_temp(val as f32).await;
@@ -317,11 +356,14 @@ impl GCodeProcessor {
                     alloc::string::String::new()
                 };
                 let report = format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report,);
-                let _ = self.write(report.as_str()).await;
+                let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
             #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
             GCode::M106 => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 //crate::info!("M106 BEGIN");
                 self.layer_fan.lock().await.set_power(255).await;
                 //crate::info!("M106 END");
@@ -334,6 +376,9 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-hotend")]
             GCode::M109(s) => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 let enabled = {
                     let mut he = self.hotend.lock().await;
                     let value = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
@@ -344,7 +389,7 @@ impl GCodeProcessor {
                     if !blocking {
                         self.motion_planner
                             .defer_channel
-                            .send(DeferEvent::HotendTemperature(DeferType::AwaitRequested))
+                            .send(DeferEvent::AwaitRequested(DeferAction::HotendTemperature, channel))
                             .await;
                     }
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
@@ -360,39 +405,42 @@ impl GCodeProcessor {
                     .motion_planner
                     .get_last_planned_pos()
                     .await
-                    .ok_or(CodeExecutionFailure::HomingRequired)?
+                    .unwrap_or(TVector::zero())
                     .rdp(6);
                 let z = format!("M114 {}\n", _pos);
-                let _ = self.write(z.as_str()).await;
+                let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M115 => {
-                let _ = self.write("C; FIRMWARE_NAME: ").await;
-                let _ = self.write(MACHINE_INFO.firmware_name).await;
-                let _ = self.write(" FIRMWARE_VERSION: ").await;
-                let _ = self.write(MACHINE_INFO.firmware_version).await;
-                let _ = self.write(" FIRMWARE_URL: ").await;
-                let _ = self.write(MACHINE_INFO.firmware_url).await;
-                let _ = self.write(" MACHINE_TYPE: ").await;
-                let _ = self.write(MACHINE_INFO.machine_type).await;
-                let _ = self.write(" MACHINE_BOARD: ").await;
-                let _ = self.write(MACHINE_INFO.machine_board).await;
-                let _ = self.write(" MACHINE_PROCESSOR: ").await;
-                let _ = self.write(MACHINE_INFO.machine_processor).await;
-                let _ = self.write(" MACHINE_UUID: ").await;
-                let _ = self.write(MACHINE_INFO.machine_uuid).await;
-                let _ = self.write(" EXTRUDER_COUNT: ").await;
+                let _ = self.write(channel, "C; FIRMWARE_NAME: ").await;
+                let _ = self.write(channel, MACHINE_INFO.firmware_name).await;
+                let _ = self.write(channel, " FIRMWARE_VERSION: ").await;
+                let _ = self.write(channel, MACHINE_INFO.firmware_version).await;
+                let _ = self.write(channel," FIRMWARE_URL: ").await;
+                let _ = self.write(channel, MACHINE_INFO.firmware_url).await;
+                let _ = self.write(channel, " MACHINE_TYPE: ").await;
+                let _ = self.write(channel, MACHINE_INFO.machine_type).await;
+                let _ = self.write(channel," MACHINE_BOARD: ").await;
+                let _ = self.write(channel, MACHINE_INFO.machine_board).await;
+                let _ = self.write(channel, " MACHINE_PROCESSOR: ").await;
+                let _ = self.write(channel, MACHINE_INFO.machine_processor).await;
+                let _ = self.write(channel, " MACHINE_UUID: ").await;
+                let _ = self.write(channel, MACHINE_INFO.machine_uuid).await;
+                let _ = self.write(channel," EXTRUDER_COUNT: ").await;
                 let _ = self
-                    .write(format!("{}\n", MACHINE_INFO.extruder_count).as_str())
+                    .write(channel, format!("{}\n", MACHINE_INFO.extruder_count).as_str())
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M117 => {
-                let _ = self.write("O.K.; (display msg)\n").await;
+                let _ = self.write(channel, "O.K.; (display msg)\n").await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCode::M119 => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 let mut d = self.motion_planner.motion_driver.lock().await;
                 let z = format!(
                     "M119 X {} Y {} Z {}\n",
@@ -413,11 +461,14 @@ impl GCodeProcessor {
                     },
                 );
                 drop(d);
-                let _ = self.write(z.as_str()).await;
+                let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-hotbed")]
             GCode::M140(s) => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
                 let mut h = self.hotbed.lock().await;
                 h.set_target_temp(val as f32).await;
@@ -425,12 +476,15 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-hotbed")]
             GCode::M190 => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 let enabled = true;
                 if enabled {
                     if !blocking {
                         self.motion_planner
                             .defer_channel
-                            .send(DeferEvent::HotbedTemperature(DeferType::AwaitRequested))
+                            .send(DeferEvent::AwaitRequested(DeferAction::HotbedTemperature, channel))
                             .await;
                     }
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
@@ -448,14 +502,17 @@ impl GCodeProcessor {
             GCode::M221(_) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-trinamic")]
             GCode::M502 => {
+                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
+                    return Err(CodeExecutionFailure::PowerRequired)
+                }
                 let success = {
                     self.motion_planner.motion_driver.lock().await
                         .trinamic_controller.init().await.is_ok()
                 };
                 if success {
-                    let _ = self.write("ok; M502\n").await;
+                    let _ = self.write(channel, "ok; M502\n").await;
                 } else {
-                    let _ = self.write("error; M502 (internal error)\n").await;
+                    let _ = self.write(channel, "error; M502 (internal error)\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }

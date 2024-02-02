@@ -15,9 +15,9 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Hardware device features
-with-usbserial = ["embassy-usb"]
+with-serial-usb = ["embassy-usb"]
+with-serial-port-1 = []
 with-printjob = []
-with-uart-port-1 = []
 with-spi = ["embedded-hal"]
 with-hotend = ["embedded-hal"]
 with-hotbed = ["embedded-hal"]

@@ -1,6 +1,6 @@
 //! TODO: This feature is still in incubation
 use crate::math::Real;
-use crate::control::planner::SCurveMotionProfile;
+use crate::control::motion_planning::SCurveMotionProfile;
 use crate::tgeo::TVector;
 
 #[allow(unused)]

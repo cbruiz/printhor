@@ -43,6 +43,8 @@ pub enum CodeExecutionFailure {
     ERR,
     /// Cannot perform because requires homing before
     HomingRequired,
+    /// Cannot perform because requires homing before
+    PowerRequired,
     /// Specific internal error: Numerical computation issue (division by 0, sqrt(x<0) or any other kind of ambiguity)
     NumericalError,
     /// The GCode is considered, but not yet implemented

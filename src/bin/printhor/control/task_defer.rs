@@ -1,87 +1,82 @@
-//! This feature is being stablished
-use embassy_time::Duration;
-// This module provides a task that notifies to the usart the acceptation or the completion of the
-// gcodes that aren't processed immediately, so processor can accept more
-// Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
+//! This feature is being established
+//! This module provides a task that notifies to the U(S)ART the acceptation or the completion of the
+//! GCodes that aren't processed immediately, so processor can accept more
+//! Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
 use crate::hwa;
-#[cfg(feature = "with-motion")]
-use printhor_hwa_common::{DeferEvent, DeferType};
+use embassy_time::Duration;
+use hwa::{CommChannel, DeferEvent, DeferAction};
+
+#[derive(Clone, Copy, Default)]
+struct SubscriptionCountings {
+    num_homes: u8,
+    num_linear: u8,
+    num_rapid: u8,
+    num_dwell: u8,
+    #[cfg(feature = "with-hotend")]
+    num_hotend: u8,
+    #[cfg(feature = "with-hotbed")]
+    num_hotbed: u8,
+}
+
+struct Subscriptions {
+    channel_counts:  [SubscriptionCountings; CommChannel::count() - 1],
+}
+
+impl Subscriptions {
+    fn new() -> Self {
+        Self {
+            channel_counts: [SubscriptionCountings::default(); CommChannel::count() - 1]
+        }
+    }
+
+    fn update(&mut self, action: DeferAction, channel: CommChannel, increment: i8) {
+        if let Some(counts) = self.channel_counts.get_mut(CommChannel::index_of(channel)) {
+            let counter = match action {
+                DeferAction::Homing => {
+                    &mut counts.num_homes
+                }
+                DeferAction::RapidMove => {
+                    &mut counts.num_rapid
+                }
+                DeferAction::LinearMove => {
+                    &mut counts.num_linear
+                }
+                DeferAction::Dwell => {
+                    &mut counts.num_dwell
+                }
+                #[cfg(feature = "with-hotend")]
+                DeferAction::HotendTemperature => {
+                    &mut counts.num_hotend
+                }
+                #[cfg(feature = "with-hotbed")]
+                DeferAction::HotbedTemperature => {
+                    &mut counts.num_hotbed
+                }
+            };
+            *counter = (*counter as i8 + increment).min(0) as u8;
+        }
+    }
+}
 
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_defer(processor: hwa::GCodeProcessor) -> ! {
-    hwa::debug!("defer_task started");
-    let mut num_homes = 0u8;
-    let mut num_linear = 0u8;
-    let mut num_rapid = 0u8;
-    let mut num_dwell = 0u8;
-    #[cfg(feature = "with-hotend")]
-    let mut num_hotend = 0u8;
-    #[cfg(feature = "with-hotbed")]
-    let mut num_hotbed = 0u8;
+    hwa::debug!("task_defer started");
+
+    let mut subscriptions = Subscriptions::new();
 
     loop {
         match embassy_time::with_timeout(Duration::from_secs(10), processor.motion_planner.defer_channel.receive()).await {
             Err(_) => {
-                hwa::trace!("defer_task timeout");
+                hwa::trace!("task_defer timeout");
             }
-            Ok(DeferEvent::Homing(DeferType::AwaitRequested)) => {
-                num_homes += 1;
+
+            Ok(DeferEvent::AwaitRequested(action, channel)) => {
+                subscriptions.update(action, channel, 1);
             }
-            Ok(DeferEvent::Homing(DeferType::Completed)) => {
-                if num_homes > 0 {
-                    num_homes -= 1;
-                    // FIXME: Control when a confirmation is needed from specific channel
-                    processor.write("ok; G28 completed (@defer_task)\n").await;
-                }
-            }
-            Ok(DeferEvent::Dwell(DeferType::AwaitRequested)) => {
-                num_dwell += 1;
-            }
-            Ok(DeferEvent::Dwell(DeferType::Completed)) => {
-                if num_dwell > 0 {
-                    num_dwell -= 1;
-                    processor.write("ok; G4 completed (@defer_task)\n").await;
-                }
-            }
-            Ok(DeferEvent::LinearMove(DeferType::AwaitRequested)) => {
-                num_linear += 1;
-            }
-            Ok(DeferEvent::LinearMove(DeferType::Completed)) => {
-                if num_linear > 0 {
-                    num_linear -= 1;
-                    //processor.write("ok; G1 completed (@defer_task)\n").await;
-                }
-            }
-            Ok(DeferEvent::RapidMove(DeferType::AwaitRequested)) => {
-                num_rapid += 1;
-            }
-            Ok(DeferEvent::RapidMove(DeferType::Completed)) => {
-                if num_rapid > 0 {
-                    num_rapid -= 1;
-                    //processor.write("ok; G0 completed (@defer_task)\n").await;
-                }
-            }
-            #[cfg(feature = "with-hotend")]
-            Ok(DeferEvent::HotendTemperature(DeferType::AwaitRequested)) => {
-                num_hotend += 1;
-            }
-            #[cfg(feature = "with-hotend")]
-            Ok(DeferEvent::HotendTemperature(DeferType::Completed)) => {
-                if num_hotend > 0 {
-                    num_hotend -= 1;
-                    processor.write("ok; M109 completed (@defer_task)\n").await;
-                }
-            }
-            #[cfg(feature = "with-hotbed")]
-            Ok(DeferEvent::HotbedTemperature(DeferType::AwaitRequested)) => {
-                num_hotbed += 1;
-            }
-            #[cfg(feature = "with-hotbed")]
-            Ok(DeferEvent::HotbedTemperature(DeferType::Completed)) => {
-                if num_hotbed > 0 {
-                    num_hotbed -= 1;
-                    processor.write("ok; M190 completed (@defer_task)\n").await;
-                }
+            Ok(DeferEvent::Completed(action, channel)) => {
+                subscriptions.update(action, channel, -1);
+                let msg = alloc::format!("ok; {:?} completed @{:?}\n", action, channel);
+                processor.write(channel, msg.as_str()).await;
             }
         }
     }
