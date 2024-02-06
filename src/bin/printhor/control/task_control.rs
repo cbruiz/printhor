@@ -162,23 +162,23 @@ pub async fn task_control(
                     _ => {
                         match processor.execute(channel, &gc, false).await {
                             Ok(CodeExecutionSuccess::OK) => {
-                                hwa::info!("Control sending OK");
+                                hwa::debug!("Control sending OK");
                                 let s = alloc::format!("ok; {}\n", gc.as_ref());
                                 processor.write(channel, s.as_str()).await;
                             }
                             Ok(CodeExecutionSuccess::QUEUED) => {
-                                hwa::info!("Control sending OK (Q)");
+                                hwa::debug!("Control sending OK (Q)");
                                 let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
                                 processor.write(channel, s.as_str()).await;
                             }
                             Ok(CodeExecutionSuccess::DEFERRED(_)) => {
-                                hwa::info!("Control not sending (deferred)");
+                                hwa::debug!("Control not sending (deferred)");
                             }
                             Ok(CodeExecutionSuccess::CONSUMED) => {
-                                hwa::info!("Control not sending (implicitly consumed)");
+                                hwa::debug!("Control not sending (implicitly consumed)");
                             }
                             Err(_e) => {
-                                hwa::info!("Control sending ERR");
+                                hwa::debug!("Control sending ERR");
                                 let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
                                 processor.write(channel, s.as_str()).await;
                             }

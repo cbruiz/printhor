@@ -324,7 +324,7 @@ impl MotionDriver {
         self.probe_controller.lock().await.probe_pin_down(300).await;
         for _i in 0..10 * 10 {
             if self.pins.z_endstop_pin.is_high() {
-                hwa::info!(" - R");
+                hwa::debug!(" - R");
                 reached = true;
                 break;
             }
