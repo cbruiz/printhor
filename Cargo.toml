@@ -34,8 +34,8 @@ with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = ["embedded-sdmmc"]
-with-fan0 = ["embedded-hal"]
 with-fan-layer = ["embedded-hal"]
+with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
 sdcard-uses-spi = []
@@ -54,9 +54,9 @@ integration-test = [
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
     #"integration-test-trinamic",
-    #"integration-test-benchy",
+    "integration-test-benchy",
     #"integration-test-laser-engrave",
-    "plot-timings",
+    #"plot-timings",
     #"timing-stats",
     #"no-real-time",
 ]
@@ -106,6 +106,7 @@ native = [
     "with-hotend", "printhor-hwi_native/with-hotend", "printhor-hwa-common/with-hotend",
     "with-hotbed", "printhor-hwi_native/with-hotbed", "printhor-hwa-common/with-hotbed",
     "with-fan-layer", "printhor-hwi_native/with-fan-layer",
+    "with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
     "with-laser", "printhor-hwi_native/with-laser",
     #"with-display", "printhor-hwi_native/with-display", "printhor-hwa-common/with-ui",
 
@@ -125,7 +126,7 @@ native = [
 mks_robin_nano = [
     "has-extruder",
     "with-defmt", "printhor-hwi_mks_robin_nano/with-defmt",
-    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
+    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano/with-motion", "printhor-hwa-common/with-motion",
 
     "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
@@ -136,12 +137,12 @@ mks_robin_nano = [
     "with-probe", "printhor-hwi_mks_robin_nano/with-probe",
     "with-hotend", "printhor-hwi_mks_robin_nano/with-hotend", "printhor-hwa-common/with-hotend",
     "with-hotbed", "printhor-hwi_mks_robin_nano/with-hotbed", "printhor-hwa-common/with-hotbed",
-    "with-fan-layer", "printhor-hwi_mks_robin_nano/with-fan-layer-fan1",
+    "with-fan-layer", "printhor-hwi_mks_robin_nano/with-fan-layer",
     "with-laser", "printhor-hwi_mks_robin_nano/with-laser",
 
-    #"float-point-f32-impl",
+    "float-point-f32-impl",
     #"float-point-f64-impl",
-    "fixed-point-128-impl",
+    #"fixed-point-128-impl",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
 
     "printhor-hwi_mks_robin_nano",
@@ -159,7 +160,7 @@ nucleo_64_arduino_cnc_hat = [
     #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     #"with-hotend", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotend", "printhor-hwa-common/with-hotend",
     #"with-hotbed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotbed", "printhor-hwa-common/with-hotbed",
-    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-layer-fan",
+    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
     #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
 
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
@@ -193,7 +194,7 @@ sk3_mini_e3_v2 = [
     "with-hotend", "printhor-hwi_skr_mini_e3/with-hotend", "printhor-hwa-common/with-hotend",
     "with-hotbed", "printhor-hwi_skr_mini_e3/with-hotbed", "printhor-hwa-common/with-hotbed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer-fan0",
+    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
 ]
 sk3_mini_e3_v3 = [
     #"timing-stats",
@@ -204,7 +205,7 @@ sk3_mini_e3_v3 = [
     "with-hotend", "printhor-hwi_skr_mini_e3/with-hotend", "printhor-hwa-common/with-hotend",
     "with-hotbed", "printhor-hwi_skr_mini_e3/with-hotbed", "printhor-hwa-common/with-hotbed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer-fan0",
+    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
 ]
 
 skr_mini_e3 = [
@@ -261,7 +262,7 @@ heapless = { version = "0.8.0", default-features = false, features = [] }
 
 async-gcode = {version = "0.3", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"]}
 
-strum = { version = "0.25.0", default-features = false, features = ["derive"] }
+strum = { version = "0.26.1", default-features = false, features = ["derive"] }
 
 rust_decimal = { version = "1.33.1", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { version = "1.33.1" }
@@ -314,7 +315,7 @@ codegen-units = 1
 debug = 2
 strip = false
 incremental = false
-debug-assertions = false
+debug-assertions = true
 opt-level = "s"
 lto = true
 panic = "abort"
@@ -327,7 +328,7 @@ incremental = false
 debug-assertions = false
 overflow-checks = false
 strip = false
-opt-level = "s"
+opt-level = "z"
 lto = true
 panic = "abort"
 

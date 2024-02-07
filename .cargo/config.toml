@@ -39,8 +39,8 @@ codegen-units = 1
 incremental = false
 opt-level = "z"
 debug = 2
-debug-assertions = false
-overflow-checks = false
+debug-assertions = true
+overflow-checks = true
 
 [profile.release-opt.package."*"]
 codegen-units = 1

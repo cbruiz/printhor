@@ -78,20 +78,14 @@
 //!  </dd>
 //! </dl>
 use crate::hwa;
+use hwa::{ControllerRef, DeferAction, EventBusRef};
+use hwa::{EventStatus, EventFlags};
 use embassy_time::{Duration, Ticker};
+use crate::hwa::controllers::HeaterController;
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
-use printhor_hwa_common::{CommChannel, ControllerRef, DeferAction, DeferEvent, EventBusRef};
-use printhor_hwa_common::EventStatus;
-use printhor_hwa_common::EventFlags;
-use printhor_hwa_common::DeferChannelRef;
-
 use pid;
-use crate::hwa::controllers::HeaterController;
-
-#[cfg(feature = "with-defmt")]
-use crate::hwa::defmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
@@ -141,9 +135,8 @@ impl HeaterStateMachine {
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
         event_bus: &EventBusRef,
-        defer_channel: &DeferChannelRef,
         temperature_flag: EventFlags,
-        defer_flag: DeferEvent,
+        action: DeferAction,
     )
         where
             AdcPeri: hwa::device::AdcTrait + 'static,
@@ -215,7 +208,7 @@ impl HeaterStateMachine {
                 }
                 State::Maintaining => {
                     hwa::debug!("Temperature reached. Firing {:?}.", temperature_flag);
-                    defer_channel.send(defer_flag).await;
+                    m.flush_notification(action).await;
                     event_bus.publish_event(EventStatus::containing(temperature_flag)).await;
                 }
                 State::Targeting => {
@@ -228,13 +221,21 @@ impl HeaterStateMachine {
             }
             self.state = new_state;
         }
+        else if m.is_awaited() {
+            match new_state {
+                State::Maintaining => {
+                    m.flush_notification(action).await;
+                }
+                _ => {}
+            }
+
+        }
     }
 }
 
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_temperature(
     event_bus: EventBusRef,
-    defer_channel: DeferChannelRef,
     #[cfg(feature = "with-hotend")]
     hotend_controller: hwa::controllers::HotendControllerRef,
     #[cfg(feature = "with-hotbed")]
@@ -257,8 +258,8 @@ pub async fn task_temperature(
     loop {
         ticker.next().await;
         #[cfg(feature = "with-hotend")]
-        hotend_sm.update(&hotend_controller, &event_bus, &defer_channel, EventFlags::HOTEND_TEMP_OK, DeferEvent::Completed(DeferAction::HotendTemperature, CommChannel::Internal)).await;
+        hotend_sm.update(&hotend_controller, &event_bus, EventFlags::HOTEND_TEMP_OK, DeferAction::HotendTemperature).await;
         #[cfg(feature = "with-hotbed")]
-        hotbed_sm.update(&hotbed_controller, &event_bus, &defer_channel, EventFlags::HOTBED_TEMP_OK, DeferEvent::Completed(DeferAction::HotbedTemperature, CommChannel::Internal)).await;
+        hotbed_sm.update(&hotbed_controller, &event_bus, EventFlags::HOTBED_TEMP_OK, DeferAction::HotbedTemperature).await;
     }
 }

@@ -47,7 +47,7 @@ pub struct PrinterController {
 }
 
 impl PrinterController {
-    pub(crate) fn new(event_bus: EventBusRef) -> PrinterController {
+    pub fn new(event_bus: EventBusRef) -> PrinterController {
         static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> = TrackedStaticCell::new();
         static STATUS_INST: TrackedStaticCell<Config<ChannelMutexType, PrinterControllerStatus>> = TrackedStaticCell::new();
 

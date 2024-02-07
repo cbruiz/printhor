@@ -3,7 +3,6 @@ mod board;
 pub use log::{trace,debug,info,warn,error};
 
 pub use board::device;
-pub use board::consts;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;

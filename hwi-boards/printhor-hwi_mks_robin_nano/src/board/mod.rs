@@ -76,8 +76,8 @@ pub struct IODevices {
 pub struct PwmDevices {
     #[cfg(feature = "with-probe")]
     pub probe: device::ProbePeripherals,
-    #[cfg(feature = "with-fan-layer-fan1")]
-    pub layer_fan: device::LayerFanPeripherals,
+    #[cfg(feature = "with-fan-layer")]
+    pub fan_layer: device::FanLayerPeripherals,
     #[cfg(feature = "with-hotend")]
     pub hotend: device::HotendPeripherals,
     #[cfg(feature = "with-hotbed")]
@@ -280,9 +280,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     // BE0 = PA0 // T2.1 | T5.1
     // LASER = PA6 // T13.1
 
-    #[cfg(feature = "with-fan-layer-fan1")]
-        let layer_device = {
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLayerFan>> = TrackedStaticCell::new();
+    #[cfg(feature = "with-fan-layer")]
+        let fan_layer_device = {
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
 
         let pwm_fan1 = embassy_stm32::timer::simple_pwm::SimplePwm::new(
             p.TIM3,
@@ -293,9 +293,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             embassy_stm32::time::hz(5_000),
             embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
         );
-        crate::device::LayerFanPeripherals {
+        crate::device::FanLayerPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init(
-                "PwmFan",
+                "FanLayerControler",
                 ControllerMutex::new(pwm_fan1)
             )),
             power_channel: embassy_stm32::timer::Channel::Ch1,
@@ -417,8 +417,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         pwm: PwmDevices {
             #[cfg(feature = "with-probe")]
             probe: probe_device,
-            #[cfg(feature = "with-fan-layer-fan1")]
-            layer_fan: layer_device,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer: fan_layer_device,
             #[cfg(feature = "with-hotend")]
             hotend: hotend_device,
             #[cfg(feature = "with-hotbed")]

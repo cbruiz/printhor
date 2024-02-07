@@ -1,32 +1,31 @@
-
+#![allow(unused)]
 #[path = "printhor/math/mod.rs"]
 mod math;
-pub type Real = math::Real;
-
+use math::Real;
+#[path = "printhor/hwa/mod.rs"]
+mod hwa;
+#[path = "printhor/hwi/mod.rs"]
+mod hwi;
+#[path = "printhor/sync/mod.rs"]
+mod sync;
 #[path = "printhor/tgeo.rs"]
 mod tgeo;
-pub use tgeo::*;
-
-#[path = "printhor/control/motion_planning/mod.rs"]
-mod _planing_mod;
-
-mod control {
-    pub(crate) use super::_planing_mod as motion_planning;
-}
-
-#[path = "printhor/hwa/controllers/motion/motion_segment.rs"]
-mod motion_segment;
-
-use motion_segment::{Segment, SegmentData};
+use tgeo::*;
+extern crate alloc;
+#[path = "printhor/control/mod.rs"]
+mod control;
+#[path = "printhor/helpers/mod.rs"]
+mod helpers;
+#[path = "printhor/machine.rs"]
+mod machine;
+use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
 use crate::control::motion_planning::{Constraints, PlanProfile, SCurveMotionProfile};
 #[allow(unused)]
 use crate::math::{ONE, ZERO};
+#[allow(unused)]
+fn initialization_error() {
 
-mod hwa {
-    pub use printhor_hwi_native::*;
 }
-
-extern crate alloc;
 
 fn main() {
 

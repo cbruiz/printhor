@@ -4,20 +4,20 @@ use crate::control::{GCodeLineParser, GCodeLineParserError};
 use embassy_time::{Instant, Timer};
 use embassy_time::Duration;
 
-use crate::hwa::controllers::PrinterController;
-use crate::hwa::controllers::PrinterControllerEvent;
-use crate::hwa::controllers::sdcard_controller::SDCardStream;
-use crate::hwa::controllers::sdcard_controller::SDCardError;
+use hwa::controllers::PrinterController;
+use hwa::controllers::PrinterControllerEvent;
+use hwa::controllers::sdcard_controller::SDCardStream;
+use hwa::controllers::sdcard_controller::SDCardError;
 use printhor_hwa_common::{CommChannel, EventStatus};
 use printhor_hwa_common::EventFlags;
 use printhor_hwa_common::EventBusSubscriber;
 use crate::control::GCode;
-use crate::control::motion_planning::{CodeExecutionFailure, CodeExecutionSuccess};
+use crate::control::{CodeExecutionFailure, CodeExecutionSuccess};
 
 #[allow(unused_mut)]
 #[allow(unreachable_patterns)]
 #[embassy_executor::task(pool_size=1)]
-pub(crate) async fn task_printjob(
+pub async fn task_printjob(
     mut processor: hwa::GCodeProcessor,
     mut printer_controller: PrinterController,
     mut card_controller: hwa::controllers::CardController,

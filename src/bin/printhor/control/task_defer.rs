@@ -29,7 +29,7 @@ impl Subscriptions {
         }
     }
 
-    fn update(&mut self, action: DeferAction, channel: CommChannel, increment: i8) {
+    fn update(&mut self, action: DeferAction, channel: CommChannel, increment: i8) -> bool {
         if let Some(counts) = self.channel_counts.get_mut(CommChannel::index_of(channel)) {
             let counter = match action {
                 DeferAction::Homing => {
@@ -53,8 +53,17 @@ impl Subscriptions {
                     &mut counts.num_hotbed
                 }
             };
-            *counter = (*counter as i8 + increment).min(0) as u8;
+            let new_value = *counter as i8 + increment;
+            if new_value < 0 {
+                *counter = 0;
+                return false;
+            }
+            else {
+                *counter = new_value as u8;
+                return true;
+            }
         }
+        false
     }
 }
 
@@ -71,12 +80,15 @@ pub async fn task_defer(processor: hwa::GCodeProcessor) -> ! {
             }
 
             Ok(DeferEvent::AwaitRequested(action, channel)) => {
-                subscriptions.update(action, channel, 1);
+                hwa::debug!("AwaitRequested {:?}", action);
+                let _ = subscriptions.update(action, channel, 1);
             }
             Ok(DeferEvent::Completed(action, channel)) => {
-                subscriptions.update(action, channel, -1);
-                let msg = alloc::format!("ok; {:?} completed @{:?}\n", action, channel);
-                processor.write(channel, msg.as_str()).await;
+                hwa::debug!("AwaitCompleted {:?}", action);
+                if subscriptions.update(action, channel, -1) {
+                    let msg = alloc::format!("ok; {:?} completed @{:?}\n", action, channel);
+                    processor.write(channel, msg.as_str()).await;
+                }
             }
         }
     }

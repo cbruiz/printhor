@@ -52,7 +52,10 @@ pub type Spi = crate::board::mocked_peripherals::MockedSpi;
 pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
 
 #[cfg(feature = "with-fan-layer")]
-pub type PwmLayerFan = crate::board::mocked_peripherals::MockedPwm;
+pub type PwmFanLayer = crate::board::mocked_peripherals::MockedPwm;
+
+#[cfg(feature = "with-fan-extra-1")]
+pub type PwmFanExtra1 = crate::board::mocked_peripherals::MockedPwm;
 
 #[cfg(feature = "with-probe")]
 pub type PwmServo = crate::board::mocked_peripherals::MockedPwm;
@@ -80,8 +83,6 @@ pub type AdcHotendPeripheral = u8;
 
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 pub type AdcHotendHotbed = AdcImpl<u8>;
-
-
 
 #[cfg(feature = "with-hotend")]
 pub type AdcHotendPin = crate::board::mocked_peripherals::MockedIOPin;
@@ -202,7 +203,13 @@ pub struct HotbedPeripherals {
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
+    pub power_channel: PwmChannel,
+}
+
+#[cfg(feature = "with-fan-extra-1")]
+pub struct FanExtra1Peripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanExtra1>,
     pub power_channel: PwmChannel,
 }
 

@@ -11,7 +11,7 @@ use printhor_hwa_common::{ControllerMutex, ControllerRef, TrackedStaticCell, Mac
 use device::{MotionDevice, MotionPins};
 #[cfg(feature = "with-motion")]
 use crate::board::mocked_peripherals::MockedIOPin;
-#[cfg(feature = "with-motion")]
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer", feature = "with-laser"))]
 use crate::board::mocked_peripherals::MockedPwm;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
@@ -57,10 +57,10 @@ pub struct PwmDevices {
     pub hotend: device::HotendPeripherals,
     #[cfg(feature = "with-hotbed")]
     pub hotbed: device::HotbedPeripherals,
-    #[cfg(feature = "with-fan0")]
-    pub fan0: device::Fan0Peripherals,
     #[cfg(feature = "with-fan-layer")]
-    pub layer_fan: device::FanLayerPeripherals,
+    pub fan_layer: device::FanLayerPeripherals,
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra_1: device::FanExtra1Peripherals,
     #[cfg(feature = "with-laser")]
     pub laser: device::LaserPeripherals,
 }
@@ -199,10 +199,10 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
         #[cfg(feature = "with-display")]
     let display_device = mocked_peripherals::SimulatorDisplayDevice::new();
 
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
+    #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
     let pwm_fan0_fan1_hotend_hotbed_laser = {
         let pwm_fan0_fan1_hotend_hotbed_laser = mocked_peripherals::MockedPwm::new(20, _pin_state);
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLayerFan>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
         ControllerRef::new(PWM_INST.init(
             "PwmFanFan0HotendHotbed",
             ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed_laser)
@@ -286,20 +286,20 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: MockedIOPin::new(24, _pin_state),
             },
-            #[cfg(feature = "with-fan0")]
-            fan0: Fan0Peripherals {
-                power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: 3,
-            },
             #[cfg(feature = "with-fan-layer")]
-            layer_fan: device::FanLayerPeripherals {
+            fan_layer: device::FanLayerPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
                 power_channel: 4,
+            },
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra_1: device::FanExtra1Peripherals {
+                power_pwm: pwm_fan0_fan1_hotend_hotbed_laser.clone(),
+                power_channel: 5,
             },
             #[cfg(feature = "with-laser")]
             laser: device::LaserPeripherals {
                 power_pwm: pwm_laser.clone(),
-                power_channel: 5,
+                power_channel: 6,
             },
         }
     }

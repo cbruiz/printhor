@@ -11,15 +11,15 @@ use super::timing_monitor::*;
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDriverParams {
-    pub(crate) motion_device: hwi::device::MotionDevice,
+    pub motion_device: hwi::device::MotionDevice,
     #[cfg(feature = "with-probe")]
-    pub(crate) probe_controller: ControllerRef<hwa::controllers::ServoController>,
-    #[cfg(feature = "with-fan0")]
-    pub(crate) fan0_controller: ControllerRef<hwa::controllers::Fan0PwmController>,
+    pub probe_controller: ControllerRef<hwa::controllers::ServoController>,
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra_1_controller: ControllerRef<hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-fan-layer")]
-    pub(crate) layer_fan_controller: ControllerRef<hwa::controllers::LayerPwmController>,
+    pub fan_layer_controller: ControllerRef<hwa::controllers::FanLayerPwmController>,
     #[cfg(feature = "with-laser")]
-    pub(crate) laser_controller: ControllerRef<hwa::controllers::LaserPwmController>,
+    pub laser_controller: ControllerRef<hwa::controllers::LaserPwmController>,
 }
 
 pub struct MotionDriver {
@@ -30,10 +30,10 @@ pub struct MotionDriver {
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
     pub probe_controller: ControllerRef<hwa::controllers::ServoController>,
-    #[cfg(feature = "with-fan0")]
-    pub fan0_controller: ControllerRef<hwa::controllers::Fan0PwmController>,
     #[cfg(feature = "with-fan-layer")]
-    pub layer_fan_controller: ControllerRef<hwa::controllers::LayerPwmController>,
+    pub fan_layer_controller: ControllerRef<hwa::controllers::FanLayerPwmController>,
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra_1_controller: ControllerRef<hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-laser")]
     pub laser_controller: ControllerRef<hwa::controllers::LaserPwmController>,
     #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -49,10 +49,10 @@ impl MotionDriver {
             trinamic_controller: hwa::controllers::TrinamicController::new(params.motion_device.trinamic_uart),
             #[cfg(feature = "with-probe")]
             probe_controller: params.probe_controller,
-            #[cfg(feature = "with-fan0")]
-            fan0_controller: params.fan0_controller,
             #[cfg(feature = "with-fan-layer")]
-            layer_fan_controller: params.layer_fan_controller,
+            fan_layer_controller: params.fan_layer_controller,
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra_1_controller: params.fan_extra_1_controller,
             #[cfg(feature = "with-laser")]
             laser_controller: params.laser_controller,
             #[cfg(all(feature = "native", feature = "plot-timings"))]

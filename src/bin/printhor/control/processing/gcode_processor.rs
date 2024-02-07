@@ -1,15 +1,18 @@
-use crate::control::motion_planning::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
+use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::control::GCode;
 use crate::hwa;
-#[cfg(feature = "with-probe")]
-use crate::hwa::controllers::ProbeTrait;
+use crate::math;
 use crate::machine::MACHINE_INFO;
-use crate::math::Real;
+
+#[cfg(feature = "with-probe")]
+use hwa::controllers::ProbeTrait;
 use alloc::format;
 #[cfg(feature = "with-motion")]
-use printhor_hwa_common::DeferEvent;
-use printhor_hwa_common::{CommChannel, DeferAction, EventBusRef, EventFlags, EventStatus};
+use hwa::{DeferEvent, DeferAction};
+use hwa::{CommChannel, EventBusRef, EventFlags, EventStatus};
+use math::Real;
 use strum::VariantNames;
+#[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
 
 pub struct GCodeProcessorParams {
@@ -29,10 +32,10 @@ pub struct GCodeProcessorParams {
     pub hotend: hwa::controllers::HotendControllerRef,
     #[cfg(feature = "with-hotbed")]
     pub hotbed: hwa::controllers::HotbedControllerRef,
-    #[cfg(feature = "with-fan0")]
-    pub fan0: hwa::controllers::Fan0PwmControllerRef,
     #[cfg(feature = "with-fan-layer")]
-    pub layer_fan: hwa::controllers::LayerPwmControllerRef,
+    pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
 }
@@ -55,16 +58,16 @@ pub struct GCodeProcessor {
     pub hotend: hwa::controllers::HotendControllerRef,
     #[cfg(feature = "with-hotbed")]
     pub hotbed: hwa::controllers::HotbedControllerRef,
-    #[cfg(feature = "with-fan0")]
-    pub fan0: hwa::controllers::Fan0PwmControllerRef,
-    #[cfg(feature = "with-fan1")]
-    pub layer_fan: hwa::controllers::LayerPwmControllerRef,
+    #[cfg(feature = "with-fan-layer")]
+    pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
 }
 
 impl GCodeProcessor {
-    pub(crate) fn new(params: GCodeProcessorParams) -> Self {
+    pub fn new(params: GCodeProcessorParams) -> Self {
         Self {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx: params.serial_usb_tx,
@@ -76,16 +79,14 @@ impl GCodeProcessor {
             motion_planner: params.motion_planner,
             #[cfg(feature = "with-probe")]
             probe: params.probe,
-            #[cfg(feature = "with-fan")]
-            fan: _c.fan_controller.clone(),
             #[cfg(feature = "with-hotend")]
             hotend: params.hotend,
             #[cfg(feature = "with-hotbed")]
             hotbed: params.hotbed,
-            #[cfg(feature = "with-fan0")]
-            fan0: params.fan0,
-            #[cfg(feature = "with-fan1")]
-            layer_fan: params.layer_fan,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer: params.fan_layer,
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra_1: params.fan_extra_1,
             #[cfg(feature = "with-laser")]
             laser: params.laser,
 
@@ -166,33 +167,7 @@ impl GCodeProcessor {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
-                hwa::debug!("Processor planning BEGIN");
-                let result = self.motion_planner.plan(channel, &gc, blocking).await?;
-                hwa::debug!("Processor planning END with Success");
-                if !blocking {
-                    hwa::debug!("Processor sending defer rq BEGIN");
-                    self.motion_planner
-                        .defer_channel
-                        .send(DeferEvent::AwaitRequested(DeferAction::LinearMove, channel))
-                        .await;
-                    hwa::debug!("Processor sending defer rq END");
-                }
-                match result {
-                    CodeExecutionSuccess::OK => {
-                        hwa::debug!("G1 OK");
-                    }
-                    CodeExecutionSuccess::CONSUMED => {
-                        hwa::debug!("G1 OK");
-                    }
-                    CodeExecutionSuccess::QUEUED => {
-                        hwa::debug!("G1 QUEUED");
-                    }
-                    CodeExecutionSuccess::DEFERRED(_) => {
-                        hwa::debug!("G1 DEFERRED");
-                    }
-                }
-                hwa::debug!("Processor returning OK");
-                Ok(CodeExecutionSuccess::OK)
+                Ok(self.motion_planner.plan(channel, &gc, blocking).await?)
             }
             #[cfg(feature = "with-motion")]
             GCode::G4 => {
@@ -251,15 +226,22 @@ impl GCodeProcessor {
                 }
             }
             GCode::G80 => Ok(CodeExecutionSuccess::OK),
+            #[cfg(feature = "with-motion")]
             GCode::G90 => {
                 self.motion_planner.set_absolute_positioning(true).await;
-                Ok(CodeExecutionSuccess::OK)
+                Ok(CodeExecutionSuccess::CONSUMED)
             }
+            #[cfg(feature = "with-motion")]
             GCode::G91 => {
                 self.motion_planner.set_absolute_positioning(false).await;
-                Ok(CodeExecutionSuccess::OK)
+                Ok(CodeExecutionSuccess::CONSUMED)
             }
-            GCode::G92 => Ok(CodeExecutionSuccess::OK),
+            #[cfg(feature = "with-motion")]
+            GCode::G92 => {
+                // FIXME
+                self.motion_planner.set_last_planned_pos(&TVector::zero()).await;
+                Ok(CodeExecutionSuccess::CONSUMED)
+            },
             GCode::G94 => Ok(CodeExecutionSuccess::OK),
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
@@ -272,7 +254,7 @@ impl GCodeProcessor {
             GCode::M5 => Ok(CodeExecutionSuccess::OK),
             GCode::M73 => Ok(CodeExecutionSuccess::OK),
             GCode::M79 => {
-                let _ = self.write(channel, "D; Software reset\n").await;
+                let _ = self.write(channel, "echo: Software reset\n").await;
                 self.flush(channel).await;
                 hwa::sys_reset();
                 Ok(CodeExecutionSuccess::OK)
@@ -316,6 +298,8 @@ impl GCodeProcessor {
                 self.write(channel, z2.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
+            // Set hotend temperature
+            // An immediate command
             #[cfg(feature = "with-hotend")]
             GCode::M104(s) => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
@@ -323,7 +307,7 @@ impl GCodeProcessor {
                 }
                 let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
                 let mut h = self.hotend.lock().await;
-                h.set_target_temp(val as f32).await;
+                h.set_target_temp(CommChannel::Internal, DeferAction::HotendTemperature, val as f32).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M105 => {
@@ -359,39 +343,35 @@ impl GCodeProcessor {
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
-            #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
+            #[cfg(feature = "with-fan-layer")]
             GCode::M106 => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
                 //crate::info!("M106 BEGIN");
-                self.layer_fan.lock().await.set_power(255).await;
+                self.fan_layer.lock().await.set_power(255).await;
                 //crate::info!("M106 END");
                 Ok(CodeExecutionSuccess::OK)
             }
-            #[cfg(any(feature = "with-fan0", feature = "with-fan1"))]
+            #[cfg(feature = "with-fan-layer")]
             GCode::M107 => {
-                self.layer_fan.lock().await.set_power(0).await;
+                self.fan_layer.lock().await.set_power(0).await;
                 Ok(CodeExecutionSuccess::OK)
             }
+            // Wait for hot-end temperature
+            // Mostly deferred code
             #[cfg(feature = "with-hotend")]
             GCode::M109(s) => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
-                let enabled = {
+                let deferred = {
                     let mut he = self.hotend.lock().await;
                     let value = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
-                    he.set_target_temp(value as f32).await;
-                    value > 0
+                    let was_deferred = he.set_target_temp(channel, DeferAction::HotendTemperature, value as f32).await;
+                    value > 0 && was_deferred
                 };
-                if enabled {
-                    if !blocking {
-                        self.motion_planner
-                            .defer_channel
-                            .send(DeferEvent::AwaitRequested(DeferAction::HotendTemperature, channel))
-                            .await;
-                    }
+                if deferred {
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
                         EventFlags::HOTEND_TEMP_OK,
                     )))
@@ -401,13 +381,19 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCode::M114 => {
-                let _pos = self
-                    .motion_planner
-                    .get_last_planned_pos()
-                    .await
+                let _pos = self.motion_planner.get_last_planned_pos().await
                     .unwrap_or(TVector::zero())
                     .rdp(6);
-                let z = format!("M114 {}\n", _pos);
+                let _spos = self.motion_planner.get_last_planned_step_pos().await.unwrap_or(TVector::zero());
+                let z = format!("X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
+                                _pos.x.unwrap_or(crate::math::ZERO),
+                                _pos.y.unwrap_or(crate::math::ZERO),
+                                _pos.z.unwrap_or(crate::math::ZERO),
+                                _pos.e.unwrap_or(crate::math::ZERO),
+                                _spos.x.unwrap_or(0),
+                                _spos.y.unwrap_or(0),
+                                _spos.z.unwrap_or(0),
+                );
                 let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -464,6 +450,8 @@ impl GCodeProcessor {
                 let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
+            // Set hot-bed temperature
+            // An immediate command
             #[cfg(feature = "with-hotbed")]
             GCode::M140(s) => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
@@ -471,24 +459,23 @@ impl GCodeProcessor {
                 }
                 let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
                 let mut h = self.hotbed.lock().await;
-                h.set_target_temp(val as f32).await;
+                h.set_target_temp(CommChannel::Internal, DeferAction::HotbedTemperature, val as f32).await;
                 Ok(CodeExecutionSuccess::OK)
             }
+            // Wait for hot-bed temperature
+            // A normally deferred command
             #[cfg(feature = "with-hotbed")]
             GCode::M190 => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
-                let enabled = true;
-                if enabled {
-                    if !blocking {
-                        self.motion_planner
-                            .defer_channel
-                            .send(DeferEvent::AwaitRequested(DeferAction::HotbedTemperature, channel))
-                            .await;
-                    }
+                let deferred = {
+                    let mut he = self.hotbed.lock().await;
+                    he.ping_subscribe(channel, DeferAction::HotendTemperature).await
+                };
+                if deferred {
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
-                        EventFlags::HOTBED_TEMP_OK,
+                        EventFlags::HOTEND_TEMP_OK,
                     )))
                 } else {
                     Ok(CodeExecutionSuccess::OK)

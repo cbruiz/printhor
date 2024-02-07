@@ -92,10 +92,8 @@ pub struct PwmDevices {
     pub hotend: device::HotendPeripherals,
     #[cfg(feature = "with-hotbed")]
     pub hotbed: device::HotbedPeripherals,
-    #[cfg(feature = "with-fan-layer-fan0")]
-    pub layer_fan: device::FanLayerPeripherals,
-    #[cfg(feature = "with-fan1")]
-    pub fan1: device::Fan1Peripherals,
+    #[cfg(feature = "with-fan-layer")]
+    pub fan_layer: device::FanLayerPeripherals,
     #[cfg(feature = "with-laser")]
     pub laser: device::LaserPeripherals,
 }
@@ -383,7 +381,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                     ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
                 ))
             };
-            #[cfg(feature = "with-fan-layer-fan0")]
+            #[cfg(feature = "with-fan-layer")]
             let pwm_fan1_channel = embassy_stm32::timer::Channel::Ch2;
             #[cfg(feature = "with-hotend")]
             let pwm_hotend_channel = embassy_stm32::timer::Channel::Ch3;
@@ -640,7 +638,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
             ))
         };
-        #[cfg(feature = "with-fan-layer-fan0")]
+        #[cfg(feature = "with-fan-layer")]
         let pwm_fan1_channel = embassy_stm32::timer::Channel::Ch2;
         #[cfg(feature = "with-hotend")]
         let pwm_hotend_channel = embassy_stm32::timer::Channel::Ch3;
@@ -777,15 +775,15 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: adc_hotbed_pin,
             },
-            #[cfg(feature = "with-fan-layer-fan0")]
-            layer_fan: device::FanLayerPeripherals {
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer: device::FanLayerPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_fan1_channel,
             },
-            #[cfg(feature = "with-fan1")]
-            fan1: device::Fan1Peripherals {
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra_1: device::FanExtra1Peripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
-                power_channel: pwm_fan1_channel,
+                power_channel: pwm_fan0_channel,
             },
             #[cfg(feature = "with-laser")]
             laser: device::LaserPeripherals {

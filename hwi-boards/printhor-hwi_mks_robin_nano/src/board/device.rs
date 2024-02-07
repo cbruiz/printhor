@@ -79,7 +79,7 @@ pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
-pub type PwmLayerFan = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+pub type PwmFanLayer = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 pub type PwmHotend = SimplePwm<'static, embassy_stm32::peripherals::TIM9>;
 pub type PwmHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM13>;
@@ -114,9 +114,9 @@ pub struct HotbedPeripherals {
     pub temp_pin: AdcHotbedPin
 }
 
-#[cfg(feature = "with-fan-layer-fan1")]
-pub struct LayerFanPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
+#[cfg(feature = "with-fan-layer")]
+pub struct FanLayerPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 

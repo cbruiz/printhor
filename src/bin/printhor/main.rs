@@ -20,7 +20,7 @@ use embassy_executor::Spawner;
 #[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
-use printhor_hwa_common::{EventBusRef, TrackedStaticCell};
+use hwa::{DeferChannelRef, EventBusRef, TrackedStaticCell};
 use hwa::{Controllers, IODevices, MotionDevices, PwmDevices};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
@@ -109,18 +109,16 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 }
 
 #[inline(never)]
-async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: DeferChannelRef,
-                     controllers: Controllers, devices: IODevices,
-                     _motion_device: MotionDevices,
-                     _pwm_devices: PwmDevices,
-                     _wd: hwa::WatchdogRef
+async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: DeferChannelRef,
+                     _controllers: Controllers, _devices: IODevices, _motion_device: MotionDevices,
+                     _pwm_devices: PwmDevices, _wd: hwa::WatchdogRef
 ) -> Result<(), ()> {
 
     #[cfg(all(feature = "with-sdcard", feature = "sdcard-uses-spi"))]
-        let sdcard_adapter = hwa::adapters::SPIAdapter::new(devices.sdcard_device, devices.sdcard_cs_pin);
+        let sdcard_adapter = hwa::adapters::SPIAdapter::new(_devices.sdcard_device, _devices.sdcard_cs_pin);
 
     #[cfg(all(feature = "with-sdcard", not(feature = "sdcard-uses-spi")))]
-        let sdcard_adapter = devices.sdcard_device;
+        let sdcard_adapter = _devices.sdcard_device;
 
     #[cfg(feature = "with-sdcard")]
         let sdcard_controller = CardController::new(
@@ -156,32 +154,32 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         )
     };
 
-    #[cfg(feature = "with-fan0")]
-        let fan0_controller = {
-        static FAN0_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::Fan0PwmController>> = TrackedStaticCell::new();
+    #[cfg(feature = "with-fan-layer")]
+        let fan_layer_controller = {
+        static LAYER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::FanLayerPwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            FAN0_CONTROLLER_INST.init("Fan0Controller",
-                                      ControllerMutex::new(
-                                          hwa::controllers::Fan0PwmController::new(
-                                              _pwm_devices.fan0.power_pwm,
-                                              _pwm_devices.fan0.power_channel,
-                                          )
-                                      )
+            LAYER_CONTROLLER_INST.init("FanLayerController",
+                                       ControllerMutex::new(
+                                           hwa::controllers::FanLayerPwmController::new(
+                                               _pwm_devices.fan_layer.power_pwm,
+                                               _pwm_devices.fan_layer.power_channel,
+                                           )
+                                       )
             )
         )
     };
 
-    #[cfg(feature = "with-fan-layer")]
-        let layer_fan_controller = {
-        static LAYER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::LayerPwmController>> = TrackedStaticCell::new();
+    #[cfg(feature = "with-fan-extra-1")]
+        let fan_extra_1_controller = {
+        static FAN_EXTRA_1_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::FanExtra1PwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            LAYER_CONTROLLER_INST.init("LayerFanController",
-                                       ControllerMutex::new(
-                                           hwa::controllers::LayerPwmController::new(
-                                               _pwm_devices.layer_fan.power_pwm,
-                                               _pwm_devices.layer_fan.power_channel,
-                                           )
-                                       )
+            FAN_EXTRA_1_CONTROLLER_INST.init("FanExtra1Controller",
+                                      ControllerMutex::new(
+                                          hwa::controllers::FanExtra1PwmController::new(
+                                              _pwm_devices.fan_extra_1.power_pwm,
+                                              _pwm_devices.fan_extra_1.power_channel,
+                                          )
+                                      )
             )
         )
     };
@@ -209,6 +207,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
                                                 _pwm_devices.hotend.temp_adc.clone(),
                                                 _pwm_devices.hotend.temp_pin,
                                                 hotend_pwm,
+                                                _defer_channel.clone(),
                                             )
                                         )
             )
@@ -227,6 +226,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
                                                 _pwm_devices.hotbed.temp_adc,
                                                 _pwm_devices.hotbed.temp_pin,
                                                 hotbed_pwm,
+                                                _defer_channel.clone(),
                                             )
                                         )
             )
@@ -238,25 +238,25 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
     #[cfg(feature = "with-motion")]
     let motion_planer = {
         static MPS : TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
-        MotionPlannerRef {
-            inner: MPS.init("MotionPlanner",
-                            MotionPlanner::new(
-                                event_bus.clone(),
-                                defer_channel.clone(),
-                                hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
-                                    motion_device: _motion_device.motion_devices,
-                                    #[cfg(feature = "with-probe")]
-                                    probe_controller: probe_controller.clone(),
-                                    #[cfg(feature = "with-fan0")]
-                                    fan0_controller: fan0_controller.clone(),
-                                    #[cfg(feature = "with-fan-layer")]
-                                    layer_fan_controller: layer_fan_controller.clone(),
-                                    #[cfg(feature = "with-laser")]
-                                    laser_controller: laser_controller.clone(),
-                                }),
-                            )
-            ),
-        }
+        MotionPlannerRef::new(
+            MPS.init("MotionPlanner",
+                     MotionPlanner::new(
+                        event_bus.clone(),
+                        _defer_channel.clone(),
+                        hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
+                            motion_device: _motion_device.motion_devices,
+                            #[cfg(feature = "with-probe")]
+                            probe_controller: probe_controller.clone(),
+                            #[cfg(feature = "with-fan-layer")]
+                            fan_layer_controller: fan_layer_controller.clone(),
+                            #[cfg(feature = "with-fan-extra-1")]
+                            fan_extra_1_controller: fan_extra_1_controller.clone(),
+                            #[cfg(feature = "with-laser")]
+                            laser_controller: laser_controller.clone(),
+                        }),
+                    )
+            )
+        )
     };
 
     let processor: GCodeProcessor = GCodeProcessor::new(GCodeProcessorParams {
@@ -264,21 +264,21 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         #[cfg(feature = "with-motion")]
         motion_planner: motion_planer.clone(),
         #[cfg(feature = "with-serial-usb")]
-        serial_usb_tx: controllers.serial_usb_tx,
+        serial_usb_tx: _controllers.serial_usb_tx,
         #[cfg(feature = "with-serial-port-1")]
-        serial_port1_tx: controllers.serial_port1_tx,
+        serial_port1_tx: _controllers.serial_port1_tx,
         #[cfg(feature = "with-serial-port-2")]
-        serial_port2_tx: controllers.serial_port2_tx,
+        serial_port2_tx: _controllers.serial_port2_tx,
         #[cfg(feature = "with-probe")]
         probe: probe_controller,
         #[cfg(feature = "with-hotend")]
         hotend: hotend_controller.clone(),
         #[cfg(feature = "with-hotbed")]
         hotbed: hotbed_controller.clone(),
-        #[cfg(feature = "with-fan0")]
-        fan0: fan0_controller.clone(),
         #[cfg(feature = "with-fan-layer")]
-        layer_fan: layer_fan_controller.clone(),
+        fan_layer: fan_layer_controller.clone(),
+        #[cfg(feature = "with-fan-extra-1")]
+        fan_extra_1: fan_extra_1_controller.clone(),
         #[cfg(feature = "with-laser")]
         laser: laser_controller,
     });
@@ -319,11 +319,11 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
         processor.clone(),
         control::GCodeMultiplexedInputStream::new(
             #[cfg(feature = "with-serial-usb")]
-                devices.serial_usb_rx_stream,
+                _devices.serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-                devices.serial_port1_rx_stream,
+                _devices.serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-                devices.serial_port2_rx_stream,
+                _devices.serial_port2_rx_stream,
         ),
         ControlTaskControllers {
             #[cfg(feature="with-printjob")]
@@ -343,7 +343,6 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
     #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
     spawner.spawn(control::task_temperature::task_temperature(
         event_bus.clone(),
-        defer_channel.clone(),
         #[cfg(feature = "with-hotend")]
         hotend_controller,
         #[cfg(feature = "with-hotbed")]
@@ -352,7 +351,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, defer_channel: De
 
     #[cfg(feature = "with-display")]
     spawner.spawn(display::display_task::display_task(
-        devices.display_device,
+        _devices.display_device,
         event_bus.clone()
     )).map_err(|_| ())?;
 
@@ -385,4 +384,3 @@ use defmt_rtt as _;
 #[allow(unused)]
 #[cfg(feature = "with-defmt")]
 use panic_probe as _;
-use printhor_hwa_common::DeferChannelRef;

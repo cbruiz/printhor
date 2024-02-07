@@ -3,6 +3,7 @@ use crate::hwa;
 use crate::control::*;
 #[allow(unused)]
 use crate::math::Real;
+#[cfg(feature = "with-motion")]
 use crate::control::motion_planning::*;
 use printhor_hwa_common::{CommChannel, EventBusSubscriber, EventFlags};
 
@@ -12,7 +13,7 @@ pub struct IntegrationaskParams {
     pub printer_controller: hwa::controllers::PrinterController,
 }
 #[embassy_executor::task(pool_size=1)]
-pub(crate) async fn task_integration(mut params: IntegrationaskParams)
+pub async fn task_integration(mut params: IntegrationaskParams)
 {
 
     #[allow(unused)]
@@ -233,7 +234,7 @@ pub(crate) async fn task_integration(mut params: IntegrationaskParams)
         params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("benchy.g"))).await.unwrap();
         match embassy_time::with_timeout(
             embassy_time::Duration::from_secs(5),
-            subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED)).await.unwrap()
+            subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
         ).await {
             Ok(_) => {
                 // command resume (eq: M24)

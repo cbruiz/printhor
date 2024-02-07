@@ -1,7 +1,7 @@
 use crate::hwa;
 use hwa::{EventBusSubscriber, EventStatus, EventFlags};
 use crate::control::{GCode, GCodeLineParserError, GCodeMultiplexedInputStream};
-use crate::control::motion_planning::CodeExecutionSuccess;
+use crate::control::CodeExecutionSuccess;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-printjob")] {
         use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
@@ -50,12 +50,12 @@ pub async fn task_control(
                 processor.write(channel, "error; (ParserError)\n").await;
             }
             Ok((Err(GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)), channel)) => {
-                hwa::error!("GCode {} (NotImplemented)\n", _gcode_name.as_str());
+                hwa::error!("GCode {} (NotImplemented)", _gcode_name.as_str());
                 let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                 processor.write(channel, &s).await;
             }
             Ok((Err(GCodeLineParserError::FatalError), channel)) => {
-                hwa::error!("[{:?}] GCode N/A (Internal error)\n", channel);
+                hwa::error!("[{:?}] GCode N/A (Internal error)", channel);
                 let s = "error; Internal error\n";
                 processor.write(channel, s).await;
             }

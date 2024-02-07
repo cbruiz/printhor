@@ -1,8 +1,11 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use printhor_hwa_common::ControllerRef;
+use printhor_hwa_common::{CommChannel, ControllerRef, DeferAction, DeferChannelRef};
+use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
 use crate::hwa::controllers::pwm_controller::PwmController;
 use crate::hwa::VREF_SAMPLE;
+#[allow(unused)]
+use crate::tgeo::ArithmeticOps;
 
 type AdcControllerRef<AdcPeri> = ControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
 
@@ -20,10 +23,14 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
     vref_sample: u16,
     // Shared PWM controller to apply heating power
     pwm: PwmController<PwmHwaDevice>,
+    // The defer channel to submit status changes to
+    defer_channel: DeferChannelRef,
     // The target/expected temperature value (in celsius)
     target_temp: f32,
     // Cache of last temperature value measure (in celsius)
     current_temp: f32,
+    // The comm channel who commanded the request.
+    commander_channel: CommChannel,
     // Cache of controller state
     on: bool,
 }
@@ -36,7 +43,7 @@ where
     PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
 {
-    pub fn new(adc: AdcControllerRef<AdcPeri>, adc_pin: AdcPin, pwm: PwmController<PwmHwaDevice>) -> Self {
+    pub fn new(adc: AdcControllerRef<AdcPeri>, adc_pin: AdcPin, pwm: PwmController<PwmHwaDevice>, defer_channel: DeferChannelRef) -> Self {
         Self {
             adc,
             adc_pin,
@@ -44,6 +51,8 @@ where
             pwm,
             target_temp: 0.0f32,
             current_temp: 0.0f32,
+            defer_channel,
+            commander_channel: CommChannel::Internal,
             on: false,
         }
     }
@@ -80,13 +89,50 @@ where
         self.target_temp
     }
 
-    pub async fn set_target_temp(&mut self, target_temp: f32) {
-        self.target_temp = target_temp;
-        if target_temp > 0.0f32 {
+    /// Returns if true when command is deferred (needs to delay ACK to reach the temperature).
+    /// Automatically triggers a defer event
+    pub async fn set_target_temp(&mut self, channel: CommChannel, action: DeferAction, requested_temp: f32) -> bool {
+
+        if requested_temp > 0.0f32 {
+            let tdiff = requested_temp - self.target_temp;
+            self.target_temp = requested_temp;
             self.on();
+            if tdiff.abs() > 0.1f32 * self.target_temp {
+                self.commander_channel = channel;
+                self.defer_channel.send(AwaitRequested(action, channel)).await;
+                true
+            }
+            else {
+                self.commander_channel = CommChannel::Internal;
+                false
+            }
         }
         else {
+            self.target_temp = 0.0f32;
+            self.commander_channel = CommChannel::Internal;
             self.off().await;
+            false
+        }
+    }
+
+    /// Check temperature is OK
+    /// Returns if true when command is deferred (needs to delay ACK to reach the temperature).
+    /// Automatically triggers a defer event
+    pub async fn ping_subscribe(&mut self, channel: CommChannel, action: DeferAction) -> bool {
+        if self.is_on() && self.current_temp > 0.0f32 {
+            let tdiff = self.current_temp - self.target_temp;
+            if tdiff.abs() > 0.1f32 * self.target_temp {
+                self.commander_channel = channel;
+                self.defer_channel.send(AwaitRequested(action, channel)).await;
+                true
+            }
+            else {
+                self.commander_channel = CommChannel::Internal;
+                false
+            }
+        }
+        else {
+            false
         }
     }
 
@@ -136,6 +182,19 @@ where
         const VREFINT_MV: u32 = 1210; // Internal reference voltage (average)
         hwa::trace!("sample: {}", sample);
         ((u32::from(sample) * VREFINT_MV) / u32::from(self.vref_sample)) as u16
+    }
+
+    // Sends and consume the deferred action
+    pub async fn flush_notification(&mut self, action: DeferAction) {
+        self.defer_channel.send(Completed(action, self.commander_channel)).await;
+        self.commander_channel = CommChannel::Internal;
+    }
+
+    pub fn is_awaited(&self) -> bool {
+        match &self.commander_channel {
+            CommChannel::Internal => false,
+            _ => true,
+        }
     }
 
     // Checks if heater is enabled

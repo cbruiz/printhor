@@ -17,11 +17,6 @@ cfg_if::cfg_if! {
     if #[cfg(feature="sk3_mini_e3_v2")] {
 
         cfg_if::cfg_if! {
-            if #[cfg(feature="with-")] {
-            }
-        }
-
-        cfg_if::cfg_if! {
             if #[cfg(feature="with-trinamic")] {
                 type TrinamicUartPeri = embassy_stm32::peripherals::UART4;
                 type TrinamicUartTxDma = embassy_stm32::peripherals::DMA2_CH5;
@@ -161,8 +156,8 @@ pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
 
 pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
-pub type PwmLayerFan = PwmFan0Fan1HotendHotbed;
-pub type PwmFan1 = PwmFan0Fan1HotendHotbed;
+pub type PwmFanLayer = PwmFan0Fan1HotendHotbed;
+pub type PwmFanExtra1 = PwmFan0Fan1HotendHotbed;
 pub type PwmHotend = PwmFan0Fan1HotendHotbed;
 pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
 
@@ -214,15 +209,15 @@ pub struct HotbedPeripherals {
     pub temp_pin: AdcHotbedPin
 }
 
-#[cfg(feature = "with-fan-layer-fan0")]
+#[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-fan1")]
-pub struct Fan1Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan1>,
+#[cfg(feature = "with-fan-extra-1")]
+pub struct FanExtra1Peripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanExtra1>,
     pub power_channel: PwmChannel,
 }
 

@@ -320,7 +320,6 @@ pub async fn task_stepper(
                             }
                             duty += t0.elapsed();
                             motion_planner.consume_current_segment_data().await;
-                            motion_planner.defer_channel.send(DeferEvent::Completed(DeferAction::LinearMove, channel)).await;
                             break;
                         }
                         #[cfg(feature = "timing-stats")]

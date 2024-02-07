@@ -7,5 +7,6 @@ pub mod timing_stats;
 
 #[cfg(feature = "with-motion")]
 pub use motion_driver::MotionDriver;
+
 #[cfg(feature = "with-motion")]
 pub use motion_driver::MotionDriverParams;

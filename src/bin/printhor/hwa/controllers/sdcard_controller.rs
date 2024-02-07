@@ -206,7 +206,7 @@ impl SDCard {
         }
     }
 
-    pub(crate) fn is_dir(&mut self, parent_dir_ref: &DirectoryRef, entry_name: &str) -> Result<bool, SDCardError>{
+    pub(crate) fn ckeck_is_dir(&mut self, parent_dir_ref: &DirectoryRef, entry_name: &str) -> Result<bool, SDCardError>{
         match self.vol.as_ref() {
             Some(vol) => {
                 let idx = parent_dir_ref.idx as usize;
@@ -371,7 +371,7 @@ pub struct CardController {
 
 #[allow(unused)]
 impl CardController {
-    pub(crate) async fn new(device: SDCardBlockDevice) -> Self {
+    pub async fn new(device: SDCardBlockDevice) -> Self {
         static CARD_CTRL_SHARED_STATE: TrackedStaticCell<ControllerMutex<SDCard>> = TrackedStaticCell::new();
         let mut card = SDCardVolumeManager::new_with_limits(device, DummyTimeSource{});
         #[cfg(feature = "sdcard-uses-spi")]
@@ -433,9 +433,9 @@ impl CardController {
                 }
                 hwa::debug!("---- Opening {}", subdir);
                 if let Some(last_dir) = path.last() {
-                    path.push(card.open_dir(last_dir, subdir)?).map_err(|d| {
+                    path.push(card.open_dir(last_dir, subdir)?).map_err(|dir_ref| {
                         hwa::error!("Error opening subdir: push failed");
-                        card.close_dir(d);
+                        card.close_dir(dir_ref);
                         SDCardError::MaxOpenDirs
                     })?;
                 }
@@ -485,10 +485,10 @@ impl CardController {
                 hwa::debug!("---- Opening {}", next_entry);
                 if let Some(last_dir) = path.last() {
 
-                    if card.is_dir(last_dir, next_entry)? {
-                        path.push(card.open_dir(last_dir, next_entry)?).map_err(|d| {
+                    if card.ckeck_is_dir(last_dir, next_entry)? {
+                        path.push(card.open_dir(last_dir, next_entry)?).map_err(|dir_ref| {
                             hwa::error!("Error opening subdir: push failed");
-                            card.close_dir(d);
+                            card.close_dir(dir_ref);
                             SDCardError::MaxOpenDirs
                         })?;
                     }

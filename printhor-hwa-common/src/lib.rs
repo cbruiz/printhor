@@ -35,6 +35,7 @@ cfg_if::cfg_if! {
 
 pub mod soft_uart;
 
+/// Represents a logical channel where the request(s) come from
 #[derive(strum::EnumCount, Clone, Copy, Debug)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum CommChannel {
@@ -44,7 +45,7 @@ pub enum CommChannel {
     SerialPort1,
     #[cfg(feature = "with-serial-port-2")]
     SerialPort2,
-    // This variant is mandatory. Used by SD prints, integration tests or marco/automation
+    /// This variant is mandatory. Used by SD prints, integration tests or marco/automation
     Internal,
 }
 
@@ -70,20 +71,20 @@ cfg_if::cfg_if! {
     }
 }
 impl CommChannel {
-    pub const fn index(idx: usize) -> CommChannel {
+    pub const fn index(_idx: usize) -> CommChannel {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-serial-usb")] {
-                if idx == 0 {
+                if _idx == 0 {
                     return CommChannel::SerialUsb
                 }
             }
             else if #[cfg(feature = "with-serial-port-1")] {
-                if idx == SERIAL_USB_OFFSET {
+                if _idx == SERIAL_USB_OFFSET {
                     return CommChannel::SerialPort1
                 }
             }
             else if #[cfg(feature = "with-serial-port-2")] {
-                if idx == SERIAL_PORT1_OFFSET {
+                if _idx == SERIAL_PORT1_OFFSET {
                     return CommChannel::SerialPort2
                 }
             }

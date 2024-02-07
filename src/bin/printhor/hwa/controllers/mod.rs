@@ -10,7 +10,7 @@ mod printer_controller;
 pub use printer_controller::*;
 
 #[cfg(feature = "with-motion")]
-mod motion;
+pub mod motion;
 #[cfg(feature = "with-trinamic")]
 mod trinamic_controller;
 #[cfg(feature = "with-probe")]
@@ -19,7 +19,7 @@ mod servo_controller;
 #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
 mod heater_controller;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
+#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
 mod pwm_controller;
 
 // Use
@@ -64,18 +64,17 @@ pub type HotbedControllerRef = printhor_hwa_common::ControllerRef<HotbedControll
 #[cfg(any(feature = "with-hotbed"))]
 pub type HotbedPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmHotbed>;
 
-////
-#[cfg(any(feature = "with-fan0"))]
-pub type Fan0PwmController = pwm_controller::PwmController<crate::hwa::devices::PwmFan0>;
-
-#[cfg(any(feature = "with-fan0"))]
-pub type Fan0PwmControllerRef = printhor_hwa_common::ControllerRef<Fan0PwmController>;
+#[cfg(any(feature = "with-fan-layer"))]
+pub type FanLayerPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmFanLayer>;
 
 #[cfg(any(feature = "with-fan-layer"))]
-pub type LayerPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmLayerFan>;
+pub type FanLayerPwmControllerRef = printhor_hwa_common::ControllerRef<FanLayerPwmController>;
 
-#[cfg(any(feature = "with-fan-layer"))]
-pub type LayerPwmControllerRef = printhor_hwa_common::ControllerRef<LayerPwmController>;
+#[cfg(any(feature = "with-fan-extra-1"))]
+pub type FanExtra1PwmController = pwm_controller::PwmController<crate::hwa::devices::PwmFanExtra1>;
+
+#[cfg(any(feature = "with-fan-extra-1"))]
+pub type FanExtra1PwmControllerRef = printhor_hwa_common::ControllerRef<FanExtra1PwmController>;
 
 #[cfg(any(feature = "with-laser"))]
 pub type LaserPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmLaser>;
