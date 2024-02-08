@@ -21,6 +21,13 @@ pub use board::VREF_SAMPLE;
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;
+pub use board::ADC_START_TIME_US;
+pub use board::ADC_VREF_DEFAULT_MV;
+cfg_if::cfg_if!{
+    if #[cfg(feature="without-vref-int")] {
+        pub use board::ADC_VREF_DEFAULT_SAMPLE;
+    }
+}
 
 static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
 

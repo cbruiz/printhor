@@ -1,13 +1,14 @@
 use embassy_time::{Duration, Timer};
 use printhor_hwa_common::TrackedStaticCell;
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 use crate::device::AdcPinTrait;
+
 type PinsCell<T> = std::sync::Mutex<T>;
 
 pub type PinStateRef = &'static PinsCell<PinState>;
 
 const NUM_PINS: usize = 100usize;
-/// Pin state for state persistence, inter-conexion, automation and monitoring
+/// Pin state for state persistence, inter-connection, automation and monitoring
 /// Purpose: simulation only
 pub(crate) struct PinState {
     digital: [bool; NUM_PINS],
@@ -109,27 +110,27 @@ impl MockedIOPin {
     }
 }
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedIOPin {
 
 }
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
 
 }
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 impl AdcPinTrait<u8> for u8 {
 
 }
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 impl AdcPinTrait<u8> for MockedIOPin {
 
 }
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 impl<'a, ADC, Word, PIN> embedded_hal_02::adc::OneShot<ADC, Word, PIN> for MockedIOPin
 where PIN: embedded_hal_02::adc::Channel<ADC>
 {

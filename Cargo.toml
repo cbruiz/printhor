@@ -28,8 +28,8 @@ with-uart-port-1 = []
 with-uart-port-2 = []
 with-printjob = []
 with-spi = ["embedded-hal"]
-with-hotend = ["embedded-hal"]
-with-hotbed = ["embedded-hal"]
+with-hot-end = ["embedded-hal"]
+with-hot-bed = ["embedded-hal"]
 with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
@@ -42,6 +42,8 @@ sdcard-uses-spi = []
 adc-is-async = []
 has-extruder = []
 trinamic-uart-multi-channel = []
+enable_vrefint-with-delay = []
+without-vref-int = []
 timing-stats = []
 
 ili9341_parallel = []
@@ -54,8 +56,8 @@ integration-test = [
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
     #"integration-test-trinamic",
-    "integration-test-benchy",
-    #"integration-test-laser-engrave",
+    #"integration-test-benchy",
+    "integration-test-laser-engrave",
     #"plot-timings",
     #"timing-stats",
     #"no-real-time",
@@ -103,8 +105,8 @@ native = [
     "with-sdcard", "printhor-hwi_native/with-sdcard",
     "with-printjob", "printhor-hwi_native/with-printjob",
     "with-probe", "printhor-hwi_native/with-probe",
-    "with-hotend", "printhor-hwi_native/with-hotend", "printhor-hwa-common/with-hotend",
-    "with-hotbed", "printhor-hwi_native/with-hotbed", "printhor-hwa-common/with-hotbed",
+    "with-hot-end", "printhor-hwi_native/with-hot-end", "printhor-hwa-common/with-hot-end",
+    "with-hot-bed", "printhor-hwi_native/with-hot-bed", "printhor-hwa-common/with-hot-bed",
     "with-fan-layer", "printhor-hwi_native/with-fan-layer",
     "with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
     "with-laser", "printhor-hwi_native/with-laser",
@@ -135,8 +137,8 @@ mks_robin_nano = [
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
     "with-probe", "printhor-hwi_mks_robin_nano/with-probe",
-    "with-hotend", "printhor-hwi_mks_robin_nano/with-hotend", "printhor-hwa-common/with-hotend",
-    "with-hotbed", "printhor-hwi_mks_robin_nano/with-hotbed", "printhor-hwa-common/with-hotbed",
+    #"with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end", "printhor-hwa-common/with-hot-end",
+    "with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed", "printhor-hwa-common/with-hot-bed",
     "with-fan-layer", "printhor-hwi_mks_robin_nano/with-fan-layer",
     "with-laser", "printhor-hwi_mks_robin_nano/with-laser",
 
@@ -158,8 +160,8 @@ nucleo_64_arduino_cnc_hat = [
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
     #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
     #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
-    #"with-hotend", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotend", "printhor-hwa-common/with-hotend",
-    #"with-hotbed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hotbed", "printhor-hwa-common/with-hotbed",
+    "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", "printhor-hwa-common/with-hot-end",
+    #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", "printhor-hwa-common/with-hot-bed",
     #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
     #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
 
@@ -171,6 +173,7 @@ nucleo_64_arduino_cnc_hat = [
 ]
 nucleo64-l476rg = [
     "printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg",
+    "enable_vrefint-with-delay",
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
@@ -191,10 +194,11 @@ sk3_mini_e3_v2 = [
     "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    "with-hotend", "printhor-hwi_skr_mini_e3/with-hotend", "printhor-hwa-common/with-hotend",
-    "with-hotbed", "printhor-hwi_skr_mini_e3/with-hotbed", "printhor-hwa-common/with-hotbed",
+    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end", "printhor-hwa-common/with-hot-end",
+    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed", "printhor-hwa-common/with-hot-bed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
     "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
+    "without-vref-int",
 ]
 sk3_mini_e3_v3 = [
     #"timing-stats",
@@ -202,10 +206,11 @@ sk3_mini_e3_v3 = [
     "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", "printhor-hwa-common/with-serial-usb",
     #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    "with-hotend", "printhor-hwi_skr_mini_e3/with-hotend", "printhor-hwa-common/with-hotend",
-    "with-hotbed", "printhor-hwi_skr_mini_e3/with-hotbed", "printhor-hwa-common/with-hotbed",
+    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end", "printhor-hwa-common/with-hot-end",
+    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed", "printhor-hwa-common/with-hot-bed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
     "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
+    "enable_vrefint-with-delay",
 ]
 
 skr_mini_e3 = [
@@ -293,9 +298,8 @@ embedded-graphics-core = {version = "0.3.3", optional = true }
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = [] }
 
-const_env = "0.1"
 cfg-if = { version = "1.0.0" }
-
+const_env = { version = "0.1" }
 
 [build-dependencies]
 #proc-macro2 = "1.0."

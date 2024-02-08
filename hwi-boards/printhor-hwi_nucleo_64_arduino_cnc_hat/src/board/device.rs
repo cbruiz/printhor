@@ -96,9 +96,12 @@ pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 #[cfg(feature = "with-sdcard")]
 pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC4>;
 
+
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-pub trait AdcTrait: embassy_stm32::adc::Instance {}
-pub trait AdcPinTrait<PERI: AdcTrait>: embassy_stm32::adc::AdcPin<PERI> {}
+pub use embassy_stm32::adc::Instance as AdcTrait;
+pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
+pub use embassy_stm32::adc::VrefInt as VrefInt;
+
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -160,20 +163,22 @@ pub struct ProbePeripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotend>,
-    pub temp_pin: AdcHotendPin
+    pub temp_pin: AdcHotendPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotbed>,
-    pub temp_pin: AdcHotbedPin
+    pub temp_pin: AdcHotbedPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan0")]

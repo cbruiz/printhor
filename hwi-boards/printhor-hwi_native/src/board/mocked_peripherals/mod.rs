@@ -1,9 +1,9 @@
-#[cfg(any(feature = "with-hotbed", feature = "with-hotend"))]
+#[cfg(any(feature = "with-hot-bed", feature = "with-hot-end"))]
 mod mocked_adc;
 
 mod mocked_pin;
 pub(crate) use mocked_pin::init_pin_state;
-#[cfg(any(feature = "with-hotbed", feature = "with-hotend", feature = "with-fan-layer"))]
+#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
 mod mocked_pwm;
 #[cfg(feature = "with-spi")]
 mod mocked_spi;
@@ -24,6 +24,7 @@ mod mocked_wdt;
 
 #[allow(unused)]
 pub use mocked_pin::*;
+
 pub use mocked_wdt::*;
 
 #[cfg(feature = "with-serial-port-1")]
@@ -44,8 +45,8 @@ pub use mocked_trinamic::*;
 #[cfg(feature = "with-display")]
 pub use mocked_display::*;
 
-#[cfg(any(feature = "with-hotbed", feature = "with-hotend", feature = "with-fan-layer"))]
+#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
 pub use mocked_pwm::*;
 
-#[cfg(any(feature = "with-hotbed", feature = "with-hotend"))]
+#[cfg(any(feature = "with-hot-bed", feature = "with-hot-end"))]
 pub use mocked_adc::*;

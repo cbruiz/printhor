@@ -12,9 +12,9 @@ struct SubscriptionCountings {
     num_linear: u8,
     num_rapid: u8,
     num_dwell: u8,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     num_hotend: u8,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     num_hotbed: u8,
 }
 
@@ -44,11 +44,11 @@ impl Subscriptions {
                 DeferAction::Dwell => {
                     &mut counts.num_dwell
                 }
-                #[cfg(feature = "with-hotend")]
+                #[cfg(feature = "with-hot-end")]
                 DeferAction::HotendTemperature => {
                     &mut counts.num_hotend
                 }
-                #[cfg(feature = "with-hotbed")]
+                #[cfg(feature = "with-hot-bed")]
                 DeferAction::HotbedTemperature => {
                     &mut counts.num_hotbed
                 }

@@ -9,7 +9,6 @@ pub use defmt;
 #[allow(unused)]
 pub use defmt::{trace, debug, info, warn, error};
 
-pub mod devices;
 pub mod controllers;
 pub mod drivers;
 

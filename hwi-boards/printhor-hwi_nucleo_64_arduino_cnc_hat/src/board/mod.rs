@@ -20,15 +20,13 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
 #[cfg(feature = "with-serial-usb")]
 use embassy_stm32::usb_otg;
-#[cfg(feature = "with-serial-usb")]
-use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
 #[allow(unused)]
 use embassy_stm32::exti::ExtiInput;
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext};
+use printhor_hwa_common::{TrackedStaticCell, MachineContext, ThermistorProperties};
 
 
 #[cfg(feature = "with-motion")]
@@ -46,6 +44,10 @@ cfg_if::cfg_if! {
         pub const MACHINE_PROCESSOR: &str = "STM32F410RB";
         #[allow(unused)]
         pub const PROCESSOR_SYS_CK_MHZ: &str = "100_000_000";
+        // https://www.st.com/resource/en/datasheet/DM00214043.pdf
+        pub const ADC_START_TIME_US: u16 = 10;
+        // https://www.st.com/resource/en/datasheet/DM00214043.pdf
+        pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
 
     }
     else if #[cfg(feature="nucleo64-l476rg")] {
@@ -53,17 +55,36 @@ cfg_if::cfg_if! {
         pub const MACHINE_PROCESSOR: &str = "STM32L476RG";
         #[allow(unused)]
         pub const PROCESSOR_SYS_CK_MHZ: &str = "80_000_000";
+        // http://www.st.com/resource/en/datasheet/DM00108832.pdf
+        pub const ADC_START_TIME_US: u16 = 12;
+        // http://www.st.com/resource/en/datasheet/DM00108832.pdf
+        pub const ADC_VREF_DEFAULT_MV: u16 = 1212;
     }
 }
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: u32 = 4096;
-pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 #[cfg(feature = "with-spi")]
 pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-end")] {
+        #[const_env::from_env("HOT_END_THERM_BETA")]
+        // The B value of the thermistor
+        const HOT_END_THERM_BETA: f32 = 3950.0;
+
+        #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+        // Nominal NTC thermistor value
+        const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+
+        #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
+        // Physically measured
+        const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+    }
+}
 
 /// Shared controllers
 pub struct Controllers {
@@ -89,9 +110,9 @@ pub struct IODevices {
 pub struct PwmDevices {
     #[cfg(feature="with-probe")]
     pub probe: device::ProbePeripherals,
-    #[cfg(feature="with-hotend")]
+    #[cfg(feature="with-hot-end")]
     pub hotend: device::HotendPeripherals,
-    #[cfg(feature="with-hotbed")]
+    #[cfg(feature="with-hot-bed")]
     pub hotbed: device::HotbedPeripherals,
     #[cfg(feature="with-laser")]
     pub laser: device::LaserPeripherals,
@@ -342,10 +363,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
-    #[cfg(feature = "with-motion")]
-    defmt::info!("motion_planner done");
+    #[cfg(feature = "with-hot-end")]
+    static HOT_END_THERMISTOR_PROPERTIES: ThermistorProperties = ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
 
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+    #[cfg(feature = "with-hot-bed")]
+    static HOT_BED_THERMISTOR_PROPERTIES: ThermistorProperties = ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
+
+
+    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         let adc = {
         let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
         #[cfg(feature = "nucleo64-l476rg")]
@@ -359,7 +384,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(all(feature ="nucleo64-l476rg", any(feature = "with-hotend", feature = "with-hotbed")))]
+    #[cfg(all(feature ="nucleo64-l476rg", any(feature = "with-hot-end", feature = "with-hot-bed")))]
         let pwm_hotend_hotbed = {
             let pwm = device::PwmHotendHotbed::new(
             p.TIM15,
@@ -378,7 +403,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(all(feature ="nucleo64-f410rb", any(feature = "with-hotend", feature = "with-hotbed", feature = "with-layer-fan")))]
+    #[cfg(all(feature ="nucleo64-f410rb", any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-layer-fan")))]
         let pwm_hotend_hotbed_layer = {
             let pwm = device::PwmHotendHotbedLayer::new(
             p.TIM5,
@@ -397,7 +422,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(all(feature = "nucleo64-l476rg", feature = "with-hotend"))]
+    #[cfg(all(feature = "nucleo64-l476rg", feature = "with-hot-end"))]
         let hotend_device = {
 
         device::HotendPeripherals {
@@ -405,9 +430,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch1,
             temp_adc: adc.clone(),
             temp_pin: p.PC2,
+            thermistor_properties: &HOT_END_THERMISTOR_PROPERTIES,
         }
     };
-    #[cfg(all(feature = "nucleo64-f410rb", feature = "with-hotend"))]
+    #[cfg(all(feature = "nucleo64-f410rb", feature = "with-hot-end"))]
         let hotend_device = {
 
         device::HotendPeripherals {
@@ -415,10 +441,11 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch1,
             temp_adc: adc.clone(),
             temp_pin: p.PB0,
+            thermistor_properties: &HOT_END_THERMISTOR_PROPERTIES,
         }
     };
 
-    #[cfg(all(feature="nucleo64-l476rg", feature = "with-hotbed"))]
+    #[cfg(all(feature="nucleo64-l476rg", feature = "with-hot-bed"))]
         let hotbed_device = {
 
         device::HotbedPeripherals {
@@ -426,9 +453,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch2,
             temp_adc: adc.clone(),
             temp_pin: p.PC3,
+            thermistor_properties: &crate::board::HOT_BED_THERMISTOR_PROPERTIES,
         }
     };
-    #[cfg(all(feature="nucleo64-f410rb", feature = "with-hotbed"))]
+    #[cfg(all(feature="nucleo64-f410rb", feature = "with-hot-bed"))]
         let hotbed_device = {
 
         device::HotbedPeripherals {
@@ -543,9 +571,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         pwm: PwmDevices {
             #[cfg(feature = "with-probe")]
             probe: probe_device,
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             hotend: hotend_device,
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             hotbed: hotbed_device,
             #[cfg(feature = "with-laser")]
             laser: laser_device,

@@ -28,9 +28,9 @@ pub struct GCodeProcessorParams {
     pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     pub hotend: hwa::controllers::HotendControllerRef,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     pub hotbed: hwa::controllers::HotbedControllerRef,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
@@ -54,9 +54,9 @@ pub struct GCodeProcessor {
     pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     pub hotend: hwa::controllers::HotendControllerRef,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     pub hotbed: hwa::controllers::HotbedControllerRef,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
@@ -79,9 +79,9 @@ impl GCodeProcessor {
             motion_planner: params.motion_planner,
             #[cfg(feature = "with-probe")]
             probe: params.probe,
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             hotend: params.hotend,
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             hotbed: params.hotbed,
             #[cfg(feature = "with-fan-layer")]
             fan_layer: params.fan_layer,
@@ -300,7 +300,7 @@ impl GCodeProcessor {
             }
             // Set hotend temperature
             // An immediate command
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             GCode::M104(s) => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
@@ -312,34 +312,36 @@ impl GCodeProcessor {
             }
             GCode::M105 => {
                 let hotend_temp_report = {
-                    #[cfg(feature = "with-hotend")]
+                    #[cfg(feature = "with-hot-end")]
                     {
                         let mut h = self.hotend.lock().await;
                         format!(
-                            " T:{} /{} T@:{}",
+                            " T:{} /{} T@:{} TZ:{}",
                             h.get_current_temp(),
                             h.get_target_temp(),
                             h.get_current_power().await,
+                            h.get_current_resistance(),
                         )
                     }
-                    #[cfg(not(feature = "with-hotend"))]
+                    #[cfg(not(feature = "with-hot-end"))]
                     alloc::string::String::new()
                 };
                 let hotbed_temp_report = {
-                    #[cfg(feature = "with-hotbed")]
+                    #[cfg(feature = "with-hot-bed")]
                     {
                         let mut h = self.hotbed.lock().await;
                         format!(
-                            " B:{} /{} B@:{}",
+                            " B:{} /{} B@:{} BZ:{}",
                             h.get_current_temp(),
                             h.get_target_temp(),
                             h.get_current_power().await,
+                            h.get_current_resistance(),
                         )
                     }
-                    #[cfg(not(feature = "with-hotbed"))]
+                    #[cfg(not(feature = "with-hot-bed"))]
                     alloc::string::String::new()
                 };
-                let report = format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report,);
+                let report = format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
@@ -360,7 +362,7 @@ impl GCodeProcessor {
             }
             // Wait for hot-end temperature
             // Mostly deferred code
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             GCode::M109(s) => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
@@ -452,7 +454,7 @@ impl GCodeProcessor {
             }
             // Set hot-bed temperature
             // An immediate command
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             GCode::M140(s) => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
@@ -464,18 +466,18 @@ impl GCodeProcessor {
             }
             // Wait for hot-bed temperature
             // A normally deferred command
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             GCode::M190 => {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
                 let deferred = {
                     let mut he = self.hotbed.lock().await;
-                    he.ping_subscribe(channel, DeferAction::HotendTemperature).await
+                    he.ping_subscribe(channel, DeferAction::HotbedTemperature).await
                 };
                 if deferred {
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
-                        EventFlags::HOTEND_TEMP_OK,
+                        EventFlags::HOTBED_TEMP_OK,
                     )))
                 } else {
                     Ok(CodeExecutionSuccess::OK)

@@ -23,8 +23,8 @@ with-serial-usb = []
 with-serial-port-1 = []
 with-serial-port-2 = []
 with-motion = []
-with-hotend = []
-with-hotbed = []
+with-hot-end = []
+with-hot-bed = []
 
 [dependencies]
 portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }

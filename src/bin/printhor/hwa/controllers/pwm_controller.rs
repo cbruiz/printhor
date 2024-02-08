@@ -22,6 +22,7 @@ impl<TimPeri> PwmController<TimPeri>
     }
 
     // Sets the applied power in scale between 0 and 100
+    #[allow(unused)]
     pub async fn set_power(&mut self, power: u8)
     {
         let mut mg = self.pwm.lock().await;
@@ -45,6 +46,7 @@ impl<TimPeri> PwmController<TimPeri>
     }
 
     // Gets the applied power in scale between 0.0 and 1.0
+    #[allow(unused)]
     pub async fn get_power(&mut self) -> f32
     {
         let mg = self.pwm.lock().await;

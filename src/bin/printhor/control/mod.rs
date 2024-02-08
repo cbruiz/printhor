@@ -21,7 +21,7 @@ pub mod task_printjob;
 pub mod task_integration;
 #[cfg(feature = "with-motion")]
 pub mod task_defer;
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub mod task_temperature;
 #[cfg(feature = "with-motion")]
 pub mod task_stepper;

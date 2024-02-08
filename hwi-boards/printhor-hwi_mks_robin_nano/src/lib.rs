@@ -31,6 +31,8 @@ const USBSERIAL_BUFFER_SIZE: usize = 32;
 const UART_PORT1_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
+pub use board::ADC_START_TIME_US;
+pub use board::ADC_VREF_DEFAULT_MV;
 
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 

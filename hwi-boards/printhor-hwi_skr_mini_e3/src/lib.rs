@@ -26,7 +26,6 @@ pub use board::MACHINE_TYPE;
 pub use board::MACHINE_PROCESSOR;
 pub use board::HEAP_SIZE_BYTES;
 pub use board::MAX_STATIC_MEMORY;
-pub use board::VREF_SAMPLE;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
@@ -35,7 +34,13 @@ const USBSERIAL_BUFFER_SIZE: usize = 32;
 const UART_PORT1_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
-
+pub use board::ADC_START_TIME_US;
+pub use board::ADC_VREF_DEFAULT_MV;
+cfg_if::cfg_if! {
+    if #[cfg(feature="without-vref-int")] {
+        pub use board::ADC_VREF_DEFAULT_SAMPLE;
+    }
+}
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
 cfg_if::cfg_if! {

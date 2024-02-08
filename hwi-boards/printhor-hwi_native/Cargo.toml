@@ -19,8 +19,8 @@ with-log = ["printhor-hwa-common/with-log"]
 with-serial-port-1 = ["async-std"]
 with-serial-port-2 = []
 with-printjob = []
-with-hotend = ["embedded-hal", "printhor-hwa-common/with-hotend"]
-with-hotbed = ["embedded-hal", "printhor-hwa-common/with-hotbed"]
+with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
+with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
 with-probe = ["embedded-hal"]
 with-endstops = []
@@ -30,6 +30,7 @@ with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
 sdcard-uses-spi = []
+without-vref-int = []
 
 with-display = [
     "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
@@ -67,6 +68,7 @@ tmc2209 = { version = "0.2.2", optional = true }
 thread-priority = { version = "0.15"}
 
 cfg-if = {version = "1.0.0"}
+const_env = { version = "0.1" }
 
 #[patch.crates-io]
 #embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}

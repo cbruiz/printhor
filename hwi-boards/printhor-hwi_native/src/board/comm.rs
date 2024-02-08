@@ -11,7 +11,7 @@ pub enum Error {
     Uninit,
     Timeout,
 }
-
+#[allow(unused)]
 use crate::board::MockedIOPin;
 
 /// Software UART channel

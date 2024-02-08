@@ -17,7 +17,7 @@ pub mod math;
 
 use crate::control::task_control::ControlTaskControllers;
 use embassy_executor::Spawner;
-#[cfg(any(feature = "with-probe", feature = "with-hotbed", feature = "with-hotend", feature = "with-fan0", feature = "with-fan-layer", feature = "with-laser"))]
+#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
 use hwa::{DeferChannelRef, EventBusRef, TrackedStaticCell};
@@ -30,9 +30,9 @@ use hwa::controllers::{MotionPlanner, MotionPlannerRef};
 use crate::control::GCodeProcessorParams;
 #[cfg(feature = "with-sdcard")]
 use crate::hwa::controllers::CardController;
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 use crate::hwa::controllers::HotendPwmController;
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::PrinterController;
@@ -128,12 +128,12 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
     #[cfg(feature = "with-printjob")]
         let printer_controller = PrinterController::new(event_bus.clone());
 
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
         let hotend_pwm = HotendPwmController::new(
         _pwm_devices.hotend.power_pwm.clone(),
         _pwm_devices.hotend.power_channel,
     );
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
         let hotbed_pwm = HotbedPwmController::new(
         _pwm_devices.hotbed.power_pwm.clone(),
         _pwm_devices.hotbed.power_channel,
@@ -197,26 +197,27 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
             ))
     };
 
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     let hotend_controller = {
         static HOTEND_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotendController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            HOTEND_CONTROLLER_INST.init("HotendController",
+            HOTEND_CONTROLLER_INST.init("HotEndController",
                                         ControllerMutex::new(
                                             hwa::controllers::HotendController::new(
                                                 _pwm_devices.hotend.temp_adc.clone(),
                                                 _pwm_devices.hotend.temp_pin,
                                                 hotend_pwm,
                                                 _defer_channel.clone(),
+                                                _pwm_devices.hotend.thermistor_properties,
                                             )
                                         )
             )
         )
     };
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     hotend_controller.lock().await.init().await;
 
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     let hotbed_controller = {
         static HOTBED_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotbedController>> = TrackedStaticCell::new();
         ControllerRef::new(
@@ -227,13 +228,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
                                                 _pwm_devices.hotbed.temp_pin,
                                                 hotbed_pwm,
                                                 _defer_channel.clone(),
+                                                _pwm_devices.hotbed.thermistor_properties,
                                             )
                                         )
             )
         )
     };
-    #[cfg(feature = "with-hotbed")]
-    hotend_controller.lock().await.init().await;
+    #[cfg(feature = "with-hot-bed")]
+    hotbed_controller.lock().await.init().await;
 
     #[cfg(feature = "with-motion")]
     let motion_planer = {
@@ -271,9 +273,9 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         serial_port2_tx: _controllers.serial_port2_tx,
         #[cfg(feature = "with-probe")]
         probe: probe_controller,
-        #[cfg(feature = "with-hotend")]
+        #[cfg(feature = "with-hot-end")]
         hotend: hotend_controller.clone(),
-        #[cfg(feature = "with-hotbed")]
+        #[cfg(feature = "with-hot-bed")]
         hotbed: hotbed_controller.clone(),
         #[cfg(feature = "with-fan-layer")]
         fan_layer: fan_layer_controller.clone(),
@@ -340,12 +342,12 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         sdcard_controller,
     )).map_err(|_| ())?;
 
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
     spawner.spawn(control::task_temperature::task_temperature(
         event_bus.clone(),
-        #[cfg(feature = "with-hotend")]
+        #[cfg(feature = "with-hot-end")]
         hotend_controller,
-        #[cfg(feature = "with-hotbed")]
+        #[cfg(feature = "with-hot-bed")]
         hotbed_controller,
     )).map_err(|_| ())?;
 

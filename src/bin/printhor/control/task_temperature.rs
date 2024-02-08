@@ -127,7 +127,9 @@ impl HeaterStateMachine {
             AdcPeri: hwa::device::AdcTrait + 'static,
             AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
             PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
-            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
+            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
+            crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
+
     {
         ctrl.lock().await.init().await;
     }
@@ -142,7 +144,8 @@ impl HeaterStateMachine {
             AdcPeri: hwa::device::AdcTrait + 'static,
             AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
             PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
-            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
+            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
+            crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
     {
         let mut m = ctrl.lock().await;
 
@@ -155,11 +158,8 @@ impl HeaterStateMachine {
                 }
             }
         }
-
         let new_state = {
-
-            hwa::trace!("MEASURED_TEMP: {}", self.current_temp);
-
+            hwa::debug!("MEASURED_TEMP[{:?}] {}", action, self.current_temp);
             if m.is_on() {
                 let target_temp = m.get_target_temp();
                 self.pid.setpoint(target_temp);
@@ -236,30 +236,30 @@ impl HeaterStateMachine {
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_temperature(
     event_bus: EventBusRef,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     hotend_controller: hwa::controllers::HotendControllerRef,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     hotbed_controller: hwa::controllers::HotbedControllerRef,
 ) -> ! {
     hwa::debug!("temperature_task started");
 
     let mut ticker = Ticker::every(Duration::from_secs(2));
 
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     let mut hotend_sm = HeaterStateMachine::new();
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     let mut hotbed_sm = HeaterStateMachine::new();
 
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     hotend_sm.init(&hotend_controller).await;
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     hotbed_sm.init(&hotbed_controller).await;
 
     loop {
         ticker.next().await;
-        #[cfg(feature = "with-hotend")]
+        #[cfg(feature = "with-hot-end")]
         hotend_sm.update(&hotend_controller, &event_bus, EventFlags::HOTEND_TEMP_OK, DeferAction::HotendTemperature).await;
-        #[cfg(feature = "with-hotbed")]
+        #[cfg(feature = "with-hot-bed")]
         hotbed_sm.update(&hotbed_controller, &event_bus, EventFlags::HOTBED_TEMP_OK, DeferAction::HotbedTemperature).await;
     }
 }

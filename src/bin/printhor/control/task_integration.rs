@@ -3,8 +3,6 @@ use crate::hwa;
 use crate::control::*;
 #[allow(unused)]
 use crate::math::Real;
-#[cfg(feature = "with-motion")]
-use crate::control::motion_planning::*;
 use printhor_hwa_common::{CommChannel, EventBusSubscriber, EventFlags};
 
 pub struct IntegrationaskParams {
@@ -77,7 +75,7 @@ pub async fn task_integration(mut params: IntegrationaskParams)
     {
 
         let homing_gcode = GCode::G28(
-            crate::control::XYZW {
+            XYZW {
                 ln: None,
                 x: None,
                 y: None,
@@ -212,13 +210,13 @@ pub async fn task_integration(mut params: IntegrationaskParams)
         params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("dir/laser.g"))).await.unwrap();
         match embassy_time::with_timeout(
             embassy_time::Duration::from_secs(5),
-            subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+            subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
         ).await {
             Ok(_) => {
                 // command resume (eq: M24)
                 params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
                 // wait for job completion
-                subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await.unwrap();
+                subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_COMPLETED)).await.unwrap();
             }
             Err(_) => {
                 hwa::error!("Timeout dispatching engraving job");
@@ -249,7 +247,7 @@ pub async fn task_integration(mut params: IntegrationaskParams)
 
     }
     if subscriber.ft_wait_for(
-        printhor_hwa_common::EventStatus::not_containing(EventFlags::JOB_PRINTING)
+        EventStatus::not_containing(EventFlags::JOB_PRINTING)
             .and_not_containing(EventFlags::MOVING)
             .and_containing(EventFlags::MOV_QUEUE_EMPTY)
     ).await.is_err() {

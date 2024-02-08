@@ -24,8 +24,8 @@ with-serial-usb = ["embassy-usb"]
 with-printjob = []
 with-serial-port-1 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]
-with-hotend = ["embedded-hal"]
-with-hotbed = ["embedded-hal"]
+with-hot-end = ["embedded-hal"]
+with-hot-bed = ["embedded-hal"]
 with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
@@ -58,6 +58,7 @@ embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unprov
 embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
 
 cfg-if = { version = "1.0.0" }
+const_env = { version = "0.1" }
 
 [patch.crates-io]
 embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

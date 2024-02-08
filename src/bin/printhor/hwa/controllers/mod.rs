@@ -16,10 +16,10 @@ mod trinamic_controller;
 #[cfg(feature = "with-probe")]
 mod servo_controller;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 mod heater_controller;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
 mod pwm_controller;
 
 // Use
@@ -39,45 +39,45 @@ pub type ServoControllerRef = printhor_hwa_common::ControllerRef<ServoController
 #[cfg(feature = "with-probe")]
 pub use servo_controller::ProbeTrait;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub use heater_controller::HeaterController;
 
 ////
 
-#[cfg(any(feature = "with-hotend"))]
-pub type HotendController = HeaterController<crate::hwa::devices::AdcHotendPeripheral, crate::hwa::devices::AdcHotendPin, crate::hwa::devices::PwmHotend>;
+#[cfg(any(feature = "with-hot-end"))]
+pub type HotendController = HeaterController<crate::hwa::device::AdcHotendPeripheral, crate::hwa::device::AdcHotendPin, crate::hwa::device::PwmHotend>;
 
-#[cfg(any(feature = "with-hotend"))]
+#[cfg(any(feature = "with-hot-end"))]
 pub type HotendControllerRef = printhor_hwa_common::ControllerRef<HotendController>;
 
-#[cfg(any(feature = "with-hotend"))]
-pub type HotendPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmHotend>;
+#[cfg(any(feature = "with-hot-end"))]
+pub type HotendPwmController = pwm_controller::PwmController<crate::hwa::device::PwmHotend>;
 
 ////
 
-#[cfg(any(feature = "with-hotbed"))]
-pub type HotbedController = HeaterController<crate::hwa::devices::AdcHotbedPeripheral, crate::hwa::devices::AdcHotbedPin, crate::hwa::devices::PwmHotbed>;
+#[cfg(any(feature = "with-hot-bed"))]
+pub type HotbedController = HeaterController<crate::hwa::device::AdcHotbedPeripheral, crate::hwa::device::AdcHotbedPin, crate::hwa::device::PwmHotbed>;
 
-#[cfg(any(feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-bed"))]
 pub type HotbedControllerRef = printhor_hwa_common::ControllerRef<HotbedController>;
 
-#[cfg(any(feature = "with-hotbed"))]
-pub type HotbedPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmHotbed>;
+#[cfg(any(feature = "with-hot-bed"))]
+pub type HotbedPwmController = pwm_controller::PwmController<crate::hwa::device::PwmHotbed>;
 
 #[cfg(any(feature = "with-fan-layer"))]
-pub type FanLayerPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmFanLayer>;
+pub type FanLayerPwmController = pwm_controller::PwmController<crate::hwa::device::PwmFanLayer>;
 
 #[cfg(any(feature = "with-fan-layer"))]
 pub type FanLayerPwmControllerRef = printhor_hwa_common::ControllerRef<FanLayerPwmController>;
 
 #[cfg(any(feature = "with-fan-extra-1"))]
-pub type FanExtra1PwmController = pwm_controller::PwmController<crate::hwa::devices::PwmFanExtra1>;
+pub type FanExtra1PwmController = pwm_controller::PwmController<crate::hwa::device::PwmFanExtra1>;
 
 #[cfg(any(feature = "with-fan-extra-1"))]
 pub type FanExtra1PwmControllerRef = printhor_hwa_common::ControllerRef<FanExtra1PwmController>;
 
 #[cfg(any(feature = "with-laser"))]
-pub type LaserPwmController = pwm_controller::PwmController<crate::hwa::devices::PwmLaser>;
+pub type LaserPwmController = pwm_controller::PwmController<crate::hwa::device::PwmLaser>;
 
 #[cfg(any(feature = "with-laser"))]
 pub type LaserPwmControllerRef = printhor_hwa_common::ControllerRef<LaserPwmController>;

@@ -27,6 +27,13 @@ pub use tracked_static_cell::COUNTER;
 use strum::EnumCount;
 
 cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        mod thermistor;
+        pub use thermistor::*;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-ui")] {
         mod display;
         pub use display::DisplayScreenUI;

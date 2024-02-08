@@ -19,8 +19,8 @@ with-serial-usb = ["embassy-usb"]
 with-serial-port-1 = []
 with-printjob = []
 with-spi = ["embedded-hal"]
-with-hotend = ["embedded-hal"]
-with-hotbed = ["embedded-hal"]
+with-hot-end = ["embedded-hal"]
+with-hot-bed = ["embedded-hal"]
 with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
@@ -50,6 +50,9 @@ async-gcode = {version = "0", default-features = false, features=["parse-trailin
 futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven", ] }
+
+cfg-if = {version = "1.0.0"}
+const_env = { version = "0.1" }
 
 [patch.crates-io]
 embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

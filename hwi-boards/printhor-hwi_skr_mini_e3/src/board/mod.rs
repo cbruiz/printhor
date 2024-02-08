@@ -1,5 +1,5 @@
-/// https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32G0B1RE.json
 /// https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32F103RC.json
+/// https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32G0B1RE.json
 pub mod device;
 pub mod io;
 
@@ -17,8 +17,6 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
 #[cfg(feature = "with-serial-usb")]
 use embassy_stm32::usb;
-#[cfg(feature = "with-serial-usb")]
-use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
 #[allow(unused)]
@@ -26,7 +24,7 @@ use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 use embassy_stm32::adc::SampleTime;
 
 #[global_allocator]
@@ -38,12 +36,29 @@ cfg_if::cfg_if! {
         pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V2";
         /// ARM Cortex M3 @72MHZ, 48kB SRAM, 256kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32F103RCT6";
+        // https://www.st.com/resource/en/datasheet/CD00191185.pdf
+        pub const ADC_START_TIME_US: u16 = 17;
+        // https://www.st.com/resource/en/datasheet/CD00191185.pdf
+        pub const ADC_VREF_DEFAULT_MV: u16 = 1200;
+        cfg_if::cfg_if! {
+            if #[cfg(feature="without-vref-int")] {
+                // As VrefInt is not present in this board, the estimation is 1489 as ADC value for 1200 mV
+                // So theoretically it will get 3300 mV for maximum ADC value (4095)
+                pub const ADC_VREF_DEFAULT_SAMPLE: u16 = 1489;
+            }
+        }
+
     } else if #[cfg(feature="sk3_mini_e3_v3")] {
         pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V3";
         /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
         #[allow(unused)]
+
         pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
+        // https://www.st.com/resource/en/datasheet/dm00748675.pdf
+        pub const ADC_START_TIME_US: u16 = 12;
+        // https://www.st.com/resource/en/datasheet/dm00748675.pdf
+        pub const ADC_VREF_DEFAULT_MV: u16 = 1212;
     } else {
         compile_error!("SKR flavor (board) not set")
     }
@@ -51,7 +66,6 @@ cfg_if::cfg_if! {
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: u32 = 4096;
-pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-uart2")]
 pub(crate) const UART2_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "with-sdcard")]
@@ -61,6 +75,37 @@ pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 #[cfg(feature = "with-spi")]
 pub(crate) const SPI_FREQUENCY_HZ: u32 = 1_000_000;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-end")] {
+        #[const_env::from_env("HOT_END_THERM_BETA")]
+        // The B value of the thermistor
+        const HOT_END_THERM_BETA: f32 = 3950.0;
+
+        #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+        // Nominal NTC thermistor value
+        const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+
+        #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
+        // Physically measured
+        const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-bed")] {
+        #[const_env::from_env("HOT_BED_THERM_BETA")]
+        // The B value of the thermistor
+        const HOT_BED_THERM_BETA: f32 = 3950.0;
+
+        #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+        // Nominal NTC thermistor value
+        const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+
+        #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+        // Physically measured
+        const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+    }
+}
 
 /// Shared controllers
 pub struct Controllers {
@@ -78,7 +123,7 @@ pub struct IODevices {
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature  ="with-display")]
-    pub display_device: device::DisplayDevice,
+    pub display_device: DisplayDevice,
     #[cfg(feature = "with-sdcard")]
     pub sdcard_device: device::SpiCardDeviceRef,
     #[cfg(feature = "with-sdcard")]
@@ -88,9 +133,9 @@ pub struct IODevices {
 pub struct PwmDevices {
     #[cfg(feature = "with-probe")]
     pub probe: device::ProbePeripherals,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     pub hotend: device::HotendPeripherals,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     pub hotbed: device::HotbedPeripherals,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: device::FanLayerPeripherals,
@@ -100,7 +145,7 @@ pub struct PwmDevices {
 
 pub struct MotionDevices {
     #[cfg(feature = "with-motion")]
-    pub motion_devices: device::MotionDevice,
+    pub motion_devices: MotionDevice,
 }
 
 pub fn heap_current_size() -> u32 {
@@ -270,7 +315,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
                 defmt::info!("Creating USB Driver");
                 let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
-                let mut usb_serial_device = USBSerialDevice::new(driver);
+                let mut usb_serial_device = device::USBSerialDevice::new(driver);
                 usb_serial_device.spawn(_spawner);
                 let (usb_serial_rx_device, sender) = usb_serial_device.split();
                 static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
@@ -312,7 +357,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 cfg.stop_bits = StopBits::STOP1;
                 cfg.parity = Parity::ParityNone;
 
-                UartTrinamic::new(p.UART4, p.PC11, p.PC10,
+                device::UartTrinamic::new(p.UART4, p.PC11, p.PC10,
                            TrinamicIrqs, p.DMA2_CH5, p.DMA2_CH3, cfg).expect("Ready")
             };
 
@@ -364,7 +409,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
             // PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo) PA1(Probe)
             // OK FOR: FAN0, FAN1, HE_PWM, BE_PWM
-            #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer-fan0"))]
+            #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer-fan0"))]
             let pwm_fan0_fan1_hotend_hotbed = {
                 let pwm_fan0_fan1_hotend_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
                     p.TIM3,
@@ -383,9 +428,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             };
             #[cfg(feature = "with-fan-layer")]
             let pwm_fan1_channel = embassy_stm32::timer::Channel::Ch2;
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             let pwm_hotend_channel = embassy_stm32::timer::Channel::Ch3;
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             let pwm_hotbed_channel = embassy_stm32::timer::Channel::Ch4;
 
             #[cfg(any(feature = "with-neo"))]
@@ -428,7 +473,13 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 )
             };
 
-            #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+            #[cfg(feature = "with-hot-end")]
+            static HOT_END_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
+
+            #[cfg(feature = "with-hot-bed")]
+            static HOT_BED_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
+
+            #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
             let adc_hotend_hotbed = {
                 let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
                 adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
@@ -442,12 +493,12 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             cfg_if::cfg_if! {
                 if #[cfg(feature="sk3_mini_e3_v2")] {
                     cfg_if::cfg_if! {
-                        if #[cfg(feature="with-hotend")] {
+                        if #[cfg(feature="with-hot-end")] {
                             let adc_hotend_pin = p.PA0;
                         }
                     }
                     cfg_if::cfg_if! {
-                        if #[cfg(feature="with-hotbed")] {
+                        if #[cfg(feature="with-hot-bed")] {
                             let adc_hotbed_pin = p.PC3;
 
                         }
@@ -455,12 +506,12 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 }
                 else if #[cfg(feature="sk3_mini_e3_v3")] {
                     cfg_if::cfg_if! {
-                        if #[cfg(feature="with-hotend")] {
+                        if #[cfg(feature="with-hot-end")] {
                             let adc_hotend_pin = p.PA0;
                         }
                     }
                     cfg_if::cfg_if! {
-                        if #[cfg(feature="with-hotbed")] {
+                        if #[cfg(feature="with-hot-bed")] {
                             let adc_hotbed_pin = p.PC4;
                         }
                     }
@@ -471,7 +522,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             let probe_device =  {
                 static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
 
-                crate::device::ProbePeripherals {
+                device::ProbePeripherals {
                     power_pwm: ControllerRef::new(
                         PWM_INST.init("PwmServo",
                                       ControllerMutex::new(
@@ -526,7 +577,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
             defmt::info!("Creating USB Driver");
             let driver = usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11);
-            let mut usb_serial_device = USBSerialDevice::new(driver);
+            let mut usb_serial_device = device::USBSerialDevice::new(driver);
             usb_serial_device.spawn(_spawner);
             let (usb_serial_rx_device, sender) = usb_serial_device.split();
             static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
@@ -616,12 +667,17 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 e_dir_pin: Output::new(p.PB4, Level::Low, Speed::VeryHigh),
             }
         };
-        #[cfg(feature = "with-motion")]
-        defmt::info!("motion_driver done");
+
+        #[cfg(feature = "with-hot-end")]
+        static HOT_END_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
+
+        #[cfg(feature = "with-hot-bed")]
+        static HOT_BED_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
+
 
         // PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo) PA1(Probe)
         // OK FOR: FAN0, FAN1, HE_PWM, BE_PWM
-        #[cfg(any(feature = "with-hotend", feature = "with-hotbed", feature = "with-fan-layer-fan0"))]
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer-fan0"))]
         let pwm_fan0_fan1_hotend_hotbed = {
             let pwm_fan0_fan1_hotend_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
                 p.TIM3,
@@ -640,9 +696,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         };
         #[cfg(feature = "with-fan-layer")]
         let pwm_fan1_channel = embassy_stm32::timer::Channel::Ch2;
-        #[cfg(feature = "with-hotend")]
+        #[cfg(feature = "with-hot-end")]
         let pwm_hotend_channel = embassy_stm32::timer::Channel::Ch3;
-        #[cfg(feature = "with-hotbed")]
+        #[cfg(feature = "with-hot-bed")]
         let pwm_hotbed_channel = embassy_stm32::timer::Channel::Ch4;
 
         #[cfg(any(feature = "with-neo"))]
@@ -686,7 +742,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             )
         };
 
-        #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         let adc_hotend_hotbed = {
             let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
             adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
@@ -697,9 +753,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 ControllerMutex::new(adc_hotend_hotbed)
             ))
         };
-        #[cfg(feature = "with-hotend")]
+        #[cfg(feature = "with-hot-end")]
         let adc_hotend_pin = p.PA0;
-        #[cfg(feature = "with-hotbed")]
+        #[cfg(feature = "with-hot-bed")]
         let adc_hotbed_pin = p.PC4;
 
         #[cfg(feature = "with-probe")]
@@ -761,19 +817,21 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         pwm: PwmDevices {
             #[cfg(feature = "with-probe")]
             probe: probe_device,
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             hotend: device::HotendPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_hotend_channel,
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: adc_hotend_pin,
+                thermistor_properties: &HOT_END_THERMISTOR_PROPERTIES,
             },
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             hotbed: device::HotbedPeripherals {
                 power_pwm: pwm_fan0_fan1_hotend_hotbed.clone(),
                 power_channel: pwm_hotbed_channel,
                 temp_adc: adc_hotend_hotbed.clone(),
                 temp_pin: adc_hotbed_pin,
+                thermistor_properties: &HOT_BED_THERMISTOR_PROPERTIES,
             },
             #[cfg(feature = "with-fan-layer")]
             fan_layer: device::FanLayerPeripherals {

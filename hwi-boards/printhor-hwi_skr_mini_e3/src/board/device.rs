@@ -59,11 +59,12 @@ cfg_if::cfg_if! {
         }
 
         cfg_if::cfg_if! {
-            if #[cfg(any(feature="with-hotend", feature="with-hotend"))] {
+            if #[cfg(any(feature="with-hot-end", feature="with-hot-end"))] {
                 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
                 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
                 pub use embassy_stm32::adc::Instance as AdcTrait;
                 pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
+                pub type VrefInt = embassy_stm32::peripherals::PA3;
 
                 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
                 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -74,12 +75,12 @@ cfg_if::cfg_if! {
         }
 
         cfg_if::cfg_if! {
-            if #[cfg(feature="with-hotend")] {
+            if #[cfg(feature="with-hot-end")] {
                 pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
             }
         }
         cfg_if::cfg_if! {
-            if #[cfg(feature="with-hotbed")] {
+            if #[cfg(feature="with-hot-bed")] {
                 pub type AdcHotbedPin = embassy_stm32::peripherals::PC3;
             }
         }
@@ -120,6 +121,8 @@ cfg_if::cfg_if! {
         pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
         pub use embassy_stm32::adc::Instance as AdcTrait;
         pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
+        pub use embassy_stm32::adc::VrefInt as VrefInt;
+
         pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
         pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
         pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -151,8 +154,6 @@ pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
-
-
 
 pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
@@ -193,20 +194,22 @@ pub struct ProbePeripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotend>,
-    pub temp_pin: AdcHotendPin
+    pub temp_pin: AdcHotendPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotbed>,
-    pub temp_pin: AdcHotbedPin
+    pub temp_pin: AdcHotbedPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]

@@ -17,14 +17,29 @@ cfg_if::cfg_if! {
     }
 }
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub type AdcImpl<T> = crate::board::mocked_peripherals::MockedAdc<T>;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub trait AdcTrait {}
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-pub trait AdcPinTrait<T> {}
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+pub trait AdcPinTrait<T> {
+    fn is_internal(&self) -> bool {
+        false
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        pub struct VrefInt;
+        impl<T> AdcPinTrait<T> for VrefInt {
+            fn is_internal(&self) -> bool {
+                true
+            }
+        }
+    }
+}
 
 #[cfg(feature = "with-trinamic")]
 pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
@@ -51,25 +66,28 @@ pub type Spi = crate::board::mocked_peripherals::MockedSpi;
 #[cfg(feature = "with-spi")]
 pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
 
+#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
+pub type PwmAny = crate::board::mocked_peripherals::MockedPwm;
+
 #[cfg(feature = "with-fan-layer")]
-pub type PwmFanLayer = crate::board::mocked_peripherals::MockedPwm;
+pub type PwmFanLayer = PwmAny;
 
 #[cfg(feature = "with-fan-extra-1")]
-pub type PwmFanExtra1 = crate::board::mocked_peripherals::MockedPwm;
+pub type PwmFanExtra1 = PwmAny;
 
 #[cfg(feature = "with-probe")]
-pub type PwmServo = crate::board::mocked_peripherals::MockedPwm;
+pub type PwmServo = PwmAny;
 
-#[cfg(feature = "with-hotend")]
-pub type PwmHotend = crate::board::mocked_peripherals::MockedPwm;
+#[cfg(feature = "with-hot-end")]
+pub type PwmHotend = PwmAny;
 
-#[cfg(feature = "with-hotbed")]
-pub type PwmHotbed = crate::board::mocked_peripherals::MockedPwm;
+#[cfg(feature = "with-hot-bed")]
+pub type PwmHotbed = PwmAny;
 
 #[cfg(feature = "with-laser")]
-pub type PwmLaser = crate::board::mocked_peripherals::MockedPwm;
+pub type PwmLaser = PwmAny;
 
-#[cfg(feature = "with-fan-layer")]
+#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
 pub use crate::board::mocked_peripherals::PwmChannel;
 
 #[cfg(feature = "with-sdcard")]
@@ -78,19 +96,19 @@ pub type SDCardBlockDevice = crate::board::mocked_peripherals::MockledSDCardBloc
 #[cfg(feature = "with-sdcard")]
 pub type SDCardBlockDeviceRef = crate::board::ControllerRef<SDCardBlockDevice>;
 
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 pub type AdcHotendPeripheral = u8;
 
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub type AdcHotendHotbed = AdcImpl<u8>;
 
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 pub type AdcHotendPin = crate::board::mocked_peripherals::MockedIOPin;
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 pub type AdcHotbedPeripheral = u8;
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 pub type AdcHotbedPin = crate::board::mocked_peripherals::MockedIOPin;
 
 pub type Watchdog = crate::board::mocked_peripherals::MockedWatchdog<'static, u8>;
@@ -185,20 +203,22 @@ pub struct ProbePeripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
     pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
     pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]

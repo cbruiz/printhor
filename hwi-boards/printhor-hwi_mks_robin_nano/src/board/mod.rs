@@ -20,8 +20,6 @@ use embassy_sync::mutex::Mutex;
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
 #[cfg(feature = "with-serial-usb")]
 use embassy_stm32::usb_otg;
-#[cfg(feature = "with-serial-usb")]
-use device::*;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
 #[allow(unused)]
@@ -52,6 +50,42 @@ pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
 #[cfg(feature = "with-trinamic")]
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 9600;
 
+// https://www.st.com/resource/en/datasheet/stm32f405og.pdf
+pub const ADC_START_TIME_US: u16 = 10;
+// https://www.st.com/resource/en/datasheet/stm32f405og.pdf
+pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-end")] {
+        #[const_env::from_env("HOT_END_THERM_BETA")]
+        // The B value of the thermistor
+        const HOT_END_THERM_BETA: f32 = 3950.0;
+
+        #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+        // Nominal NTC thermistor value
+        const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+
+        #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
+        // Physically measured
+        const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-bed")] {
+        #[const_env::from_env("HOT_BED_THERM_BETA")]
+        // The B value of the thermistor
+        const HOT_BED_THERM_BETA: f32 = 3950.0;
+
+        #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+        // Nominal NTC thermistor value
+        const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+
+        #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+        // Physically measured
+        const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+    }
+}
+
 /// Shared controllers
 pub struct Controllers {
     pub sys_watchdog: ControllerRef<device::Watchdog>,
@@ -78,9 +112,9 @@ pub struct PwmDevices {
     pub probe: device::ProbePeripherals,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: device::FanLayerPeripherals,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     pub hotend: device::HotendPeripherals,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     pub hotbed: device::HotbedPeripherals,
     #[cfg(feature = "with-laser")]
     pub laser: device::LaserPeripherals,
@@ -155,7 +189,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
         let driver = usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
-        let mut usb_serial_device = USBSerialDevice::new(driver);
+        let mut usb_serial_device = device::USBSerialDevice::new(driver);
         usb_serial_device.spawn(_spawner);
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
         static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
@@ -273,13 +307,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
-    // FAN0 = PC14 // Requires a soft pwm [Not implemented (yet)]
-    // FAN1 = PB1 // T3.CH4
-    // HE0 = PE5 // T9.Ch1
-    // HE1 = PB0 // T3.3 | T1.2N
-    // BE0 = PA0 // T2.1 | T5.1
-    // LASER = PA6 // T13.1
-
     #[cfg(feature = "with-fan-layer")]
         let fan_layer_device = {
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
@@ -302,10 +329,16 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
-    #[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
+    #[cfg(feature = "with-hot-end")]
+    static HOT_END_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
+
+    #[cfg(feature = "with-hot-bed")]
+    static HOT_BED_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
+
+    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
     let adc = {
         let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
-        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles15);
+        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles28);
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
         ControllerRef::new(ADC_INST.init(
             "HotendHotbedAdc",
@@ -313,7 +346,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(any(feature = "with-hotend"))]
+    #[cfg(any(feature = "with-hot-end"))]
         let hotend_device = {
 
         let pwm_hotend = embassy_stm32::timer::simple_pwm::SimplePwm::new(
@@ -335,10 +368,11 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch1,
             temp_adc: adc.clone(),
             temp_pin: p.PC1,
+            thermistor_properties: &crate::board::HOT_END_THERMISTOR_PROPERTIES,
         }
     };
 
-    #[cfg(any(feature = "with-hotbed"))]
+    #[cfg(any(feature = "with-hot-bed"))]
         let hotbed_device = {
 
         let pwm_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
@@ -352,7 +386,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         );
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotbed>> = TrackedStaticCell::new();
 
-        HotbedPeripherals {
+        device::HotbedPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init(
                 "PwmHotbed",
                 ControllerMutex::new(pwm_hotbed)
@@ -360,6 +394,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch1,
             temp_adc: adc.clone(),
             temp_pin: p.PC0,
+            thermistor_properties: &HOT_BED_THERMISTOR_PROPERTIES,
         }
     };
 
@@ -377,7 +412,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         );
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
 
-        LaserPeripherals {
+        device::LaserPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init(
                 "PwmLaser",
                 ControllerMutex::new(pwm_laser)
@@ -419,9 +454,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             probe: probe_device,
             #[cfg(feature = "with-fan-layer")]
             fan_layer: fan_layer_device,
-            #[cfg(feature = "with-hotend")]
+            #[cfg(feature = "with-hot-end")]
             hotend: hotend_device,
-            #[cfg(feature = "with-hotbed")]
+            #[cfg(feature = "with-hot-bed")]
             hotbed: hotbed_device,
             #[cfg(feature = "with-laser")]
             laser: laser_device,
