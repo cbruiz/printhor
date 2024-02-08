@@ -122,18 +122,6 @@ impl HeaterStateMachine {
         }
     }
 
-    async fn init<AdcPeri, AdcPin, PwmHwaDevice>(&mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>)
-        where
-            AdcPeri: hwa::device::AdcTrait + 'static,
-            AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
-            PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
-            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
-            crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
-
-    {
-        ctrl.lock().await.init().await;
-    }
-
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
         event_bus: &EventBusRef,
@@ -249,11 +237,6 @@ pub async fn task_temperature(
     let mut hotend_sm = HeaterStateMachine::new();
     #[cfg(feature = "with-hot-bed")]
     let mut hotbed_sm = HeaterStateMachine::new();
-
-    #[cfg(feature = "with-hot-end")]
-    hotend_sm.init(&hotend_controller).await;
-    #[cfg(feature = "with-hot-bed")]
-    hotbed_sm.init(&hotbed_controller).await;
 
     loop {
         ticker.next().await;

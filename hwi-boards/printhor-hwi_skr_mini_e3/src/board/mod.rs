@@ -619,7 +619,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             cfg.stop_bits = StopBits::STOP1;
             cfg.parity = Parity::ParityNone;
 
-            UartTrinamic::new(p.USART4, p.PC11, p.PC10,
+            device::UartTrinamic::new(p.USART4, p.PC11, p.PC10,
                        TrinamicIrqs, p.DMA1_CH7, p.DMA1_CH6,
                        cfg).expect("Ready")
         };
