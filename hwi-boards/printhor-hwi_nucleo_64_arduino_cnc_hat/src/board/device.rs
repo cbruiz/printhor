@@ -131,9 +131,9 @@ pub type PwmHotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM15>
 pub type PwmHotendHotbedLayer = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 
 #[cfg(feature = "nucleo64-l476rg")]
-pub type PwmLayerFan = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+pub type PwmFanLayer = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
 #[cfg(feature = "nucleo64-f410rb")]
-pub type PwmLayerFan = PwmHotendHotbedLayer;
+pub type PwmFanLayer = PwmHotendHotbedLayer;
 
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmHotend = PwmHotendHotbed;
@@ -181,15 +181,15 @@ pub struct HotbedPeripherals {
     pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
-#[cfg(feature = "with-fan0")]
-pub struct Fan0Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan0>,
+#[cfg(feature = "with-fan-layer")]
+pub struct FanLayerPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-fan1")]
-pub struct Fan1Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFan1>,
+#[cfg(feature = "with-fan-extra-1")]
+pub struct FanExtra1Peripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanExtra1>,
     pub power_channel: PwmChannel,
 }
 

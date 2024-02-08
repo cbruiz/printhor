@@ -26,7 +26,7 @@ use embassy_stm32::spi;
 use embassy_stm32::exti::ExtiInput;
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext, ThermistorProperties};
+use printhor_hwa_common::{TrackedStaticCell, MachineContext};
 
 
 #[cfg(feature = "with-motion")]
@@ -85,6 +85,21 @@ cfg_if::cfg_if! {
         const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
     }
 }
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-bed")] {
+        #[const_env::from_env("HOT_BED_THERM_BETA")]
+        // The B value of the thermistor
+        const HOT_BED_THERM_BETA: f32 = 3950.0;
+
+        #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+        // Nominal NTC thermistor value
+        const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+
+        #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+        // Physically measured
+        const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+    }
+}
 
 /// Shared controllers
 pub struct Controllers {
@@ -116,8 +131,10 @@ pub struct PwmDevices {
     pub hotbed: device::HotbedPeripherals,
     #[cfg(feature="with-laser")]
     pub laser: device::LaserPeripherals,
-    #[cfg(feature="with-layer-fan")]
-    pub layer_fan: device::LayerFanPeripherals,
+    #[cfg(feature="with-fan-layer")]
+    pub fan_layer: device::FanLayerPeripherals,
+    #[cfg(feature="with-fan-extra-1")]
+    pub fan_extra1: device::FanExtra1Peripherals,
 }
 
 pub struct MotionDevices {
@@ -364,10 +381,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     };
 
     #[cfg(feature = "with-hot-end")]
-    static HOT_END_THERMISTOR_PROPERTIES: ThermistorProperties = ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
+    static HOT_END_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
 
     #[cfg(feature = "with-hot-bed")]
-    static HOT_BED_THERMISTOR_PROPERTIES: ThermistorProperties = ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
+    static HOT_BED_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
 
 
     #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
@@ -453,7 +470,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch2,
             temp_adc: adc.clone(),
             temp_pin: p.PC3,
-            thermistor_properties: &crate::board::HOT_BED_THERMISTOR_PROPERTIES,
+            thermistor_properties: &HOT_BED_THERMISTOR_PROPERTIES,
         }
     };
     #[cfg(all(feature="nucleo64-f410rb", feature = "with-hot-bed"))]
@@ -464,6 +481,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch4,
             temp_adc: adc.clone(),
             temp_pin: p.PB1,
+            thermistor_properties: &HOT_BED_THERMISTOR_PROPERTIES,
         }
     };
 
@@ -511,9 +529,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
-    #[cfg(all(feature="nucleo64-l476rg", feature = "with-layer-fan"))]
-        let layer_fan_device = {
-        let pwm = device::PwmLayerFan::new(
+    #[cfg(all(feature="nucleo64-l476rg", feature = "with-fan-layer"))]
+        let fan_layer_device = {
+        let pwm = device::PwmFanLayer::new(
             p.TIM2,
             Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PA15, embassy_stm32::gpio::OutputType::PushPull)),
             None,
@@ -522,9 +540,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             embassy_stm32::time::hz(5_000),
             embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
         );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLayerFan>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
 
-        device::LayerFanPeripherals {
+        device::FanLayerPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init(
                 "PwmLayer",
                 ControllerMutex::new(pwm)
@@ -533,15 +551,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
-    #[cfg(all(feature="nucleo64-f410rb", feature = "with-layer-fan"))]
-        let layer_fan_device = {
+    #[cfg(all(feature="nucleo64-f410rb", feature = "with-fan-layer"))]
+        let fan_layer_device = {
 
-        device::LayerFanPeripherals {
+        device::FanLayerPeripherals {
             power_pwm: pwm_hotend_hotbed_layer.clone(),
             power_channel: embassy_stm32::timer::Channel::Ch2,
         }
     };
-
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
@@ -577,8 +594,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             hotbed: hotbed_device,
             #[cfg(feature = "with-laser")]
             laser: laser_device,
-            #[cfg(feature = "with-layer-fan")]
-            layer_fan: layer_fan_device,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer: fan_layer_device,
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra1: fan_extra1_device,
         }
     }
 }
