@@ -1,32 +1,31 @@
-
+#![allow(unused)]
 #[path = "printhor/math/mod.rs"]
 mod math;
-pub type Real = math::Real;
-
+use math::Real;
+#[path = "printhor/hwa/mod.rs"]
+mod hwa;
+#[path = "printhor/hwi/mod.rs"]
+mod hwi;
+#[path = "printhor/sync/mod.rs"]
+mod sync;
 #[path = "printhor/tgeo.rs"]
 mod tgeo;
-pub use tgeo::*;
-
-#[path = "printhor/control/planner/mod.rs"]
-pub(crate) mod p;
-
-mod control {
-    pub(crate) use super::p as planner;
-}
-
-#[path = "printhor/hwa/controllers/motion/motion_segment.rs"]
-mod motion_segment;
-
-use motion_segment::{Segment, SegmentData};
-use crate::control::planner::{Constraints, PlanProfile, SCurveMotionProfile};
+use tgeo::*;
+extern crate alloc;
+#[path = "printhor/control/mod.rs"]
+mod control;
+#[path = "printhor/helpers/mod.rs"]
+mod helpers;
+#[path = "printhor/machine.rs"]
+mod machine;
+use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
+use crate::control::motion_planning::{Constraints, PlanProfile, SCurveMotionProfile};
 #[allow(unused)]
 use crate::math::{ONE, ZERO};
+#[allow(unused)]
+fn initialization_error() {
 
-mod hwa {
-    pub use printhor_hwi_native::*;
 }
-
-extern crate alloc;
 
 fn main() {
 
@@ -126,6 +125,7 @@ fn main() {
                         displacement_u: (module_target_distance / Real::from_lit(1000, 0)).to_i32().unwrap_or(0) as u32,
                         vdir,
                         dest_pos: Default::default(),
+                        tool_power: 0,
                     },
                     SCurveMotionProfile::compute(
                         module_target_distance, ZERO, ZERO,

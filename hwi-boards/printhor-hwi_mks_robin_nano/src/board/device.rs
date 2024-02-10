@@ -3,28 +3,28 @@ use embassy_stm32::wdg;
 use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::timer::simple_pwm::SimplePwm;
 
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub type USBDrv = embassy_stm32::usb_otg::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
 
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub use crate::board::io::usbserial::*;
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
     embassy_stm32::peripherals::USART1,
     embassy_stm32::peripherals::DMA2_CH7, embassy_stm32::peripherals::DMA2_CH5
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
     embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH7
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
     embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5
 >;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
 
 #[cfg(feature = "with-trinamic")]
@@ -66,6 +66,7 @@ pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC9>;
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
 pub use embassy_stm32::adc::Instance as AdcTrait;
 pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
+pub use embassy_stm32::adc::VrefInt as VrefInt;
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -79,13 +80,12 @@ pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
-pub type PwmLayerFan = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+pub type PwmFanLayer = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 pub type PwmHotend = SimplePwm<'static, embassy_stm32::peripherals::TIM9>;
 pub type PwmHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM13>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
-
 
 pub type Watchdog = wdg::IndependentWatchdog<'static,
     embassy_stm32::peripherals::IWDG
@@ -98,25 +98,27 @@ pub struct ProbePeripherals {
     pub power_channel: PwmChannel,
 }
 
-#[cfg(feature = "with-hotend")]
+#[cfg(feature = "with-hot-end")]
 pub struct HotendPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotend>,
-    pub temp_pin: AdcHotendPin
+    pub temp_pin: AdcHotendPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
-#[cfg(feature = "with-hotbed")]
+#[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
     pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
     pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotbed>,
-    pub temp_pin: AdcHotbedPin
+    pub temp_pin: AdcHotbedPin,
+    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
-#[cfg(feature = "with-fan-layer-fan1")]
-pub struct LayerFanPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
+#[cfg(feature = "with-fan-layer")]
+pub struct FanLayerPeripherals {
+    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 

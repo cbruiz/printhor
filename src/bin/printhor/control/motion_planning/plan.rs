@@ -5,14 +5,13 @@ use core::fmt::Display;
 use core::fmt::Formatter;
 use core::ops::{Div, Neg};
 use core::ops::Mul;
-//use embassy_time::{Instant, Duration};
 #[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use num_traits::float::FloatCore;
 use crate::{math::Real, math::RealInclusiveRange};
 #[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use rust_decimal::prelude::ToPrimitive;
 use crate::math::{FOUR, HALF, ONE, SIX, THREE, TWO, ZERO};
-use crate::control::planner::CodeExecutionFailure;
+use crate::control::CodeExecutionFailure;
 
 #[derive(Clone, Default)]
 pub struct Boundaries {

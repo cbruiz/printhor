@@ -1,25 +1,30 @@
 #[cfg(feature = "native")]
 use core::fmt::Display;
-
+use crate::hwa::EventStatus;
 use crate::math::Real;
 #[cfg(feature = "native")]
 use strum::Display;
-use strum::{AsRefStr, EnumVariantNames};
+use strum::{AsRefStr, VariantNames};
 use alloc::string::String;
-pub(crate) mod processor;
-pub(crate) mod planner;
-pub(crate) mod parser;
-pub(crate) mod task_control;
-#[cfg(feature = "with-printjob")] pub(crate) mod task_printjob;
-#[cfg(feature = "integration-test")] pub(crate) mod task_integration;
 #[cfg(feature = "with-motion")]
-pub(crate) mod task_deferr;
-#[cfg(any(feature = "with-hotend", feature = "with-hotbed"))]
-pub(crate) mod task_temperature;
-#[cfg(feature = "with-motion")]
-pub mod task_stepper;
+pub(crate) mod motion_planning;
 #[cfg(feature = "with-motion")]
 pub(crate) mod motion_timing;
+
+mod processing;
+pub use processing::*;
+
+pub mod task_control;
+#[cfg(feature = "with-printjob")]
+pub mod task_printjob;
+#[cfg(feature = "integration-test")]
+pub mod task_integration;
+#[cfg(feature = "with-motion")]
+pub mod task_defer;
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+pub mod task_temperature;
+#[cfg(feature = "with-motion")]
+pub mod task_stepper;
 
 #[allow(dead_code)]
 #[derive(Clone, Default)]
@@ -114,7 +119,7 @@ impl crate::hwa::defmt::Format for XYZEFS {
 }
 
 #[allow(unused)]
-#[derive(Clone, EnumVariantNames, AsRefStr, Default)]
+#[derive(Clone, VariantNames, AsRefStr, Default)]
 #[cfg_attr(feature = "native", derive(Display))]
 pub enum GCode {
     /// No Operation
@@ -283,3 +288,38 @@ impl crate::hwa::defmt::Format for GCode {
     }
 }
 
+#[cfg_attr(all(feature = "defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(feature = "native", derive(Debug))]
+#[cfg_attr(feature = "native", derive(strum::Display))]
+#[allow(unused)]
+pub enum CodeExecutionSuccess {
+    /// Immediately executed
+    OK,
+    /// Immediately executed and reported
+    CONSUMED,
+    /// Queued but assumed it will be executed not too long, so practically same as OK
+    QUEUED,
+    /// Executed but it will take time to get a final response. EventStatus contains the needed flags to wait for
+    DEFERRED(EventStatus),
+}
+
+#[cfg_attr(all(feature = "defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(feature = "native", derive(strum::Display))]
+#[derive(Debug)]
+#[allow(unused)]
+pub enum CodeExecutionFailure {
+    /// Cannot perform because there is the same or something else running
+    BUSY,
+    /// Generic internal error
+    ERR,
+    /// Cannot perform because requires homing before
+    HomingRequired,
+    /// Cannot perform because requires homing before
+    PowerRequired,
+    /// Specific internal error: Numerical computation issue (division by 0, sqrt(x<0) or any other kind of ambiguity)
+    NumericalError,
+    /// The GCode is considered, but not yet implemented
+    NotYetImplemented,
+}
+#[allow(unused)]
+pub type CodeExecutionResult = Result<CodeExecutionSuccess, CodeExecutionFailure>;

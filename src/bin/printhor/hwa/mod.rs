@@ -1,8 +1,6 @@
-#[allow(unused)]
-use crate::hwa;
 use crate::hwi;
-pub use printhor_hwa_common::ControllerRef;
-pub use crate::control::processor::GCodeProcessor;
+pub use printhor_hwa_common::*;
+pub use crate::control::GCodeProcessor;
 
 #[cfg(feature = "with-defmt")]
 pub use defmt;
@@ -11,7 +9,6 @@ pub use defmt;
 #[allow(unused)]
 pub use defmt::{trace, debug, info, warn, error};
 
-pub mod devices;
 pub mod controllers;
 pub mod drivers;
 
@@ -23,31 +20,21 @@ pub use hwi::*;
 
 pub mod mem {
     use crate::hwi;
-    #[allow(unused)]
     #[inline]
     pub fn heap_current_size() -> u32 {
         hwi::heap_current_size()
     }
-    #[allow(unused)]
     #[inline]
     pub fn heap_max_size() -> usize {
         hwi::HEAP_SIZE_BYTES
     }
 
-    #[allow(unused)]
-    #[inline]
-    pub fn heap_current_usage_percentage() -> f32 {
-        hwi::heap_current_usage_percentage()
-    }
-
-    #[allow(unused)]
     #[inline]
     pub fn stack_reservation_max_size() -> u32 {
         hwi::MAX_STATIC_MEMORY as u32
 
     }
 
-    #[allow(unused)]
     #[inline]
     pub fn stack_reservation_current_size() -> u32 {
         hwi::stack_reservation_current_size()
@@ -105,7 +92,6 @@ pub mod task_allocations {
 
 #[cfg(feature = "with-sdcard")]
 pub struct DummyTimeSource {
-    
 }
 
 #[cfg(feature = "with-sdcard")]

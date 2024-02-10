@@ -61,10 +61,13 @@ impl<STREAM> GCodeLineParser<STREAM>
         let mut skip_gcode = false;
         let mut raw_gcode_spec: Option<(char, Option<(i32, u8)>)> = None;
 
+        // TODO
+        //self.raw_parser.get_stream();
+
         loop {
             match self.raw_parser.next().await {
                 None => {
-                    hwa::warn!("EOF reading from stream");
+                    hwa::debug!("EOF reading from stream");
                     return Ok(None);
                 }
                 Some(result) => {

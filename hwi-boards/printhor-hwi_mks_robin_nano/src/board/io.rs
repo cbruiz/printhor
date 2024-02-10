@@ -1,4 +1,4 @@
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub mod usbserial {
     use crate::board::device::USBDrv;
     use futures::Stream;
@@ -19,7 +19,7 @@ pub mod usbserial {
 
     #[embassy_executor::task(pool_size=1)]
     pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
-        defmt::info!("Running usb task...");
+        defmt::debug!("Running usb task...");
         usb.run().await;
         unreachable!("usb task ended")
     }
@@ -163,7 +163,7 @@ pub mod usbserial {
     }
 }
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub mod uart_port1 {
     use crate::device::UartPort1RxDevice;
     use futures::Stream;
@@ -234,7 +234,4 @@ pub mod uart_port1 {
             }
         }
     }
-
-
-
 }

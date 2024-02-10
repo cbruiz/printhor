@@ -1,4 +1,4 @@
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 pub mod usbserial {
     use crate::board::device::USBDrv;
     use futures::Stream;
@@ -159,7 +159,7 @@ pub mod usbserial {
     }
 }
 
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 pub mod uart_port1 {
     use crate::device::UartPort1RxDevice;
     use crate::device::UartPort1RingBufferedRxDevice;
@@ -170,21 +170,44 @@ pub mod uart_port1 {
     use futures::Future;
     use printhor_hwa_common::TrackedStaticCell;
 
-    pub struct UartPort1RxInputStream {
-        pub receiver: UartPort1RingBufferedRxDevice,
-        buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
-        bytes_read: u8,
-        current_byte_index: u8,
+    cfg_if::cfg_if! {
+        if #[cfg(feature="without-ringbuffer")] {
+            pub struct UartPort1RxInputStream {
+                receiver: UartPort1RxDevice,
+                buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
+                bytes_read: u8,
+                current_byte_index: u8,
+            }
+        }
+        else {
+            pub struct UartPort1RxInputStream {
+                receiver: UartPort1RingBufferedRxDevice,
+                buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
+                bytes_read: u8,
+                current_byte_index: u8,
+            }
+        }
     }
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
             static BUFF: TrackedStaticCell<[u8;crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
-            Self {
-                receiver: receiver.into_ring_buffered(BUFF.init("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
-                buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
-                bytes_read: 0,
-                current_byte_index: 0,
+            cfg_if::cfg_if! {
+                if #[cfg(feature="without-ringbuffer")] {
+                    Self {
+                        receiver,
+                        bytes_read: 0,
+                        current_byte_index: 0,
+                    }
+                }
+                else {
+                    Self {
+                        receiver: receiver.into_ring_buffered(BUFF.init("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
+                        buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
+                        bytes_read: 0,
+                        current_byte_index: 0,
+                    }
+                }
             }
         }
     }
@@ -195,41 +218,40 @@ pub mod uart_port1 {
 
         fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
 
-            //defmt::trace!("poll()");
             let this = self.get_mut();
-
             if this.current_byte_index < this.bytes_read {
                 let byte = this.buffer[this.current_byte_index as usize];
                 this.current_byte_index += 1;
-                //defmt::trace!("poll() -> Ready buff");
                 Poll::Ready(Some(Ok(byte)))
             }
             else {
                 this.current_byte_index = 0;
                 this.bytes_read = 0;
 
-                let r = core::pin::pin!(
-                    this.receiver.read(&mut this.buffer)
-                ).poll(ctx);
-                match r {
-                    Poll::Ready(rst) => {
-                        match rst {
-                            Ok(n) => {
-                                this.bytes_read = n as u8;
-                                if n > 0 {
-                                    let byte = this.buffer[this.current_byte_index as usize];
-                                    this.current_byte_index += 1;
-                                    Poll::Ready(Some(Ok(byte)))
-                                }
-                                else {
-                                    Poll::Ready(None)
-                                }
-                            }
-                            Err(_e) => {
-                                defmt::trace!("poll() -> Error");
-                                Poll::Ready(None)
-                            }
+                let r = core::pin::pin!({
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature="without-ringbuffer")] {
+                            this.receiver.read_until_idle(&mut this.buffer)
                         }
+                        else {
+                            this.receiver.read(&mut this.buffer)
+                        }
+                    }
+                }).poll(ctx);
+                match r {
+                    Poll::Ready(Ok(n)) => {
+                        this.bytes_read = n as u8;
+                        if n > 0 {
+                            let byte = this.buffer[this.current_byte_index as usize];
+                            this.current_byte_index += 1;
+                            Poll::Ready(Some(Ok(byte)))
+                        } else {
+                            Poll::Ready(None)
+                        }
+                    }
+                    Poll::Ready(Err(_e)) => {
+                        defmt::warn!("poll() -> Error {:?}", _e);
+                        Poll::Ready(None)
                     }
                     Poll::Pending => {
                         defmt::trace!("poll() -> Pending");

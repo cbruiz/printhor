@@ -1,10 +1,9 @@
 use crate::hwa;
 #[allow(unused)]
-use crate::control::GCode;
+use crate::control::*;
 #[allow(unused)]
 use crate::math::Real;
-use crate::control::planner::*;
-use printhor_hwa_common::{EventBusSubscriber, EventFlags};
+use printhor_hwa_common::{CommChannel, EventBusSubscriber, EventFlags};
 
 pub struct IntegrationaskParams {
     pub processor: hwa::GCodeProcessor,
@@ -12,18 +11,18 @@ pub struct IntegrationaskParams {
     pub printer_controller: hwa::controllers::PrinterController,
 }
 #[embassy_executor::task(pool_size=1)]
-pub(crate) async fn integration_task(mut params: IntegrationaskParams)
+pub async fn task_integration(mut params: IntegrationaskParams)
 {
 
     #[allow(unused)]
     let expect_immediate = |res| match res {
-        CodeExecutionSuccess::OK => Ok(CodeExecutionSuccess::OK),
+        CodeExecutionSuccess::OK | CodeExecutionSuccess::CONSUMED => Ok(CodeExecutionSuccess::OK),
         CodeExecutionSuccess::QUEUED => Ok(CodeExecutionSuccess::OK),
         CodeExecutionSuccess::DEFERRED(_) => Err(CodeExecutionFailure::ERR),
     };
     #[allow(unused)]
     let expect_deferred = |res| match res {
-        CodeExecutionSuccess::OK => Err(CodeExecutionFailure::ERR),
+        CodeExecutionSuccess::OK | CodeExecutionSuccess::CONSUMED => Err(CodeExecutionFailure::ERR),
         CodeExecutionSuccess::QUEUED => Err(CodeExecutionFailure::ERR),
         CodeExecutionSuccess::DEFERRED(evt) => Ok(evt),
     };
@@ -31,13 +30,21 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
     let event_bus = params.processor.event_bus.clone();
     let mut subscriber: EventBusSubscriber<'static> = hwa::task_allocations::init_integration_subscriber(event_bus).await;
 
-    subscriber.wait_until(EventFlags::SYS_READY).await;
+    subscriber.ft_wait_until(EventFlags::SYS_READY).await.unwrap();
     hwa::info!("D; integration_task started");
+
+    // Set endstops up for simulation for homing to be completed properly
+    {
+        let mut dg = params.processor.motion_planner.motion_driver.lock().await;
+        dg.pins.x_endstop_pin.set_high();
+        dg.pins.y_endstop_pin.set_high();
+        dg.pins.z_endstop_pin.set_high();
+    }
 
     #[cfg(feature = "integration-test-m100")]
     {
         hwa::info!("Testing M100");
-        if params.processor.execute(&GCode::M100, true).await.and_then(expect_immediate).is_err() {
+        if params.processor.execute(CommChannel::Internal, &GCode::M100, true).await.and_then(expect_immediate).is_err() {
             hwa::error!("M100: Unexpected result");
         }
     }
@@ -45,7 +52,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
     #[cfg(feature = "integration-test-power-on")]
     {
         hwa::info!("Testing M80");
-        if params.processor.execute(&GCode::M80, false).await.and_then(expect_immediate).is_err() {
+        if params.processor.execute(CommChannel::Internal, &GCode::M80, false).await.and_then(expect_immediate).is_err() {
             hwa::error!("M80: Unexpected result");
         }
         else {
@@ -53,9 +60,10 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         }
     }
 
+    #[cfg(feature = "integration-test-trinamic")]
     {
         hwa::info!("Testing M502");
-        if params.processor.execute(&GCode::M502, false).await.and_then(expect_immediate).is_err() {
+        if params.processor.execute(CommChannel::Internal, &GCode::M502, false).await.and_then(expect_immediate).is_err() {
             hwa::error!("M502: Unexpected result");
         }
         else {
@@ -65,8 +73,9 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
     #[cfg(feature = "integration-test-homing")]
     {
+
         let homing_gcode = GCode::G28(
-            crate::control::XYZW {
+            XYZW {
                 ln: None,
                 x: None,
                 y: None,
@@ -77,9 +86,11 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
 
         hwa::info!("Testing G28");
         let t0 = embassy_time::Instant::now();
-        if let Some(evt) = params.processor.execute(&homing_gcode, false).await.and_then(expect_deferred).ok()
+        if let Some(evt) = params.processor.execute(CommChannel::Internal, &homing_gcode, false).await.and_then(expect_deferred).ok()
         {
-            subscriber.wait_for(evt).await;
+            if subscriber.ft_wait_for(evt).await.is_err() {
+                hwa::error!("Unexpected state for G28");
+            }
             hwa::info!("G28 OK (took: {} ms)", t0.elapsed().as_millis());
         } else {
             hwa::error!("Unexpected state for G28");
@@ -100,7 +111,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
             s: None
         });
 
-        if let Some(_evt) = params.processor.execute(&g1_code, false).await.and_then(expect_immediate).ok() {
+        if let Some(_evt) = params.processor.execute(CommChannel::Internal, &g1_code, false).await.and_then(expect_immediate).ok() {
             hwa::trace!("-- G1 OK");
         } else {
             hwa::error!("G1 Unexpected state");
@@ -121,7 +132,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
             s: None
         });
 
-        if let Some(_evt) = params.processor.execute(&g1_code, false).await.and_then(expect_immediate).ok() {
+        if let Some(_evt) = params.processor.execute(CommChannel::Internal, &g1_code, false).await.and_then(expect_immediate).ok() {
             hwa::info!("-- G1 Oblique OK");
         } else {
             hwa::error!("G1 Unexpected state");
@@ -162,7 +173,7 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
             s: None
         });
 
-        if let Some(_evt) = params.processor.execute(&g1_code, false).await.and_then(expect_immediate).ok() {
+        if let Some(_evt) = params.processor.execute(CommChannel::Internal, &g1_code, false).await.and_then(expect_immediate).ok() {
             hwa::info!("-- G1 retract OK");
         } else {
             hwa::error!("G1 Unexpected state");
@@ -172,8 +183,8 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
     #[cfg(feature = "integration-test-dwell")]
     {
         hwa::info!("Testing G4");
-        if let Some(evt) = params.processor.execute(&GCode::G4, false).await.and_then(expect_deferred).ok() {
-            subscriber.wait_for(evt).await;
+        if let Some(evt) = params.processor.execute(CommChannel::Internal, &GCode::G4, false).await.and_then(expect_deferred).ok() {
+            subscriber.ft_wait_for(evt).await.unwrap();
             hwa::info!("-- G4 OK");
         } else {
             hwa::error!("G4 Unexpected state");
@@ -183,12 +194,12 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
     #[cfg(feature = "integration-test-set-hotend-temp")]
     {
         hwa::info!("Testing M104");
-        if !params.processor.execute(&GCode::M104(S { ln: None, s: Some(Real::new(235, 0)) }), false).await.and_then(expect_immediate).is_ok() {
+        if !params.processor.execute(CommChannel::Internal, &GCode::M104(S { ln: None, s: Some(Real::new(235, 0)) }), false).await.and_then(expect_immediate).is_ok() {
             hwa::error!("M104: unexpected result");
         }
         hwa::info!("Testing M109 S235");
-        if let Some(evt) = params.processor.execute(&GCode::M109(S{ln: None, s: Some(Real::new(235, 0))}), false).await.and_then(expect_deferred).ok() {
-            subscriber.wait_for(evt).await;
+        if let Some(evt) = params.processor.execute(CommChannel::Internal, &GCode::M109(S{ln: None, s: Some(Real::new(235, 0))}), false).await.and_then(expect_deferred).ok() {
+            subscriber.ft_wait_for(evt).await.unwrap();
         }
     }
     #[cfg(feature = "integration-test-laser-engrave")]
@@ -199,13 +210,13 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("dir/laser.g"))).await.unwrap();
         match embassy_time::with_timeout(
             embassy_time::Duration::from_secs(5),
-            subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+            subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
         ).await {
             Ok(_) => {
                 // command resume (eq: M24)
                 params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
                 // wait for job completion
-                subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
+                subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_COMPLETED)).await.unwrap();
             }
             Err(_) => {
                 hwa::error!("Timeout dispatching engraving job");
@@ -221,13 +232,13 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("benchy.g"))).await.unwrap();
         match embassy_time::with_timeout(
             embassy_time::Duration::from_secs(5),
-            subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+            subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
         ).await {
             Ok(_) => {
                 // command resume (eq: M24)
                 params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
                 // wait for job completion
-                subscriber.wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await;
+                subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await.unwrap();
             }
             Err(_) => {
                 hwa::error!("Timeout dispatching benchy job");
@@ -235,11 +246,13 @@ pub(crate) async fn integration_task(mut params: IntegrationaskParams)
         }
 
     }
-    subscriber.wait_for(
-        printhor_hwa_common::EventStatus::not_containing(EventFlags::JOB_PRINTING)
+    if subscriber.ft_wait_for(
+        EventStatus::not_containing(EventFlags::JOB_PRINTING)
             .and_not_containing(EventFlags::MOVING)
             .and_containing(EventFlags::MOV_QUEUE_EMPTY)
-    ).await;
+    ).await.is_err() {
+        hwa::error!("Unexpected error processing benchy job");
+    }
     hwa::info!("D; Integration task END");
     #[cfg(feature = "native")]
     std::process::exit(0)

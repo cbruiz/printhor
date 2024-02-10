@@ -1,5 +1,4 @@
-//! TODO: This feature is still very experimental
-//! TODO: Pending to review after intense refactor
+//! TODO: This feature is still in incubation
 use printhor_hwa_common::TrackedStaticCell;
 use printhor_hwa_common::EventBusRef;
 use crate::hwa;
@@ -48,7 +47,7 @@ pub struct PrinterController {
 }
 
 impl PrinterController {
-    pub(crate) fn new(event_bus: EventBusRef) -> PrinterController {
+    pub fn new(event_bus: EventBusRef) -> PrinterController {
         static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> = TrackedStaticCell::new();
         static STATUS_INST: TrackedStaticCell<Config<ChannelMutexType, PrinterControllerStatus>> = TrackedStaticCell::new();
 

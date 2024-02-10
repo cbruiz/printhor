@@ -1,9 +1,9 @@
 [package]
 name = "printhor-hwi_skr_mini_e3"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
-description = "Printhor Hardware Abstraction for SK3 Mini E3 V2 board"
+description = "Printhor Hardware Abstraction for SK3 Mini E3 V2.0 and SK3 Mini E3 V3.0 boards"
 readme = "README.md"
 repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
@@ -14,31 +14,36 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
+# Versions/boards
+sk3_mini_e3_v2 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
+sk3_mini_e3_v3 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["printhor-hwa-common/defmt"]
 # Hardware device features
-with-usbserial = ["embassy-usb"]
+with-serial-usb = ["embassy-usb"]
 with-printjob = []
-with-uart-port-1 = []
+with-serial-port-1 = []
 with-spi = ["embedded-hal"]
-with-hotend = ["embedded-hal"]
-with-hotbed = ["embedded-hal"]
+with-hot-end = ["embedded-hal"]
+with-hot-bed = ["embedded-hal"]
 with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
-with-fan-layer-fan0 = ["embedded-hal"]
+with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = []
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
+upstream-embassy = []
+without-vref-int = []
 
 [dependencies]
 defmt = {version = "0.3", default-features = false }
 
-printhor-hwa-common = { version = "0.0.3"}
+printhor-hwa-common = { version = "0.0"}
 
-embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "stm32g0b1re", "rt", "memory-x", "unstable-pac", "time-driver-tim4"] }
+embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "rt", "memory-x", "unstable-pac"] }
 embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "executor-interrupt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0.5.0", features = ["defmt"] }
 embassy-time = { version = "0.3.0", features = ["defmt", "tick-hz-100_000"] }
@@ -53,3 +58,6 @@ embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["un
 
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }
+
+cfg-if = { version = "1.0.0" }
+const_env = { version = "0.1" }

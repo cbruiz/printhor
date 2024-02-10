@@ -1,6 +1,4 @@
 #![no_std]
-#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
-#![allow(stable_features)]
 use embassy_stm32::interrupt;
 use embassy_executor::InterruptExecutor;
 
@@ -18,22 +16,22 @@ pub use board::PwmDevices;
 pub use board::init;
 pub use board::setup;
 pub use board::heap_current_size;
-pub use board::heap_current_usage_percentage;
 pub use board::stack_reservation_current_size;
 pub use board::MACHINE_BOARD;
 pub use board::MACHINE_TYPE;
 pub use board::MACHINE_PROCESSOR;
 pub use board::HEAP_SIZE_BYTES;
 pub use board::MAX_STATIC_MEMORY;
-pub use board::VREF_SAMPLE;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-usb")]
 const USBSERIAL_BUFFER_SIZE: usize = 32;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;
-#[cfg(feature = "with-uart-port-1")]
+#[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
+pub use board::ADC_START_TIME_US;
+pub use board::ADC_VREF_DEFAULT_MV;
 
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
@@ -44,6 +42,8 @@ unsafe fn RNG() {
 
 #[inline]
 pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+    use embassy_stm32::interrupt::InterruptExt;
+    interrupt::RNG.set_priority(embassy_stm32::interrupt::Priority::P8);
     let spawner = EXECUTOR_HIGH.start(interrupt::RNG);
     spawner.spawn(token).map_err(|_| ())
 }

@@ -78,20 +78,14 @@
 //!  </dd>
 //! </dl>
 use crate::hwa;
+use hwa::{ControllerRef, DeferAction, EventBusRef};
+use hwa::{EventStatus, EventFlags};
 use embassy_time::{Duration, Ticker};
+use crate::hwa::controllers::HeaterController;
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
-use printhor_hwa_common::{ControllerRef, DeferEvent, DeferType, EventBusRef};
-use printhor_hwa_common::EventStatus;
-use printhor_hwa_common::EventFlags;
-use printhor_hwa_common::DeferChannelRef;
-
 use pid;
-use crate::hwa::controllers::HeaterController;
-
-#[cfg(feature = "with-defmt")]
-use crate::hwa::defmt;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
@@ -128,36 +122,32 @@ impl HeaterStateMachine {
         }
     }
 
-    async fn init<AdcPeri, AdcPin, PwmHwaDevice>(&mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>)
-        where
-            AdcPeri: hwa::device::AdcTrait + 'static,
-            AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
-            PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
-            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
-    {
-        ctrl.lock().await.init().await;
-    }
-
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
         event_bus: &EventBusRef,
-        defer_channel: &DeferChannelRef,
         temperature_flag: EventFlags,
-        defer_flag: DeferEvent,
+        action: DeferAction,
     )
         where
             AdcPeri: hwa::device::AdcTrait + 'static,
             AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
             PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
-            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
+            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
+            crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
     {
         let mut m = ctrl.lock().await;
 
         self.current_temp = m.read_temp().await;
+        #[cfg(feature = "native")]
+        {
+            if m.is_on() {
+                if self.t0.elapsed() > Duration::from_secs(5) {
+                    self.current_temp = m.get_target_temp();
+                }
+            }
+        }
         let new_state = {
-
-            hwa::trace!("MEASURED_TEMP: {}", self.current_temp);
-
+            hwa::debug!("MEASURED_TEMP[{:?}] {}", action, self.current_temp);
             if m.is_on() {
                 let target_temp = m.get_target_temp();
                 self.pid.setpoint(target_temp);
@@ -176,7 +166,7 @@ impl HeaterStateMachine {
                 } else {
                     0.0f32
                 };
-                hwa::info!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
+                hwa::debug!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
 
                 m.set_power((power * 100.0f32).to_u8().unwrap_or(0)).await;
 
@@ -205,58 +195,54 @@ impl HeaterStateMachine {
                     event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
                 State::Maintaining => {
-                    defer_channel.send(defer_flag).await;
+                    hwa::debug!("Temperature reached. Firing {:?}.", temperature_flag);
+                    m.flush_notification(action).await;
                     event_bus.publish_event(EventStatus::containing(temperature_flag)).await;
                 }
                 State::Targeting => {
                     #[cfg(feature = "native")]
                     {
                         self.t0 = embassy_time::Instant::now();
-                        hwa::info!("Temp reatched. Firing {:?}", temperature_flag);
                     }
                     event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
             }
             self.state = new_state;
         }
-        else if self.state == State::Maintaining {
-            // There could be deferred commands subscribed after
-            // * temp target was set
-            // * and temp is currently maintaining
-            // ... so there is not state change but it's needed to flush them
-            defer_channel.send(defer_flag).await;
+        else if m.is_awaited() {
+            match new_state {
+                State::Maintaining => {
+                    m.flush_notification(action).await;
+                }
+                _ => {}
+            }
+
         }
     }
 }
 
 #[embassy_executor::task(pool_size=1)]
-pub async fn temp_task(
+pub async fn task_temperature(
     event_bus: EventBusRef,
-    defer_channel: DeferChannelRef,
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     hotend_controller: hwa::controllers::HotendControllerRef,
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     hotbed_controller: hwa::controllers::HotbedControllerRef,
 ) -> ! {
     hwa::debug!("temperature_task started");
 
     let mut ticker = Ticker::every(Duration::from_secs(2));
 
-    #[cfg(feature = "with-hotend")]
+    #[cfg(feature = "with-hot-end")]
     let mut hotend_sm = HeaterStateMachine::new();
-    #[cfg(feature = "with-hotbed")]
+    #[cfg(feature = "with-hot-bed")]
     let mut hotbed_sm = HeaterStateMachine::new();
-
-    #[cfg(feature = "with-hotend")]
-    hotend_sm.init(&hotend_controller).await;
-    #[cfg(feature = "with-hotbed")]
-    hotbed_sm.init(&hotbed_controller).await;
 
     loop {
         ticker.next().await;
-        #[cfg(feature = "with-hotend")]
-        hotend_sm.update(&hotend_controller, &event_bus, &defer_channel, EventFlags::HOTEND_TEMP_OK, DeferEvent::HotendTemperature(DeferType::Completed)).await;
-        #[cfg(feature = "with-hotbed")]
-        hotbed_sm.update(&hotbed_controller, &event_bus, &defer_channel, EventFlags::HOTBED_TEMP_OK, DeferEvent::HotbedTemperature(DeferType::Completed)).await;
+        #[cfg(feature = "with-hot-end")]
+        hotend_sm.update(&hotend_controller, &event_bus, EventFlags::HOTEND_TEMP_OK, DeferAction::HotendTemperature).await;
+        #[cfg(feature = "with-hot-bed")]
+        hotbed_sm.update(&hotbed_controller, &event_bus, EventFlags::HOTBED_TEMP_OK, DeferAction::HotbedTemperature).await;
     }
 }

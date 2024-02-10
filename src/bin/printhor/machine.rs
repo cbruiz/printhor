@@ -1,15 +1,18 @@
+//! Machine metadata information
 use crate::hwa;
-#[allow(unused)]
-pub(crate) struct MachineInfo
+
+/// The Machine metadata info structure
+pub struct MachineInfo
 {
-    pub(crate) firmware_name: & 'static str,
-    pub(crate) firmware_version: & 'static str,
-    pub(crate) firmware_url: & 'static str,
-    pub(crate) machine_type: & 'static str,
-    pub(crate) machine_board: & 'static str,
-    pub(crate) machine_processor: & 'static str,
-    pub(crate) machine_uuid: & 'static str,
-    pub(crate) extruder_count: u8,
+
+    pub firmware_name: & 'static str,
+    pub firmware_version: & 'static str,
+    pub firmware_url: & 'static str,
+    pub machine_type: & 'static str,
+    pub machine_board: & 'static str,
+    pub machine_processor: & 'static str,
+    pub machine_uuid: & 'static str,
+    pub extruder_count: u8,
 }
 
 impl MachineInfo {
@@ -27,4 +30,5 @@ impl MachineInfo {
         }
     }
 }
-pub(crate) static MACHINE_INFO: MachineInfo = MachineInfo::new();
+/// Public static read-only instance of the machine metadata
+pub static MACHINE_INFO: MachineInfo = MachineInfo::new();

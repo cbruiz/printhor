@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwi_mks_robin_nano"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for MKS Robin Nano v3.1 board"
@@ -15,17 +15,17 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Hardware device features
-with-usbserial = ["embassy-usb"]
+with-serial-usb = ["embassy-usb"]
+with-serial-port-1 = []
 with-printjob = []
-with-uart-port-1 = []
 with-spi = ["embedded-hal"]
-with-hotend = ["embedded-hal"]
-with-hotbed = ["embedded-hal"]
+with-hot-end = ["embedded-hal"]
+with-hot-bed = ["embedded-hal"]
 with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
-with-fan-layer-fan1 = ["embedded-hal"]
+with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-defmt = ["printhor-hwa-common/with-defmt"]
 with-trinamic = []
@@ -41,15 +41,18 @@ alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 embassy-stm32 = { version = "0.1.0", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
 embassy-executor = { version = "0.5.0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
 embassy-sync = { version = "0.5.0", features = [] }
-embassy-time = { version = "0.3.0", features = ["tick-hz-1_000_000"] }
+embassy-time = { version = "0.3.0", features = ["tick-hz-100_000"] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-usb = { version = "0.1.0", features = [], optional = true }
 
-printhor-hwa-common = { version = "0.0.3"}
+printhor-hwa-common = { version = "0.0"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven", ] }
+
+cfg-if = {version = "1.0.0"}
+const_env = { version = "0.1" }
 
 [patch.crates-io]
 embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

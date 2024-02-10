@@ -1,28 +1,30 @@
 use embassy_sync::channel::Channel;
-use crate::TrackedStaticCell;
+use crate::{CommChannel, TrackedStaticCell};
 
 type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-pub enum DeferType {
-    AwaitRequested,
-    Completed,
+#[derive(Copy, Clone, Debug)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+pub enum DeferAction {
+    #[cfg(feature = "with-motion")]
+    Homing,
+    #[cfg(feature = "with-motion")]
+    RapidMove,
+    #[cfg(feature = "with-motion")]
+    LinearMove,
+    #[cfg(feature = "with-motion")]
+    Dwell,
+    #[cfg(feature = "with-hot-end")]
+    HotendTemperature,
+    #[cfg(feature = "with-hot-bed")]
+    HotbedTemperature,
 }
 
 ///! These are the Events that can be deferred
 #[allow(unused)]
 pub enum DeferEvent {
-    #[cfg(feature = "with-motion")]
-    Homing(DeferType),
-    #[cfg(feature = "with-motion")]
-    RapidMove(DeferType),
-    #[cfg(feature = "with-motion")]
-    LinearMove(DeferType),
-    #[cfg(feature = "with-motion")]
-    Dwell(DeferType),
-    #[cfg(feature = "with-hotend")]
-    HotendTemperature(DeferType),
-    #[cfg(feature = "with-hotbed")]
-    HotbedTemperature(DeferType),
+    AwaitRequested(DeferAction, CommChannel),
+    Completed(DeferAction, CommChannel),
 }
 
 type ChannelType = Channel<ChannelMutexType, DeferEvent, 4>;

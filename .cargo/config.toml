@@ -1,25 +1,54 @@
+[env]
+
+###########################
+## Configuration - BEGIN ##
+###########################
+
+## Heater and bed configuration (thermistor based) ##
+
+# [Depends on the board] the pull-up resistance of hot-end sensor circuit in ohms
+HOT_END_THERM_PULL_UP_RESISTANCE = "4685.0"
+# Nominal resistance of hot-end NTC thermistor at 25ºC
+HOT_END_THERM_NOMINAL_RESISTANCE = "100000.0"
+# BETA value of hot-end NTC thermistor
+HOT_END_THERM_BETA = "3950.0"
+
+# [Depends on the board] the pull-up resistance of hot-bed sensor circuit in ohms
+HOT_BED_THERM_PULL_UP_RESISTANCE = "4685.0"
+# Nominal resistance of hot-bed NTC thermistor at 25ºC
+HOT_BED_THERM_NOMINAL_RESISTANCE = "100000.0"
+# BETA value of hot-bed NTC thermistor
+HOT_BED_THERM_BETA = "3950.0"
+
+## Pure technical stuff ##
+
+DEFMT_LOG = "info"
+RUST_LOG = "info"
+ASYNC_STD_THREAD_COUNT = "1"
+EMBASSY_USB_MAX_INTERFACE_COUNT = "3"
+
+###########################
+## Configuration -  END  ##
+###########################
+
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset"
+#runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset --log-format {L}{s}"
 rustflags = [ "-C", "linker=flip-link" ]
 
 [target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32L476RG --disable-progressbars"
 
-[target.'cfg(all(any(board="skr_mini_e3"), target_arch="arm", target_os="none"))']
+[target.'cfg(all(any(board="skr_mini_e3_v2"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32F103RC --disable-progressbars"
+
+[target.'cfg(all(any(board="skr_mini_e3_v3"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars"
 
 [target.'cfg(all(any(board="mks_robin_nano"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F407VETx --disable-progressbars"
 
 [build]
-
-[env]
-DEFMT_LOG = "info"
-RUST_LOG = "info"
-ASYNC_STD_THREAD_COUNT = "1"
-
-# BETA value of the hotend thermistor
-#HOTEND_TERM_BETA = "3950.0"
 
 [profile.dev.package."*"]
 codegen-units = 1
@@ -34,8 +63,8 @@ codegen-units = 1
 incremental = false
 opt-level = "z"
 debug = 2
-debug-assertions = false
-overflow-checks = false
+debug-assertions = true
+overflow-checks = true
 
 [profile.release-opt.package."*"]
 codegen-units = 1

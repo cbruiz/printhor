@@ -1,6 +1,6 @@
-//! TODO: This feature is still very experimental
+//! TODO: This feature is still in incubation
 use crate::math::Real;
-use crate::control::planner::SCurveMotionProfile;
+use crate::control::motion_planning::SCurveMotionProfile;
 use crate::tgeo::TVector;
 
 #[allow(unused)]
@@ -15,6 +15,8 @@ pub struct SegmentData {
 
     pub vdir: TVector<Real>,
     pub dest_pos: TVector<Real>,
+
+    pub tool_power: u8,
 }
 
 #[allow(unused)]

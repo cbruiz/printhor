@@ -14,6 +14,6 @@ pub const ONE_HUNDRED: Real = Real::from_f32(100.0f32);
 pub const ONE_THOUSAND: Real = Real::from_f32(1000.0);
 #[allow(unused)]
 pub const ONE_MILLION: Real = Real::from_f32(1000000.0);
-
+#[allow(unused)]
 pub const PI: Real = Real::from_f32(f32::consts::PI);
 

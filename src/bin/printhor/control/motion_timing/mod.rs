@@ -1,5 +1,5 @@
 use embassy_time::{Duration, Instant};
-use crate::control::planner::StepperChannel;
+use crate::control::motion_planning::StepperChannel;
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {
@@ -26,23 +26,33 @@ pub fn now() -> Instant {
     return Instant::now();
 }
 
-/// An utility to feed forward a uniformly distributed pulse train at different rates by channel
-///
-/// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
-/// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](MultiTimer::new())
-///
-/// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
-/// - Each pulse period (pulse width) is: **`t=T/x`**.
-/// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
-/// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
-///
-pub struct MultiTimer<const N: usize>
-{
-    #[cfg(feature = "no-real-time")]
-    ref_time: u64,
-    interval_width: u64,
-    channels: [ChannelStatus; N],
+cfg_if::cfg_if! {
+    if #[cfg(feature = "no-real-time")] {
+        pub struct MultiTimer<const N: usize> {
+            #[cfg(feature = "no-real-time")]
+            ref_time: u64,
+            interval_width: u64,
+            channels: [ChannelStatus; N],
+        }
+    }
+    else {
+        /// A utility to feed forward a uniformly distributed pulse train at different rates by channel
+        ///
+        /// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
+        /// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](MultiTimer::new())
+        ///
+        /// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
+        /// - Each pulse period (pulse width) is: **`t=T/x`**.
+        /// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
+        /// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
+        ///
+        pub struct MultiTimer<const N: usize> {
+            interval_width: u64,
+            channels: [ChannelStatus; N],
+        }
+    }
 }
+
 
 impl<const N: usize> MultiTimer<N> {
     pub fn new(interval_width: u64, mut s: [ChannelStatus; N]) -> Self {
@@ -71,19 +81,22 @@ impl<const N: usize> MultiTimer<N> {
             return None
         }
         return if let Some(channel) = target_channel {
-            #[cfg(feature = "no-real-time")]
-                let ref_time = self.ref_time;
-            #[cfg(not(feature = "no-real-time"))]
-                let ref_time = now().as_ticks();
-            let tw = Duration::from_ticks((channel.next_tick as i64 - ref_time as i64).max(0) as u64);
-            #[cfg(not(feature = "no-real-time"))]
-            while now().as_ticks() < channel.next_tick {}
-            channel.next_tick += channel.width;
-            #[cfg(feature = "no-real-time")]
-            {
-                self.ref_time += tw.as_ticks();
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "no-real-time")] {
+                    let ref_time = self.ref_time;
+                    let tw = Duration::from_ticks((channel.next_tick as i64 - ref_time as i64).max(0) as u64);
+                    channel.next_tick += channel.width;
+                    self.ref_time += tw.as_ticks();
+                    Some((channel.name, tw))
+                }
+                else {
+                    let ref_time = now().as_ticks();
+                    let tw = Duration::from_ticks((channel.next_tick as i64 - ref_time as i64).max(0) as u64);
+                    while now().as_ticks() < channel.next_tick {}
+                    channel.next_tick += channel.width;
+                    Some((channel.name, tw))
+                }
             }
-            Some((channel.name, tw))
         } else {
             None
         };
@@ -95,7 +108,18 @@ impl<const N: usize> MultiTimer<N> {
     }
 }
 
+#[inline(always)]
 pub fn s_block_for(duration: Duration) {
     let expires_at = Instant::now() + duration;
     while Instant::now() < expires_at {}
 }
+
+/*
+#[inline]
+pub async fn s_block_for(duration: Duration) {
+    //let expires_at = Instant::now() + duration;
+    //while Instant::now() < expires_at {}
+    embassy_time::Timer::after(duration).await
+}
+
+ */

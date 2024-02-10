@@ -1,6 +1,6 @@
 [package]
 name = "printhor-hwa-common"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printor harware abstraction utillery"
@@ -19,9 +19,12 @@ with-ui = ["embedded-graphics-core"]
 nightly = []
 with-log = ["log"]
 with-defmt = ["defmt"]
+with-serial-usb = []
+with-serial-port-1 = []
+with-serial-port-2 = []
 with-motion = []
-with-hotend = []
-with-hotbed = []
+with-hot-end = []
+with-hot-bed = []
 
 [dependencies]
 portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
@@ -35,5 +38,7 @@ embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["un
 
 embedded-graphics-core = {version = "0.3.3", optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }
+cfg-if = { version = "1.0.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4.20", default-features = false, optional = true }
+strum = { version = "0.26.1", default-features = false, features = ["derive"] }
