@@ -55,7 +55,7 @@ integration-test = [
     "integration-test-move-ortho",
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
-    #"integration-test-trinamic",
+    "integration-test-trinamic",
     #"integration-test-benchy",
     "integration-test-laser-engrave",
     #"plot-timings",
@@ -101,7 +101,7 @@ with-display = [
 #################
 
 native = [
-    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
+    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
     "with-motion", "has-extruder", "printhor-hwi_native/with-motion", "printhor-hwa-common/with-motion",
     "with-serial-port-1", "printhor-hwi_native/with-serial-port-1", "printhor-hwa-common/with-serial-port-1",
     "with-serial-port-2", "printhor-hwi_native/with-serial-port-2", "printhor-hwa-common/with-serial-port-2",

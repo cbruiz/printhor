@@ -134,7 +134,7 @@ impl SingleWireSoftwareUart {
         for b in _buffer {
             uart.write(*b).await.map_err(|_e| Error::Timeout)?;
         }
-        log::trace!("Written {:?}", _buffer);
+        log::info!("Written {:?}", _buffer);
         Ok(())
     }
 

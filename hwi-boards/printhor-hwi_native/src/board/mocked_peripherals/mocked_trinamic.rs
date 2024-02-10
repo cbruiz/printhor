@@ -23,6 +23,8 @@ impl MockedTrinamicDriver {
 #[embassy_executor::task(pool_size=1)]
 pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
 
+    log::info!("Trinamic Simulator stared");
+
     let mut ticker = embassy_time::Ticker::every(Duration::from_millis(100));
     let mut buff: [u8; 32] = [0; 32];
     loop {
@@ -34,7 +36,7 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
             match driver.uart_trinamic.read_until_idle(&mut buff).await {
                 Ok(num_bytes_read) => {
                     buff[1] = 0xff;
-                    log::trace!("Uart read {} bytes", num_bytes_read);
+                    log::info!("Simulated Uart read {} bytes", num_bytes_read);
 
                     if num_bytes_read > 0 {
 

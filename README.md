@@ -234,8 +234,7 @@ Example output:
 * Display
 * I/O control
   * xonxoff
-* Adaptative planing cost measurement to take a decision on chaining or not and how much.
-* There is an issue activating USB together with SPI in SKR E3 Mini v3 :(
+* Adaptative planing cost measurement to take a decision on chaining or not and how much (AKA Cornering).
 * exfat support could be great.
 
 # Customization
@@ -250,12 +249,12 @@ Because of that limitation (Rust makes that hard to tackle because of the strict
 printhor is composed by the following architectural blocks
 * embassy-rs, as the harware and async foundation https://github.com/embassy-rs/embassy
 * async-gcode, as the core of the GCode interpretation  https://github.com/ithinuel/async-gcode
-* printhor-hwa-common (within the project), as the hardware abstraction layer contract and common utilery
+* printhor-hwa-common (within the project), as the hardware abstraction layer contract and common machinery
 * A set of crates (withn the project) for each harware/board. Currently:
   * printhor-hwi_native : The native simulator.
-  * printhor-hwi_skr_mini_e3_v3 : (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0))
-  * printhor-hwi_mks_robin_nano_v3_1 [WIP] : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
-  * printhor-hwi_nucleo_64_arduino_cnc_hat [WIP] : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3))
+  * printhor-hwi_skr_mini_e3 : Two boards: V2 (See [Datasheets/SKR_MINI_E3-V2.0](datasheets/SKR_MINI_E3-V2.0)) and V3 (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0))
+  * printhor-hwi_mks_robin_nano_v3_1 : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
+  * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3))
 
 Intentionally, traits are in general avoided when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
 * type aliases
@@ -401,7 +400,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M20</td>
         <td>*</td>
         <td>List SD card</td>
-        <td>WIP</td>
+        <td>DONE*</td>
     </tr>
     <tr>
         <td rowspan="1">M21</td>
@@ -419,19 +418,19 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M23</td>
         <td>*</td>
         <td>Select SD file</td>
-        <td>TODO</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M24</td>
         <td>*</td>
         <td>Start/resume SD print</td>
-        <td>TODO</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M25</td>
         <td>*</td>
         <td>Pause SD print</td>
-        <td>TODO</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M26</td>
@@ -485,7 +484,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M79</td>
         <td>*</td>
         <td>Soft reset</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M80</td>
@@ -545,7 +544,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M109</td>
         <td>FFF</td>
         <td>Set Extruder Temperature and Wait</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M110</td>
@@ -575,7 +574,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M115</td>
         <td>*</td>
         <td>Get Firmware Version and Capabilities</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M116</td>
@@ -599,19 +598,19 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M119</td>
         <td>*</td>
         <td>Get Endstop Status</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M120</td>
         <td>*</td>
         <td>Enable endstop detection</td>
-        <td>WIP</td>
+        <td>ILT</td>
     </tr>
     <tr>
         <td rowspan="1">M121</td>
         <td>*</td>
         <td>Disable endstop detection</td>
-        <td>WIP</td>
+        <td>ILT</td>
     </tr>
     <tr>
         <td rowspan="1">M140</td>
@@ -731,13 +730,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M302</td>
         <td>*</td>
         <td>Allow cold extrudes</td>
-        <td>WIP</td>
+        <td>ILT</td>
     </tr>
     <tr>
         <td rowspan="1">M305</td>
         <td>*</td>
         <td>Set thermistor and ADC parameters</td>
-        <td>WIP</td>
+        <td>ILT</td>
     </tr>
     <tr>
         <td rowspan="1">M350</td>
@@ -749,7 +748,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M360</td>
         <td>*</td>
         <td>Report firmware configuration</td>
-        <td>WIP</td>
+        <td>ILT</td>
     </tr>
     <tr>
         <td rowspan="1">M400</td>
@@ -761,13 +760,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M401</td>
         <td>*</td>
         <td>Deploy Z Probe</td>
-        <td>TODO</td>
+        <td>WIP</td>
     </tr>
     <tr>
         <td rowspan="1">M402</td>
         <td>*</td>
         <td>Stow Z Probe</td>
-        <td>TODO</td>
+        <td>WIP</td>
     </tr>
     <tr>
         <td rowspan="1">M404</td>
@@ -839,7 +838,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M503</td>
         <td>*</td>
         <td>Report Current Settings</td>
-        <td>WIP</td>
+        <td>TODO</td>
     </tr>
     <tr>
         <td rowspan="1">M504</td>
@@ -881,7 +880,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M524</td>
         <td>*</td>
         <td>Abort SD Printing</td>
-        <td>ILT</td>
+        <td>WIP</td>
     </tr>
     <tr>
         <td rowspan="1">M555</td>
@@ -923,7 +922,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M929</td>
         <td>*</td>
         <td>Start/stop event logging to SD card</td>
-        <td>TODO</td>
+        <td>ILT</td>
     </tr>
 
 </tbody></table>
@@ -953,7 +952,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">G4</td>
         <td>*</td>
         <td>Dwell</td>
-        <td>TODO</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">G10</td>
@@ -989,7 +988,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">G21</td>
         <td>*</td>
         <td>Set Units to Millimeters</td>
-        <td>WIP</td>
+        <td>TODO</td>
     </tr>
     <tr>
         <td rowspan="1">G22</td>
@@ -1007,7 +1006,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">G28</td>
         <td>*</td>
         <td>Move to Origin (Home)</td>
-        <td>TODO</td>
+        <td>WIP</td>
     </tr>
     <tr>
         <td rowspan="1">G29</td>

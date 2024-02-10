@@ -32,6 +32,7 @@ pub const MAX_STATIC_MEMORY: u32 = 8192;
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
+// The bit-banging uart in native simulator is set to ultra low speed for obvious reasons
 #[cfg(feature = "with-trinamic")]
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;

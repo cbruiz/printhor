@@ -51,17 +51,18 @@ impl TrinamicController
 
     async fn read_register<T: tmc2209::ReadableRegister + core::fmt::Debug>(&mut self, slave_addr: u8) -> Result<T, TrinamicError>
     {
+        hwa::info!("Sending request...");
         self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes()).await?;
-        hwa::debug!("Now reading...");
+        hwa::info!("Now reading response...");
         let mut buff:[u8; 8] = [0; 8];
         let mut reader = tmc2209::Reader::default();
         loop {
-            match embassy_time::with_timeout(
-                embassy_time::Duration::from_secs(30),
-                self.uart.read_until_idle(&mut buff)).await {
+            match embassy_time::with_timeout( embassy_time::Duration::from_secs(30),
+                self.uart.read_until_idle(&mut buff)
+            ).await {
                 Ok(Ok(num_bytes_read)) => {
                     if num_bytes_read > 0 {
-                        hwa::debug!("Uart read {} bytes", num_bytes_read);
+                        hwa::info!("Uart read {} bytes", num_bytes_read);
                         match reader.read_response(&buff[0..num_bytes_read]) {
                             (_n, Some(response)) => {
                                 return match response.register::<T>() {
@@ -96,7 +97,7 @@ impl TrinamicController
     }
 
     async fn raw_write(&mut self, bytes: &[u8]) -> Result<(), TrinamicError> {
-        hwa::debug!("Trinamic_uart sent {:?}", bytes);
+        hwa::info!("Trinamic_uart sent {:?}", bytes);
         self.uart.write(bytes).await.map_err(|_| TrinamicError::WriteError)?;
         Ok(self.uart.blocking_flush().map_err(|_| TrinamicError::WriteError)?)
     }
