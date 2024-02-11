@@ -44,7 +44,7 @@ cfg_if::cfg_if! {
 pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
 
 cfg_if::cfg_if! {
-    if #[cfg(feature="sk3_mini_e3_v2")] {
+    if #[cfg(feature="skr_mini_e3_v2")] {
         #[interrupt]
         unsafe fn RTC() {
             EXECUTOR_HIGH.on_interrupt()
@@ -60,7 +60,7 @@ cfg_if::cfg_if! {
             spawner.spawn(token).map_err(|_| ())
         }
     }
-    else if #[cfg(feature="sk3_mini_e3_v3")] {
+    else if #[cfg(feature="skr_mini_e3_v3")] {
         #[interrupt]
         unsafe fn CEC() {
             EXECUTOR_HIGH.on_interrupt()

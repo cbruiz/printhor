@@ -15,8 +15,8 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Versions/boards
-sk3_mini_e3_v2 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
-sk3_mini_e3_v3 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
+skr_mini_e3_v2 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
+skr_mini_e3_v3 = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["printhor-hwa-common/defmt"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]

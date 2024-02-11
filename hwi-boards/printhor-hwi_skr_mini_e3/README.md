@@ -9,5 +9,7 @@
 
 # Overview
 
-Doc WIP: The Printhor HWI for SKR Mini E3 V3
+Doc WIP: The Printhor HWI for:
+* SKR Mini E3 V2.0
+* SKR Mini E3 V3.0
 

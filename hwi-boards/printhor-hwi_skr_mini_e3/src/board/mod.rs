@@ -32,7 +32,7 @@ static HEAP: CortexMHeap = CortexMHeap::empty();
 
 pub const MACHINE_TYPE: &str = "SKR";
 cfg_if::cfg_if! {
-    if #[cfg(feature="sk3_mini_e3_v2")] {
+    if #[cfg(feature="skr_mini_e3_v2")] {
         pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V2";
         /// ARM Cortex M3 @72MHZ, 48kB SRAM, 256kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32F103RCT6";
@@ -48,7 +48,7 @@ cfg_if::cfg_if! {
             }
         }
 
-    } else if #[cfg(feature="sk3_mini_e3_v3")] {
+    } else if #[cfg(feature="skr_mini_e3_v3")] {
         pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V3";
         /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
@@ -60,7 +60,7 @@ cfg_if::cfg_if! {
         // https://www.st.com/resource/en/datasheet/dm00748675.pdf
         pub const ADC_VREF_DEFAULT_MV: u16 = 1212;
     } else {
-        compile_error!("SKR flavor (board) not set")
+        compile_error!("SKR flavor (board) not set");
     }
 }
 
@@ -161,7 +161,7 @@ pub fn stack_reservation_current_size() -> u32 {
 
 // Interrupt mappings
 cfg_if::cfg_if! {
-    if #[cfg(feature="sk3_mini_e3_v2")] {
+    if #[cfg(feature="skr_mini_e3_v2")] {
         #[cfg(feature = "with-serial-usb")]
         bind_interrupts!(struct UsbIrqs {
             USB_LP_CAN1_RX0 => usb::InterruptHandler<embassy_stm32::peripherals::USB>;
@@ -175,7 +175,7 @@ cfg_if::cfg_if! {
             UART4 => usart::InterruptHandler<embassy_stm32::peripherals::UART4>;
         });
     }
-    else if #[cfg(feature="sk3_mini_e3_v3")] {
+    else if #[cfg(feature="skr_mini_e3_v3")] {
         #[cfg(feature = "with-serial-usb")]
         bind_interrupts!(struct UsbIrqs {
             USB_UCPD1_2 => usb::InterruptHandler<embassy_stm32::peripherals::USB>;
@@ -205,7 +205,7 @@ pub fn init() -> embassy_stm32::Peripherals {
     let mut config = embassy_stm32::Config::default();
 
     cfg_if::cfg_if! {
-        if #[cfg(feature="sk3_mini_e3_v2")] {
+        if #[cfg(feature="skr_mini_e3_v2")] {
             use embassy_stm32::time::Hertz;
             use embassy_stm32::pac::*;
             cfg_if::cfg_if! {
@@ -221,7 +221,7 @@ pub fn init() -> embassy_stm32::Peripherals {
                 }
             }
         }
-        else if #[cfg(feature="sk3_mini_e3_v3")] {
+        else if #[cfg(feature="skr_mini_e3_v3")] {
 
             use embassy_stm32::pac::*;
             use embassy_stm32::rcc::*;
@@ -293,7 +293,7 @@ pub fn init() -> embassy_stm32::Peripherals {
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
 
     cfg_if::cfg_if! {
-        if #[cfg(feature="sk3_mini_e3_v2")] {
+        if #[cfg(feature="skr_mini_e3_v2")] {
             #[cfg(feature = "with-spi")]
             let spi1_device = {
 
@@ -491,7 +491,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 ))
             };
             cfg_if::cfg_if! {
-                if #[cfg(feature="sk3_mini_e3_v2")] {
+                if #[cfg(feature="skr_mini_e3_v2")] {
                     cfg_if::cfg_if! {
                         if #[cfg(feature="with-hot-end")] {
                             let adc_hotend_pin = p.PA0;
@@ -504,7 +504,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                         }
                     }
                 }
-                else if #[cfg(feature="sk3_mini_e3_v3")] {
+                else if #[cfg(feature="skr_mini_e3_v3")] {
                     cfg_if::cfg_if! {
                         if #[cfg(feature="with-hot-end")] {
                             let adc_hotend_pin = p.PA0;
@@ -545,7 +545,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-motion")]
             defmt::info!("motion_planner done");
         }
-        else if #[cfg(feature="sk3_mini_e3_v3")] {
+        else if #[cfg(feature="skr_mini_e3_v3")] {
             embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
                 // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
                 //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)
