@@ -224,7 +224,7 @@ nucleo_64_arduino_cnc_hat = [
 ####        #####
 #################
 
-sk3_mini_e3_v2 = [
+skr_mini_e3_v2 = [
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion", "printhor-hwa-common/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
@@ -246,9 +246,9 @@ sk3_mini_e3_v2 = [
     #"fixed-point-128-impl",
     #"timing-stats",
 
-    "skr_mini_e3", "printhor-hwi_skr_mini_e3/sk3_mini_e3_v2",
+    "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v2",
 ]
-sk3_mini_e3_v3 = [
+skr_mini_e3_v3 = [
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion", "printhor-hwa-common/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
@@ -269,7 +269,7 @@ sk3_mini_e3_v3 = [
 
     #"timing-stats",
 
-    "skr_mini_e3", "printhor-hwi_skr_mini_e3/sk3_mini_e3_v3",
+    "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v3",
 ]
 
 skr_mini_e3 = [

@@ -185,31 +185,38 @@ This one is a bit slower but much more RAM and flash. Enough even though with no
 DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-l476rg"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-l476rg --target thumbv7em-none-eabihf --bin printhor
 ```
 
-## SKR Mini E3 (currently v3.0 only)
+## SKR Mini E3 (currently 2.0 and v3.0)
 
-This board (https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3) is quite functional
+This boards are quite functional:
+* https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3
+* https://biqu.equipment/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-integrated-tmc2209-uart-for-ender-4
 
 ### Binary image production (standard with defmt)
 
 The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
 
+```
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+```
+or
+
 ```shell
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
-Firmware size if 196kB as of now with previous settings.
+Firmware size around 196kB as of now with previous settings.
 
 ### Minimal-size binary image production
 
 ```shell
-DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
-Firmware size if 164kB as of now with previous settings.
+Firmware size if 180kB as of now with previous settings.
 
 ### Run with JLink/SWD device
 
-DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3"' cargo run --release --no-default-features --features skr_mini_e3 --target thumbv6m-none-eabi --bin printhor
+DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3_v3"' cargo run --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor
 
 
 ## Extra utilery

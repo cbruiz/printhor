@@ -13,8 +13,8 @@ cfg_if::cfg_if! {
 
 // Specific for single board
 cfg_if::cfg_if! {
-    // Specific to sk3_mini_e3_v2
-    if #[cfg(feature="sk3_mini_e3_v2")] {
+    // Specific to skr_mini_e3_v2
+    if #[cfg(feature="skr_mini_e3_v2")] {
 
         cfg_if::cfg_if! {
             if #[cfg(feature="with-trinamic")] {
@@ -85,7 +85,7 @@ cfg_if::cfg_if! {
             }
         }
     }
-    else if #[cfg(feature="sk3_mini_e3_v3")] {
+    else if #[cfg(feature="skr_mini_e3_v3")] {
         #[cfg(feature = "with-trinamic")]
         pub type UartTrinamic = crate::board::usart::Uart<'static,
             embassy_stm32::peripherals::USART4,
