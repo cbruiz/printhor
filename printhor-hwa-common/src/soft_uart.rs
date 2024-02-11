@@ -75,7 +75,7 @@ impl<RXTX> HalfDuplexSerial<RXTX>
 {
     pub fn new(rxtx: RXTX, baud_rate: u32) -> Self {
 
-        log::debug!("HalfDuplexSerial init at {} baud rate", baud_rate);
+        crate::debug!("HalfDuplexSerial init at {} baud rate", baud_rate);
 
         Self { rxtx, bit_period: Duration::from_hz(baud_rate as u64), timeout_ms: None }
     }
@@ -107,7 +107,7 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
 
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
-        log::trace!("TX: Start bit");
+        crate::trace!("TX: Start bit");
         ticker.next().await;
         for _bit in 0..8 {
             if data_out & 1 == 1 {
@@ -152,7 +152,7 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
                 None => {},
             }
         }
-        log::trace!("RX: Start bit got");
+        crate::trace!("RX: Start bit got");
         // Align to pulse center assuming start bit is detected closely after rising edge
         Timer::after_ticks(self.bit_period.as_ticks() + (self.bit_period.as_ticks() >> 1)).await;
         // Read 8 bits
