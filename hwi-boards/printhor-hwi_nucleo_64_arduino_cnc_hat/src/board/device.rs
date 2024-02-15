@@ -36,6 +36,12 @@ cfg_if::cfg_if! {
                 pub type UartTrinamic = crate::board::usart::Uart<'static,UartTrinamicPeri, UartTrinamicTxDma, UartTrinamicRxDma>;
             }
         }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-ps-on")] {
+                pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PA4>;
+                pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
+            }
+        }
 
     }
     else if #[cfg(feature="nucleo64-l476rg")] {
@@ -65,6 +71,12 @@ cfg_if::cfg_if! {
                 type UartTrinamicTxDma = embassy_stm32::peripherals::DMA1_CH7;
                 type UartTrinamicRxDma = embassy_stm32::peripherals::DMA1_CH6;
                 pub type UartTrinamic = crate::board::usart::Uart<'static,UartTrinamicPeri, UartTrinamicTxDma, UartTrinamicRxDma>;
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-ps-on")] {
+                pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PA4>;
+                pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
             }
         }
     }
@@ -279,9 +291,12 @@ impl MotionPins {
     }
     #[inline]
     pub fn disable_e_stepper(&mut self) { self.all_enable_pin.set_high(); }
+    #[inline]
     pub fn disable_all_steppers(&mut self) {
         self.all_enable_pin.set_high();
     }
+    #[inline]
+    pub fn enable_all_steppers(&mut self) { self.all_enable_pin.set_low(); }
 }
 
 #[cfg(feature = "with-motion")]

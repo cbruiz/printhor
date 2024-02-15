@@ -234,7 +234,44 @@ pub mod uart_port1 {
             }
         }
     }
-
-
-
 }
+
+cfg_if::cfg_if!{
+    if #[cfg(feature = "with-trinamic")] {
+        pub struct TrinamicUartWrapper {
+            inner: crate::device::TrinamicUartDevice
+        }
+
+        impl TrinamicUartWrapper {
+            pub fn new(inner: crate::device::TrinamicUartDevice) -> Self {
+                Self {
+                    inner
+                }
+            }
+            pub async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, printhor_hwa_common::soft_uart::SerialError> {
+                match embassy_time::with_timeout(embassy_time::Duration::from_secs(5),
+                                                 self.inner.read_until_idle(buffer)).await {
+                    Ok(Ok(read_size)) => {
+                        Ok(read_size)
+                    },
+                    Ok(Err(_error)) => {
+                        // TODO
+                        Err(printhor_hwa_common::soft_uart::SerialError::Framing)
+                    },
+                    Err(_) => {
+                        Err(printhor_hwa_common::soft_uart::SerialError::Timeout)
+                    }
+                 }
+            }
+
+            pub async fn write(&mut self,buffer: &[u8]) -> Result<(), printhor_hwa_common::soft_uart::SerialError> {
+                Ok(self.inner.write(buffer).await.map_err(|_| {printhor_hwa_common::soft_uart::SerialError::Framing})?)
+            }
+
+            pub fn blocking_flush(&mut self) -> Result<(), printhor_hwa_common::soft_uart::SerialError> {
+                Ok(self.inner.blocking_flush().map_err(|_| {printhor_hwa_common::soft_uart::SerialError::Framing})?)
+            }
+        }
+    }
+}
+

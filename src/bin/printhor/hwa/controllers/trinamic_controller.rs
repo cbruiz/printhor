@@ -1,4 +1,6 @@
 //! TODO: This feature is still very experimental/preliminar
+use embassy_time::Instant;
+use hwa::soft_uart::SerialError;
 use crate::hwa;
 
 pub enum TrinamicError {
@@ -9,19 +11,22 @@ pub enum TrinamicError {
 
 pub struct TrinamicController
 {
-    uart: hwa::device::UartTrinamic,
+    uart: hwa::device::TrinamicUart,
 }
 impl TrinamicController
 {
-    pub fn new(uart: hwa::device::UartTrinamic) -> Self {
+    pub fn new(uart: hwa::device::TrinamicUart) -> Self {
         Self{uart}
     }
 
     pub async fn init(&mut self) -> Result<(),TrinamicError> {
         hwa::info!("Trinamic_uart CMD");
 
-        #[cfg(feature = "trinamic-uart-multi-channel")]
-        self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartX));
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "trinamic-uart-multi-channel")] {
+                self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartX));
+            }
+        }
 
         let _status = self.read_register::<tmc2209::reg::DRV_STATUS>(0).await?;
 
@@ -30,17 +35,17 @@ impl TrinamicController
         gconf.set_shaft(false);
         gconf.set_mstep_reg_select(true);
         let _ = self.write_register(0, gconf).await?;
-        let _ = self.write_register(1, gconf).await?;
-        let _ = self.write_register(2, gconf).await?;
-        let _ = self.write_register(3, gconf).await?;
+        //let _ = self.write_register(1, gconf).await?;
+        //let _ = self.write_register(2, gconf).await?;
+        //let _ = self.write_register(3, gconf).await?;
 
         let mut chopconf = tmc2209::reg::CHOPCONF::default();
         chopconf.set_intpol(true);
         chopconf.set_mres(16);
         let _ = self.write_register(0, chopconf).await?;
-        let _ = self.write_register(1, chopconf).await?;
-        let _ = self.write_register(2, chopconf).await?;
-        let _ = self.write_register(3, chopconf).await?;
+        //let _ = self.write_register(1, chopconf).await?;
+        //let _ = self.write_register(2, chopconf).await?;
+        //let _ = self.write_register(3, chopconf).await?;
         Ok(())
     }
 
@@ -53,14 +58,18 @@ impl TrinamicController
     {
         hwa::info!("Sending request...");
         self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes()).await?;
+
         hwa::info!("Now reading response...");
         let mut buff:[u8; 8] = [0; 8];
         let mut reader = tmc2209::Reader::default();
+        let reception_timeout = Instant::now() + embassy_time::Duration::from_secs(5);
         loop {
-            match embassy_time::with_timeout( embassy_time::Duration::from_secs(30),
-                self.uart.read_until_idle(&mut buff)
-            ).await {
-                Ok(Ok(num_bytes_read)) => {
+            if Instant::now() > reception_timeout {
+                hwa::info!("TO Req");
+                return Err(TrinamicError::Timeout);
+            }
+            match self.uart.read_until_idle(&mut buff).await {
+                Ok(num_bytes_read) => {
                     if num_bytes_read > 0 {
                         hwa::info!("Uart read {} bytes", num_bytes_read);
                         match reader.read_response(&buff[0..num_bytes_read]) {
@@ -83,22 +92,23 @@ impl TrinamicController
                         }
                     }
                 }
-                Ok(Err(err)) => {
-                    let err = alloc::format!("{:?}", err);
-                    hwa::error!("read error reading trinamic: {:?}", err.as_str());
-                    return Err(TrinamicError::ReadError)
+                Err(SerialError::Timeout) => {
+                    // Lost one frame.
+                    // Continue until [reception_timeout]
                 }
-                Err(_) => {
-                    hwa::error!("timeout waiting for trinamic response");
-                    return Err(TrinamicError::Timeout)
+                Err(err) => {
+                    hwa::error!("Read error reading trinamic: {:?}", err);
+                    return Err(TrinamicError::ReadError)
                 }
             }
         }
     }
 
-    async fn raw_write(&mut self, bytes: &[u8]) -> Result<(), TrinamicError> {
+    pub async fn raw_write(&mut self, bytes: &[u8]) -> Result<(), TrinamicError> {
         hwa::info!("Trinamic_uart sent {:?}", bytes);
         self.uart.write(bytes).await.map_err(|_| TrinamicError::WriteError)?;
-        Ok(self.uart.blocking_flush().map_err(|_| TrinamicError::WriteError)?)
+        let _ = self.uart.blocking_flush().map_err(|_| TrinamicError::WriteError)?;
+        Ok(())
     }
+
 }

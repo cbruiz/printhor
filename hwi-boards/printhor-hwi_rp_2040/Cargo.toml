@@ -1,0 +1,70 @@
+[package]
+name = "printhor-hwi_rp_2040"
+version = "0.0.1"
+edition = "2021"
+authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
+description = "Printhor Hardware Abstraction for RP-2040"
+readme = "README.md"
+repository = "https://github.com/cbruiz/printhor"
+keywords = ["hardware", "abstraction"]
+license = "MIT"
+documentation = "https://docs.rs/printhor-hwi_rp_2040"
+homepage = "https://github.com/cbruiz/printhor"
+
+[lib]
+
+[features]
+upstream-embassy = []
+# Board kind
+tst-rp2040 = ["embassy-executor/task-arena-size-16384"]
+# Hardware device features
+with-serial-usb = ["embassy-usb"]
+with-printjob = []
+with-serial-port-1 = ["embedded-io-async"]
+with-serial-port-2 = ["embedded-io-async"]
+with-spi = ["embedded-hal"]
+with-hot-end = ["embedded-hal"]
+with-hot-bed = ["embedded-hal"]
+with-motion = []
+with-probe = ["embedded-hal"]
+with-endstops = []
+with-sdcard = []
+with-fan-layer = ["embedded-hal"]
+with-laser = ["embedded-hal"]
+with-defmt = ["printhor-hwa-common/with-defmt", "embassy-rp/defmt", "embassy-executor/defmt"]
+with-trinamic = []
+with-ps-on = []
+
+without-uart-until_idle = []
+with-uart-buffered = []
+# with-uart-ringbuffered = [] # Not yet present in embassy-rp
+
+sdcard-uses-spi = []
+ili9341_parallel = []
+ili9341_spi = ["with-spi"]
+
+[dependencies]
+defmt = {version = "0.3", default-features = false}
+cortex-m = { version = "0.7.7", features = ["inline-asm"] }
+alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
+
+embassy-rp = { version = "0", default-features = false, features = ["unstable-pac", "time-driver", "critical-section-impl"]}
+embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m", "integrated-timers"] }
+embassy-sync = { version = "0", features = ["defmt"] }
+embassy-time = { version = "0", features = ["defmt"] }
+embassy-futures = { version = "0", features = ["defmt"] }
+embassy-usb = { version = "0", features = [], optional = true }
+portable-atomic = { version = "1.5", features = ["critical-section"] }
+
+printhor-hwa-common = { version = "0.0", features = [] }
+async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
+futures = { version = "0.3.17", default-features = false, features = [] }
+embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
+embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
+embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
+
+cfg-if = { version = "1.0.0" }
+const_env = { version = "0.1" }
+
+[patch.crates-io]
+embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

@@ -7,30 +7,16 @@ pub mod io;
 use alloc_cortex_m::CortexMHeap;
 use embassy_executor::Spawner;
 use embassy_stm32::Config;
-#[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature="with-trinamic"))]
-use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
-use embassy_stm32::usart;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 
-#[allow(unused)]
-use embassy_sync::mutex::Mutex;
 #[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
-#[cfg(feature = "with-serial-usb")]
-use embassy_stm32::usb_otg;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
 #[allow(unused)]
-use embassy_stm32::exti::ExtiInput;
-#[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
 use printhor_hwa_common::{TrackedStaticCell, MachineContext};
-
-
-#[cfg(feature = "with-motion")]
-use device::{MotionDevice, MotionPins};
 
 #[global_allocator]
 static HEAP: CortexMHeap = CortexMHeap::empty();
@@ -110,10 +96,16 @@ pub struct Controllers {
     pub serial_port1_tx: device::UartPort1TxControllerRef,
 }
 
+pub struct SysDevices {
+    #[cfg(feature = "with-motion")]
+    pub task_stepper_core: printhor_hwa_common::NoDevice,
+    #[cfg(feature = "with-ps-on")]
+    pub ps_on: device::PsOnRef,
+}
+
 pub struct IODevices {
     #[cfg(feature = "with-serial-usb")]
-    pub serial_usb_tx_stream: device::USBSerialDeviceInputStream,
-    /// Only single owner allowed
+    pub serial_usb_rx_stream: device::USBSerialDeviceInputStream,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature = "with-sdcard")]
@@ -153,18 +145,40 @@ pub fn stack_reservation_current_size() -> u32 {
     }
 }
 
-#[cfg(feature = "with-serial-usb")]
-bind_interrupts!(struct UsbIrqs {
-    OTG_FS => usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
-});
-#[cfg(all(feature = "nucleo64-l476rg", feature = "with-serial-port-1"))]
-bind_interrupts!(struct UartPort1Irqs {
-    USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
-});
-#[cfg(all(feature = "nucleo64-f410rb", feature = "with-serial-port-1"))]
-bind_interrupts!(struct UartPort1Irqs {
-    USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
-});
+cfg_if::cfg_if!{
+    if #[cfg(feature = "nucleo64-l476rg")] {
+        cfg_if::cfg_if!{
+            if #[cfg(feature = "with-serial-usb")] {
+                embassy_stm32::bind_interrupts!(struct UsbIrqs {
+                    OTG_FS => embassy_stm32::usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
+                });
+            }
+        }
+        cfg_if::cfg_if!{
+            if #[cfg(feature = "with-serial-port-1")] {
+                embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
+                    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+                });
+            }
+        }
+    }
+    else if #[cfg(feature = "nucleo64-f410rb")] {
+        cfg_if::cfg_if!{
+            if #[cfg(feature = "with-serial-usb")] {
+                embassy_stm32::bind_interrupts!(struct UsbIrqs {
+                    OTG_FS => embassy_stm32::usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
+                });
+            }
+        }
+        cfg_if::cfg_if!{
+            if #[cfg(feature = "with-serial-port-1")] {
+                embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
+                    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+                });
+            }
+        }
+    }
+}
 
 #[inline]
 pub(crate) fn init_heap() -> () {
@@ -221,7 +235,7 @@ pub fn init() -> embassy_stm32::Peripherals {
     embassy_stm32::init(config)
 }
 
-pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
+pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
     //defmt::warn!("Wait a few...");
     //embassy_time::Timer::after_secs(5).await;
@@ -236,12 +250,12 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
-        let driver = usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
-        let mut usb_serial_device = USBSerialDevice::new(driver);
+        let driver = embassy_stm32::usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
+        let mut usb_serial_device = io::usbserial::USBSerialDevice::new(driver);
         usb_serial_device.spawn(_spawner);
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
-        static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
-        let usbserial_tx_controller = ControllerRef::new(
+        static USB_INST: TrackedStaticCell<ControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
+        let serial_usb_tx = ControllerRef::new(
             USB_INST.init("USBSerialTxController", ControllerMutex::new(sender))
         );
         (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
@@ -250,19 +264,12 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-serial-port-1")]
     let (serial_port1_tx, serial_port1_rx_stream) = {
-        let mut cfg = usart::Config::default();
+        let mut cfg = embassy_stm32::usart::Config::default();
         cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
         cfg.data_bits = DataBits::DataBits8;
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
         cfg.detect_previous_overrun = true;
-
-        /*
-        static RXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
-        let rxb = RXB.init("RXBuffer", [0u8; 32]);
-        static TXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
-        let txb = TXB.init("TXBuffer", [0u8; 32]);
-         */
 
         #[cfg(feature = "nucleo64-f410rb")]
         let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
@@ -317,10 +324,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     defmt::info!("card_controller done");
 
     #[cfg(feature = "with-motion")]
-    let motion_devices = MotionDevice {
+    let motion_devices = device::MotionDevice {
         #[cfg(feature = "with-trinamic")]
         trinamic_uart,
-        motion_pins: MotionPins {
+        motion_pins: device::MotionPins {
             all_enable_pin: Output::new(p.PA9, Level::Low, Speed::VeryHigh),
             x_endstop_pin: Input::new(p.PC7, Pull::Down),
             y_endstop_pin: Input::new(p.PB6, Pull::Down),
@@ -560,6 +567,16 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
+    #[cfg(feature = "with-ps-on")]
+        let ps_on = {
+        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            PS_ON.init("", ControllerMutex::new(
+                Output::new(p.PA4, Level::Low, Speed::Low)
+            ))
+        )
+    };
+
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 
@@ -571,7 +588,12 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_tx,
         },
-        devices: IODevices {
+        sys_devices: SysDevices {
+            task_stepper_core: printhor_hwa_common::NoDevice::new(),
+            #[cfg(feature = "with-ps-on")]
+            ps_on,
+        },
+        io_devices: IODevices {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]

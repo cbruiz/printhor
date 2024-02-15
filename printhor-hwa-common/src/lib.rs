@@ -123,3 +123,12 @@ impl CommChannel {
         Self::COUNT
     }
 }
+
+// A dummy empty structure to model whether a device is not necessary.
+// This is zero-cost in memory but useful to maintain a common method signature across boards
+#[allow(unused)]
+pub struct NoDevice;
+impl NoDevice {
+    #[allow(unused)]
+    pub const fn new() -> Self { Self {} }
+}

@@ -9,5 +9,6 @@
 
 # Overview
 
-Doc WIP: The Printhor HWI for few STM Nucleo-64 boards with Arduino CNC Shield
+Doc WIP: The Printhor HWI for few RP2040 boards:
+* Test
 

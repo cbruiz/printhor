@@ -8,6 +8,7 @@ pub use defmt;
 mod board;
 
 pub use board::device;
+pub use board::SysDevices;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;
@@ -41,7 +42,7 @@ unsafe fn RNG() {
 }
 
 #[inline]
-pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
     use embassy_stm32::interrupt::InterruptExt;
     interrupt::RNG.set_priority(embassy_stm32::interrupt::Priority::P8);
     let spawner = EXECUTOR_HIGH.start(interrupt::RNG);

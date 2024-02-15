@@ -1,6 +1,7 @@
-pub struct MachineContext<C, D, M, P> {
+pub struct MachineContext<C, S, I, M, P> {
     pub controllers: C,
-    pub devices: D,
+    pub sys_devices: S,
+    pub io_devices: I,
     pub motion: M,
     pub pwm: P,
 }

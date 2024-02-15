@@ -14,6 +14,9 @@ use math::Real;
 use strum::VariantNames;
 #[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
+#[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
+#[allow(unused)]
+use embedded_io_async::Write;
 
 pub struct GCodeProcessorParams {
     pub event_bus: EventBusRef,
@@ -26,6 +29,8 @@ pub struct GCodeProcessorParams {
     pub serial_port1_tx: hwa::device::UartPort1TxControllerRef,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
+    #[cfg(feature = "with-ps-on")]
+    pub ps_on: hwa::controllers::PsOnRef,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hot-end")]
@@ -52,6 +57,8 @@ pub struct GCodeProcessor {
     pub serial_port1_tx: hwa::device::UartPort1TxControllerRef,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
+    #[cfg(feature = "with-ps-on")]
+    pub ps_on: hwa::controllers::PsOnRef,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hot-end")]
@@ -75,6 +82,8 @@ impl GCodeProcessor {
             serial_port1_tx: params.serial_port1_tx,
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_tx: params.serial_port2_tx,
+            #[cfg(feature = "with-ps-on")]
+            ps_on: params.ps_on,
             #[cfg(feature = "with-motion")]
             motion_planner: params.motion_planner,
             #[cfg(feature = "with-probe")]
@@ -260,14 +269,18 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M80 => {
-                // TODO set output
+                #[cfg(feature = "with-ps-on")]
+                self.ps_on.lock().await.set_high();
+                #[cfg(feature = "with-trinamic")]
+                let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
                 self.event_bus
                     .publish_event(EventStatus::containing(EventFlags::ATX_ON))
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M81 => {
-                // TODO set output
+                #[cfg(feature = "with-ps-on")]
+                self.ps_on.lock().await.set_low();
                 self.event_bus
                     .publish_event(EventStatus::not_containing(EventFlags::ATX_ON))
                     .await;

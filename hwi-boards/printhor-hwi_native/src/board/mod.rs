@@ -81,6 +81,13 @@ pub struct Controllers {
     pub serial_port2_tx: device::UartPort2TxControllerRef,
 }
 
+pub struct SysDevices {
+    #[cfg(feature = "with-motion")]
+    pub task_stepper_core: printhor_hwa_common::NoDevice,
+    #[cfg(feature = "with-ps-on")]
+    pub ps_on: device::PsOnRef,
+}
+
 pub struct IODevices {
     /// Only single owner allowed
     #[cfg(feature = "with-serial-port-1")]
@@ -133,7 +140,7 @@ pub fn init() -> HWIPeripherals {
     HWIPeripherals{}
 }
 
-pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
+pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
     let _pin_state = mocked_peripherals::init_pin_state();
 
@@ -161,7 +168,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
 
     #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
-        device::UartTrinamic::new(
+        device::TrinamicUart::new(
             TRINAMIC_UART_BAUD_RATE,
             MockedIOPin::new(0, _pin_state),
             MockedIOPin::new(1, _pin_state),
@@ -272,6 +279,14 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     #[cfg(feature = "with-motion")]
     log::debug!("motion_planner done");
 
+    #[cfg(feature = "with-ps-on")]
+    let ps_on = {
+        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            PS_ON.init("", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
+        )
+    };
+
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
 
@@ -283,7 +298,12 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_tx,
         },
-        devices: IODevices {
+        sys_devices: SysDevices {
+            task_stepper_core: printhor_hwa_common::NoDevice::new(),
+            #[cfg(feature = "with-ps-on")]
+            ps_on
+        },
+        io_devices: IODevices {
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]

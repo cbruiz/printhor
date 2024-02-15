@@ -4,7 +4,8 @@ use embassy_time::Timer;
 use embassy_time::Duration;
 
 /// Serial communication error type
-#[cfg_attr(feature = "with-log", derive(Debug))]
+#[derive(Debug)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum SerialError {
     /// Timeout
     Timeout,
@@ -34,6 +35,8 @@ pub trait IOPin {
     fn set_high(&mut self);
 
     fn set_low(&mut self);
+
+    fn set_open_drain(&mut self);
 }
 
 pub trait MultiChannel {
@@ -73,9 +76,12 @@ impl<RXTX> HalfDuplexSerial<RXTX>
     where
         RXTX: IOPin,
 {
-    pub fn new(rxtx: RXTX, baud_rate: u32) -> Self {
+    pub fn new(mut rxtx: RXTX, baud_rate: u32) -> Self {
 
         crate::debug!("HalfDuplexSerial init at {} baud rate", baud_rate);
+        rxtx.set_output();
+        //rxtx.set_open_drain();
+        rxtx.set_high();
 
         Self { rxtx, bit_period: Duration::from_hz(baud_rate as u64), timeout_ms: None }
     }
@@ -89,6 +95,16 @@ impl<RXTX> HalfDuplexSerial<RXTX>
     pub fn set_timeout(&mut self, timeout_ms: Option<Duration>) {
         self.timeout_ms = timeout_ms;
     }
+
+    pub async fn set_write_mode(&mut self) {
+        crate::info!("set write mode()");
+        self.rxtx.set_output();
+        self.rxtx.set_high();
+    }
+
+    pub async fn set_read_mode(&mut self) {
+        self.rxtx.set_input();
+    }
 }
 
 impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
@@ -100,10 +116,8 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
     async fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
 
         let mut data_out = byte;
-        self.rxtx.set_output();
 
-        #[cfg(feature = "with-log")]
-        log::trace!(">: {:08b}", byte);
+        crate::info!(">: {:08b}", byte);
 
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
@@ -124,7 +138,6 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
         }
         self.rxtx.set_high(); // stop bit
         ticker.next().await;
-        self.rxtx.set_input(); // safety
         Ok(())
     }
 }
@@ -137,7 +150,6 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
 
     async fn read(&mut self) -> Result<u8, Self::Error> {
 
-        self.rxtx.set_input();
         let mut data_in = 0;
 
         let t0 = embassy_time::Instant::now();
@@ -152,7 +164,7 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
                 None => {},
             }
         }
-        crate::trace!("RX: Start bit got");
+        crate::info!("RX: Start bit got");
         // Align to pulse center assuming start bit is detected closely after rising edge
         Timer::after_ticks(self.bit_period.as_ticks() + (self.bit_period.as_ticks() >> 1)).await;
         // Read 8 bits

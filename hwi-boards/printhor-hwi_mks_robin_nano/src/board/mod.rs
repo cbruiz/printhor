@@ -95,6 +95,13 @@ pub struct Controllers {
     pub serial_port1_tx: device::UartPort1TxControllerRef,
 }
 
+pub struct SysDevices {
+    #[cfg(feature = "with-motion")]
+    pub task_stepper_core: printhor_hwa_common::NoDevice,
+    #[cfg(feature = "with-ps-on")]
+    pub ps_on: device::PsOnRef,
+}
+
 pub struct IODevices {
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_rx_stream: device::USBSerialDeviceInputStream,
@@ -176,7 +183,7 @@ pub fn init() -> embassy_stm32::Peripherals {
     embassy_stm32::init(config)
 }
 
-pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
+pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
     #[cfg(feature = "with-serial-usb")]
     let (serial_usb_tx, serial_usb_rx_stream) = {
@@ -227,12 +234,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         //use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
 
-
-
         //let _ = uart_e0.write(0b10101010u8).await;
         //let _ = uart_e0.read().await;
 
-        crate::device::UartTrinamic::new(TRINAMIC_UART_BAUD_RATE, p.PD5, p.PD7, p.PD4, p.PD9)
+        device::TrinamicUart::new(TRINAMIC_UART_BAUD_RATE, p.PD1, p.PD7, p.PD4, p.PD9)
     };
 
     #[cfg(feature = "with-spi")]
@@ -360,7 +365,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         );
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotend>> = TrackedStaticCell::new();
 
-        HotendPeripherals {
+        device::HotendPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init(
                 "PwmFanFan0HotendHotbed",
                 ControllerMutex::new(pwm_hotend)
@@ -368,7 +373,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch1,
             temp_adc: adc.clone(),
             temp_pin: p.PC1,
-            thermistor_properties: &crate::board::HOT_END_THERMISTOR_PROPERTIES,
+            thermistor_properties: &HOT_END_THERMISTOR_PROPERTIES,
         }
     };
 
@@ -421,6 +426,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
+    #[cfg(feature = "with-ps-on")]
+    let ps_on = {
+        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            PS_ON.init("", ControllerMutex::new(Output::new(p.PB2, Level::Low, Speed::Low)))
+        )
+    };
+
     #[cfg(feature = "with-motion")]
     defmt::info!("motion_planner done");
 
@@ -435,7 +448,13 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_tx,
         },
-        devices: IODevices {
+        sys_devices: SysDevices {
+            #[cfg(feature = "with-motion")]
+            task_stepper_core: printhor_hwa_common::NoDevice::new(),
+            #[cfg(feature = "with-ps-on")]
+            ps_on
+        },
+        io_devices: IODevices {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
