@@ -29,6 +29,8 @@ with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
+with-ps-on = []
+
 sdcard-uses-spi = []
 without-vref-int = []
 

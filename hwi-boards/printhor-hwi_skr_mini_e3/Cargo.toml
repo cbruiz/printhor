@@ -32,6 +32,8 @@ with-sdcard = []
 with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = []
+with-ps-on = []
+
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]

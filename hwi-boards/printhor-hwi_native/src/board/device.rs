@@ -42,7 +42,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-trinamic")]
-pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
+pub type TrinamicUart = crate::board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-trinamic")]
 pub use crate::board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};
@@ -59,12 +59,16 @@ pub type TMCUartCh3Pin = crate::board::MockedIOPin;
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh4Pin = crate::board::MockedIOPin;
 
+#[cfg(feature = "with-ps-on")]
+pub type PsOnPin = crate::board::mocked_peripherals::MockedIOPin;
+#[cfg(feature = "with-ps-on")]
+pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
 
 #[cfg(feature = "with-spi")]
 pub type Spi = crate::board::mocked_peripherals::MockedSpi;
 
 #[cfg(feature = "with-spi")]
-pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
+pub type SpiDeviceRef = printhor_hwa_common::ControllerRef<Spi>;
 
 #[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
 pub type PwmAny = crate::board::mocked_peripherals::MockedPwm;
@@ -178,6 +182,13 @@ impl MotionPins {
         self.z_enable_pin.set_high();
         self.e_enable_pin.set_high();
     }
+    #[inline]
+    pub fn enable_all_steppers(&mut self) {
+        self.x_enable_pin.set_low();
+        self.y_enable_pin.set_low();
+        self.z_enable_pin.set_low();
+        self.e_enable_pin.set_low();
+    }
 }
 
 
@@ -185,7 +196,7 @@ impl MotionPins {
 pub struct MotionDevice {
 
     #[cfg(feature = "with-trinamic")]
-    pub trinamic_uart: UartTrinamic,
+    pub trinamic_uart: TrinamicUart,
 
     pub motion_pins: MotionPins,
 }

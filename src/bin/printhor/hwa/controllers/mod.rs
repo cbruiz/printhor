@@ -33,6 +33,9 @@ pub use motion::*;
 #[cfg(feature = "with-probe")]
 pub use servo_controller::ServoController;
 
+#[cfg(feature = "with-ps-on")]
+pub type PsOnRef = printhor_hwa_common::ControllerRef<crate::hwa::device::PsOnPin>;
+
 #[cfg(feature = "with-probe")]
 pub type ServoControllerRef = printhor_hwa_common::ControllerRef<ServoController>;
 

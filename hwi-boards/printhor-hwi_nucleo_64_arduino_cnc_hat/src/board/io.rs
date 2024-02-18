@@ -53,6 +53,7 @@ pub mod usbserial {
                 device_descriptor,
                 config_descriptor,
                 bos_descriptor,
+                &mut [],
                 control_buf,
             );
 

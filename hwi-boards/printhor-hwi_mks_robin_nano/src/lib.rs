@@ -8,6 +8,7 @@ pub use defmt;
 mod board;
 
 pub use board::device;
+pub use board::SysDevices;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;
@@ -42,7 +43,7 @@ unsafe fn RTC_ALARM() {
 }
 
 #[inline]
-pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
     let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
     spawner.spawn(token).map_err(|_| ())
 }

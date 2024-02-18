@@ -20,15 +20,18 @@ pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
 >;
 #[cfg(feature = "with-serial-port-1")]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
-    embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5
->;
+    embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5>;
+#[cfg(feature = "with-serial-port-1")]
+pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static,
+    embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5>;
+
 #[cfg(feature = "with-serial-port-1")]
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
 #[cfg(feature = "with-serial-port-1")]
 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
 
 #[cfg(feature = "with-trinamic")]
-pub type UartTrinamic = crate::board::comm::SingleWireSoftwareUart;
+pub type TrinamicUart = crate::board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-trinamic")]
 pub use crate::board::comm::AxisChannel;
@@ -36,11 +39,17 @@ pub use crate::board::comm::AxisChannel;
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh1Pin = embassy_stm32::peripherals::PD5;
 #[cfg(feature = "with-trinamic")]
-pub type TMCUartCh2Pin = embassy_stm32::peripherals::PD7;
+pub type TMCUartCh2Pin = embassy_stm32::peripherals::PD1;
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh3Pin = embassy_stm32::peripherals::PD4;
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh4Pin = embassy_stm32::peripherals::PD9;
+
+#[cfg(feature = "with-ps-on")]
+pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PB2>;
+
+#[cfg(feature = "with-ps-on")]
+pub type PsOnRef = ControllerRef<PsOnPin>;
 
 #[cfg(feature = "with-spi")]
 pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
@@ -77,6 +86,8 @@ pub type AdcHotendPin = embassy_stm32::peripherals::PC1;
 pub type AdcHotbedPin = embassy_stm32::peripherals::PC0;
 
 pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
+use printhor_hwa_common::ControllerRef;
+
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
@@ -190,13 +201,20 @@ impl MotionPins {
         self.z_enable_pin.set_high();
         self.e_enable_pin.set_high();
     }
+    #[inline]
+    pub fn enable_all_steppers(&mut self) {
+        self.x_enable_pin.set_low();
+        self.y_enable_pin.set_low();
+        self.z_enable_pin.set_low();
+        self.e_enable_pin.set_low();
+    }
 }
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDevice {
 
     #[cfg(feature = "with-trinamic")]
-    pub trinamic_uart: UartTrinamic,
+    pub trinamic_uart: TrinamicUart,
 
     pub motion_pins: MotionPins,
 }

@@ -39,14 +39,12 @@ impl GCodeMultiplexedInputStream {
 
     pub async fn next_gcode(&mut self) -> (Result<Option<GCode>, GCodeLineParserError>, crate::hwa::CommChannel) {
 
-        type FutResult = Result<Option<GCode>, GCodeLineParserError>;
-
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-usb")] {
                 let f1 = self.serial_usb_line_parser.next_gcode();
             }
             else {
-                let f1 = future::pending::<FutResult>();
+                let f1 = future::pending::<Result<Option<GCode>, GCodeLineParserError>>();
             }
         }
         cfg_if::cfg_if! {
@@ -54,7 +52,7 @@ impl GCodeMultiplexedInputStream {
                 let f2 = self.serial_port1_line_parser.next_gcode();
             }
             else {
-                let f2 = future::pending::<FutResult>();
+                let f2 = future::pending::<Result<Option<GCode>, GCodeLineParserError>>();
             }
         }
         cfg_if::cfg_if! {
@@ -62,7 +60,7 @@ impl GCodeMultiplexedInputStream {
                 let f3 = self.serial_port2_line_parser.next_gcode();
             }
             else {
-                let f3 = future::pending::<FutResult>();
+                let f3 = future::pending::<Result<Option<GCode>, GCodeLineParserError>>();
             }
         }
 

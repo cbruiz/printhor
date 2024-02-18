@@ -34,6 +34,8 @@ with-fan-layer = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-defmt = ["printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = []
+with-ps-on = []
+
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]

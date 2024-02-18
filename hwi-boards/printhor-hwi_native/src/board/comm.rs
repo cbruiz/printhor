@@ -52,6 +52,8 @@ impl soft_uart::IOPin for AnyPinWrapper
     fn set_high(&mut self) { self.0.set_high() }
     #[inline]
     fn set_low(&mut self) { self.0.set_low() }
+    #[inline]
+    fn set_open_drain(&mut self) { unimplemented!("Not implemented") }
 }
 
 pub struct SingleWireSoftwareUart {
@@ -89,9 +91,9 @@ impl SingleWireSoftwareUart {
     }
 
 
-    pub async fn read_until_idle(&mut self, _buffer: &mut [u8]) -> Result<usize, Error>
+    pub async fn read_until_idle(&mut self, _buffer: &mut [u8]) -> Result<usize, SerialError>
     {
-        let uart = match self.selected.as_ref().ok_or(Error::Uninit)? {
+        let uart = match self.selected.as_ref().ok_or(SerialError::Framing)? {
             UartChannel::Ch1 => &mut self.tmc_uarts[0],
             UartChannel::Ch2=> &mut self.tmc_uarts[1],
             UartChannel::Ch3=> &mut self.tmc_uarts[2],
@@ -114,11 +116,11 @@ impl SingleWireSoftwareUart {
                         return Ok(read_idx)
                     }
                     else {
-                        return Err(Error::Timeout)
+                        return Err(SerialError::Timeout)
                     }
                 },
                 _e => {
-                    return Err(Error::Uninit)   // FIXME: Proper codes
+                    return Err(SerialError::Framing)   // FIXME: Proper codes
                 }
             }
         }

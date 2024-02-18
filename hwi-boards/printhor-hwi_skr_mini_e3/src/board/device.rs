@@ -1,8 +1,3 @@
-use embassy_stm32::wdg;
-#[allow(unused)]
-use embassy_stm32::gpio::{Input, Output};
-use embassy_stm32::timer::simple_pwm::SimplePwm;
-
 // Common for both boards
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-usb")] {
@@ -22,7 +17,8 @@ cfg_if::cfg_if! {
                 type TrinamicUartTxDma = embassy_stm32::peripherals::DMA2_CH5;
                 type TrinamicUartRxDma = embassy_stm32::peripherals::DMA2_CH3;
 
-                pub type UartTrinamic = crate::board::usart::Uart<'static, TrinamicUartPeri, TrinamicUartTxDma, TrinamicUartRxDma>;
+                pub type TrinamicUartDevice = crate::board::usart::Uart<'static, TrinamicUartPeri, TrinamicUartTxDma, TrinamicUartRxDma>;
+                pub type TrinamicUart = TrinamicUartWrapper;
             }
         }
 
@@ -54,7 +50,7 @@ cfg_if::cfg_if! {
         // [Customization!!!] Use NeoPixel PWM as laser in this board
         cfg_if::cfg_if! {
             if #[cfg(feature="with-laser")] {
-                pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
+                pub type PwmLaser = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
             }
         }
 
@@ -87,9 +83,11 @@ cfg_if::cfg_if! {
     }
     else if #[cfg(feature="skr_mini_e3_v3")] {
         #[cfg(feature = "with-trinamic")]
-        pub type UartTrinamic = crate::board::usart::Uart<'static,
+        pub type TrinamicUartDevice = crate::board::usart::Uart<'static,
             embassy_stm32::peripherals::USART4,
             embassy_stm32::peripherals::DMA1_CH7, embassy_stm32::peripherals::DMA1_CH6>;
+        #[cfg(feature = "with-trinamic")]
+        pub type TrinamicUart = TrinamicUartWrapper;
 
         #[cfg(feature = "with-serial-port-1")]
         pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static,
@@ -116,7 +114,7 @@ cfg_if::cfg_if! {
             embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3>;
 
         #[cfg(feature = "with-laser")]
-        pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
+        pub type PwmLaser = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
 
         pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
         pub use embassy_stm32::adc::Instance as AdcTrait;
@@ -135,27 +133,34 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(feature = "with-ps-on")]
+pub type PsOnPin = embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PC13>;
+#[cfg(feature = "with-ps-on")]
+pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
+
 cfg_if::cfg_if! {
     if #[cfg(any(feature="with-spi", feature="with-sdcard"))] {
         pub type SpiCardDevice = Spi1;
         pub type Spi = Spi1;
-        pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
+        pub type SpiDeviceRef = printhor_hwa_common::ControllerRef<Spi>;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-sdcard")] {
         pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
-        pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PA4>;
+        pub type SpiCardCSPin = embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PA4>;
     }
 }
-
 pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
+#[cfg(feature = "with-trinamic")]
+use crate::board::io::TrinamicUartWrapper;
+
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
-pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+pub type PwmServo = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
 
-pub type PwmFan0Fan1HotendHotbed = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+pub type PwmFan0Fan1HotendHotbed = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
 pub type PwmFanLayer = PwmFan0Fan1HotendHotbed;
 pub type PwmFanExtra1 = PwmFan0Fan1HotendHotbed;
@@ -164,19 +169,19 @@ pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
-pub type Watchdog = wdg::IndependentWatchdog<'static,
+pub type Watchdog = embassy_stm32::wdg::IndependentWatchdog<'static,
     embassy_stm32::peripherals::IWDG
 >;
 
 #[allow(non_camel_case_types)]
-pub type DISPLAY_SER_RST_OUTPUT = Output<'static, embassy_stm32::peripherals::PC1>;
+pub type DISPLAY_SER_RST_OUTPUT = embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PC1>;
 //pub type DISPLAY_SER_RST_OUTPUT = Output<'static>;
 #[allow(non_camel_case_types)]
-pub type DISPLAY_SER_CS_OUTPUT = Output<'static, embassy_stm32::peripherals::PB0>;
+pub type DISPLAY_SER_CS_OUTPUT = embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB0>;
 //pub type DISPLAY_SER_CS_OUTPUT = Output<'static>;
 
 #[allow(non_camel_case_types)]
-pub type DISPLAY_SER_DC_OUTPUT = Output<'static, embassy_stm32::peripherals::PA4>;
+pub type DISPLAY_SER_DC_OUTPUT = embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PA4>;
 //pub type DISPLAY_SER_DC_OUTPUT = Output<'static>;
 
 
@@ -232,47 +237,47 @@ pub struct LaserPeripherals {
 
 #[cfg(feature = "with-motion")]
 pub struct MotionPins {
-    pub x_enable_pin: Output<'static, embassy_stm32::peripherals::PB14>,
-    pub y_enable_pin: Output<'static, embassy_stm32::peripherals::PB11>,
-    pub z_enable_pin: Output<'static, embassy_stm32::peripherals::PB1>,
-    pub e_enable_pin: Output<'static, embassy_stm32::peripherals::PD1>,
+    pub x_enable_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB14>,
+    pub y_enable_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB11>,
+    pub z_enable_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB1>,
+    pub e_enable_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PD1>,
 
-    pub x_endstop_pin: Input<'static, embassy_stm32::peripherals::PC0>,
-    pub y_endstop_pin: Input<'static, embassy_stm32::peripherals::PC1>,
-    pub z_endstop_pin: Input<'static, embassy_stm32::peripherals::PC2>,
-    pub e_endstop_pin: Input<'static, embassy_stm32::peripherals::PC15>,
+    pub x_endstop_pin: embassy_stm32::gpio::Input<'static, embassy_stm32::peripherals::PC0>,
+    pub y_endstop_pin: embassy_stm32::gpio::Input<'static, embassy_stm32::peripherals::PC1>,
+    pub z_endstop_pin: embassy_stm32::gpio::Input<'static, embassy_stm32::peripherals::PC2>,
+    pub e_endstop_pin: embassy_stm32::gpio::Input<'static, embassy_stm32::peripherals::PC15>,
 
-    pub x_step_pin: Output<'static, embassy_stm32::peripherals::PB13>,
-    pub y_step_pin: Output<'static, embassy_stm32::peripherals::PB10>,
-    pub z_step_pin: Output<'static, embassy_stm32::peripherals::PB0>,
-    pub e_step_pin: Output<'static, embassy_stm32::peripherals::PB3>,
+    pub x_step_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB13>,
+    pub y_step_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB10>,
+    pub z_step_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB0>,
+    pub e_step_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB3>,
 
-    pub x_dir_pin: Output<'static, embassy_stm32::peripherals::PB12>,
-    pub y_dir_pin: Output<'static, embassy_stm32::peripherals::PB2>,
-    pub z_dir_pin: Output<'static, embassy_stm32::peripherals::PC5>,
-    pub e_dir_pin: Output<'static, embassy_stm32::peripherals::PB4>,
+    pub x_dir_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB12>,
+    pub y_dir_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB2>,
+    pub z_dir_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PC5>,
+    pub e_dir_pin: embassy_stm32::gpio::Output<'static, embassy_stm32::peripherals::PB4>,
 }
 /*
 pub struct MotionPins {
-    pub x_enable_pin: Output<'static>,
-    pub y_enable_pin: Output<'static>,
-    pub z_enable_pin: Output<'static>,
-    pub e_enable_pin: Output<'static>,
+    pub x_enable_pin: embassy_stm32::gpio::Output<'static>,
+    pub y_enable_pin: embassy_stm32::gpio::Output<'static>,
+    pub z_enable_pin: embassy_stm32::gpio::Output<'static>,
+    pub e_enable_pin: embassy_stm32::gpio::Output<'static>,
 
-    pub x_endstop_pin: Input<'static>,
-    pub y_endstop_pin: Input<'static>,
-    pub z_endstop_pin: Input<'static>,
-    pub e_endstop_pin: Input<'static>,
+    pub x_endstop_pin: embassy_stm32::gpio::Input<'static>,
+    pub y_endstop_pin: embassy_stm32::gpio::Input<'static>,
+    pub z_endstop_pin: embassy_stm32::gpio::Input<'static>,
+    pub e_endstop_pin: embassy_stm32::gpio::Input<'static>,
 
-    pub x_step_pin: Output<'static>,
-    pub y_step_pin: Output<'static>,
-    pub z_step_pin: Output<'static>,
-    pub e_step_pin: Output<'static>,
+    pub x_step_pin: embassy_stm32::gpio::Output<'static>,
+    pub y_step_pin: embassy_stm32::gpio::Output<'static>,
+    pub z_step_pin: embassy_stm32::gpio::Output<'static>,
+    pub e_step_pin: embassy_stm32::gpio::Output<'static>,
 
-    pub x_dir_pin: Output<'static>,
-    pub y_dir_pin: Output<'static>,
-    pub z_dir_pin: Output<'static>,
-    pub e_dir_pin: Output<'static>,
+    pub x_dir_pin: embassy_stm32::gpio::Output<'static>,
+    pub y_dir_pin: embassy_stm32::gpio::Output<'static>,
+    pub z_dir_pin: embassy_stm32::gpio::Output<'static>,
+    pub e_dir_pin: embassy_stm32::gpio::Output<'static>,
 }
 */
 
@@ -315,13 +320,20 @@ impl MotionPins {
         self.z_enable_pin.set_high();
         self.e_enable_pin.set_high();
     }
+    #[inline]
+    pub fn enable_all_steppers(&mut self) {
+        self.x_enable_pin.set_low();
+        self.y_enable_pin.set_low();
+        self.z_enable_pin.set_low();
+        self.e_enable_pin.set_low();
+    }
 }
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDevice {
 
     #[cfg(feature = "with-trinamic")]
-    pub trinamic_uart: UartTrinamic,
+    pub trinamic_uart: TrinamicUartWrapper,
 
     pub motion_pins: MotionPins,
 }

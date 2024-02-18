@@ -114,6 +114,15 @@ pub struct Controllers {
     pub serial_usb_tx: device::USBSerialTxControllerRef,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_tx: device::UartPort1TxControllerRef,
+    #[cfg(feature = "with-serial-port-2")]
+    pub serial_port2_tx: device::UartPort2TxControllerRef,
+}
+
+pub struct SysDevices {
+    #[cfg(feature = "with-motion")]
+    pub task_stepper_core: printhor_hwa_common::NoDevice,
+    #[cfg(feature = "with-ps-on")]
+    pub ps_on: device::PsOnRef,
 }
 
 pub struct IODevices {
@@ -290,7 +299,7 @@ pub fn init() -> embassy_stm32::Peripherals {
     embassy_stm32::init(config)
 }
 
-pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, IODevices, MotionDevices, PwmDevices> {
+pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
     cfg_if::cfg_if! {
         if #[cfg(feature="skr_mini_e3_v2")] {
@@ -357,7 +366,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 cfg.stop_bits = StopBits::STOP1;
                 cfg.parity = Parity::ParityNone;
 
-                device::UartTrinamic::new(p.UART4, p.PC11, p.PC10,
+                device::TrinamicUartDevice::new(p.UART4, p.PC11, p.PC10,
                            TrinamicIrqs, p.DMA2_CH5, p.DMA2_CH3, cfg).expect("Ready")
             };
 
@@ -384,7 +393,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-motion")]
             let motion_devices = MotionDevice {
                 #[cfg(feature = "with-trinamic")]
-                trinamic_uart,
+                trinamic_uart: io::TrinamicUartWrapper::new(trinamic_uart),
                 motion_pins: MotionPins {
                     x_enable_pin: Output::new(p.PB14, Level::Low, Speed::VeryHigh),
                     y_enable_pin: Output::new(p.PB11, Level::Low, Speed::VeryHigh),
@@ -619,7 +628,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             cfg.stop_bits = StopBits::STOP1;
             cfg.parity = Parity::ParityNone;
 
-            device::UartTrinamic::new(p.USART4, p.PC11, p.PC10,
+            device::TrinamicUartDevice::new(p.USART4, p.PC11, p.PC10,
                        TrinamicIrqs, p.DMA1_CH7, p.DMA1_CH6,
                        cfg).expect("Ready")
         };
@@ -629,7 +638,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         #[cfg(feature = "with-sdcard")]
         let (sdcard_device, sdcard_cs_pin) = {
-            (spi1_device.clone(), Output::new(p.PA4, Level::High, Speed::VeryHigh))
+            (spi1_device.clone(), embassy_stm32::gpio::Output::new(p.PA4, embassy_stm32::gpio::Level::High, embassy_stm32::gpio::Speed::VeryHigh))
         };
         #[cfg(feature = "with-sdcard")]
         defmt::info!("card_controller done");
@@ -637,9 +646,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         #[cfg(feature = "with-display")]
         let display_device = device::DisplayDevice {
             interface: spi_device,
-            rst: Output::new(p.PC1, Level::High, Speed::VeryHigh),
-            cs: Output::new(p.PB0, Level::High, Speed::VeryHigh),
-            dc: Output::new(p.PA4, Level::High, Speed::VeryHigh),
+            rst: embassy_stm32::gpio::Output::new(p.PC1, Level::High, Speed::VeryHigh),
+            cs: embassy_stm32::gpio::Output::new(p.PB0, Level::High, Speed::VeryHigh),
+            dc: embassy_stm32::gpio::Output::new(p.PA4, Level::High, Speed::VeryHigh),
         };
         #[cfg(feature = "with-display")]
         crate::info!("display_device done");
@@ -647,24 +656,24 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         #[cfg(feature = "with-motion")]
         let motion_devices = MotionDevice {
             #[cfg(feature = "with-trinamic")]
-            trinamic_uart,
+            trinamic_uart: io::TrinamicUartWrapper::new(trinamic_uart),
             motion_pins: MotionPins {
-                x_enable_pin: Output::new(p.PB14, Level::Low, Speed::VeryHigh),
-                y_enable_pin: Output::new(p.PB11, Level::Low, Speed::VeryHigh),
-                z_enable_pin: Output::new(p.PB1, Level::Low, Speed::VeryHigh),
-                e_enable_pin: Output::new(p.PD1, Level::Low, Speed::VeryHigh),
-                x_endstop_pin: Input::new(p.PC0, Pull::Down),
-                y_endstop_pin: Input::new(p.PC1, Pull::Down),
-                z_endstop_pin: Input::new(p.PC2, Pull::Down),
-                e_endstop_pin: Input::new(p.PC15, Pull::Down),
-                x_step_pin: Output::new(p.PB13, Level::Low, Speed::VeryHigh),
-                y_step_pin: Output::new(p.PB10, Level::Low, Speed::VeryHigh),
-                z_step_pin: Output::new(p.PB0, Level::Low, Speed::VeryHigh),
-                e_step_pin: Output::new(p.PB3, Level::Low, Speed::VeryHigh),
-                x_dir_pin: Output::new(p.PB12, Level::Low, Speed::VeryHigh),
-                y_dir_pin: Output::new(p.PB2, Level::Low, Speed::VeryHigh),
-                z_dir_pin: Output::new(p.PC5, Level::Low, Speed::VeryHigh),
-                e_dir_pin: Output::new(p.PB4, Level::Low, Speed::VeryHigh),
+                x_enable_pin: embassy_stm32::gpio::Output::new(p.PB14, Level::Low, Speed::VeryHigh),
+                y_enable_pin: embassy_stm32::gpio::Output::new(p.PB11, Level::Low, Speed::VeryHigh),
+                z_enable_pin: embassy_stm32::gpio::Output::new(p.PB1, Level::Low, Speed::VeryHigh),
+                e_enable_pin: embassy_stm32::gpio::Output::new(p.PD1, Level::Low, Speed::VeryHigh),
+                x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC0, Pull::Down),
+                y_endstop_pin: embassy_stm32::gpio::Input::new(p.PC1, Pull::Down),
+                z_endstop_pin: embassy_stm32::gpio::Input::new(p.PC2, Pull::Down),
+                e_endstop_pin: embassy_stm32::gpio::Input::new(p.PC15, Pull::Down),
+                x_step_pin: embassy_stm32::gpio::Output::new(p.PB13, Level::Low, Speed::VeryHigh),
+                y_step_pin: embassy_stm32::gpio::Output::new(p.PB10, Level::Low, Speed::VeryHigh),
+                z_step_pin: embassy_stm32::gpio::Output::new(p.PB0, Level::Low, Speed::VeryHigh),
+                e_step_pin: embassy_stm32::gpio::Output::new(p.PB3, Level::Low, Speed::VeryHigh),
+                x_dir_pin: embassy_stm32::gpio::Output::new(p.PB12, Level::Low, Speed::VeryHigh),
+                y_dir_pin: embassy_stm32::gpio::Output::new(p.PB2, Level::Low, Speed::VeryHigh),
+                z_dir_pin: embassy_stm32::gpio::Output::new(p.PC5, Level::Low, Speed::VeryHigh),
+                e_dir_pin: embassy_stm32::gpio::Output::new(p.PB4, Level::Low, Speed::VeryHigh),
             }
         };
 
@@ -787,6 +796,16 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     }
 
+    #[cfg(feature = "with-ps-on")]
+    let ps_on = {
+        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        ControllerRef::new(
+            PS_ON.init("", ControllerMutex::new(
+                Output::new(p.PC13, Level::Low, Speed::Low)
+            ))
+        )
+    };
+
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 
@@ -798,7 +817,13 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_tx,
         },
-        devices: IODevices {
+        sys_devices: SysDevices {
+            #[cfg(feature = "with-motion")]
+            task_stepper_core: printhor_hwa_common::NoDevice::new(),
+            #[cfg(feature = "with-ps-on")]
+            ps_on,
+        },
+        io_devices: IODevices {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]

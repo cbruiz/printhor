@@ -67,6 +67,7 @@ pub async fn task_stepper(
 
     loop {
         let mut wait_for_sysalarm = false;
+        motion_planner.motion_driver.lock().await.pins.enable_all_steppers();
         if !s.get_status().await.contains(EventFlags::ATX_ON) {
             hwa::info!("task_stepper waiting for ATX_ON");
             if s.ft_wait_until(EventFlags::ATX_ON).await.is_err() {
@@ -87,12 +88,14 @@ pub async fn task_stepper(
             // Timeout
             Err(_) => {
                 hwa::trace!("stepper_task timeout");
+                /*
                 if !steppers_off {
                     hwa::info!("Timeout. Powering steppers off");
                     let mut drv = motion_planner.motion_driver.lock().await;
                     drv.pins.disable_all_steppers();
                     steppers_off = true;
                 }
+                 */
             }
             // Process segment plan
             Ok(Some((segment, channel))) => {
@@ -153,7 +156,7 @@ pub async fn task_stepper(
                 #[cfg(feature = "timing-stats")]
                 timings.set_prep();
 
-                /* WIP
+                /* WIP clean and simple iterator with interp hadware for MCUs supporting it
                 let offset = Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS.into());
                 for _ps in segment.motion_profile.iterate(t_segment_start, offset) {
                     embassy_time::Timer::after_ticks(MICRO_SEGMENT_PERIOD_TICKS.into()).await;

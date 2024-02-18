@@ -48,6 +48,10 @@ runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars"
 [target.'cfg(all(any(board="mks_robin_nano"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F407VETx --disable-progressbars"
 
+[target.'cfg(all(any(board="rp2040"), target_arch="arm", target_os="none"))']
+#runner = "probe-run --chip RP2040"
+runner = "elf2uf2-rs --deploy --serial --verbose"
+
 [build]
 
 [profile.dev.package."*"]

@@ -12,6 +12,7 @@ pub use defmt;
 mod board;
 
 pub use board::device;
+pub use board::SysDevices;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;
@@ -51,7 +52,7 @@ cfg_if::cfg_if! {
         }
 
         #[inline]
-        pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+        pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
             #[cfg(feature = "with-usbserial")]
             interrupt::USB_LP_CAN1_RX0.set_priority(Priority::P3);
             interrupt::RTC.set_priority(Priority::P2);
@@ -67,7 +68,7 @@ cfg_if::cfg_if! {
         }
 
         #[inline]
-        pub fn launch_high_priotity<S: 'static + Send>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+        pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
 
             #[cfg(feature = "with-usbserial")]
             interrupt::USB_UCPD1_2.set_priority(Priority::P3);

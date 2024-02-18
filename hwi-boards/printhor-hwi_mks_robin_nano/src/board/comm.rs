@@ -1,15 +1,11 @@
 //! This specialization exists because there are several ways to communicate with stepper's Trinamic UART
 use embassy_stm32::gpio::{Pin, AnyPin, Flex, Pull, Speed};
 use printhor_hwa_common::soft_uart;
-use printhor_hwa_common::soft_uart::{AsyncRead, MultiChannel, UartChannel};
+use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite, MultiChannel, SerialError, UartChannel};
 use crate::device;
 
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[derive(Debug)]
-pub enum Error {
-    Uninit,
-    Timeout,
-}
-
 pub enum AxisChannel {
     TMCUartX,
     TMCUartY,
@@ -38,7 +34,7 @@ impl soft_uart::IOPin for AnyPinWrapper
     }
     #[inline]
     fn set_input(&mut self) {
-        self.0.set_as_input(Pull::Down);
+        self.0.set_as_input(Pull::Up);
     }
     #[inline]
     fn is_high(&mut self) -> bool {
@@ -48,10 +44,12 @@ impl soft_uart::IOPin for AnyPinWrapper
     fn set_high(&mut self) { self.0.set_high() }
     #[inline]
     fn set_low(&mut self) { self.0.set_low() }
+    #[inline]
+    fn set_open_drain(&mut self) { self.0.set_as_input_output(Speed::VeryHigh, Pull::Up) }
 }
 
 pub struct SingleWireSoftwareUart {
-    tmc_uarts: [soft_uart::HalfDuplexSerial<AnyPinWrapper>; 4],
+    tmc_uart: [soft_uart::HalfDuplexSerial<AnyPinWrapper>; 4],
     selected: Option<UartChannel>,
 }
 
@@ -65,7 +63,7 @@ impl SingleWireSoftwareUart {
         tmc_uart_ch4_pin: device::TMCUartCh4Pin,
     ) -> Self {
         Self {
-            tmc_uarts: [
+            tmc_uart: [
                 soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch1_pin.degrade())), baud_rate),
                 soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch2_pin.degrade())), baud_rate),
                 soft_uart::HalfDuplexSerial::new(AnyPinWrapper(Flex::new(tmc_uart_ch3_pin.degrade())), baud_rate),
@@ -77,35 +75,64 @@ impl SingleWireSoftwareUart {
 
     /// "Low level" speciallization with channel semantics
     pub fn set_axis_channel(&mut self, axis_channel: Option<AxisChannel>) {
+        crate::info!("set_axis_channel({:?})", axis_channel);
         self.set_channel(axis_channel.and_then(|ac| Some(ac.into())));
     }
 
 
-    pub async fn read_until_idle(&mut self, _buffer: &mut [u8]) -> Result<usize, Error>
+    pub async fn read_until_idle(&mut self, _buffer: &mut [u8]) -> Result<usize, SerialError>
     {
-        let uart = match self.selected.as_ref().ok_or(Error::Uninit)? {
-            UartChannel::Ch1 => &mut self.tmc_uarts[0],
-            UartChannel::Ch2=> &mut self.tmc_uarts[1],
-            UartChannel::Ch3=> &mut self.tmc_uarts[2],
-            UartChannel::Ch4=> &mut self.tmc_uarts[3],
+        let uart = match self.selected.as_ref().ok_or(SerialError::Framing)? {
+            UartChannel::Ch1 => &mut self.tmc_uart[0],
+            UartChannel::Ch2=> &mut self.tmc_uart[1],
+            UartChannel::Ch3=> &mut self.tmc_uart[2],
+            UartChannel::Ch4=> &mut self.tmc_uart[3],
         };
 
         uart.set_timeout(Some(uart.word_transfer_duration() * 10));
 
-        let _x = uart.read().await;
+        uart.set_read_mode().await;
 
-        Ok(0)
+        let mut nb = 0;
+        while nb < _buffer.len() {
+            match uart.read().await {
+                Ok(_br) => {
+                    _buffer[nb] = _br;
+                    nb += 1;
+                }
+                Err(_e) => {
+                    if nb > 0 {
+                        return Ok(nb);
+                    }
+                    else {
+                        return Err(SerialError::Timeout);
+                    }
+                }
+            }
+        }
+        Ok(nb)
     }
 
-    pub async fn write(&mut self, _buffer: &[u8]) -> Result<(), Error> {
+    pub async fn write(&mut self, _buffer: &[u8]) -> Result<(), SerialError> {
+        let uart = match self.selected.as_ref().ok_or(SerialError::Framing)? {
+            UartChannel::Ch1 => &mut self.tmc_uart[0],
+            UartChannel::Ch2=> &mut self.tmc_uart[1],
+            UartChannel::Ch3=> &mut self.tmc_uart[2],
+            UartChannel::Ch4=> &mut self.tmc_uart[3],
+        };
+
+        uart.set_write_mode().await;
+
+        for b in _buffer {
+            let _x = uart.write(*b).await;
+        }
         Ok(())
     }
 
     #[inline]
-    pub fn blocking_flush(&mut self) -> Result<(), Error> {
+    pub fn blocking_flush(&mut self) -> Result<(), SerialError> {
         Ok(())
     }
-
 }
 
 impl MultiChannel for SingleWireSoftwareUart {

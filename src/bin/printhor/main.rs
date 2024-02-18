@@ -21,7 +21,7 @@ use embassy_executor::Spawner;
 use printhor_hwa_common::{ControllerMutex, ControllerRef};
 #[allow(unused)]
 use hwa::{DeferChannelRef, EventBusRef, TrackedStaticCell};
-use hwa::{Controllers, IODevices, MotionDevices, PwmDevices};
+use hwa::{Controllers, SysDevices, IODevices, MotionDevices, PwmDevices};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
 use hwa::{GCodeProcessor};
@@ -65,7 +65,8 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 
     if spawn_tasks(spawner, event_bus.clone(), defer_channel,
                    context.controllers,
-                   context.devices,
+                   context.sys_devices,
+                   context.io_devices,
                    context.motion,
                    context.pwm,
                    wdt.clone()
@@ -110,15 +111,18 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 
 #[inline(never)]
 async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: DeferChannelRef,
-                     _controllers: Controllers, _devices: IODevices, _motion_device: MotionDevices,
+                     _controllers: Controllers,
+                     _sys_devices: SysDevices,
+                     _io_devices: IODevices,
+                     _motion_device: MotionDevices,
                      _pwm_devices: PwmDevices, _wd: hwa::WatchdogRef
 ) -> Result<(), ()> {
 
     #[cfg(all(feature = "with-sdcard", feature = "sdcard-uses-spi"))]
-        let sdcard_adapter = hwa::adapters::SPIAdapter::new(_devices.sdcard_device, _devices.sdcard_cs_pin);
+        let sdcard_adapter = hwa::adapters::SPIAdapter::new(_io_devices.sdcard_device, _io_devices.sdcard_cs_pin);
 
     #[cfg(all(feature = "with-sdcard", not(feature = "sdcard-uses-spi")))]
-        let sdcard_adapter = _devices.sdcard_device;
+        let sdcard_adapter = _io_devices.sdcard_device;
 
     #[cfg(feature = "with-sdcard")]
         let sdcard_controller = CardController::new(
@@ -271,6 +275,8 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         serial_port1_tx: _controllers.serial_port1_tx,
         #[cfg(feature = "with-serial-port-2")]
         serial_port2_tx: _controllers.serial_port2_tx,
+        #[cfg(feature = "with-ps-on")]
+        ps_on: _sys_devices.ps_on,
         #[cfg(feature = "with-probe")]
         probe: probe_controller,
         #[cfg(feature = "with-hot-end")]
@@ -289,10 +295,6 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-
-        #[cfg(feature = "with-trinamic")]
-        let _ = motion_planer.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
-
         motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
         motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(600), Some(600), Some(600), Some(600))).await;
         motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(900), Some(900), Some(900), Some(900))).await;
@@ -300,9 +302,9 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        hwa::launch_high_priotity( control::task_stepper::task_stepper(
-            motion_planer, _wd
-        )).and_then(|_| {
+        hwa::launch_high_priotity( _sys_devices.task_stepper_core,
+                                   control::task_stepper::task_stepper(motion_planer, _wd)
+        ).and_then(|_| {
             hwa::debug!("stepper_start() spawned");
             Ok(())
         })?;
@@ -321,11 +323,11 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         processor.clone(),
         control::GCodeMultiplexedInputStream::new(
             #[cfg(feature = "with-serial-usb")]
-                _devices.serial_usb_rx_stream,
+                _io_devices.serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-                _devices.serial_port1_rx_stream,
+                _io_devices.serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-                _devices.serial_port2_rx_stream,
+                _io_devices.serial_port2_rx_stream,
         ),
         ControlTaskControllers {
             #[cfg(feature="with-printjob")]
@@ -353,7 +355,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-display")]
     spawner.spawn(display::display_task::display_task(
-        _devices.display_device,
+        _io_devices.display_device,
         event_bus.clone()
     )).map_err(|_| ())?;
 

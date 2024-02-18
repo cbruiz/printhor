@@ -3,6 +3,7 @@ mod board;
 pub use log::{trace,debug,info,warn,error};
 
 pub use board::device;
+pub use board::SysDevices;
 pub use board::IODevices;
 pub use board::Controllers;
 pub use board::MotionDevices;
@@ -39,7 +40,7 @@ unsafe impl<S> Sync for TokenHolder<S> {}
 unsafe impl<S> Send for TokenHolder<S> {}
 
 #[inline]
-pub fn launch_high_priotity<S: 'static>(token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+pub fn launch_high_priotity<S: 'static>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
     use thread_priority::*;
 
     let r = Box::new(TokenHolder {token});
