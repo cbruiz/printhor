@@ -59,7 +59,7 @@ integration-test = [
     "integration-test-move-ortho",
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
-    "integration-test-trinamic",
+    #"integration-test-trinamic",
     #"integration-test-benchy",
     "integration-test-laser-engrave",
     #"plot-timings",
@@ -102,7 +102,7 @@ plot-motion-plan = ["gnuplot"]
 #################
 
 native = [
-    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
+    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
     "with-motion", "has-extruder", "printhor-hwi_native/with-motion",
     "with-serial-port-1", "printhor-hwi_native/with-serial-port-1",
     "with-serial-port-2", "printhor-hwi_native/with-serial-port-2",
@@ -139,7 +139,7 @@ native = [
 mks_robin_nano = [
     "has-extruder",
     "with-defmt", "printhor-hwi_mks_robin_nano/with-defmt",
-    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
+    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano/with-motion",
 
     "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
@@ -240,7 +240,7 @@ skr_mini_e3_v2 = [
     "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
     "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
-    "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
+    #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
     "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
@@ -264,7 +264,7 @@ skr_mini_e3_v3 = [
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
     "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
-    "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
+    #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
     "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",

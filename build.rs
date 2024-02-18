@@ -12,6 +12,7 @@ fn main() {
                 .write_all(std::fs::read(memory_x_path.as_path().to_str().unwrap()).unwrap().as_slice())
                 .unwrap();
             println!("cargo:rustc-link-search={}", out.display());
+            println!("cargo:rerun-if-changed=memory.x");
         }
     }
 
@@ -19,7 +20,6 @@ fn main() {
     // any file in the project changes. By specifying `memory.x`
     // here, we ensure the build script is only re-run when
     // `memory.x` is changed.
-    println!("cargo:rerun-if-changed=memory.x");
     #[cfg(not(feature = "native"))]
     {
         println!("cargo:rustc-link-arg-bins=--nmagic");

@@ -164,7 +164,7 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
                 None => {},
             }
         }
-        crate::info!("RX: Start bit got");
+        //crate::trace!("RX: Start bit got");
         // Align to pulse center assuming start bit is detected closely after rising edge
         Timer::after_ticks(self.bit_period.as_ticks() + (self.bit_period.as_ticks() >> 1)).await;
         // Read 8 bits
@@ -189,8 +189,8 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
             Ok(data_in)
         }
         else {
-            #[cfg(feature = "with-log")]
-            log::error!("Missed stop bit. Got: {:08b}", data_in);
+            //#[cfg(feature = "with-log")]
+            //log::error!("Missed stop bit. Got: {:08b}", data_in);
             Err(Self::Error::Framing)
         }
     }

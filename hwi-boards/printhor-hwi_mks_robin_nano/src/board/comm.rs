@@ -133,9 +133,6 @@ impl SingleWireSoftwareUart {
     pub fn blocking_flush(&mut self) -> Result<(), SerialError> {
         Ok(())
     }
-
-
-
 }
 
 impl MultiChannel for SingleWireSoftwareUart {

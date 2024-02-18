@@ -58,7 +58,6 @@ impl TrinamicController
     {
         hwa::info!("Sending request...");
         self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes()).await?;
-
         hwa::info!("Now reading response...");
         let mut buff:[u8; 8] = [0; 8];
         let mut reader = tmc2209::Reader::default();

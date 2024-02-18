@@ -20,8 +20,11 @@ pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static,
 >;
 #[cfg(feature = "with-serial-port-1")]
 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static,
-    embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5
->;
+    embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5>;
+#[cfg(feature = "with-serial-port-1")]
+pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static,
+    embassy_stm32::peripherals::USART1, embassy_stm32::peripherals::DMA2_CH5>;
+
 #[cfg(feature = "with-serial-port-1")]
 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
 #[cfg(feature = "with-serial-port-1")]
@@ -34,10 +37,9 @@ pub type TrinamicUart = crate::board::comm::SingleWireSoftwareUart;
 pub use crate::board::comm::AxisChannel;
 
 #[cfg(feature = "with-trinamic")]
-//pub type TMCUartCh1Pin = embassy_stm32::peripherals::PD5; // TMC TX -> STM RX
-pub type TMCUartCh1Pin = embassy_stm32::peripherals::PD1; // TMC RX <- STM TX
+pub type TMCUartCh1Pin = embassy_stm32::peripherals::PD5;
 #[cfg(feature = "with-trinamic")]
-pub type TMCUartCh2Pin = embassy_stm32::peripherals::PD7;
+pub type TMCUartCh2Pin = embassy_stm32::peripherals::PD1;
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh3Pin = embassy_stm32::peripherals::PD4;
 #[cfg(feature = "with-trinamic")]

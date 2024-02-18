@@ -230,14 +230,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-trinamic")]
     let trinamic_uart = {
-        // TODO: WorkInProgress Trinamic UART (when needed) requires a software usar implementation because of the wiring
-
-        //use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite};
-
-        //let _ = uart_e0.write(0b10101010u8).await;
-        //let _ = uart_e0.read().await;
-
-        device::TrinamicUart::new(TRINAMIC_UART_BAUD_RATE, p.PD1, p.PD7, p.PD4, p.PD9)
+        // TODO: WorkInProgress Trinamic UART (when needed) requires a software usart implementation because of the wiring
+        device::TrinamicUart::new(TRINAMIC_UART_BAUD_RATE, p.PD5, p.PD1, p.PD4, p.PD9)
     };
 
     #[cfg(feature = "with-spi")]
