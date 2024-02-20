@@ -1,6 +1,7 @@
 #![allow(stable_features)]
 mod board;
-pub use log::{trace,debug,info,warn,error};
+
+pub use log::{trace, debug, info, warn, error};
 
 pub use board::device;
 pub use board::SysDevices;
@@ -22,39 +23,39 @@ pub use board::VREF_SAMPLE;
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion")] {
+        /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
+        pub const SEGMENT_QUEUE_SIZE: u8 = 40;
+    }
+}
 pub use board::ADC_START_TIME_US;
 pub use board::ADC_VREF_DEFAULT_MV;
+use embassy_executor::Spawner;
 cfg_if::cfg_if!{
     if #[cfg(feature="without-vref-int")] {
         pub use board::ADC_VREF_DEFAULT_SAMPLE;
     }
 }
 
-static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
-
-struct TokenHolder<S> {
-    token: embassy_executor::SpawnToken<S>
-}
-
-unsafe impl<S> Sync for TokenHolder<S> {}
-unsafe impl<S> Send for TokenHolder<S> {}
-
 #[inline]
-pub fn launch_high_priotity<S: 'static>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-    use thread_priority::*;
+pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, _spawner: Spawner, token: embassy_executor::SpawnToken<S>) -> Result<(),()>
+{
+    cfg_if::cfg_if! {
+        if #[cfg(feature="threaded")] {
+            static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
 
-    let r = Box::new(TokenHolder {token});
-    let builder = std::thread::Builder::new()
-        .name("isr-high-prio".to_owned());
-    let _ = builder.spawn_with_priority(ThreadPriority::Max,|_| {
-        let executor: &'static mut embassy_executor::Executor = EXECUTOR_HIGH.init("StepperExecutor", embassy_executor::Executor::new());
-        executor.run(move |spawner| {
-            spawner.spawn(
-                r.token
-            ).unwrap();
-        });
-    });
-    Ok(())
+            let executor: &'static mut embassy_executor::Executor = EXECUTOR_HIGH.init("StepperExecutor", embassy_executor::Executor::new());
+            executor.run(|s| {
+                let x = s.make_send();
+                thread_priority::ThreadPriority::Max.set_for_current().unwrap();
+                x.spawn(token).unwrap();
+            });
+        }
+        else {
+            Ok(_spawner.spawn(token).map_err(|_| ())?)
+        }
+    }
 }
 
 #[inline]

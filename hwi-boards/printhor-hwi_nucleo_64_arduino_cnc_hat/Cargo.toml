@@ -17,8 +17,8 @@ homepage = "https://github.com/cbruiz/printhor"
 #default = ["nucleo64-l476rg"]
 upstream-embassy = []
 # Board kind
-nucleo64-l476rg = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
-nucleo64-f410rb = ["embassy-time/tick-hz-100_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
+nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
+nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
 with-printjob = []
@@ -36,6 +36,9 @@ with-defmt = ["printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-
 with-trinamic = []
 with-ps-on = []
 
+nightly = []
+threaded = ["embassy-executor/executor-interrupt"]
+verbose-timings = []
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
@@ -46,7 +49,7 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-stm32 = { version = "0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0", default-features = false, features = ["executor-thread", "arch-cortex-m", "integrated-timers"] }
 embassy-sync = { version = "0", features = ["defmt"] }
 embassy-time = { version = "0", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }

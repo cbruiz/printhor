@@ -8,7 +8,7 @@ bitflags! {
         const X    = 0b00000001;
         const Y    = 0b00000010;
         const Z    = 0b00000100;
-        #[cfg(feature="has-extruder")]
+        #[cfg(feature="with-hot-end")]
         const E    = 0b00001000;
     }
 }

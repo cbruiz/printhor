@@ -1,21 +1,17 @@
 //! This feature is being stabilized
 use crate::hwa;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
-use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef, EventBusRef, EventFlags, EventStatus};
+use printhor_hwa_common::{CommChannel, ControllerRef, DeferAction, DeferChannelRef, EventBusRef, EventFlags, EventStatus};
 use printhor_hwa_common::DeferEvent;
 use crate::control::GCode;
 use crate::control::{CodeExecutionSuccess, CodeExecutionFailure};
 use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
-use crate::math::{ONE_HUNDRED, Real, ZERO};
+use crate::math::{Real, ZERO};
 use crate::sync::config::Config;
 use crate::tgeo::TVector;
 use crate::tgeo::CoordSel;
 
 use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
-
-/// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-const SEGMENT_QUEUE_SIZE: u8 = 4;
 
 pub enum ScheduledMove {
     Move(SegmentData, SCurveMotionProfile),
@@ -31,23 +27,29 @@ pub struct MotionConfig {
     pub(crate) max_speed: TVector<u16>,
     pub(crate) max_jerk: TVector<u32>,
     pub(crate) default_travel_speed: u16,
+    pub(crate) steps_per_mm: TVector<Real>,
+    pub(crate) usteps: [u16; 4],
     pub(crate) flow_rate: u8,
     pub(crate) speed_rate: u8,
 }
 
 impl MotionConfig {
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             microsteps: TVector::new(),
             max_accel: TVector::new(),
             max_speed: TVector::new(),
             max_jerk: TVector::new(),
+            steps_per_mm: TVector::new(),
+            usteps: [0; 4],
             default_travel_speed: 1,
             flow_rate: 100,
             speed_rate: 100,
         }
     }
 }
+
+pub type MotionConfigRef = ControllerRef<MotionConfig>;
 
 pub struct MotionStatus {
     #[allow(unused)]
@@ -78,24 +80,28 @@ pub struct MotionPlanner {
     // The channel to send deferred events
     pub defer_channel: printhor_hwa_common::DeferChannelRef,
 
-    pub(self) ringbuffer: Mutex<CriticalSectionRawMutex, RingBuffer>,
-    pub(self) move_planned: Config<CriticalSectionRawMutex, bool>,
-    pub(self) available: Config<CriticalSectionRawMutex, bool>,
-    pub(self) motion_cfg: Mutex<CriticalSectionRawMutex, MotionConfig>,
-    motion_st: Mutex<CriticalSectionRawMutex, MotionStatus>,
-    pub motion_driver: Mutex<CriticalSectionRawMutex, hwa::drivers::MotionDriver>,
+    pub(self) ringbuffer: Mutex<hwa::ControllerMutexType, RingBuffer>,
+    pub(self) move_planned: Config<hwa::ControllerMutexType, bool>,
+    pub(self) available: Config<hwa::ControllerMutexType, bool>,
+    pub(self) motion_config: MotionConfigRef,
+    motion_st: Mutex<hwa::ControllerMutexType, MotionStatus>,
+    pub motion_driver: Mutex<hwa::ControllerMutexType, hwa::drivers::MotionDriver>,
 }
 
 #[allow(unused)]
 impl MotionPlanner {
-    pub const fn new(event_bus: EventBusRef, defer_channel: DeferChannelRef, motion_driver: hwa::drivers::MotionDriver) -> Self {
+    pub const fn new(event_bus: EventBusRef,
+                     defer_channel: DeferChannelRef,
+                     motion_config: MotionConfigRef,
+                     motion_driver: hwa::drivers::MotionDriver,
+    ) -> Self {
         Self {
             event_bus,
             defer_channel,
+            motion_config,
             ringbuffer: Mutex::new(RingBuffer::new()),
             move_planned: Config::new(),
             available: Config::new(),
-            motion_cfg: Mutex::new(MotionConfig::new()),
             motion_st: Mutex::new(MotionStatus::new()),
             motion_driver: Mutex::new(motion_driver),
         }
@@ -123,7 +129,7 @@ impl MotionPlanner {
                         do_dwell = true;
                     },
                     PlanEntry::PlannedMove(planned_data, action, channel, deferred) => {
-                        hwa::debug!("Exec starting: {} / {} h={}", rb.used, SEGMENT_QUEUE_SIZE, head);
+                        hwa::debug!("Exec starting: {} / {} h={}", rb.used, hwa::SEGMENT_QUEUE_SIZE, head);
                         rb.data[head] = PlanEntry::Executing(MovType::Move(action, channel), deferred);
                         return Some((planned_data, channel));
                     },
@@ -166,7 +172,7 @@ impl MotionPlanner {
             }
         }
         rb.data[head as usize] = PlanEntry::Empty;
-        rb.head = match head + 1 < SEGMENT_QUEUE_SIZE {
+        rb.head = match head + 1 < hwa::SEGMENT_QUEUE_SIZE {
             true => head + 1,
             false => 0u8,
         };
@@ -185,9 +191,9 @@ impl MotionPlanner {
             self.available.wait().await;
             {
                 let mut rb = self.ringbuffer.lock().await;
-                let mut is_defer = (rb.used == SEGMENT_QUEUE_SIZE - 1);
+                let mut is_defer = (rb.used == hwa::SEGMENT_QUEUE_SIZE - 1);
 
-                if rb.used < (SEGMENT_QUEUE_SIZE as u8) {
+                if rb.used < (hwa::SEGMENT_QUEUE_SIZE as u8) {
                     let used = rb.used;
                     let head = rb.head;
                     let mut could_replan = false;
@@ -210,17 +216,17 @@ impl MotionPlanner {
 
                     let index = head as u16 + used as u16;
 
-                    let index = match index < SEGMENT_QUEUE_SIZE as u16 {
+                    let index = match index < hwa::SEGMENT_QUEUE_SIZE as u16 {
                         true => index,
-                        false => index - SEGMENT_QUEUE_SIZE as u16,
+                        false => index - hwa::SEGMENT_QUEUE_SIZE as u16,
                     } as u8;
 
                     rb.data[index as usize] = entry;
 
-                    hwa::debug!("Mov queued @{} ({} / {})", index, rb.used + 1, SEGMENT_QUEUE_SIZE);
+                    hwa::debug!("Mov queued @{} ({} / {})", index, rb.used + 1, hwa::SEGMENT_QUEUE_SIZE);
                     if could_replan && used > 0 {
                         let last_inserted_idx = rb.head as u16 + rb.used as u16 - 1;
-                        let last_inserted_idx = match last_inserted_idx < (SEGMENT_QUEUE_SIZE as u16) {
+                        let last_inserted_idx = match last_inserted_idx < (hwa::SEGMENT_QUEUE_SIZE as u16) {
                             true => last_inserted_idx,
                             false => 0,
                         };
@@ -256,7 +262,7 @@ impl MotionPlanner {
                 } else {
                     self.available.reset();
                     if !blocking {
-                        hwa::warn!("Mov rejected: {} / {} h={}", rb.used, SEGMENT_QUEUE_SIZE, rb.head);
+                        hwa::warn!("Mov rejected: {} / {} h={}", rb.used, hwa::SEGMENT_QUEUE_SIZE, rb.head);
                         return Err(CodeExecutionFailure::BUSY)
                     }
                     else {
@@ -268,8 +274,8 @@ impl MotionPlanner {
         hwa::debug!("schedule_raw_move() END");
     }
 
-    pub fn motion_cfg(&self) -> &'_ Mutex<CriticalSectionRawMutex,MotionConfig> {
-        &self.motion_cfg
+    pub fn motion_cfg(&self) -> MotionConfigRef {
+        self.motion_config.clone()
     }
 
     pub async fn set_absolute_positioning(&self, absolute_is_set: bool) {
@@ -308,64 +314,93 @@ impl MotionPlanner {
     }
 
     pub async fn get_flow_rate(&self) -> u8 {
-        self.motion_cfg.lock().await.flow_rate
+        self.motion_config.lock().await.flow_rate
     }
 
     pub async fn set_flow_rate(&self, rate: u8) {
-        self.motion_cfg.lock().await.flow_rate = rate;
+        self.motion_config.lock().await.flow_rate = rate;
     }
 
     pub async fn get_flow_rate_as_real(&self) -> Real {
-        Real::new(self.motion_cfg.lock().await.flow_rate as i64, 0)
+        Real::new(self.motion_config.lock().await.flow_rate as i64, 0)
     }
 
     pub async fn get_speed_rate(&self) -> u8 {
-        self.motion_cfg.lock().await.speed_rate
+        self.motion_config.lock().await.speed_rate
     }
 
     pub async fn set_speed_rate(&self, rate: u8) {
-        self.motion_cfg.lock().await.speed_rate = rate;
+        self.motion_config.lock().await.speed_rate = rate;
     }
 
     pub async fn get_speed_rate_as_real(&self) -> Real {
-        Real::new(self.motion_cfg.lock().await.speed_rate as i64, 0)
+        Real::new(self.motion_config.lock().await.speed_rate as i64, 0)
     }
 
     pub async fn get_default_travel_speed(&self) -> u16 {
-        self.motion_cfg.lock().await.default_travel_speed
+        self.motion_config.lock().await.default_travel_speed
     }
     pub async fn set_default_travel_speed(&self, speed: u16) {
-        self.motion_cfg.lock().await.default_travel_speed = speed;
+        self.motion_config.lock().await.default_travel_speed = speed;
+    }
+
+    pub async fn set_steps_per_mm(&self, x_spm: Real, y_spm: Real, z_spm: Real, e_spm: Real) {
+        self.motion_config.lock().await.steps_per_mm = TVector::from_coords(
+            Some(x_spm),
+            Some(y_spm),
+            Some(z_spm),
+            Some(e_spm),
+        );
+    }
+
+    pub async fn get_steps_per_mm_as_vector(&self) -> TVector<Real> {
+        self.motion_config.lock().await.steps_per_mm
+    }
+
+    pub async fn set_usteps(&self, x_usteps: u8, y_usteps: u8, z_usteps: u8, e_usteps: u8) {
+        self.motion_config.lock().await.usteps = [
+            x_usteps.into(), y_usteps.into(), z_usteps.into(), e_usteps.into()
+        ];
+    }
+
+    pub async fn get_usteps_as_vector(&self) -> TVector<Real> {
+        let mcfg = self.motion_config.lock().await;
+        TVector::from_coords(
+            Some(Real::new(mcfg.usteps[0].into(), 0)),
+            Some(Real::new(mcfg.usteps[1].into(), 0)),
+            Some(Real::new(mcfg.usteps[2].into(), 0)),
+            Some(Real::new(mcfg.usteps[3].into(), 0)),
+        )
     }
 
     pub async fn get_default_travel_speed_as_real(&self) -> Real {
-        Real::new(self.motion_cfg.lock().await.default_travel_speed as i64, 0)
+        Real::new(self.motion_config.lock().await.default_travel_speed as i64, 0)
     }
 
     pub async fn get_max_accel(&self) -> TVector<u16> {
-        self.motion_cfg.lock().await.max_accel
+        self.motion_config.lock().await.max_accel
     }
 
     pub async fn get_max_speed(&self) -> TVector<u16> {
-        self.motion_cfg.lock().await.max_speed
+        self.motion_config.lock().await.max_speed
     }
     pub async fn set_max_speed(&self, speed: TVector<u16>) {
-        self.motion_cfg.lock().await.max_speed.assign(CoordSel::all(), &speed);
+        self.motion_config.lock().await.max_speed.assign(CoordSel::all(), &speed);
     }
     pub async fn get_max_speed_as_vreal(&self) -> TVector<Real> {
-        self.motion_cfg.lock().await.max_speed.map_coords(|c| Some(Real::new(c as i64, 0)))
+        self.motion_config.lock().await.max_speed.map_coords(|c| Some(Real::new(c as i64, 0)))
     }
 
     pub async fn set_max_accel(&self, accel: TVector<u16>) {
-        self.motion_cfg.lock().await.max_accel.assign(CoordSel::all(), &accel);
+        self.motion_config.lock().await.max_accel.assign(CoordSel::all(), &accel);
     }
 
     pub async fn get_max_accel_as_vreal(&self) -> TVector<Real> {
-        self.motion_cfg.lock().await.max_accel.map_coords(|c| Some(Real::new(c as i64, 0)))
+        self.motion_config.lock().await.max_accel.map_coords(|c| Some(Real::new(c as i64, 0)))
     }
 
     pub async fn set_max_jerk(&self, jerk: TVector<u32>) {
-        self.motion_cfg.lock().await.max_jerk.assign(CoordSel::all(), &jerk);
+        self.motion_config.lock().await.max_jerk.assign(CoordSel::all(), &jerk);
     }
 
     pub async fn plan(&self, channel: CommChannel, gc: &GCode, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure>{
@@ -413,8 +448,8 @@ impl MotionPlanner {
         let cfg_g = cfg.lock().await;
         //----
         let dts = Real::from_lit(cfg_g.default_travel_speed as i64, 0);
-        let flow_rate = Real::from_lit(cfg_g.flow_rate as i64, 0) / ONE_HUNDRED;
-        let speed_rate = Real::from_lit(cfg_g.speed_rate as i64, 0) / ONE_HUNDRED;
+        let flow_rate = Real::from_lit(cfg_g.flow_rate as i64, 2);
+        let speed_rate = Real::from_lit(cfg_g.speed_rate as i64, 2);
         let max_speed = cfg_g.max_speed.map_coords(|c| Some(Real::from_lit(c as i64, 0)));
         let max_accel = cfg_g.max_accel.map_coords(|c| Some(Real::from_lit(c as i64, 0)));
         let max_jerk = cfg_g.max_jerk.map_coords(|c| Some(Real::from_lit(c as i64, 0)));
@@ -457,8 +492,8 @@ impl MotionPlanner {
         let speed_vector = disp_vector / max_time;
 
         let module_target_speed = speed_vector.norm2().unwrap_or(ZERO);
-        let module_target_accel = (max_accel * speed_vector).norm2().unwrap_or(ZERO);
-        let module_target_jerk = (max_jerk * speed_vector).norm2().unwrap_or(ZERO);
+        let module_target_accel = (vdir.abs() * max_accel).norm2().unwrap_or(ZERO);
+        let module_target_jerk = (vdir.abs() * max_jerk).norm2().unwrap_or(ZERO);
 
         let t2 = embassy_time::Instant::now();
 
@@ -580,7 +615,7 @@ impl MotionPlanner {
 
 #[allow(unused)]
 pub struct RingBuffer {
-    pub(self) data: [PlanEntry; SEGMENT_QUEUE_SIZE as usize],
+    pub(self) data: [PlanEntry; hwa::SEGMENT_QUEUE_SIZE as usize],
     pub(self) head: u8,
     pub(self) used: u8,
 }
@@ -588,7 +623,7 @@ pub struct RingBuffer {
 impl RingBuffer {
     pub const fn new() -> Self {
         Self {
-            data: [PlanEntry::Empty; SEGMENT_QUEUE_SIZE as usize],
+            data: [PlanEntry::Empty; hwa::SEGMENT_QUEUE_SIZE as usize],
             head: 0,
             used: 0,
         }

@@ -5,13 +5,11 @@ use core::ops::{BitAnd, BitOr, BitXor};
 use crate::{TrackedStaticCell, ControllerMutex, ControllerRef};
 use bitflags::bitflags;
 
-type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-pub type PubSubType = embassy_sync::pubsub::PubSubChannel<ChannelMutexType, EventFlags, 1, 6, 1>;
-pub type PublisherType = embassy_sync::pubsub::Publisher<'static, ChannelMutexType, EventFlags, 1, 6, 1>;
-pub type SubscriberType<'a> = embassy_sync::pubsub::Subscriber<'a, ChannelMutexType, EventFlags, 1, 6, 1>;
+pub type PubSubType = embassy_sync::pubsub::PubSubChannel<crate::ControllerMutexType, EventFlags, 1, 6, 1>;
+pub type PublisherType = embassy_sync::pubsub::Publisher<'static, crate::ControllerMutexType, EventFlags, 1, 6, 1>;
+pub type SubscriberType<'a> = embassy_sync::pubsub::Subscriber<'a, crate::ControllerMutexType, EventFlags, 1, 6, 1>;
 
 bitflags! {
-    //#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct EventFlags: u32 {
         const SYS_ALARM        = 0b1000000000000000000000000000000;
@@ -63,7 +61,7 @@ impl EventBus {
 }
 
 pub struct EventBusRef {
-    instance: ControllerRef<EventBus, ChannelMutexType>,
+    instance: ControllerRef<EventBus, crate::ControllerMutexType>,
 }
 
 pub struct EventBusSubscriber<'a> {
@@ -251,16 +249,16 @@ impl EventStatus {
     }
 }
 
-pub fn init_event_bus() -> EventBusRef {
+pub fn init_event_bus<const MAX_SIZE: usize>() -> EventBusRef {
     static EVT_BUS: TrackedStaticCell<PubSubType> = TrackedStaticCell::new();
     static EVT_CTRL_BUS: TrackedStaticCell<ControllerMutex<EventBus>> = TrackedStaticCell::new();
 
-    let bus = EVT_BUS.init("EventBusChannel", PubSubType::new());
+    let bus = EVT_BUS.init::<MAX_SIZE>("EventBusChannel", PubSubType::new());
     let publisher: PublisherType = bus.publisher().expect("publisher exausted");
 
     EventBusRef::new(
         ControllerRef::new(
-            EVT_CTRL_BUS.init("EventBus", ControllerMutex::new(
+            EVT_CTRL_BUS.init::<MAX_SIZE>("EventBus", ControllerMutex::new(
                 EventBus {
                     bus,
                     publisher,

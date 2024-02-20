@@ -28,7 +28,7 @@ pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
-pub const MAX_STATIC_MEMORY: u32 = 8192;
+pub const MAX_STATIC_MEMORY: usize = 32768;
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
@@ -39,6 +39,7 @@ pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 
 pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1650;
+#[allow(unused)]
 pub const ADC_VREF_DEFAULT_SAMPLE: u16 = 2048;
 
 cfg_if::cfg_if! {
@@ -149,7 +150,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
             static UART_PORT1_INS: TrackedStaticCell<ControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
             let serial_port1_tx = ControllerRef::new(
-                UART_PORT1_INS.init("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
+                UART_PORT1_INS.init::<{self::MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
             );
             let serial_port1_rx_stream = device::UartPort1RxInputStream::new(uart_port1_rx_device);
         }
@@ -160,7 +161,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new().split();
             static UART_PORT2_INS: TrackedStaticCell<ControllerMutex<device::UartPort2Tx>> = TrackedStaticCell::new();
             let serial_port2_tx = ControllerRef::new(
-                UART_PORT2_INS.init("UartPort1Tx", ControllerMutex::new(uart_port2_tx_device))
+                UART_PORT2_INS.init::<{self::MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port2_tx_device))
             );
             let serial_port2_rx_stream = device::UartPort2RxInputStream::new(uart_port2_rx_device);
         }
@@ -259,7 +260,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     let pwm_any = {
         let pwm_any = mocked_peripherals::MockedPwm::new(20, _pin_state);
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmAny>> = TrackedStaticCell::new();
-        ControllerRef::new(PWM_INST.init(
+        ControllerRef::new(PWM_INST.init::<{self::MAX_STATIC_MEMORY}>(
             "PwmAny",
             ControllerMutex::new(pwm_any)
         ))
@@ -283,12 +284,12 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     let ps_on = {
         static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init("", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
+            PS_ON.init::<{self::MAX_STATIC_MEMORY}>("", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
         )
     };
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
-    let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
+    let sys_watchdog = ControllerRef::new(WD.init::<{self::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
 
     MachineContext {
         controllers: Controllers {

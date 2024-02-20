@@ -41,6 +41,12 @@ cfg_if::cfg_if! {
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion")] {
+        /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
+        const SEGMENT_QUEUE_SIZE: u8 = 4;
+    }
+}
 
 pub use board::ADC_START_TIME_US;
 pub use board::ADC_VREF_DEFAULT_MV;
@@ -49,7 +55,7 @@ use embassy_executor::Executor;
 use embassy_rp::multicore::{spawn_core1, Stack};
 use printhor_hwa_common::TrackedStaticCell;
 
-static CORE1_STACK: TrackedStaticCell<Stack<4096>> = TrackedStaticCell::new();
+static CORE1_STACK: TrackedStaticCell<Stack<8192>> = TrackedStaticCell::new();
 static EXECUTOR_HIGH: TrackedStaticCell<Executor> = TrackedStaticCell::new();
 
 struct TokenHolder<S> {

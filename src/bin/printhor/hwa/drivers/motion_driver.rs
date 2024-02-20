@@ -1,17 +1,23 @@
+use core::sync::atomic::compiler_fence;
+use core::sync::atomic::Ordering::SeqCst;
+use embassy_time::Duration;
 #[allow(unused)]
 use crate::{hwa, hwi};
+use crate::control::motion_timing::s_block_for;
 #[allow(unused)]
 use crate::hwa::ControllerRef;
+#[allow(unused)]
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
 use crate::math::Real;
-use crate::tgeo::TVector;
+use crate::tgeo::{CoordSel, TVector};
 #[cfg(all(feature = "native", feature = "plot-timings"))]
 use super::timing_monitor::*;
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDriverParams {
     pub motion_device: hwi::device::MotionDevice,
+    pub motion_config: hwa::controllers::MotionConfigRef,
     #[cfg(feature = "with-probe")]
     pub probe_controller: ControllerRef<hwa::controllers::ServoController>,
     #[cfg(feature = "with-fan-extra-1")]
@@ -46,7 +52,10 @@ impl MotionDriver {
         Self {
             pins: params.motion_device.motion_pins,
             #[cfg(feature = "with-trinamic")]
-            trinamic_controller: hwa::controllers::TrinamicController::new(params.motion_device.trinamic_uart),
+            trinamic_controller: hwa::controllers::TrinamicController::new(
+                params.motion_device.trinamic_uart,
+                params.motion_config,
+            ),
             #[cfg(feature = "with-probe")]
             probe_controller: params.probe_controller,
             #[cfg(feature = "with-fan-layer")]
@@ -128,7 +137,7 @@ impl MotionDriver {
         self.pins.disable_z_stepper()
     }
 
-    #[cfg(feature = "has-extruder")]
+    #[cfg(feature = "with-hot-end")]
     #[inline(always)]
     pub fn enable_e_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -137,7 +146,7 @@ impl MotionDriver {
     }
 
 
-    #[cfg(feature = "has-extruder")]
+    #[cfg(feature = "with-hot-end")]
     #[allow(unused)]
     #[inline(always)]
     pub fn disable_e_stepper(&mut self) {
@@ -167,7 +176,7 @@ impl MotionDriver {
         self.pins.z_dir_pin.set_high();
     }
 
-    #[cfg(feature = "has-extruder")]
+    #[cfg(feature = "with-hot-end")]
     #[inline(always)]
     pub fn e_dir_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -196,7 +205,7 @@ impl MotionDriver {
         self.pins.z_dir_pin.set_low();
     }
 
-    #[cfg(feature = "has-extruder")]
+    #[cfg(feature = "with-hot-end")]
     #[inline(always)]
     pub fn e_dir_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -225,7 +234,7 @@ impl MotionDriver {
         self.pins.z_step_pin.set_high();
     }
 
-    #[cfg(feature = "has-extruder")]
+    #[cfg(feature = "with-hot-end")]
     #[inline(always)]
     pub fn e_step_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -254,7 +263,7 @@ impl MotionDriver {
         self.pins.z_step_pin.set_low();
     }
 
-    #[cfg(feature = "has-extruder")]
+    #[cfg(feature = "with-hot-end")]
     #[inline(always)]
     pub fn e_step_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -267,7 +276,7 @@ impl MotionDriver {
         self.enable_x_stepper();
         self.enable_y_stepper();
         self.enable_z_stepper();
-        #[cfg(feature = "has-extruder")]
+        #[cfg(feature = "with-hot-end")]
         self.enable_e_stepper();
 
         if vdir.x.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
@@ -288,7 +297,7 @@ impl MotionDriver {
         else {
             self.z_dir_pin_low();
         }
-        #[cfg(feature = "has-extruder")]
+        #[cfg(feature = "with-hot-end")]
         if vdir.e.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
             self.e_dir_pin_high();
         }
@@ -298,52 +307,94 @@ impl MotionDriver {
     }
 
     pub async fn homing_action(&mut self) -> Result<(), ()>{
-        hwa::debug!("Do homing");
+        hwa::info!("Homing");
+
+        compiler_fence(SeqCst);
+
+        let mm_per_second = Real::new(50, 0);
+        let microsteps = Real::new(16, 0);
+        let axis_pulses_width = TVector::<Real>::one() * Real::from_lit(1000000, 0) / (TVector::<Real>::one() * mm_per_second * microsteps);
+        let bounds = TVector::one() * Real::from_lit(200, 0) * microsteps;
+        let mut advanced = TVector::zero();
+
+        hwa::info!("Homing speed: {}", axis_pulses_width );
+        hwa::info!("Homing bounds: {}", bounds );
 
         #[cfg(feature="with-laser")]
         self.laser_controller.lock().await.set_power(0).await;
 
-        self.pins.enable_z_stepper();
-
-        let mut num_pulses = 0u32;
-        let mut reached = false;
-
-        self.pins.z_dir_pin.set_high();
-
-        // Move up a little bit
-        for _i in 0..2 {
-            self.pins.z_step_pin.set_high();
-            embassy_time::Timer::after(embassy_time::Duration::from_micros(10)).await;
-            self.pins.z_step_pin.set_low();
-            embassy_time::Timer::after(embassy_time::Duration::from_micros(1000)).await;
-        }
-
-        // Move down until endtop hit
-        self.pins.z_dir_pin.set_low();
-        #[cfg(feature = "with-probe")]
-        self.probe_controller.lock().await.probe_pin_down(300).await;
-        for _i in 0..10 * 10 {
-            if self.pins.z_endstop_pin.is_high() {
-                hwa::debug!(" - R");
-                reached = true;
-                break;
+        hwa::info!("Homing X axis");
+        self.enable_x_stepper();
+        self.x_dir_pin_low();
+        let mut ticker = embassy_time::Ticker::every(
+            embassy_time::Duration::from_micros(axis_pulses_width.x.unwrap().to_i64().unwrap() as u64)
+        );
+        while self.pins.x_endstop_pin.is_low() {
+            if !advanced.bounded_by(&bounds) {
+                hwa::warn!("Missing X endstop after {}", advanced);
+                return Err(());
             }
-            num_pulses += 1;
-            self.pins.z_step_pin.set_high();
-            embassy_time::Timer::after(embassy_time::Duration::from_micros(10)).await;
-            self.pins.z_step_pin.set_low();
-            embassy_time::Timer::after(embassy_time::Duration::from_micros(1000)).await;
+            self.x_step_pin_high();
+            s_block_for(Duration::from_micros(10));
+            self.x_step_pin_low();
+            s_block_for(Duration::from_micros(10));
+            advanced.increment(CoordSel::X, Real::one());
+            ticker.next().await;
         }
-        hwa::debug!("1.ZDone");
-        #[cfg(feature = "with-probe")]
-        self.probe_controller.lock().await.probe_pin_up(300).await;
-        if ! reached{
-            hwa::debug!("not reached in {}", num_pulses);
-            Err(())
+        hwa::info!("{}", advanced);
+        advanced.set_coord(CoordSel::X, Some(Real::zero()));
+
+        hwa::info!("Homing Y axis");
+        self.enable_y_stepper();
+        self.y_dir_pin_low();
+        let mut ticker = embassy_time::Ticker::every(
+            Duration::from_micros(axis_pulses_width.y.unwrap().to_i64().unwrap() as u64)
+        );
+        while self.pins.y_endstop_pin.is_low() {
+            if !advanced.bounded_by(&bounds) {
+                hwa::warn!("Missing Y endstop after {}", advanced);
+                return Err(());
+            }
+            self.y_step_pin_high();
+            s_block_for(Duration::from_micros(10));
+            self.y_step_pin_low();
+            s_block_for(Duration::from_micros(10));
+            advanced.increment(CoordSel::Y, Real::one());
+            ticker.next().await;
         }
-        else {
-            Ok(())
+
+        hwa::info!("{}", advanced);
+        advanced.set_coord(CoordSel::Y, Some(Real::zero()));
+
+        hwa::info!("Move Z up");
+        self.enable_z_stepper();
+        self.z_dir_pin_high();
+        ticker = embassy_time::Ticker::every(
+            Duration::from_micros(axis_pulses_width.z.unwrap().to_i64().unwrap() as u64)
+        );
+        for _i in 0 .. 16 * 10 {
+            self.z_step_pin_high();
+            s_block_for(Duration::from_micros(10));
+            advanced.increment(CoordSel::Z, Real::one());
+            self.z_step_pin_low();
+            s_block_for(Duration::from_micros(10));
+            ticker.next().await;
         }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-probe")] {
+                hwa::info!("probe down...");
+                self.probe_controller.lock().await.probe_pin_down(100).await;
+                hwa::info!("TODO: Homing Z axis");
+                embassy_time::Timer::after_secs(1).await;
+                self.probe_controller.lock().await.probe_pin_up(100).await;
+            }
+        }
+
+        //#[cfg(all(feature = "native", feature = "plot-timings"))]
+        //self.end_segment().await;
+
+        Ok(())
     }
 
 }

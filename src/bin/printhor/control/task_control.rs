@@ -40,10 +40,10 @@ pub async fn task_control(
     }
     loop {
 
-        match embassy_time::with_timeout(embassy_time::Duration::from_secs(600), _d.next_gcode()).await {
+        match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode()).await {
             // Timeout
             Err(_) => {
-                hwa::warn!("task_control: Timeout");
+                hwa::debug!("task_control: Timeout");
             }
             Ok((Err(GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
@@ -60,7 +60,7 @@ pub async fn task_control(
                 processor.write(channel, s).await;
             }
             Ok((Ok(None), _channel)) => {
-                hwa::trace!("{:?} Got EOF", _channel);
+                hwa::warn!("{:?} Got EOF", _channel);
                 //embassy_time::Timer::after_secs(1).await; // Avoid respawn too fast
             }
             Ok((Ok(Some(gc)), channel)) => {

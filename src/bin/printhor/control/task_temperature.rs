@@ -85,7 +85,6 @@ use crate::hwa::controllers::HeaterController;
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
-use pid;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
@@ -195,6 +194,7 @@ impl HeaterStateMachine {
                     event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
                 }
                 State::Maintaining => {
+                    #[cfg(feature = "native")]
                     hwa::debug!("Temperature reached. Firing {:?}.", temperature_flag);
                     m.flush_notification(action).await;
                     event_bus.publish_event(EventStatus::containing(temperature_flag)).await;

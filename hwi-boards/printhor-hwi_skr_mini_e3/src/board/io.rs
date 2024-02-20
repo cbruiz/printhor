@@ -36,31 +36,30 @@ pub mod usbserial {
             config.device_sub_class = 0x02;
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
+
             static DEVICE_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let device_descriptor = DEVICE_DESCRIPTOR_ST.init("", [0; 256]);
+            let device_descriptor = DEVICE_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
             static CONFIG_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let config_descriptor = CONFIG_DESCRIPTOR_ST.init("", [0; 256]);
+            let config_descriptor = CONFIG_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
             static BOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let bos_descriptor = BOS_DESCRIPTOR_ST.init("", [0; 256]);
-            static MSOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let msos_descriptor = MSOS_DESCRIPTOR_ST.init("", [0; 256]);
+            let bos_descriptor = BOS_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
 
             static CONTROL_BUF_ST: crate::board::TrackedStaticCell<[u8; 64]> = crate::board::TrackedStaticCell::new();
-            let control_buf = CONTROL_BUF_ST.init("", [0; 64]);
+            let control_buf = CONTROL_BUF_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 64]);
 
             static STATE_ST: crate::board::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = crate::board::TrackedStaticCell::new();
-            let state = STATE_ST.init("", embassy_usb::class::cdc_acm::State::new());
+            let state = STATE_ST.init::<{crate::MAX_STATIC_MEMORY}>("", embassy_usb::class::cdc_acm::State::new());
             let mut builder = embassy_usb::Builder::new(
                 driver,
                 config,
                 device_descriptor,
                 config_descriptor,
                 bos_descriptor,
-                msos_descriptor,
+                &mut [],
                 control_buf,
             );
 
-            //crate::info!("Creating USB CLASS");
+            crate::debug!("Creating USB CLASS");
 
             // Create classes on the builder.
             let class = embassy_usb::class::cdc_acm::CdcAcmClass::new(&mut builder, state, 64);
@@ -168,24 +167,50 @@ pub mod uart_port1 {
     use crate::device::UartPort1RxDevice;
     use futures::Stream;
     use core::pin::Pin;
+    use core::sync::atomic::{compiler_fence, Ordering};
     use futures::task::Context;
     use futures::task::Poll;
     use futures::Future;
 
-    pub struct UartPort1RxInputStream {
-        pub receiver: UartPort1RxDevice,
-        buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
-        bytes_read: u8,
-        current_byte_index: u8,
+    cfg_if::cfg_if! {
+        if #[cfg(feature="without-ringbuffer")] {
+            pub struct UartPort1RxInputStream {
+                receiver: UartPort1RxDevice,
+                buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
+                bytes_read: u8,
+                current_byte_index: u8,
+            }
+        }
+        else {
+            pub struct UartPort1RxInputStream {
+                receiver: crate::device::UartPort1RingBufferedRxDevice,
+                buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
+                bytes_read: u8,
+                current_byte_index: u8,
+            }
+        }
     }
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
-            Self {
-                receiver,
-                buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
-                bytes_read: 0,
-                current_byte_index: 0,
+            cfg_if::cfg_if! {
+                if #[cfg(feature="without-ringbuffer")] {
+                    Self {
+                        receiver,
+                        buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
+                        bytes_read: 0,
+                        current_byte_index: 0,
+                    }
+                }
+                else {
+                    static BUFF: printhor_hwa_common::TrackedStaticCell<[u8;crate::UART_PORT1_BUFFER_SIZE]> = printhor_hwa_common::TrackedStaticCell::new();
+                    Self {
+                        receiver: receiver.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
+                        buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
+                        bytes_read: 0,
+                        current_byte_index: 0,
+                    }
+                }
             }
         }
     }
@@ -194,10 +219,9 @@ pub mod uart_port1 {
     {
         type Item = Result<u8, async_gcode::Error>;
 
-        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
-
+        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
+            compiler_fence(Ordering::SeqCst);
             let this = self.get_mut();
-
             if this.current_byte_index < this.bytes_read {
                 let byte = this.buffer[this.current_byte_index as usize];
                 this.current_byte_index += 1;
@@ -207,29 +231,139 @@ pub mod uart_port1 {
                 this.current_byte_index = 0;
                 this.bytes_read = 0;
 
-                let r = core::pin::pin!(
-                    this.receiver.read_until_idle(&mut this.buffer)
-                ).poll(ctx);
-                match r {
-                    Poll::Ready(rst) => {
-                        match rst {
-                            Ok(n) => {
-                                this.bytes_read = n as u8;
-                                if n > 0 {
-                                    let byte = this.buffer[this.current_byte_index as usize];
-                                    this.current_byte_index += 1;
-                                    Poll::Ready(Some(Ok(byte)))
-                                }
-                                else {
-                                    Poll::Ready(None)
-                                }
-                            }
-                            Err(_e) => {
-                                Poll::Ready(None)
-                            }
+                let r = core::pin::pin!({
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature="without-ringbuffer")] {
+                            this.receiver.read_until_idle(&mut this.buffer)
+                        }
+                        else {
+                            this.receiver.read(&mut this.buffer)
                         }
                     }
-                    Poll::Pending => Poll::Pending
+                }).poll(ctx);
+                match r {
+                    Poll::Ready(Ok(n)) => {
+                        this.bytes_read = n as u8;
+                        if n > 0 {
+                            let byte = this.buffer[this.current_byte_index as usize];
+                            this.current_byte_index += 1;
+                            Poll::Ready(Some(Ok(byte)))
+                        } else {
+                            Poll::Ready(None)
+                        }
+                    }
+                    Poll::Ready(Err(_e)) => {
+                        defmt::warn!("poll() -> Error {:?}", _e);
+                        Poll::Ready(None)
+                    }
+                    Poll::Pending => {
+                        defmt::trace!("poll() -> Pending");
+                        Poll::Pending
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "with-serial-port-2")]
+pub mod uart_port2 {
+    use crate::device::UartPort2RxDevice;
+    use futures::Stream;
+    use core::pin::Pin;
+    use core::sync::atomic::{compiler_fence, Ordering};
+    use futures::task::Context;
+    use futures::task::Poll;
+    use futures::Future;
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature="without-ringbuffer")] {
+            pub struct UartPort2RxInputStream {
+                receiver: UartPort2RxDevice,
+                buffer: [u8; crate::UART_PORT2_BUFFER_SIZE],
+                bytes_read: u8,
+                current_byte_index: u8,
+            }
+        }
+        else {
+            pub struct UartPort2RxInputStream {
+                receiver: crate::device::UartPort2RingBufferedRxDevice,
+                buffer: [u8; crate::UART_PORT2_BUFFER_SIZE],
+                bytes_read: u8,
+                current_byte_index: u8,
+            }
+        }
+    }
+
+    impl UartPort2RxInputStream {
+        pub fn new(receiver: UartPort2RxDevice) -> Self {
+            cfg_if::cfg_if! {
+                if #[cfg(feature="without-ringbuffer")] {
+                    Self {
+                        receiver,
+                        buffer: [0; crate::UART_PORT2_BUFFER_SIZE],
+                        bytes_read: 0,
+                        current_byte_index: 0,
+                    }
+                }
+                else {
+                    static BUFF: printhor_hwa_common::TrackedStaticCell<[u8;crate::UART_PORT2_BUFFER_SIZE]> = printhor_hwa_common::TrackedStaticCell::new();
+                    Self {
+                        receiver: receiver.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartPort2RXRingBuff", [0; crate::UART_PORT2_BUFFER_SIZE])),
+                        buffer: [0; crate::UART_PORT2_BUFFER_SIZE],
+                        bytes_read: 0,
+                        current_byte_index: 0,
+                    }
+                }
+            }
+        }
+    }
+
+    impl Stream for UartPort2RxInputStream
+    {
+        type Item = Result<u8, async_gcode::Error>;
+
+        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
+            compiler_fence(Ordering::SeqCst);
+            let this = self.get_mut();
+            if this.current_byte_index < this.bytes_read {
+                let byte = this.buffer[this.current_byte_index as usize];
+                this.current_byte_index += 1;
+                Poll::Ready(Some(Ok(byte)))
+            }
+            else {
+                this.current_byte_index = 0;
+                this.bytes_read = 0;
+
+                let r = core::pin::pin!({
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature="without-ringbuffer")] {
+                            this.receiver.read_until_idle(&mut this.buffer)
+                        }
+                        else {
+                            this.receiver.read(&mut this.buffer)
+                        }
+                    }
+                }).poll(ctx);
+                match r {
+                    Poll::Ready(Ok(n)) => {
+                        this.bytes_read = n as u8;
+                        if n > 0 {
+                            let byte = this.buffer[this.current_byte_index as usize];
+                            this.current_byte_index += 1;
+                            Poll::Ready(Some(Ok(byte)))
+                        } else {
+                            Poll::Ready(None)
+                        }
+                    }
+                    Poll::Ready(Err(_e)) => {
+                        defmt::warn!("poll() -> Error {:?}", _e);
+                        Poll::Ready(None)
+                    }
+                    Poll::Pending => {
+                        defmt::trace!("poll() -> Pending");
+                        Poll::Pending
+                    }
                 }
             }
         }
@@ -238,38 +372,62 @@ pub mod uart_port1 {
 
 cfg_if::cfg_if!{
     if #[cfg(feature = "with-trinamic")] {
-        pub struct TrinamicUartWrapper {
-            inner: crate::device::TrinamicUartDevice
+
+        cfg_if::cfg_if!{
+            if #[cfg(feature = "upstream-embassy")] {
+                pub struct TrinamicUartWrapper {
+                    rx: embassy_stm32::usart::RingBufferedUartRx<'static, crate::device::TrinamicUartPeri>,
+                    tx: embassy_stm32::usart::UartTx<'static, crate::device::TrinamicUartPeri, crate::device::TrinamicUartTxDma>,
+                }
+
+            }
+            else {
+                pub struct TrinamicUartWrapper {
+                    rx: embassy_stm32::usart::RingBufferedUartRx<'static, crate::device::TrinamicUartPeri, crate::device::TrinamicUartRxDma>,
+                    tx: embassy_stm32::usart::UartTx<'static, crate::device::TrinamicUartPeri, crate::device::TrinamicUartTxDma>,
+                }
+            }
         }
+
 
         impl TrinamicUartWrapper {
             pub fn new(inner: crate::device::TrinamicUartDevice) -> Self {
+                static BUFF: printhor_hwa_common::TrackedStaticCell<[u8; 32]> = printhor_hwa_common::TrackedStaticCell::new();
+
+                let (tx, rx) = inner.split();
                 Self {
-                    inner
+                    rx: rx.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartTrinamicRXRingBuff", [0; 32])),
+                    tx,
                 }
             }
+
+            pub async fn consume(&mut self) {
+                let _ = self.rx.start();
+            }
+
             pub async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, printhor_hwa_common::soft_uart::SerialError> {
-                match embassy_time::with_timeout(embassy_time::Duration::from_secs(5),
-                                                 self.inner.read_until_idle(buffer)).await {
-                    Ok(Ok(read_size)) => {
-                        Ok(read_size)
+                match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), self.rx.read(buffer)).await {
+                    Ok(Ok(x)) => {
+                        crate::info!("Ok read: {} bytes", x);
+                        Ok(x)
                     },
                     Ok(Err(_error)) => {
-                        // TODO
+                        crate::error!("Error: {}", _error);
                         Err(printhor_hwa_common::soft_uart::SerialError::Framing)
                     },
                     Err(_) => {
+                        crate::error!("Timeout");
                         Err(printhor_hwa_common::soft_uart::SerialError::Timeout)
                     }
                  }
             }
 
             pub async fn write(&mut self,buffer: &[u8]) -> Result<(), printhor_hwa_common::soft_uart::SerialError> {
-                Ok(self.inner.write(buffer).await.map_err(|_| {printhor_hwa_common::soft_uart::SerialError::Framing})?)
+                Ok(self.tx.write(buffer).await.map_err(|_| {printhor_hwa_common::soft_uart::SerialError::Framing})?)
             }
 
             pub fn blocking_flush(&mut self) -> Result<(), printhor_hwa_common::soft_uart::SerialError> {
-                Ok(self.inner.blocking_flush().map_err(|_| {printhor_hwa_common::soft_uart::SerialError::Framing})?)
+                Ok(self.tx.blocking_flush().map_err(|_| {printhor_hwa_common::soft_uart::SerialError::Framing})?)
             }
         }
     }

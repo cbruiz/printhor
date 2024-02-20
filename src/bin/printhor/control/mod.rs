@@ -5,7 +5,6 @@ use crate::math::Real;
 #[cfg(feature = "native")]
 use strum::Display;
 use strum::{AsRefStr, VariantNames};
-use alloc::string::String;
 #[cfg(feature = "with-motion")]
 pub(crate) mod motion_planning;
 #[cfg(feature = "with-motion")]
@@ -27,15 +26,13 @@ pub mod task_temperature;
 pub mod task_stepper;
 
 #[allow(dead_code)]
-#[derive(Clone, Default)]
-#[cfg_attr(feature = "native", derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct S {
     pub(crate) ln: Option<u32>,
     pub(crate) s: Option<Real>,
 }
 #[allow(dead_code)]
-#[derive(Clone, Default)]
-#[cfg_attr(feature = "native", derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct XYZW {
     pub(crate) ln: Option<u32>,
     pub(crate) x: Option<Real>,
@@ -53,8 +50,7 @@ impl crate::hwa::defmt::Format for XYZW {
 
 
 #[allow(dead_code)]
-#[derive(Clone, Default)]
-#[cfg_attr(feature = "native", derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct XYZ {
     pub(crate) ln: Option<u32>,
     pub(crate) f: Option<Real>,
@@ -84,8 +80,7 @@ impl Display for XYZ {
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Default)]
-#[cfg_attr(feature = "native", derive(Debug))]
+#[derive(Clone, Default, Debug)]
 pub struct XYZEFS {
     pub(crate) ln: Option<u32>,
     pub(crate) e: Option<Real>,
@@ -119,7 +114,7 @@ impl crate::hwa::defmt::Format for XYZEFS {
 }
 
 #[allow(unused)]
-#[derive(Clone, VariantNames, AsRefStr, Default)]
+#[derive(Clone, VariantNames, AsRefStr, Default, Debug)]
 #[cfg_attr(feature = "native", derive(Display))]
 pub enum GCode {
     /// No Operation
@@ -180,11 +175,11 @@ pub enum GCode {
     M6, M7, M8, M9, M10, M11, M13, M16, // CNC
     M17, M18, // Stepper motors
     /// List SD
-    M20(Option<String>),
+    M20(Option<alloc::string::String>),
     M21,
     M22,
     /// Select SD file
-    M23(Option<String>),
+    M23(Option<alloc::string::String>),
     /// Start/resume SD print
     M24,
     /// Pause SD print

@@ -1,4 +1,4 @@
-use crate::hwa;
+use crate::{hwa, math};
 #[cfg(feature = "native")]
 use core::fmt::Display;
 #[cfg(feature = "native")]
@@ -7,10 +7,13 @@ use core::ops::{Div, Neg};
 use core::ops::Mul;
 #[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use num_traits::float::FloatCore;
+#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use crate::{math::Real, math::RealInclusiveRange};
 #[cfg(all(feature = "native", feature = "plot-motion-plan"))]
 use rust_decimal::prelude::ToPrimitive;
-use crate::math::{FOUR, HALF, ONE, SIX, THREE, TWO, ZERO};
+#[cfg(all(not(feature = "native"), feature = "plot-motion-plan"))]
+use num_traits::ToPrimitive;
+use crate::math::*;
 use crate::control::CodeExecutionFailure;
 
 #[derive(Clone, Default)]
@@ -69,6 +72,8 @@ pub struct SCurveMotionProfile {
     pub a_lim_d: Real,
     pub v_lim: Real,
     pub q1: Real,
+
+    pub cache: Cache,
 }
 
 #[allow(unused)]
@@ -105,7 +110,7 @@ impl SCurveMotionProfile {
 
         let (t_j1, t_a) = if (constraints.v_max - v_0) * constraints.j_max < amax_squared {
             let t_j1 = ( ( constraints.v_max - v_0 ) / constraints.j_max ).sqrt().ok_or(CodeExecutionFailure::NumericalError)?;
-            (t_j1, t_j1 * TWO)
+            (t_j1, t_j1 + t_j1)
         } else {
             let t_j1 = constraints.a_max / constraints.j_max;
             (t_j1, t_j1 + (constraints.v_max - v_0) / constraints.a_max)
@@ -113,15 +118,15 @@ impl SCurveMotionProfile {
 
         let (t_j2, t_d) = if (constraints.v_max - v_1) * constraints.j_max < amax_squared {
             let t_j1 = ( ( constraints.v_max - v_1 ) / constraints.j_max ).sqrt().ok_or(CodeExecutionFailure::NumericalError)?;
-            (t_j1, t_j1 * TWO)
+            (t_j1, t_j1 + t_j1)
         } else {
             let t_j1 = constraints.a_max / constraints.j_max;
             (t_j1, t_j1 + (constraints.v_max - v_1) / constraints.a_max)
         };
 
         let t_v = (q_1 / constraints.v_max )
-            - ((t_a / TWO) * ( ONE + (v_0 / constraints.v_max)))
-            - ((t_d / TWO) * ( ONE + (v_1 / constraints.v_max)));
+            - ((t_a * HALF) * ( ONE + (v_0 / constraints.v_max)))
+            - ((t_d * HALF) * ( ONE + (v_1 / constraints.v_max)));
 
         let (intervals, _j_max) = if t_v >= ZERO {
             let a_lim_a = constraints.j_max * t_j1;
@@ -143,6 +148,7 @@ impl SCurveMotionProfile {
                 a_lim_d,
                 v_lim,
                 q1: q_1,
+                cache: Cache::default(),
             }, constraints.j_max)
         }
         else {
@@ -225,6 +231,7 @@ impl SCurveMotionProfile {
                 a_lim_d,
                 v_lim,
                 q1: q_1,
+                cache: Cache::default()
             }, a_max_2)
         };
 
@@ -245,70 +252,134 @@ impl SCurveMotionProfile {
 
     }
 
+    /// \[ 0, T_{j1}\]
     #[inline]
-    fn t1(&self) -> Real {
+    fn i1_start(&self) -> Real {
+        Real::zero()
+    }
+
+    /// \[ 0, T_{j1}\]
+    #[inline]
+    fn i1_end(&self) -> Real {
+        self.i2_start()
+    }
+
+    /// \[ T_{j1}, T_{a} - T_{j1}\]
+    #[inline]
+    fn i2_start(&self) -> Real {
         self.t_j1
     }
+
+    /// \[ T_{j1}, T_{a} - T_{j1}\]
     #[inline]
-    fn t2(&self) -> Real {
+    fn i2_end(&self) -> Real {
+        self.i3_start()
+    }
+
+    /// \[ T_{a} - T_{j1}, T_{a}\]
+    #[inline]
+    fn i3_start(&self) -> Real {
         self.t_a - self.t_j1
     }
 
+    /// \[ T_{a} - T_{j1}, T_{a}\]
     #[inline]
-    fn t3(&self) -> Real {
+    fn i3_end(&self) -> Real {
+        self.i4_start()
+    }
+
+    /// \[T_a, T_a + T_v\]
+    #[inline]
+    fn i4_start(&self) -> Real {
         self.t_a
     }
 
+    /// \[T_a, T_a + T_v\]
     #[inline]
-    fn t4(&self) -> Real {
+    fn i4_end(&self) -> Real {
+        self.i5_start()
+    }
+
+    /// \[T_a + T_v, T - T_d + T_j2\]
+    ///
+    /// \[T_a + T_v, T_a + T_v + T_j2\]
+    #[inline]
+    fn i5_start(&self) -> Real {
         self.t_a + self.t_v
     }
 
     #[inline]
-    fn t5(&self) -> Real {
-        self.t - self.t_d + self.t_j2
+    fn i5_end(&self) -> Real {
+        self.i6_start()
     }
 
+    /// \[T - T_{d} + T_{j2}, T - T_{j2}\]
+    ///
+    /// \[T_{a} + T_{v} + T_{j2}, T_{a} + T_{v} + T_{d} - T_{j2}\]
     #[inline]
-    fn t6(&self) -> Real {
-        self.t - self.t_j2
+    fn i6_start(&self) -> Real {
+        self.t_a + self.t_v + self.t_j2
     }
 
+    /// \[T - T_d + T_j2, T - T_j2\]
+    ///
+    /// \[T_a + T_v + T_j2, T_a + T_v + T_d - T_j2\]
     #[inline]
-    fn t7(&self) -> Real {
+    fn i6_end(&self) -> Real {
+        self.i7_start()
+    }
+
+    /// \[T - T_j2, T\]
+    ///
+    /// \[T_a + T_v + T_d - T_j2, T_a + T_v + T_d\]
+    #[inline]
+    fn i7_start(&self) -> Real {
+        self.t_a + self.t_v + self.t_d - self.t_j2
+    }
+
+    /// \[T - T_j2, T\]
+    ///
+    /// \[T_a + T_v + T_d - T_j2, T_a + T_v + T_d\]
+    #[inline]
+    fn i7_end(&self) -> Real {
         self.t
     }
 
     /// Computes the position (steps) in given timestamp (uS)
-    pub fn eval_position(&self, t_i: Real) -> Option<Real> {
-        let v0 =  self.v_0;
-        let v1 = self.v_1;
-
-        if t_i <= self.t1() {
-            Some((v0 * t_i) + (self.j_max * t_i.powi(3) / SIX))
-        } else if t_i <= self.t2() {
-            Some((v0 * t_i) + ((self.a_lim_a * ((THREE * t_i.powi(2)) - (THREE * self.t_j1 * t_i) + self.t_j1.powi(2))) / SIX))
-        } else if t_i <= self.t3() {
-            Some((self.v_lim + v0) * self.t_a / TWO - self.v_lim * (self.t_a - t_i) - self.j_min * (self.t_a - t_i).powi(3) / SIX)
-        } else if t_i <= self.t4() {
-            Some((self.v_lim + v0) * self.t_a / TWO + self.v_lim * (t_i - self.t_a))
-        } else if t_i <= self.t5() {
-            Some(self.q1 - (self.v_lim + v1) * self.t_d / TWO
-                + self.v_lim * (t_i - self.t + self.t_d)
-                - self.j_max * (t_i - self.t + self.t_d).powi(3) / SIX)
-        } else if t_i <= self.t6() {
-            Some(self.q1 - (self.v_lim + v1) * self.t_d / TWO
-                + self.v_lim * (t_i - self.t + self.t_d)
-                - (self.a_lim_d / SIX) * (
-                    (THREE * ((t_i - self.t + self.t_d).powi(2)))
-                        - (THREE * self.t_j2 * (t_i - self.t + self.t_d))
-                        + self.t_j2.powi(2)
-                )
-            )
-        } else if t_i <= self.t7() {
-            Some(self.q1 - v1 * (self.t - t_i) - self.j_max * (self.t - t_i).powi(3) / SIX)
-        } else {
-            None
+    /// * p_{1}(t) = if( 0 <= t < T_{j1} , s_{i1}(t) ) | \[0, T_{j1} \]
+    /// * p_{2}(t) = if( T_{j1} <= t < T_{a} - T_{j1}, s_{i2}(t) ) | \[ T_{j1}, T_{a} - T_{j1} \]
+    /// * p_{3}(t) = if( T_{a} - T_{j1} <= t < T_{a}, s_{i3}(t) ) | \[ T_{a} - T_{j1}, T_{a} \]
+    /// * p_{4}(t) = if( T_{a} <= t < T_{a} + T_{v}, s_{i4}(t) ) | \[ T_{a}, T_{a} + T_{v} \]
+    /// * p_{5}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
+    /// * p_{6}(t) = if( T_{a} + T_{v} + T_{j2} <= t < T_{a} + T_{v} + T_{d} - T_{j2}, s_{i6}(t) ) | \[ T_{a} + T_{v} + T_{j2}, T_{a} + T_{v} + T_{d} - T_{j2} \]
+    /// * p_{7}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
+    pub fn eval_position(&mut self, t: Real) -> (u8, Option<Real>) {
+        if t < math::ZERO {
+            (0, Some(math::ZERO))
+        }
+        else if t >= self.i1_start() && t < self.i1_end() {
+            (1, Some(self.s_i1(&t)))
+        }
+        else if t >= self.i2_start() && t < self.i2_end() {
+            (2, Some(self.s_i2(&t)))
+        }
+        else if t >= self.i3_start() && t < self.i3_end() {
+            (3, Some(self.s_i3(&t)))
+        }
+        else if t >= self.i4_start() && t < self.i4_end() {
+            (4, Some(self.s_i4(&t)))
+        }
+        else if t >= self.i5_start() && t < self.i5_end() {
+            (5, Some(self.s_i5(&t)))
+        }
+        else if t >= self.i6_start() && t < self.i6_end() {
+            (6, Some(self.s_i6(&t)))
+        }
+        else if t >= self.i7_start() && t < self.i7_end() {
+            (7, Some(self.s_i7(&t)))
+        }
+        else {
+            (8, None)
         }
     }
 
@@ -317,6 +388,157 @@ impl SCurveMotionProfile {
         SCurveRealTimeIterator::new(self, ref_time, offset)
     }
      */
+
+    // Starting at \sigma_{1}
+    // v_{i1}(t) = \frac{j_{max}}{2} (t-\sigma_{1})^2 + v_{0}
+    fn v_i1(&self, t: &Real) -> Real {
+        let dt = (*t) - self.i1_start();
+        (self.j_max * HALF * dt * dt) + self.v_0
+    }
+
+    // Starting at \sigma_{2}
+    // v_{i2}(t)=j_{max} T_{j1} (t-\sigma_{2})+v_{i1}(\sigma_{2})
+    fn v_i2(&self, t: &Real) -> Real {
+        let dt = (*t) - self.i2_start();
+        (self.j_max * self.t_j1 * dt) + self.v_i1(&self.i2_start())
+    }
+
+    // Starting at \sigma_{3}
+    // v_{i3}(t) = \frac{-j_{max}}{2}(t-\sigma_{3} - T_{j1})^2 - \frac{j_{max} T_{j1}^2}{2} + v_{i2}(\sigma_{3})
+    // Simplified as:
+    // v_{i3}(t) = \frac{j_{max}}{2}((T_{j1})^2 - (t-\sigma_{3})^2) + v_{i2}(\sigma_{3})
+    fn v_i3(&self, t: &Real) -> Real {
+        let dt = (*t) - self.i3_start();
+        let dtt = dt - self.t_j1;
+        //(-self.j_max * HALF * dtt * dtt) + (self.j_max * HALF * self.t_j1 * self.t_j1) + self.v_i2(&self.i3_start())
+        (self.j_max * HALF) * ((self.t_j1 * self.t_j1) - (dtt * dtt)) + self.v_i2(&self.i3_start())
+    }
+
+    fn v_i4(&self, t: &Real) -> Real {
+        self.v_i3(&self.i4_start())
+    }
+
+    fn v_i5(&self, t: &Real) -> Real {
+        let dt = (*t) - self.i5_start();
+        (-self.j_max * HALF * dt * dt) + self.v_i4(&self.i5_start())
+    }
+
+    fn v_i6(&self, t: &Real) -> Real {
+        let dt = (*t) - self.i6_start();
+        (-self.j_max * self.t_j2 * dt) + self.v_i5(&self.i6_start())
+    }
+
+    fn v_i7(&self, t: &Real) -> Real {
+        let dt = (*t) - self.i7_start();
+        let dtt = dt - self.t_j2;
+        (self.j_max * HALF * dtt * dtt) + (self.j_max * HALF * self.t_j2 * self.t_j2) - self.v_i6(&self.i7_start())
+    }
+
+    /// Acceleration phase, jerk limited acceleration
+    ///
+    /// v_{i1}(t) = \frac{j_{max}t^2}{2}+v_{0} \\
+    ///
+    /// s_{i1}(t) = \int{v_{i1}(t)dt} \\
+    ///
+    /// s_{i1}(t)_{|t>\delta} = \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) \\
+    fn s_i1(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i1_start();
+        (self.j_max * SIXTH * dt * dt * dt) + (self.v_0 * dt)
+    }
+
+    /// Acceleration phase, constant acceleration
+    ///
+    /// v_{i2}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i1}(\delta)\\
+    ///
+    /// s_{i2}(t) = \int{v_{i2}(t)dt}\\
+    ///
+    /// s_{i2}(t)_{|t>\delta} = \frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i1}(\delta)(t-\delta) + s_{i1}(\delta)\\
+    ///
+    fn s_i2(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i2_start();
+        (self.j_max * HALF * self.t_j1 * dt) * (dt + self.t_j1)
+                + self.v_0 * dt + self.s_i1(&self.i1_end())
+    }
+
+    /// Acceleration phase, jerk limited deceleration
+    ///
+    /// v_{i3}(t)(t)_{|t>\delta} = v_{i2}(t) + v_{0} - j_{max} T_{j1} (t-\delta)\\
+    ///
+    /// s_{i3}(t) = \int{v_{i2}(t) + v_0 dt} - \int{v_{i3}(t)dt}\\
+    fn s_i3(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i3_start();
+        self.s_i2(t) - ((self.j_max * SIXTH * dt) * (dt * dt)) + (self.v_0 * dt)
+    }
+
+    /// Constant velocity
+    ///
+    /// v_{i4}(t)(t)_{|t>\delta} = v_{lim} \\
+    ///
+    /// s_{i4}(t) = s_{i3}(\delta) + \int{v_{i3}(t)dt}\\
+    fn s_i4(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i4_start();
+        self.s_i3(&self.i3_end()) + (self.v_lim * dt)
+    }
+
+    /// Deceleration phase, jerk limited deceleration
+    ///
+    /// Same as s_{í1}(t)
+    ///
+    /// v_{i5}(t) = \frac{j_{max}t^2}{2}+v_{0} \\
+    ///
+    /// s_{i5}(t) = s_i4(t) - \int{v_{i5}(t)dt} \\
+    ///
+    /// s_{i5}(t)_{|t>\delta} = s_{i4}(t) - \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) \\
+    fn s_i5(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i5_start();
+        self.s_i4(t) - self.s_i1(&dt)
+    }
+
+    /// Deceleration phase, constant deceleration
+    ///
+    /// Same as s_{í2}(t)
+    ///
+    /// v_{i6}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i5}(\delta)\\
+    ///
+    /// s_{i2}(t) = \int{v_{i2}(t)dt} + s_{i5}(\delta)\\
+    ///
+    /// s_{i5}(t)_{|t>\delta} = -\frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i5}(\delta)(t-\delta) + s_{i5}(\delta)\\
+    ///
+    fn s_i6(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i6_start();
+        (dt * (-self.j_max * HALF * self.t_j2 * dt)) + (self.v_i5(&self.i5_end()) * dt) + self.s_i5(&self.i5_end())
+    }
+
+    /// Deceleration phase, jerk limited acceleration
+    ///
+    /// v_{i3}(t)(t)_{|t>\delta} = v_{i2}(t) + v_{0} - j_{max} T_{j1} (t-\delta)\\
+    ///
+    /// s_{i3}(t) = \int{v_{i2}(t) + v_0 dt} - \int{v_{i3}(t)dt}\\
+    fn s_i7(&mut self, t: &Real) -> Real {
+        let dt = (*t) - self.i7_start();
+        self.s_i6(t) + ((self.j_max * SIXTH * dt) * (dt * dt)) + (self.v_0 * dt)
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Cache {
+    pub t_ant: Real,
+    pub p_acc: Real,
+}
+
+impl Default for Cache {
+    fn default() -> Self {
+        Self { t_ant: Real::zero(), p_acc: Real::zero() }
+    }
+}
+
+
+#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
+#[allow(unused)]
+pub fn rtoi(r: Real ) -> i32 {
+    #[cfg(not(feature = "native"))]
+    use num_traits::ToPrimitive;
+    (r * Real::from_lit(100, 0)).to_i64().unwrap().to_i32().unwrap()
 }
 
 /*
@@ -350,17 +572,20 @@ impl<'a> Iterator for SCurveRealTimeIterator<'a> {
 impl Display for SCurveMotionProfile {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f,
-               "\n\tt_j1={}",
-               self.t_j1.rdp(4)
+               "\n\tt_j1={}, t_a={}, t_v={}, t_d={}, t_j2={}",
+               self.t_j1.rdp(4),
+               self.t_a.rdp(4),
+               self.t_v.rdp(4),
+               self.t_d.rdp(4),
+               self.t_j1.rdp(4),
+        )?;
+        write!(f,
+               "\n\ta_lim_a={}, v_lim={}, a_lim_d={}",
+               self.a_lim_a,
+               self.v_lim,
+               self.a_lim_d,
         )
     }
-}
-
-//#[test]
-#[allow(unused)]
-pub fn test() -> Result<(),()>{
-    /// TODO
-    Ok(())
 }
 
 pub struct PlanProfile {
@@ -412,17 +637,6 @@ impl PlanProfile
 
         let p = &(self.plan);
 
-        let t :Vec<Tick<f64, std::string::String>> = vec!(
-            Tick::Major(p.t1().to_f64(), AutoOption::Fix(std::string::String::from("t1"))),
-            Tick::Major(p.t2().to_f64(), AutoOption::Fix(std::string::String::from("t2"))),
-            Tick::Major(p.t3().to_f64(), AutoOption::Fix(std::string::String::from("t3"))),
-            Tick::Major(p.t4().to_f64(), AutoOption::Fix(std::string::String::from("t4"))),
-            Tick::Major(p.t5().to_f64(), AutoOption::Fix(std::string::String::from("t5"))),
-            Tick::Major(p.t6().to_f64(), AutoOption::Fix(std::string::String::from("t6"))),
-            Tick::Major(p.t7().to_f64(), AutoOption::Fix(std::string::String::from("t7"))),
-
-        );
-
         let steps_per_unit = Real::from_lit(5, 0);
 
         let mut time: Vec<f64> = Vec::with_capacity(1000);
@@ -433,6 +647,8 @@ impl PlanProfile
         let mut spd: Vec<f64> = Vec::with_capacity(1000);
         let mut acc: Vec<f64> = Vec::with_capacity(1000);
         let mut jerk: Vec<f64> = Vec::with_capacity(1000);
+
+        let mut inter: Vec<f64> = Vec::with_capacity(1000);
 
         let mut time_ref = &mut time;
         let mut pos_ref = &mut pos;
@@ -458,13 +674,13 @@ impl PlanProfile
         let pdisp = self.plan.q1.rdp(4);
         let pres = self.lin_space.step_size().rdp(4);
 
-        for (_v, ti, pos) in self.into_iter() {
-            //info!("T[{}] {} P {}", _v, ti, pos);
+        for (inte, ti, pos) in self.into_iter() {
+            //println!("T[{}] {} P {}", inte, ti, pos);
 
             real_advanced = pos;
 
             let ti_v = ti.inner();
-            let real_pos = pos.inner();
+            let real_pos = pos.max(Real::zero()).inner();
             let c_ti = ti_v.to_f64().unwrap();
             let c_pos = real_pos.to_f64().unwrap();
 
@@ -493,12 +709,14 @@ impl PlanProfile
 
             abs_advanced = pos_abs;
 
-            let s = (c_pos - last_p) / dt.clone();
+            let s = (c_pos - last_p) / dt.clone().abs();
             let a = ((s.clone() - last_s) / dt.clone());
             let j = ((a.clone() - last_a) / dt.clone());
 
             time_ref.push(c_ti.clone());
             pos_ref.push(c_pos.clone());
+
+            inter.push(inte.to_f64().unwrap());
 
             if plot_vel {
                 spd_ref.push(s.clone());
@@ -521,7 +739,7 @@ impl PlanProfile
         println!("D; Advanced: {} mm {} steps", real_advanced.rdp(4), abs_steps_advanced);
         let mut fg = Figure::new();
 
-        fg.set_multiplot_layout(5, 1)
+        fg.set_multiplot_layout(6, 1)
             .set_title(
                 format!(
                     "FixedPoint Double S-Curve velocity profile\n[vin={} mm/s, vmax={} mm/s, vout={} mm/s, displacement={} mm, sample\\_period={} s]",
@@ -534,27 +752,40 @@ impl PlanProfile
 
         fg.axes2d()
             .set_y_label("Position (mm)", &[])
+            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap() * 0.5), AutoOption::Auto)
             .lines(time.clone(), pos.clone(), &[PlotOption::Color("blue")])
-            .set_x2_ticks_custom(t.clone(), &[], &[]);
+        ;
+        fg.axes2d()
+            .set_y_label("interv", &[])
+            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
+
+            .lines(time.clone(), inter.clone(), &[PlotOption::Color("black")])
         ;
         fg.axes2d()
             .set_y_label("Velocity (mm/s)", &[])
+            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
+
             .lines(time.clone(), spd.clone(), &[PlotOption::Color("green")])
         ;
         fg.axes2d()
             .set_y_label("Acceleration (mm/s²)", &[])
+            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
+
             .lines(time.clone(), acc.clone(), &[PlotOption::Color("red")])
         ;
         fg.axes2d()
             .set_y_label("Jerk (m/s³)", &[])
+            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
+
             .lines(time.clone(), jerk.clone(), &[PlotOption::Color("orange")])
         ;
         fg.axes2d()
             .set_x_label("Time in seconds", &[])
             .set_y_label("Discrete\nsteps", &[])
-            .set_x2_ticks_custom(t, &[], &[])
             .set_x2_grid(true)
             .set_x2_minor_grid(true)
+            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
+
             .set_grid_options(true, &[PlotOption::Color("gray"),PlotOption::LineStyle(DashType::Dash)])
             .lines(time_step_by_pulse.clone(), step_by_pulse.clone(), &[PlotOption::Color("black")])
         ;
@@ -573,130 +804,9 @@ impl Iterator for PlanProfile
                 None
             },
             Some(tp) => {
-                Some((1, tp, self.plan.eval_position(tp)?))
+                let (s, v) = self.plan.eval_position(tp);
+                Some((s, tp, v?))
             }
         }
     }
 }
-
-
-#[test]
-pub fn plan_test() -> Result<(),()>{
-    /*
-
-    println!("3.9: Constant velocity phase is present");
-    // Boundaries
-    let q_1 = Real::from_fixed(dec!(10.0));
-    let v_0 = Real::from_fixed(dec!(1.0));
-    let v_1 = Real::from_fixed(dec!(0.0));
-
-    // Constraints
-    let v_max = Real::from_fixed(dec!(5.0));
-    let a_max = Real::from_fixed(dec!(10.0));
-    let j_max = Real::from_fixed(dec!(30.0));
-
-    let boundaries = Boundaries { q_1, v_0, v_1, };
-    let constraints = Constraints { v_max, a_max, j_max, };
-    println!("boundaries: {}, constraints: {}", boundaries, constraints);
-    let intervals = SCurveMotionProfile::new(&boundaries, &constraints);
-    println!("expected  = T_{{j1}}=0.3333 T_{{a}}=0.7333 T_{{v}}=1.1433 T_{{d}}=0.8333 T_{{j2}}=0.3333");
-    println!("intervals = {}", intervals);
-    println!("--");
-
-    println!("3.10: Constant velocity phase is NOT present");
-    // Boundaries
-    let q_1 = Real::from_fixed(dec!(10.0));
-    let v_0 = Real::from_fixed(dec!(1.0));
-    let v_1 = Real::from_fixed(dec!(0.0));
-
-    // Constraints
-    let v_max = Real::from_fixed(dec!(10.0));
-    let a_max = Real::from_fixed(dec!(10.0));
-    let j_max = Real::from_fixed(dec!(30.0));
-
-    let boundaries = Boundaries { q_1, v_0, v_1, };
-    let constraints = Constraints { v_max, a_max, j_max, };
-    println!("boundaries: {}, constraints: {}", boundaries, constraints);
-    let intervals = SCurveMotionProfile::new(&boundaries, &constraints);
-    println!("expected  = T_{{j1}}=0.3333 T_{{a}}=1.0747 T_{{v}}=0.0 T_{{d}}=1.1747 T_{{j2}}=0.3333");
-    println!("intervals = {}", intervals);
-    println!("--");
-
-
-    println!("3.11: Constant velocity phase is NOT present and maximum acceleration is not reached");
-    // Boundaries
-    let q_1 = Real::from_fixed(dec!(10.0));
-    let v_0 = Real::from_fixed(dec!(7.0));
-    let v_1 = Real::from_fixed(dec!(0.0));
-
-    // Constraints
-    let v_max = Real::from_fixed(dec!(10.0));
-    let a_max = Real::from_fixed(dec!(10.0));
-    let j_max = Real::from_fixed(dec!(30.0));
-
-    let boundaries = Boundaries { q_1, v_0, v_1, };
-    let constraints = Constraints { v_max, a_max, j_max, };
-    println!("boundaries: {}, constraints: {}", boundaries, constraints);
-    let intervals = SCurveMotionProfile::new(&boundaries, &constraints);
-    println!("expected  = T_{{j1}}=0.2321 T_{{a}}=0.4666 T_{{v}}=0.0 T_{{d}}=1.4718 T_{{j2}}=0.2321");
-    println!("intervals = {}", intervals);
-    println!("--");
-
-    println!("3.12: Constant velocity phase is NOT present, maximum acceleration is not reached and T_{{a}} becomes negative");
-
-    // Boundaries
-    let q_1 = Real::from_fixed(dec!(10.0));
-    let v_0 = Real::from_fixed(dec!(7.5));
-    let v_1 = Real::from_fixed(dec!(0.0));
-
-    // Constraints
-    let v_max = Real::from_fixed(dec!(10.0));
-    let a_max = Real::from_fixed(dec!(10.0));
-    let j_max = Real::from_fixed(dec!(30.0));
-
-    let boundaries = Boundaries { q_1, v_0, v_1, };
-    let constraints = Constraints { v_max, a_max, j_max, };
-    println!("boundaries: {}, constraints: {}", boundaries, constraints);
-    let intervals = SCurveMotionProfile::new(&boundaries, &constraints);
-    // TBD
-    println!("expected  = T_{{j1}}=0.0 T_{{a}}=0.0 T_{{v}}=0.0 T_{{d}}=2.6667 T_{{j2}}=0.0973");
-    println!("intervals = {}", intervals);
-    println!("--");
-
-    let mut profile = PlanProfile::new(intervals,Real::from_fixed(dec!(0.01)));
-    profile.plot();
-
-    //////////////
-
-    println!("3.12 bis: Constant velocity phase is NOT present, maximum acceleration is not reached and T_{{a}} becomes negative");
-
-    // Boundaries
-    let q_1 = Real::from_fixed(dec!(10.0));
-    let v_0 = Real::from_fixed(dec!(0.0));
-    let v_1 = Real::from_fixed(dec!(7.5));
-
-    // Constraints
-    let v_max = Real::from_fixed(dec!(10.0));
-    let a_max = Real::from_fixed(dec!(10.0));
-    let j_max = Real::from_fixed(dec!(30.0));
-
-    let boundaries = Boundaries { q_1, v_0, v_1, };
-    let constraints = Constraints { v_max, a_max, j_max, };
-    println!("boundaries: {}, constraints: {}", boundaries, constraints);
-    let intervals = SCurveMotionProfile::new(&boundaries, &constraints);
-    // TBD
-    println!("expected  = T_{{j1}}=0.0 T_{{a}}=0.0 T_{{v}}=0.0 T_{{d}}=2.6667 T_{{j2}}=0.0973");
-    println!("intervals = {}", intervals);
-    println!("--");
-
-    let mut profile = PlanProfile::new(intervals,
-                                       Real::from_fixed(dec!(0.01)));
-    profile.plot();
-    */
-
-    Ok(())
-}
-
-
-
-

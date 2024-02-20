@@ -6,13 +6,47 @@ fn main() {
     cfg_if::cfg_if! {
         if #[cfg(feature="rp_2040")] {
             let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-            let memory_x_path = std::path::PathBuf::from(".").join("hwi-boards").join("rp_2040_memory.x");
+            let memory_x_path = std::path::PathBuf::from(".")
+                .join("hwi-boards")
+                .join("printhor-hwi_rp_2040")
+                .join("memory.x");
+            let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
             std::fs::File::create(out.join("memory.x"))
                 .unwrap()
-                .write_all(std::fs::read(memory_x_path.as_path().to_str().unwrap()).unwrap().as_slice())
+                .write_all(std::fs::read(memory_x_path_str).unwrap().as_slice())
                 .unwrap();
             println!("cargo:rustc-link-search={}", out.display());
-            println!("cargo:rerun-if-changed=memory.x");
+            println!("cargo:rerun-if-changed={}", memory_x_path_str);
+        }
+        else if #[cfg(all(feature="skr_mini_e3_v2", feature="with-bootloader"))] {
+            let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+            let memory_x_path = std::path::PathBuf::from(".")
+                .join("hwi-boards")
+                .join("printhor-hwi_skr_mini_e3")
+                .join("skr_mini_e3_v2")
+                .join("memory.x");
+            let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
+            std::fs::File::create(out.join("memory.x"))
+                .unwrap()
+                .write_all(std::fs::read(memory_x_path_str).unwrap().as_slice())
+                .unwrap();
+            println!("cargo:rustc-link-search={}", out.display());
+            println!("cargo:rerun-if-changed={}", memory_x_path_str);
+        }
+        else if #[cfg(all(feature="skr_mini_e3_v3", feature="with-bootloader"))] {
+            let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
+            let memory_x_path = std::path::PathBuf::from(".")
+                .join("hwi-boards")
+                .join("printhor-hwi_skr_mini_e3")
+                .join("skr_mini_e3_v3")
+                .join("memory.x");
+            let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
+            std::fs::File::create(out.join("memory.x"))
+                .unwrap()
+                .write_all(std::fs::read(memory_x_path_str).unwrap().as_slice())
+                .unwrap();
+            println!("cargo:rustc-link-search={}", out.display());
+            println!("cargo:rerun-if-changed={}", memory_x_path_str);
         }
     }
 

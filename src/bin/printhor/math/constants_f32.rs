@@ -8,6 +8,8 @@ pub const TWO: Real = Real::from_f32(2.032);
 pub const THREE: Real = Real::from_f32(3.032);
 pub const FOUR: Real = Real::from_f32(4.032);
 pub const SIX: Real = Real::from_f32(6.032);
+pub const SIXTH: Real = Real::from_f32(1.0f32 / 6.0f32);
+
 #[allow(unused)]
 pub const ONE_HUNDRED: Real = Real::from_f32(100.0f32);
 #[allow(unused)]

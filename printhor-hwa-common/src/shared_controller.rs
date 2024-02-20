@@ -1,7 +1,6 @@
 use core::cell::RefCell;
-pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-pub type ControllerMutex<D> = embassy_sync::mutex::Mutex<ControllerMutexType, D>;
+pub type ControllerMutex<D> = embassy_sync::mutex::Mutex<crate::ControllerMutexType, D>;
 
 pub trait ControllerKind<T: 'static> {
     type Type;
@@ -9,13 +8,13 @@ pub trait ControllerKind<T: 'static> {
 }
 
 pub struct Holder<T: 'static> {
-    pub r: RefCell<Option<embassy_sync::mutex::MutexGuard<'static, ControllerMutexType, T>>>
+    pub r: RefCell<Option<embassy_sync::mutex::MutexGuard<'static, crate::ControllerMutexType, T>>>
 }
 impl<T: 'static> Holder<T> {
     const fn new() -> Self {
         Self {r: RefCell::new(None) }
     }
-    fn set(&self, r: embassy_sync::mutex::MutexGuard<'static, ControllerMutexType, T>) {
+    fn set(&self, r: embassy_sync::mutex::MutexGuard<'static, crate::ControllerMutexType, T>) {
         self.r.borrow_mut().replace(r);
     }
     fn release(&self) {
@@ -31,7 +30,7 @@ impl<T: 'static> Clone for Holder<T> {
     }
 }
 
-pub struct ControllerRef<T: 'static, M: embassy_sync::blocking_mutex::raw::RawMutex + 'static = ControllerMutexType> {
+pub struct ControllerRef<T: 'static, M: embassy_sync::blocking_mutex::raw::RawMutex + 'static = crate::ControllerMutexType> {
     c: &'static embassy_sync::mutex::Mutex<M, T>,
     h: Holder<T>,
 }
@@ -41,13 +40,13 @@ impl<T: 'static> ControllerKind<T> for ControllerRef<T> {
 }
 
 impl<T: 'static> ControllerRef<T> {
-    pub fn new(c: &'static embassy_sync::mutex::Mutex<ControllerMutexType, T>) -> Self {
+    pub fn new(c: &'static embassy_sync::mutex::Mutex<crate::ControllerMutexType, T>) -> Self {
         Self{c, h: Holder::new()}
     }
 
     #[allow(unused)]
     #[inline]
-    pub async fn lock(&self) -> embassy_sync::mutex::MutexGuard<'static, ControllerMutexType, T> {
+    pub async fn lock(&self) -> embassy_sync::mutex::MutexGuard<'static, crate::ControllerMutexType, T> {
         self.c.lock().await
     }
 

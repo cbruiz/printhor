@@ -35,7 +35,7 @@ static GLOBAL_PIN_STATE: TrackedStaticCell<PinsCell<PinState>> = TrackedStaticCe
 
 #[inline]
 pub(crate) fn init_pin_state() -> PinStateRef {
-    GLOBAL_PIN_STATE.init("GlobaPinState", PinsCell::new(PinState::new()))
+    GLOBAL_PIN_STATE.init::<{crate::MAX_STATIC_MEMORY}>("GlobaPinState", PinsCell::new(PinState::new()))
 }
 
 pub struct MockedIOPin {

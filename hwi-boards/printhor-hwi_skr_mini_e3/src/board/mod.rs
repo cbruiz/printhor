@@ -36,6 +36,10 @@ cfg_if::cfg_if! {
         pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V2";
         /// ARM Cortex M3 @72MHZ, 48kB SRAM, 256kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32F103RCT6";
+
+        pub const MAX_STATIC_MEMORY: usize = 8192;
+        pub const HEAP_SIZE_BYTES: usize = 512;
+
         // https://www.st.com/resource/en/datasheet/CD00191185.pdf
         pub const ADC_START_TIME_US: u16 = 17;
         // https://www.st.com/resource/en/datasheet/CD00191185.pdf
@@ -53,8 +57,11 @@ cfg_if::cfg_if! {
         /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
         #[allow(unused)]
-
         pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
+
+        pub const MAX_STATIC_MEMORY: usize = 8192;
+        pub const HEAP_SIZE_BYTES: usize = 1024;
+
         // https://www.st.com/resource/en/datasheet/dm00748675.pdf
         pub const ADC_START_TIME_US: u16 = 12;
         // https://www.st.com/resource/en/datasheet/dm00748675.pdf
@@ -63,16 +70,13 @@ cfg_if::cfg_if! {
         compile_error!("SKR flavor (board) not set");
     }
 }
-
-pub const HEAP_SIZE_BYTES: usize = 1024;
-pub const MAX_STATIC_MEMORY: u32 = 4096;
 #[cfg(feature = "with-uart2")]
 pub(crate) const UART2_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 #[cfg(feature = "with-trinamic")]
-pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 115200;
-pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
+pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 9600;
+pub(crate) const WATCHDOG_TIMEOUT: u32 = 8_000_000;
 #[cfg(feature = "with-spi")]
 pub(crate) const SPI_FREQUENCY_HZ: u32 = 1_000_000;
 
@@ -131,6 +135,8 @@ pub struct IODevices {
     /// Only single owner allowed
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
+    #[cfg(feature = "with-serial-port-2")]
+    pub serial_port2_rx_stream: device::UartPort2RxInputStream,
     #[cfg(feature  ="with-display")]
     pub display_device: DisplayDevice,
     #[cfg(feature = "with-sdcard")]
@@ -177,6 +183,10 @@ cfg_if::cfg_if! {
         });
         #[cfg(feature = "with-serial-port-1")]
         bind_interrupts!(struct UartPort1Irqs {
+            USART1 => usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+        });
+        #[cfg(feature = "with-serial-port-2")]
+        bind_interrupts!(struct UartPort2Irqs {
             USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
         });
         #[cfg(feature = "with-trinamic")]
@@ -191,6 +201,10 @@ cfg_if::cfg_if! {
         });
         #[cfg(feature = "with-serial-port-1")]
         bind_interrupts!(struct UartPort1Irqs {
+            USART1 => usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+        });
+        #[cfg(feature = "with-serial-port-2")]
+        bind_interrupts!(struct UartPort2Irqs {
             USART2_LPUART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
         });
         #[cfg(feature = "with-trinamic")]
@@ -211,37 +225,74 @@ pub(crate) fn init_heap() -> () {
 pub fn init() -> embassy_stm32::Peripherals {
 
     init_heap();
+    #[allow(unused_mut)]
     let mut config = embassy_stm32::Config::default();
 
     cfg_if::cfg_if! {
         if #[cfg(feature="skr_mini_e3_v2")] {
-            use embassy_stm32::time::Hertz;
+            #[allow(unused)]
             use embassy_stm32::pac::*;
+
+            #[cfg(not(feature = "without-bootloader"))]
+            unsafe {
+                defmt::info!("Setting VTOR...");
+                #[allow(unused_mut)]
+                let mut p = cortex_m::Peripherals::steal();
+                defmt::trace!("VTOR WAS AT: {} ", p.SCB.vtor.read());
+                p.SCB.vtor.write(0x7000);
+                defmt::trace!("VTOR SET TO: {} ", p.SCB.vtor.read());
+            }
             cfg_if::cfg_if! {
                 if #[cfg(feature="use-hsi")] {
                     compile_error!("Not supported")
                 }
+                else if #[cfg(feature="upstream-embassy")] {
+                    config.rcc.hse = Some(embassy_stm32::rcc::Hse {
+                        freq: embassy_stm32::time::Hertz(8_000_000),
+                        mode: embassy_stm32::rcc::HseMode::Oscillator,
+                    });
+                    config.rcc.pll = Some(embassy_stm32::rcc::Pll {
+                        src: embassy_stm32::rcc::PllSource::HSE,
+                        prediv: embassy_stm32::rcc::PllPreDiv::DIV1,
+                        mul: embassy_stm32::rcc::PllMul::MUL9,
+                    });
+                    config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;
+                    config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
+                    config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV2;
+                    config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+                    config.rcc.adc_pre = embassy_stm32::rcc::ADCPrescaler::DIV6;
+                }
                 else {
+
                     RCC.cr().write(|w| { w.set_hsebyp(true); });
 
-                    config.rcc.hse = Some(Hertz(8_000_000));
-                    config.rcc.sys_ck = Some(Hertz(72_000_000));
-                    config.rcc.pclk1 = Some(Hertz(36_000_000));
+                    config.rcc.hse = Some(embassy_stm32::time::Hertz(8_000_000));
+                    config.rcc.sys_ck = Some(embassy_stm32::time::Hertz(72_000_000));
+                    config.rcc.pclk1 = Some(embassy_stm32::time::Hertz(36_000_000));
                 }
             }
         }
         else if #[cfg(feature="skr_mini_e3_v3")] {
 
+            #[allow(unused)]
             use embassy_stm32::pac::*;
+            #[allow(unused)]
             use embassy_stm32::rcc::*;
 
-            PWR.cr1().write(|w| {
-                w.set_vos(pwr::vals::Vos::RANGE1);
-            });
-            while PWR.sr2().read().vosf() {}
+            #[cfg(not(feature = "without-bootloader"))]
+            unsafe {
+                defmt::info!("Setting VTOR...");
+                #[allow(unused_mut)]
+                let mut p = cortex_m::Peripherals::steal();
+                defmt::trace!("VTOR WAS AT: {} ", p.SCB.vtor.read());
+                p.SCB.vtor.write(0x7000);
+                defmt::trace!("VTOR SET TO: {} ", p.SCB.vtor.read());
+            }
 
             cfg_if::cfg_if! {
                 if #[cfg(feature="use-hsi")] {
+                    defmt::trace!("HSI...");
+
                     config.rcc.mux = ClockSrc::PLL(
                         PllConfig {
                             // HSI = 16MHz
@@ -264,6 +315,7 @@ pub fn init() -> embassy_stm32::Peripherals {
                     ));
                 }
                 else {
+                    defmt::trace!("PLL...");
                     config.rcc.mux = ClockSrc::PLL(
                         PllConfig {
                             // HSE = 8MHz
@@ -296,29 +348,32 @@ pub fn init() -> embassy_stm32::Peripherals {
             }
         }
     }
+    defmt::debug!("Initiallizing embassy_stm32...");
     embassy_stm32::init(config)
 }
 
 pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor_hwa_common::MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
+    defmt::debug!("Setting up...");
     cfg_if::cfg_if! {
         if #[cfg(feature="skr_mini_e3_v2")] {
+            #[allow(unused)]
             #[cfg(feature = "with-spi")]
             let spi1_device = {
 
                 let mut cfg = spi::Config::default();
                 cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
                 static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
-                ControllerRef::new(SPI1_INST.init("SPI1",
+                ControllerRef::new(SPI1_INST.init::<{crate::MAX_STATIC_MEMORY}>("SPI1",
                     ControllerMutex::new(
                         device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
-                                          p.DMA1_CH4, p.DMA1_CH3, cfg
+                                          p.DMA1_CH3, p.DMA1_CH2, cfg
                         )
                     )
                 ))
             };
 
-            // Use UART1 instead of USB CDC Serial
+
             #[cfg(feature = "with-serial-usb")]
             let (serial_usb_tx, serial_usb_rx_stream) = {
 
@@ -345,17 +400,40 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 cfg.parity = Parity::ParityNone;
                 cfg.detect_previous_overrun = false;
 
-                let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART2,
-                                                                    p.PA3, p.PA2,
+                let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART1,
+                                                                    p.PA10, p.PA9,
                                                                     UartPort1Irqs,
-                                                                    p.DMA1_CH7, p.DMA1_CH6,
+                                                                    p.DMA1_CH4, p.DMA1_CH5,
                                                                     cfg).expect("Ready").split();
 
                 static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
                 let serial_port1_tx = ControllerRef::new(
-                    UART_PORT1_INST.init("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
+                    UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
                 );
                 (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
+            };
+
+            #[cfg(feature = "with-serial-port-2")]
+            let (serial_port2_tx, serial_port2_rx_stream) = {
+
+                let mut cfg = usart::Config::default();
+                cfg.baudrate = crate::UART_PORT2_BAUD_RATE;
+                cfg.data_bits = DataBits::DataBits8;
+                cfg.stop_bits = StopBits::STOP1;
+                cfg.parity = Parity::ParityNone;
+                cfg.detect_previous_overrun = false;
+
+                let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new(p.USART2,
+                                                                    p.PA3, p.PA2,
+                                                                    UartPort2Irqs,
+                                                                    p.DMA1_CH7, p.DMA1_CH6,
+                                                                    cfg).expect("Ready").split();
+
+                static UART_PORT2_INST: TrackedStaticCell<ControllerMutex<device::UartPort2TxDevice>> = TrackedStaticCell::new();
+                let serial_port2_tx = ControllerRef::new(
+                    UART_PORT2_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort2", Mutex::<ControllerMutexType, _>::new(uart_port2_tx_device))
+                );
+                (serial_port2_tx, device::UartPort2RxInputStream::new(uart_port2_rx_device))
             };
 
             #[cfg(all(feature = "with-trinamic"))]
@@ -365,6 +443,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 cfg.data_bits = DataBits::DataBits8;
                 cfg.stop_bits = StopBits::STOP1;
                 cfg.parity = Parity::ParityNone;
+                cfg.detect_previous_overrun = true;
 
                 device::TrinamicUartDevice::new(p.UART4, p.PC11, p.PC10,
                            TrinamicIrqs, p.DMA2_CH5, p.DMA2_CH3, cfg).expect("Ready")
@@ -392,13 +471,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
             #[cfg(feature = "with-motion")]
             let motion_devices = MotionDevice {
+
                 #[cfg(feature = "with-trinamic")]
                 trinamic_uart: io::TrinamicUartWrapper::new(trinamic_uart),
                 motion_pins: MotionPins {
-                    x_enable_pin: Output::new(p.PB14, Level::Low, Speed::VeryHigh),
-                    y_enable_pin: Output::new(p.PB11, Level::Low, Speed::VeryHigh),
-                    z_enable_pin: Output::new(p.PB1, Level::Low, Speed::VeryHigh),
-                    e_enable_pin: Output::new(p.PD1, Level::Low, Speed::VeryHigh),
+                    x_enable_pin: Output::new(p.PB14, Level::High, Speed::VeryHigh),
+                    y_enable_pin: Output::new(p.PB11, Level::High, Speed::VeryHigh),
+                    z_enable_pin: Output::new(p.PB1, Level::High, Speed::VeryHigh),
+                    e_enable_pin: Output::new(p.PD1, Level::High, Speed::VeryHigh),
                     x_endstop_pin: Input::new(p.PC0, Pull::Down),
                     y_endstop_pin: Input::new(p.PC1, Pull::Down),
                     z_endstop_pin: Input::new(p.PC2, Pull::Down),
@@ -418,7 +498,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
             // PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo) PA1(Probe)
             // OK FOR: FAN0, FAN1, HE_PWM, BE_PWM
-            #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer-fan0"))]
+            #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer"))]
             let pwm_fan0_fan1_hotend_hotbed = {
                 let pwm_fan0_fan1_hotend_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
                     p.TIM3,
@@ -430,7 +510,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                     embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
                 );
                 static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
-                ControllerRef::new(PWM_INST.init(
+                ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                     "PwmFanFan0HotendHotbed",
                     ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
                 ))
@@ -494,7 +574,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
                 static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
-                ControllerRef::new(ADC_INST.init(
+                ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                     "HotendHotbedAdc",
                     ControllerMutex::new(adc_hotend_hotbed)
                 ))
@@ -533,7 +613,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
                 device::ProbePeripherals {
                     power_pwm: ControllerRef::new(
-                        PWM_INST.init("PwmServo",
+                        PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>("PwmServo",
                                       ControllerMutex::new(
                                           device::PwmServo::new(
                                               p.TIM2,
@@ -555,6 +635,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             defmt::info!("motion_planner done");
         }
         else if #[cfg(feature="skr_mini_e3_v3")] {
+
             embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
                 // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
                 //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)
@@ -564,13 +645,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 let off = 4usize;
                 w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
             });
+
             #[cfg(feature = "with-spi")]
             let spi1_device = {
 
             let mut cfg = spi::Config::default();
             cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
             static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
-            ControllerRef::new(SPI1_INST.init(
+            ControllerRef::new(SPI1_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "SPI1",
                 ControllerMutex::new(
                     device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
@@ -580,7 +662,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             ))
         };
 
-        // Use UART1 instead of USB CDC Serial
         #[cfg(feature = "with-serial-usb")]
         let (serial_usb_tx, serial_usb_rx_stream) = {
 
@@ -591,7 +672,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             let (usb_serial_rx_device, sender) = usb_serial_device.split();
             static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
             let serial_usb_tx = ControllerRef::new(
-                USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
+                USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
             );
 
             (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
@@ -599,7 +680,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         #[cfg(feature = "with-serial-port-1")]
         let (serial_port1_tx, serial_port1_rx_stream) = {
-
+            compile_error!("This feature is broken");
             let mut cfg = usart::Config::default();
             cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
             cfg.data_bits = DataBits::DataBits8;
@@ -607,8 +688,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             cfg.parity = Parity::ParityNone;
             cfg.detect_previous_overrun = false;
 
-            let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART2,
-                                                                p.PA3, p.PA2,
+            let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART1,
+                                                                p.PA10, p.PA9,
                                                                 UartPort1Irqs,
                                                                 p.DMA2_CH2, p.DMA2_CH1,
                                                                 cfg).expect("Ready").split();
@@ -619,6 +700,29 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             );
             (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
         };
+
+        #[cfg(feature = "with-serial-port-2")]
+        let (serial_port2_tx, serial_port2_rx_stream) = {
+
+                let mut cfg = usart::Config::default();
+                cfg.baudrate = crate::UART_PORT2_BAUD_RATE;
+                cfg.data_bits = DataBits::DataBits8;
+                cfg.stop_bits = StopBits::STOP1;
+                cfg.parity = Parity::ParityNone;
+                cfg.detect_previous_overrun = false;
+
+                let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new(p.USART2,
+                                                                    p.PA3, p.PA2,
+                                                                    UartPort2Irqs,
+                                                                    p.DMA2_CH4, p.DMA2_CH3,
+                                                                    cfg).expect("Ready").split();
+
+                static UART_PORT2_INST: TrackedStaticCell<ControllerMutex<device::UartPort2TxDevice>> = TrackedStaticCell::new();
+                let serial_port2_tx = ControllerRef::new(
+                    UART_PORT2_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort2", Mutex::<ControllerMutexType, _>::new(uart_port2_tx_device))
+                );
+                (serial_port2_tx, device::UartPort2RxInputStream::new(uart_port2_rx_device))
+            };
 
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
@@ -658,21 +762,25 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-trinamic")]
             trinamic_uart: io::TrinamicUartWrapper::new(trinamic_uart),
             motion_pins: MotionPins {
-                x_enable_pin: embassy_stm32::gpio::Output::new(p.PB14, Level::Low, Speed::VeryHigh),
-                y_enable_pin: embassy_stm32::gpio::Output::new(p.PB11, Level::Low, Speed::VeryHigh),
-                z_enable_pin: embassy_stm32::gpio::Output::new(p.PB1, Level::Low, Speed::VeryHigh),
-                e_enable_pin: embassy_stm32::gpio::Output::new(p.PD1, Level::Low, Speed::VeryHigh),
+                x_enable_pin: embassy_stm32::gpio::Output::new(p.PB14, Level::High, Speed::VeryHigh),
+                y_enable_pin: embassy_stm32::gpio::Output::new(p.PB11, Level::High, Speed::VeryHigh),
+                z_enable_pin: embassy_stm32::gpio::Output::new(p.PB1, Level::High, Speed::VeryHigh),
+                #[cfg(feature="with-hot-bed")]
+                e_enable_pin: embassy_stm32::gpio::Output::new(p.PD1, Level::High, Speed::VeryHigh),
                 x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC0, Pull::Down),
                 y_endstop_pin: embassy_stm32::gpio::Input::new(p.PC1, Pull::Down),
                 z_endstop_pin: embassy_stm32::gpio::Input::new(p.PC2, Pull::Down),
+                #[cfg(feature="with-hot-bed")]
                 e_endstop_pin: embassy_stm32::gpio::Input::new(p.PC15, Pull::Down),
                 x_step_pin: embassy_stm32::gpio::Output::new(p.PB13, Level::Low, Speed::VeryHigh),
                 y_step_pin: embassy_stm32::gpio::Output::new(p.PB10, Level::Low, Speed::VeryHigh),
                 z_step_pin: embassy_stm32::gpio::Output::new(p.PB0, Level::Low, Speed::VeryHigh),
+                #[cfg(feature="with-hot-bed")]
                 e_step_pin: embassy_stm32::gpio::Output::new(p.PB3, Level::Low, Speed::VeryHigh),
                 x_dir_pin: embassy_stm32::gpio::Output::new(p.PB12, Level::Low, Speed::VeryHigh),
                 y_dir_pin: embassy_stm32::gpio::Output::new(p.PB2, Level::Low, Speed::VeryHigh),
                 z_dir_pin: embassy_stm32::gpio::Output::new(p.PC5, Level::Low, Speed::VeryHigh),
+                #[cfg(feature="with-hot-bed")]
                 e_dir_pin: embassy_stm32::gpio::Output::new(p.PB4, Level::Low, Speed::VeryHigh),
             }
         };
@@ -686,7 +794,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         // PC7(Fan1) PC6(Fan0) PC8(HE_PWM) PC9(BED_PWM) PB15(Fan2) PA8(neo) PA1(Probe)
         // OK FOR: FAN0, FAN1, HE_PWM, BE_PWM
-        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer-fan0"))]
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer"))]
         let pwm_fan0_fan1_hotend_hotbed = {
             let pwm_fan0_fan1_hotend_hotbed = embassy_stm32::timer::simple_pwm::SimplePwm::new(
                 p.TIM3,
@@ -698,7 +806,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
             );
             static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
-            ControllerRef::new(PWM_INST.init(
+            ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "PwmFanFan0HotendHotbed",
                 ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
             ))
@@ -733,7 +841,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let (pwm_laser, pwm_laser_channel) = {
             static PWM_LASER_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
             (
-                ControllerRef::new(PWM_LASER_INST.init(
+                ControllerRef::new(PWM_LASER_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                     "LaserPwmController",
                     ControllerMutex::new(
                         embassy_stm32::timer::simple_pwm::SimplePwm::new(
@@ -773,7 +881,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
             crate::device::ProbePeripherals {
                 power_pwm: ControllerRef::new(
-                    PWM_INST.init("PwmServo",
+                    PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>("PwmServo",
                                   ControllerMutex::new(
                                       device::PwmServo::new(
                                           p.TIM2,
@@ -800,14 +908,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     let ps_on = {
         static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init("", ControllerMutex::new(
+            PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(
                 Output::new(p.PC13, Level::Low, Speed::Low)
             ))
         )
     };
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
-    let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
+    let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 
     MachineContext {
         controllers: Controllers {
@@ -816,6 +924,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             serial_usb_tx,
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port2_tx,
         },
         sys_devices: SysDevices {
             #[cfg(feature = "with-motion")]
@@ -828,6 +938,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_rx_stream,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port2_rx_stream,
             #[cfg(feature = "with-display")]
             display_device,
             #[cfg(feature = "with-sdcard")]
