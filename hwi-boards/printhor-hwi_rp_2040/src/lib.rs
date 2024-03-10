@@ -44,7 +44,7 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-        const SEGMENT_QUEUE_SIZE: u8 = 4;
+        pub const SEGMENT_QUEUE_SIZE: u8 = 10;
     }
 }
 
@@ -70,10 +70,10 @@ pub fn launch_high_priotity<S: 'static + Send>(core: device::TaskStepperCore, to
 
     // TODO: There must be a better way to tackle this
     let r = Box::new(TokenHolder {token});
-    let stack = CORE1_STACK.init("executor1::stack", Stack::new());
+    let stack = CORE1_STACK.init::<{crate::MAX_STATIC_MEMORY}>("executor1::stack", Stack::new());
 
     spawn_core1(core, stack, || {
-        let executor1 = EXECUTOR_HIGH.init("executor1", Executor::new());
+        let executor1 = EXECUTOR_HIGH.init::<{crate::MAX_STATIC_MEMORY}>("executor1", Executor::new());
         executor1.run(|spawner| {
             unwrap!(spawner.spawn(r.token))
         })

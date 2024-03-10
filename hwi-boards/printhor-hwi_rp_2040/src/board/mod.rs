@@ -35,7 +35,7 @@ cfg_if::cfg_if! {
 }
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
-pub const MAX_STATIC_MEMORY: u32 = 4096;
+pub const MAX_STATIC_MEMORY: usize = 4096;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const WATCHDOG_TIMEOUT_MS: u32 = 30_000_000;
@@ -207,7 +207,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
         static USB_INST: TrackedStaticCell<ControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let serial_usb_tx = ControllerRef::new(
-            USB_INST.init("USBSerialTxController", ControllerMutex::new(sender))
+            USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", ControllerMutex::new(sender))
         );
         (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
@@ -221,9 +221,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         cfg.parity = Parity::ParityNone;
 
         static RXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
-        let rxb = RXB.init("RXBuffer", [0u8; 32]);
+        let rxb = RXB.init::<{crate::MAX_STATIC_MEMORY}>("RXBuffer", [0u8; 32]);
         static TXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
-        let txb = TXB.init("TXBuffer", [0u8; 32]);
+        let txb = TXB.init::<{crate::MAX_STATIC_MEMORY}>("TXBuffer", [0u8; 32]);
 
         let (uart_port1_rx_device, uart_port1_tx_device) = device::UartPort1Device::new_blocking(
             p.UART0, p.PIN_0, p.PIN_1, cfg
@@ -231,7 +231,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
-            UART_PORT1_INST.init("UartPort1", ControllerMutex::new(uart_port1_tx_device))
+            UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port1_tx_device))
         );
         (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
@@ -245,9 +245,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         cfg.parity = Parity::ParityNone;
 
         static RXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
-        let rxb = RXB.init("RXBuffer", [0u8; 32]);
+        let rxb = RXB.init::<{crate::MAX_STATIC_MEMORY}>("RXBuffer", [0u8; 32]);
         static TXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
-        let txb = TXB.init("TXBuffer", [0u8; 32]);
+        let txb = TXB.init::<{crate::MAX_STATIC_MEMORY}>("TXBuffer", [0u8; 32]);
 
         let (uart_port2_rx_device, uart_port2_tx_device) = device::UartPort2Device::new_blocking(
             p.UART1, p.PIN_4, p.PIN_5, cfg
@@ -255,7 +255,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
 
         static UART_PORT2_INST: TrackedStaticCell<ControllerMutex<device::UartPort2TxDevice>> = TrackedStaticCell::new();
         let serial_port2_tx = ControllerRef::new(
-            UART_PORT2_INST.init("UartPort1", ControllerMutex::new(uart_port2_tx_device))
+            UART_PORT2_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port2_tx_device))
         );
         (serial_port2_tx, device::UartPort2RxInputStream::new(uart_port2_rx_device))
     };
@@ -341,7 +341,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         let ps_on = {
         static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init("", ControllerMutex::new(
+            PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(
                 embassy_rp::gpio::Output::new(p.PIN_14, embassy_rp::gpio::Level::Low)
             ))
         )
@@ -349,7 +349,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
 
     let watchdog = device::Watchdog::new(p.WATCHDOG);
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
-    let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(watchdog)));
+    let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(watchdog)));
 
     MachineContext {
         controllers: Controllers {
