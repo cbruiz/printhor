@@ -36,25 +36,23 @@ pub enum PrinterControllerError {
     NoEffect,
 }
 
-type ChannelMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
-
-pub type PrinterControllerSignalType = embassy_sync::signal::Signal<ChannelMutexType, PrinterControllerEvent>;
+pub type PrinterControllerSignalType = embassy_sync::signal::Signal<hwa::ControllerMutexType, PrinterControllerEvent>;
 
 pub struct PrinterController {
     channel: &'static PrinterControllerSignalType,
     event_bus: EventBusRef,
-    status: &'static Config<ChannelMutexType,PrinterControllerStatus>,
+    status: &'static Config<hwa::ControllerMutexType, PrinterControllerStatus>,
 }
 
 impl PrinterController {
     pub fn new(event_bus: EventBusRef) -> PrinterController {
         static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> = TrackedStaticCell::new();
-        static STATUS_INST: TrackedStaticCell<Config<ChannelMutexType, PrinterControllerStatus>> = TrackedStaticCell::new();
+        static STATUS_INST: TrackedStaticCell<Config<hwa::ControllerMutexType, PrinterControllerStatus>> = TrackedStaticCell::new();
 
-        let channel = SIGNAL_CHANNEL_INST.init("PrinterController::channel", PrinterControllerSignalType::new());
+        let channel = SIGNAL_CHANNEL_INST.init::<{hwa::MAX_STATIC_MEMORY}>("PrinterController::channel", PrinterControllerSignalType::new());
         let status_cfg = Config::new();
         status_cfg.signal(PrinterControllerStatus::Ready);
-        let status = STATUS_INST.init("PrinterController::state", status_cfg);
+        let status = STATUS_INST.init::<{hwa::MAX_STATIC_MEMORY}>("PrinterController::state", status_cfg);
         PrinterController {
             channel,
             event_bus,

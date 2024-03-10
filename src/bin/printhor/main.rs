@@ -2,6 +2,8 @@
 #![cfg_attr(not(feature = "native"), no_main)]
 #![allow(stable_features)]
 #![allow(nonstandard_style)]
+#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
+
 extern crate alloc;
 extern crate core;
 mod hwi;
@@ -26,7 +28,7 @@ use hwa::{Controllers, SysDevices, IODevices, MotionDevices, PwmDevices};
 use printhor_hwa_common::{EventStatus, EventFlags};
 use hwa::{GCodeProcessor};
 #[cfg(feature = "with-motion")]
-use hwa::controllers::{MotionPlanner, MotionPlannerRef};
+use hwa::controllers::{MotionPlanner, MotionPlannerRef, MotionConfig};
 use crate::control::GCodeProcessorParams;
 #[cfg(feature = "with-sdcard")]
 use crate::hwa::controllers::CardController;
@@ -51,14 +53,14 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     let context = hwa::setup(spawner, peripherals).await;
     hwa::info!("HWI setup completed. Allocated {} bytes for context.", core::mem::size_of_val(&context));
 
-    let event_bus: EventBusRef = printhor_hwa_common::init_event_bus();
+    let event_bus: EventBusRef = printhor_hwa_common::init_event_bus::<{hwa::MAX_STATIC_MEMORY}>();
     #[cfg(feature = "with-motion")]
     let mut event_suscriber = event_bus.subscriber().await;
     event_bus.publish_event(
         EventStatus::containing(EventFlags::SYS_BOOTING)
     ).await;
 
-    let defer_channel: DeferChannelRef = printhor_hwa_common::init_defer_channel();
+    let defer_channel: DeferChannelRef = printhor_hwa_common::init_defer_channel::<{hwa::MAX_STATIC_MEMORY}>();
 
     let wdt = context.controllers.sys_watchdog.clone();
     wdt.lock().await.unleash();
@@ -147,7 +149,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         let probe_controller = {
         static PROBE_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::ServoController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PROBE_CONTROLLER_INST.init("ProbeServoController",
+            PROBE_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("ProbeServoController",
                                        ControllerMutex::new(
                                            hwa::controllers::ServoController::new(
                                                _pwm_devices.probe.power_pwm,
@@ -162,7 +164,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         let fan_layer_controller = {
         static LAYER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::FanLayerPwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            LAYER_CONTROLLER_INST.init("FanLayerController",
+            LAYER_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("FanLayerController",
                                        ControllerMutex::new(
                                            hwa::controllers::FanLayerPwmController::new(
                                                _pwm_devices.fan_layer.power_pwm,
@@ -177,7 +179,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         let fan_extra_1_controller = {
         static FAN_EXTRA_1_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::FanExtra1PwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            FAN_EXTRA_1_CONTROLLER_INST.init("FanExtra1Controller",
+            FAN_EXTRA_1_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("FanExtra1Controller",
                                       ControllerMutex::new(
                                           hwa::controllers::FanExtra1PwmController::new(
                                               _pwm_devices.fan_extra_1.power_pwm,
@@ -192,7 +194,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         let laser_controller = {
         static LASER_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::LaserPwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            LASER_CONTROLLER_INST.init("LaserController",
+            LASER_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("LaserController",
                                        ControllerMutex::new(
                                            hwa::controllers::LaserPwmController::new(
                                                _pwm_devices.laser.power_pwm,
@@ -205,7 +207,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
     let hotend_controller = {
         static HOTEND_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotendController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            HOTEND_CONTROLLER_INST.init("HotEndController",
+            HOTEND_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("HotEndController",
                                         ControllerMutex::new(
                                             hwa::controllers::HotendController::new(
                                                 _pwm_devices.hotend.temp_adc.clone(),
@@ -225,7 +227,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
     let hotbed_controller = {
         static HOTBED_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotbedController>> = TrackedStaticCell::new();
         ControllerRef::new(
-            HOTBED_CONTROLLER_INST.init("HotbedController",
+            HOTBED_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("HotbedController",
                                         ControllerMutex::new(
                                             hwa::controllers::HotbedController::new(
                                                 _pwm_devices.hotbed.temp_adc,
@@ -243,14 +245,22 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     let motion_planer = {
+        static MCS: TrackedStaticCell<hwa::ControllerMutex<MotionConfig>> = TrackedStaticCell::new();
+        let motion_config = hwa::ControllerRef::new(
+            MCS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionConfig",
+            hwa::ControllerMutex::new(MotionConfig::new())
+            )
+        );
         static MPS : TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
         MotionPlannerRef::new(
-            MPS.init("MotionPlanner",
+            MPS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionPlanner",
                      MotionPlanner::new(
                         event_bus.clone(),
                         _defer_channel.clone(),
+                        motion_config.clone(),
                         hwa::drivers::MotionDriver::new(hwa::drivers::MotionDriverParams{
                             motion_device: _motion_device.motion_devices,
+                            motion_config,
                             #[cfg(feature = "with-probe")]
                             probe_controller: probe_controller.clone(),
                             #[cfg(feature = "with-fan-layer")]
@@ -295,19 +305,39 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(300), Some(300))).await;
-        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(600), Some(600), Some(600), Some(600))).await;
-        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(900), Some(900), Some(900), Some(900))).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(600), Some(600))).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(9000), Some(9000), Some(150), Some(150))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(12000), Some(12000), Some(300), Some(300))).await;
         motion_planer.set_default_travel_speed(300).await;
+
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "skr_mini_e3_v3",feature = "nucleo_64_arduino_cnc_hat"))] {
+                motion_planer.set_steps_per_mm(math::Real::new(5, 0), math::Real::new(5, 0), math::Real::new(200, 0), math::Real::new(200, 0)).await;
+                motion_planer.set_usteps(16, 16, 16, 16).await;
+            }
+            else {
+                motion_planer.set_steps_per_mm(math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0)).await;
+                motion_planer.set_usteps(2, 2, 2, 2).await;
+            }
+        }
+
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        hwa::launch_high_priotity( _sys_devices.task_stepper_core,
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "threaded")] {
+                hwa::launch_high_priotity( _sys_devices.task_stepper_core,
+                                   spawner,
                                    control::task_stepper::task_stepper(motion_planer, _wd)
-        ).and_then(|_| {
-            hwa::debug!("stepper_start() spawned");
-            Ok(())
-        })?;
+                ).and_then(|_| {
+                    hwa::debug!("stepper_start() spawned");
+                    Ok(())
+                })?;
+            }
+            else {
+                spawner.spawn(control::task_stepper::task_stepper(motion_planer, _wd)).map_err(|_| ())?;
+            }
+        }
     }
 
     #[cfg(feature = "integration-test")]
@@ -374,17 +404,13 @@ pub fn initialization_error() {
     panic!("{}", msg);
 }
 
-#[cfg(all(not(feature="native"), not(feature = "with-defmt")))]
-#[defmt::panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    loop {
-        cortex_m::asm;::wfi();
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-defmt")] {
+        #[allow(unused)]
+        #[cfg(feature = "with-defmt")]
+        use defmt_rtt as _;
+        #[allow(unused)]
+        #[cfg(feature = "with-defmt")]
+        use panic_probe as _;
     }
 }
-
-#[allow(unused)]
-#[cfg(feature = "with-defmt")]
-use defmt_rtt as _;
-#[allow(unused)]
-#[cfg(feature = "with-defmt")]
-use panic_probe as _;

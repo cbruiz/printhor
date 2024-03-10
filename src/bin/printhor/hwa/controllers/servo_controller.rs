@@ -3,6 +3,7 @@ use printhor_hwa_common::ControllerRef;
 use crate::hwa;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
+#[allow(unused)]
 pub trait ProbeTrait {
     async fn probe_pin_down(&mut self, sleep_us: u64);
     async fn probe_pin_up(&mut self, sleep_us: u64);

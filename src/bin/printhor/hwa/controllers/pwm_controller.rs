@@ -27,11 +27,12 @@ impl<TimPeri> PwmController<TimPeri>
     {
         let mut mg = self.pwm.lock().await;
         if power > 0 {
-            let duty_result: Result<u16, _> = ((power as u32 * (mg.get_max_duty() as u32)) / 100u32).try_into();
+            let max_duty = mg.get_max_duty();
+            let duty_result: Result<u16, _> = (((power as u32) * (max_duty as u32)) / 100u32).try_into();
             match duty_result {
                 Ok(duty) => {
                     hwa::trace!("Set duty: {}", duty);
-                    mg.set_duty(self.pwm_chan, duty as <TimPeri as Pwm>::Duty);
+                    mg.set_duty(self.pwm_chan, duty.min(max_duty) as <TimPeri as Pwm>::Duty);
                     mg.enable(self.pwm_chan);
                 }
                 _ => {

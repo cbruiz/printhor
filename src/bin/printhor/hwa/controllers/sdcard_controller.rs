@@ -4,10 +4,8 @@ use core::pin::Pin;
 use futures::task::{Context, Poll};
 use embedded_sdmmc::{Directory, DirEntry, File, Mode, TimeSource, Timestamp, Volume, VolumeIdx, VolumeManager};
 use futures::Stream;
-use heapless;
 use printhor_hwa_common::TrackedStaticCell;
 use crate::hwa;
-use crate::alloc::string::ToString;
 use printhor_hwa_common::ControllerMutex;
 use futures::Future;
 
@@ -19,6 +17,8 @@ pub type SDCardBlockDevice = hwa::adapters::SPIAdapter<hwa::device::SpiCardCSPin
 #[cfg(not(feature = "sdcard-uses-spi"))]
 pub type SDCardBlockDevice = hwa::device::SDCardBlockDevice;
 
+#[allow(unused)]
+use crate::alloc::string::ToString;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -389,7 +389,7 @@ impl CardController {
         }
 
         Self{
-            instance: CARD_CTRL_SHARED_STATE.init(
+            instance: CARD_CTRL_SHARED_STATE.init::<{hwa::MAX_STATIC_MEMORY}>(
                 "card_shared_state",
                 ControllerMutex::new(SDCard {
                     mgr: card,

@@ -1,8 +1,6 @@
 use embassy_sync::channel::Channel;
 use crate::{CommChannel, TrackedStaticCell};
 
-type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
 #[derive(Copy, Clone, Debug)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum DeferAction {
@@ -27,7 +25,7 @@ pub enum DeferEvent {
     Completed(DeferAction, CommChannel),
 }
 
-type ChannelType = Channel<ChannelMutexType, DeferEvent, 4>;
+type ChannelType = Channel<crate::ControllerMutexType, DeferEvent, 4>;
 
 #[derive(Clone)]
 pub struct DeferChannelRef {
@@ -45,10 +43,10 @@ impl core::ops::Deref for DeferChannelRef {
     }
 }
 
-pub fn init_defer_channel() -> DeferChannelRef {
+pub fn init_defer_channel<const MAX_SIZE: usize>() -> DeferChannelRef {
     static CHANNEL: TrackedStaticCell<ChannelType> = TrackedStaticCell::new();
 
     DeferChannelRef {
-        inner: CHANNEL.init("defer_channel", ChannelType::new()),
+        inner: CHANNEL.init::<MAX_SIZE>("defer_channel", ChannelType::new()),
     }
 }

@@ -8,6 +8,7 @@ pub const TWO: Real = Real::from_fixed(dec!(2.0));
 pub const THREE: Real = Real::from_fixed(dec!(3.0));
 pub const FOUR: Real = Real::from_fixed(dec!(4.0));
 pub const SIX: Real = Real::from_fixed(dec!(6.0));
+pub const SIXTH: Real = Real::from_fixed(dec!(0.1666666666666666666666666666));
 #[allow(unused)]
 pub const ONE_HUNDRED: Real = Real::from_fixed(dec!(100.0));
 #[allow(unused)]

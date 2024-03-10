@@ -7,9 +7,8 @@ use crate::machine::MACHINE_INFO;
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 use alloc::format;
-#[cfg(feature = "with-motion")]
-use hwa::{DeferEvent, DeferAction};
-use hwa::{CommChannel, EventBusRef, EventFlags, EventStatus};
+#[allow(unused)]
+use hwa::{CommChannel, EventBusRef, EventFlags, EventStatus, DeferEvent, DeferAction};
 use math::Real;
 use strum::VariantNames;
 #[cfg(feature = "with-motion")]
@@ -269,21 +268,22 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M80 => {
-                #[cfg(feature = "with-ps-on")]
-                self.ps_on.lock().await.set_high();
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-ps-on")] {
+                        self.ps_on.lock().await.set_high();
+                        embassy_time::Timer::after_secs(1).await;
+                    }
+                }
+
                 #[cfg(feature = "with-trinamic")]
                 let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
-                self.event_bus
-                    .publish_event(EventStatus::containing(EventFlags::ATX_ON))
-                    .await;
+                self.event_bus.publish_event(EventStatus::containing(EventFlags::ATX_ON)).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M81 => {
                 #[cfg(feature = "with-ps-on")]
                 self.ps_on.lock().await.set_low();
-                self.event_bus
-                    .publish_event(EventStatus::not_containing(EventFlags::ATX_ON))
-                    .await;
+                self.event_bus.publish_event(EventStatus::not_containing(EventFlags::ATX_ON)).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M83 => Ok(CodeExecutionSuccess::OK),
@@ -439,9 +439,6 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCode::M119 => {
-                if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
-                    return Err(CodeExecutionFailure::PowerRequired)
-                }
                 let mut d = self.motion_planner.motion_driver.lock().await;
                 let z = format!(
                     "M119 X {} Y {} Z {}\n",
@@ -504,9 +501,11 @@ impl GCodeProcessor {
             GCode::M221(_) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-trinamic")]
             GCode::M502 => {
+                /*
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
+                 */
                 let success = {
                     self.motion_planner.motion_driver.lock().await
                         .trinamic_controller.init().await.is_ok()

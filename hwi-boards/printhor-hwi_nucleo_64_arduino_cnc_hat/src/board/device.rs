@@ -16,8 +16,15 @@ cfg_if::cfg_if! {
                 pub type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, UartPort1TxDma, UartPort1RxDma>;
                 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, UartPort1TxDma>;
                 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, UartPort1RxDma>;
-                pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
 
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri>;
+                    }
+                    else {
+                        pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
+                    }
+                }
                 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
                 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
             }
@@ -38,7 +45,15 @@ cfg_if::cfg_if! {
         }
         cfg_if::cfg_if! {
             if #[cfg(feature="with-ps-on")] {
-                pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PA4>;
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub type PsOnPin = Output<'static>;
+                    }
+                    else {
+                        pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PA4>;
+                    }
+                }
+
                 pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
             }
         }
@@ -53,7 +68,15 @@ cfg_if::cfg_if! {
                 pub type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, UartPort1TxDma, UartPort1RxDma>;
                 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, UartPort1TxDma>;
                 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, UartPort1RxDma>;
-                pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri>;
+                    }
+                    else {
+                        pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
+                    }
+                }
 
                 pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
                 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
@@ -75,7 +98,14 @@ cfg_if::cfg_if! {
         }
         cfg_if::cfg_if! {
             if #[cfg(feature="with-ps-on")] {
-                pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PA4>;
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub type PsOnPin = Output<'static>;
+                    }
+                    else {
+                        pub type PsOnPin = Output<'static, embassy_stm32::peripherals::PA4>;
+                    }
+                }
                 pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
             }
         }
@@ -102,12 +132,20 @@ pub type Spi = Spi1;
 #[cfg(feature = "with-spi")]
 pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
 
-#[cfg(feature = "with-sdcard")]
-pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-sdcard")] {
+        pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
 
-#[cfg(feature = "with-sdcard")]
-pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC4>;
-
+        cfg_if::cfg_if! {
+            if #[cfg(feature="upstream-embassy")] {
+                pub type SpiCardCSPin = Output<'static>;
+            }
+            else {
+                pub type SpiCardCSPin = Output<'static, embassy_stm32::peripherals::PC4>;
+            }
+        }
+    }
+}
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
 pub use embassy_stm32::adc::Instance as AdcTrait;
@@ -275,6 +313,10 @@ impl MotionPins {
     }
     #[inline]
     pub fn enable_z_stepper(&mut self) {
+        self.all_enable_pin.set_low();
+    }
+    #[inline]
+    pub fn enable_e_stepper(&mut self) {
         self.all_enable_pin.set_low();
     }
     #[inline]

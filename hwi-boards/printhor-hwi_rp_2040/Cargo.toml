@@ -35,6 +35,9 @@ with-defmt = ["printhor-hwa-common/with-defmt", "embassy-rp/defmt", "embassy-exe
 with-trinamic = []
 with-ps-on = []
 
+nightly = []
+threaded = ["embassy-executor/executor-interrupt"]
+verbose-timings = []
 without-uart-until_idle = []
 with-uart-buffered = []
 # with-uart-ringbuffered = [] # Not yet present in embassy-rp
@@ -49,7 +52,7 @@ cortex-m = { version = "0.7.7", features = ["inline-asm"] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-rp = { version = "0", default-features = false, features = ["unstable-pac", "time-driver", "critical-section-impl"]}
-embassy-executor = { version = "0", default-features = false, features = ["executor-interrupt", "executor-thread", "arch-cortex-m", "integrated-timers"] }
+embassy-executor = { version = "0", default-features = false, features = ["executor-thread", "arch-cortex-m", "integrated-timers"] }
 embassy-sync = { version = "0", features = ["defmt"] }
 embassy-time = { version = "0", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }

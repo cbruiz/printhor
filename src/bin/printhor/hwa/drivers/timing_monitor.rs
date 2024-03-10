@@ -3,7 +3,6 @@ use std::io::Write;
 use bitflags::bitflags;
 use embassy_time::Instant;
 use crate::hwa;
-use crate::control::motion_timing::now;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -69,7 +68,7 @@ impl TimingsMonitor {
         #[cfg(feature = "no-real-time")]
         let real_time = self.real_time;
         #[cfg(not(feature = "no-real-time"))]
-        let real_time = now();
+        let real_time = crate::control::motion_timing::now();
         let k1 = (real_time - self.ref_time).as_micros();
         self.timings.push((k1, self.current_state));
     }
@@ -79,7 +78,7 @@ impl TimingsMonitor {
         #[cfg(feature = "no-real-time")]
         let real_time = self.real_time;
         #[cfg(not(feature = "no-real-time"))]
-        let real_time = now();
+        let real_time = crate::control::motion_timing::now();
         let k1 = (real_time - self.ref_time).as_micros();
         self.timings.push((k1, self.current_state));
     }
@@ -103,7 +102,7 @@ binary "X_STEP" as XS
 binary "Y_STEP" as YS
 binary "Z_STEP" as ZS
 binary "E_STEP" as ES
-scale 2000 as 50 pixels
+scale 10000 as 60 pixels
 
 "###;
         const POS: &'static str = r###"@enduml"###;

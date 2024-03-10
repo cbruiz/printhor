@@ -3,6 +3,7 @@ pub mod usbserial {
     use crate::board::device::USBDrv;
     use futures::Stream;
     use core::pin::Pin;
+    use core::sync::atomic::{compiler_fence, Ordering};
     use futures::task::Context;
     use futures::task::Poll;
     use futures::Future;
@@ -116,6 +117,7 @@ pub mod usbserial {
 
         fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
 
+            compiler_fence(Ordering::SeqCst);
             let this = self.get_mut();
 
             if this.current_byte_index < this.bytes_read {
@@ -166,6 +168,7 @@ pub mod uart_port1 {
     use crate::device::UartPort1RingBufferedRxDevice;
     use futures::Stream;
     use core::pin::Pin;
+    use core::sync::atomic::{compiler_fence, Ordering};
     use futures::task::Context;
     use futures::task::Poll;
     use futures::Future;
@@ -203,7 +206,7 @@ pub mod uart_port1 {
                 }
                 else {
                     Self {
-                        receiver: receiver.into_ring_buffered(BUFF.init("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
+                        receiver: receiver.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
                         buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
                         bytes_read: 0,
                         current_byte_index: 0,
@@ -217,8 +220,8 @@ pub mod uart_port1 {
     {
         type Item = Result<u8, async_gcode::Error>;
 
-        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
-
+        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
+            compiler_fence(Ordering::SeqCst);
             let this = self.get_mut();
             if this.current_byte_index < this.bytes_read {
                 let byte = this.buffer[this.current_byte_index as usize];

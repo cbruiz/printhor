@@ -49,7 +49,7 @@ cfg_if::cfg_if! {
 }
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
-pub const MAX_STATIC_MEMORY: u32 = 4096;
+pub const MAX_STATIC_MEMORY: usize = 4096;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
@@ -269,7 +269,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         cfg.data_bits = DataBits::DataBits8;
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
-        cfg.detect_previous_overrun = true;
+        cfg.detect_previous_overrun = false;
 
         #[cfg(feature = "nucleo64-f410rb")]
         let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
@@ -283,7 +283,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
-            UART_PORT1_INST.init("UartPort1", ControllerMutex::new(uart_port1_tx_device))
+            UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port1_tx_device))
         );
         (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
@@ -294,7 +294,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
         static SPI_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
         #[cfg(feature="nucleo64-l476rg")]
-        let spi = ControllerRef::new(SPI_INST.init(
+        let spi = ControllerRef::new(SPI_INST.init::<{crate::MAX_STATIC_MEMORY}>(
             "SPI",
             ControllerMutex::new(
                 device::Spi1::new(p.SPI3, p.PC10, p.PC12, p.PC11,
@@ -349,7 +349,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
         crate::device::ProbePeripherals {
             power_pwm: ControllerRef::new(
-                PWM_INST.init("PwmServo",
+                PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>("PwmServo",
                               ControllerMutex::new(
                                   device::PwmServo::new(
                                       p.TIM3,
@@ -402,7 +402,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         #[cfg(feature = "nucleo64-f410rb")]
         adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles15);
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
-        ControllerRef::new(ADC_INST.init(
+        ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
             "HotendHotbedAdc",
             ControllerMutex::new(adc_hotend_hotbed)
         ))
@@ -421,7 +421,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         );
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotendHotbed>> = TrackedStaticCell::new();
 
-        ControllerRef::new(PWM_INST.init(
+        ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
             "PwmHotendHotbed",
             ControllerMutex::new(pwm)
         ))
@@ -506,7 +506,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
 
         device::LaserPeripherals {
-            power_pwm: ControllerRef::new(PWM_INST.init(
+            power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "PwmLaser",
                 ControllerMutex::new(pwm)
             )),
@@ -550,7 +550,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
 
         device::FanLayerPeripherals {
-            power_pwm: ControllerRef::new(PWM_INST.init(
+            power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "PwmLayer",
                 ControllerMutex::new(pwm)
             )),
@@ -571,14 +571,14 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let ps_on = {
         static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init("", ControllerMutex::new(
+            PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(
                 Output::new(p.PA4, Level::Low, Speed::Low)
             ))
         )
     };
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
-    let sys_watchdog = ControllerRef::new(WD.init("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
+    let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 
     MachineContext {
         controllers: Controllers {

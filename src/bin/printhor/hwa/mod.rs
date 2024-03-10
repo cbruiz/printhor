@@ -59,24 +59,25 @@ pub mod display {
 /// Simple module to manage and measure static controller allocations in async tasks
 pub mod task_allocations {
     use printhor_hwa_common::{EventBusRef, EventBusSubscriber, TrackedStaticCell};
+    use crate::hwa;
 
     pub async fn init_control_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static>  {
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut EventBusRef = SUBS.init("control_task::EventBusSubscriber", event_bus);
+        let bi: &mut EventBusRef = SUBS.init::<{hwa::MAX_STATIC_MEMORY}>("control_task::EventBusSubscriber", event_bus);
         bi.subscriber().await
     }
 
     #[cfg(feature = "with-printjob")]
     pub async fn init_printer_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static>  {
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut EventBusRef = SUBS.init("printer_task::EventBusSubscriber", event_bus);
+        let bi: &mut EventBusRef = SUBS.init::<{hwa::MAX_STATIC_MEMORY}>("printer_task::EventBusSubscriber", event_bus);
         bi.subscriber().await
     }
 
     #[cfg(all(feature = "integration-test"))]
     pub async fn init_integration_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static>  {
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut EventBusRef = SUBS.init("integration_task::EventBusSubscriber", event_bus);
+        let bi: &mut EventBusRef = SUBS.init::<{hwa::MAX_STATIC_MEMORY}>("integration_task::EventBusSubscriber", event_bus);
         bi.subscriber().await
     }
 

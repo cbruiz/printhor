@@ -8,6 +8,7 @@ pub const TWO: Real = Real::from_f64(2.0);
 pub const THREE: Real = Real::from_f64(3.0);
 pub const FOUR: Real = Real::from_f64(4.0);
 pub const SIX: Real = Real::from_f64(6.0);
+pub const SIXTH: Real = Real::from_f64(1.0 / 6.0);
 #[allow(unused)]
 pub const ONE_HUNDRED: Real = Real::from_f64(100.0);
 #[allow(unused)]

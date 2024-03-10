@@ -8,7 +8,6 @@ readme = "README.md"
 repository = "https://github.com/cbruiz/printhor"
 documentation = "https://docs.rs/printhor"
 description = "The highly reliable but not necessarily functional 3D Printer firmware"
-
 exclude = [
     "datasheets", "design", "package-publish-trick"
 ]
@@ -17,9 +16,13 @@ exclude = [
 status = "experimental"
 
 [features]
+nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
+verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
+
 default = ["native"]
 
 # Hardware device features
+without-bootloader = []
 with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt"]
 with-serial-usb = ["printhor-hwa-common/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1"]
@@ -41,14 +44,24 @@ with-display = [
 ]
 with-ps-on = []
 
+threaded = [
+    "printhor-hwa-common/threaded",
+    "printhor-hwi_native?/threaded",
+    "printhor-hwi_skr_mini_e3?/threaded",
+    "printhor-hwi_mks_robin_nano?/threaded",
+    "printhor-hwi_rp_2040?/threaded",
+    "printhor-hwi_nucleo_64_arduino_cnc_hat?/threaded",
+]
 
+upstream-embassy = ["printhor-hwi_skr_mini_e3?/upstream-embassy", "printhor-hwi_mks_robin_nano?/upstream-embassy", "printhor-hwi_nucleo_64_arduino_cnc_hat?/upstream-embassy", "printhor-hwi_rp_2040?/upstream-embassy"]
 sdcard-uses-spi = []
 adc-is-async = []
-has-extruder = []
 trinamic-uart-multi-channel = []
 enable_vrefint-with-delay = []
 without-vref-int = []
 timing-stats = []
+bypass-hotend = []
+bypass-hotbed = []
 
 ili9341_parallel = []
 ili9341_spi = []
@@ -56,14 +69,15 @@ ili9341_spi = []
 integration-test = [
     "integration-test-m100",
     "integration-test-power-on", "integration-test-homing",
-    "integration-test-move-ortho",
-    "integration-test-move-oblique",
+    #"integration-test-move-ortho",
+    #"integration-test-move-oblique",
     "integration-test-move-boundaries",
     #"integration-test-trinamic",
     #"integration-test-benchy",
-    "integration-test-laser-engrave",
-    #"plot-timings",
-    #"timing-stats",
+    #"integration-test-laser-engrave",
+    "plot-timings",
+    "timing-stats",
+    "verbose-timings",
     #"no-real-time",
 ]
 integration-test-m100 = []
@@ -103,14 +117,14 @@ plot-motion-plan = ["gnuplot"]
 
 native = [
     #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
-    "with-motion", "has-extruder", "printhor-hwi_native/with-motion",
+    "with-motion", "printhor-hwi_native/with-motion",
     "with-serial-port-1", "printhor-hwi_native/with-serial-port-1",
     "with-serial-port-2", "printhor-hwi_native/with-serial-port-2",
     "with-sdcard", "printhor-hwi_native/with-sdcard",
     "with-printjob", "printhor-hwi_native/with-printjob",
     "with-probe", "printhor-hwi_native/with-probe",
-    "with-hot-end", "printhor-hwi_native/with-hot-end",
-    "with-hot-bed", "printhor-hwi_native/with-hot-bed",
+    #"with-hot-end", "printhor-hwi_native/with-hot-end",
+    #"with-hot-bed", "printhor-hwi_native/with-hot-bed",
     "with-fan-layer", "printhor-hwi_native/with-fan-layer",
     "with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
     "with-laser", "printhor-hwi_native/with-laser",
@@ -127,9 +141,7 @@ native = [
     #"with-lvgl",
 
     "printhor-hwi_native/with-log",
-    "embassy-executor/arch-std",
-    "embassy-sync/std", "embassy-time/std",
-    "embassy-time/generic-queue",
+    "embassy-executor/arch-std", "embassy-sync/std", "embassy-time/std",
 ]
 
 #################
@@ -137,13 +149,16 @@ native = [
 #################
 
 mks_robin_nano = [
-    "has-extruder",
+    "nightly",
+    "timing-stats",
+    #"upstream-embassy",
     "with-defmt", "printhor-hwi_mks_robin_nano/with-defmt",
-    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
+    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano/with-motion",
 
-    "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
     "with-serial-usb", "printhor-hwi_mks_robin_nano/with-serial-usb",
+    "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
+    #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2",
     "with-spi", "printhor-hwi_mks_robin_nano/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
@@ -161,7 +176,6 @@ mks_robin_nano = [
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
     "printhor-hwi_mks_robin_nano",
     "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
-    "embassy-time/generic-queue", "embassy-time/generic-queue-128",
     "cortex-m/critical-section-single-core",
 ]
 
@@ -170,6 +184,7 @@ mks_robin_nano = [
 #################
 
 nucleo64-l476rg = [
+    #"upstream-embassy",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2
@@ -178,8 +193,8 @@ nucleo64-l476rg = [
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
     "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
-    "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end",
-    "with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed",
+    #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end",
+    #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed",
     "with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
     "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
     "with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
@@ -191,12 +206,13 @@ nucleo64-l476rg = [
     #"fixed-point-128-impl",
 
     #"timing-stats",
-
     "printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg",
-    #"printhor-hwi_nucleo_64_arduino_cnc_hat/upstream-embassy",
 ]
 
 nucleo64-f410rb = [
+    #"upstream-embassy",
+    #"verbose-timings",
+    #"timing-stats",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2
@@ -218,14 +234,12 @@ nucleo64-f410rb = [
     #"timing-stats",
 
     "printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-f410rb",
-    #"printhor-hwi_nucleo_64_arduino_cnc_hat/upstream-embassy",
 ]
 
 nucleo_64_arduino_cnc_hat = [
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
     "printhor-hwi_nucleo_64_arduino_cnc_hat",
     "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
-    "embassy-time/generic-queue", "embassy-time/generic-queue-128",
     "cortex-m/critical-section-single-core",
 ]
 
@@ -234,20 +248,25 @@ nucleo_64_arduino_cnc_hat = [
 #################
 
 skr_mini_e3_v2 = [
+    #"nightly",
+    #"verbose-timings",
+    #"timing-stats",
+    #"printhor-hwi_skr_mini_e3/without-ringbuffer",
+    "without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader",
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
-    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
-    "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
-    "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
+    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
+    #"with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
+    #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
-    #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
-    "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
+    "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
+    "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
+    #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
-    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
+    #"with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
+    #"with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
     "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
-
     "without-vref-int",
     "adc-is-async",
 
@@ -256,18 +275,25 @@ skr_mini_e3_v2 = [
     #"fixed-point-128-impl",
     #"timing-stats",
 
+    "with-defmt", "printhor-hwi_skr_mini_e3/with-defmt",
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v2",
 ]
 skr_mini_e3_v3 = [
+    "nightly",
+    #"verbose-timings",
+    #"timing-stats",
+    "without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader",
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
-    "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
-    #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
+    "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", # Broken with bootloader
+    #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", // Broken with USB
+    "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
+    "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
-    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
+    #"with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
+    #"with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
     "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
     "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
@@ -278,17 +304,13 @@ skr_mini_e3_v3 = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    #"timing-stats",
-
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v3",
 ]
 
 skr_mini_e3 = [
     "with-defmt", "printhor-hwi_skr_mini_e3/with-defmt",
     "cortex-m", "cortex-m-rt", "alloc-cortex-m",
-    "printhor-hwi_skr_mini_e3",
     "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
-    "embassy-time/generic-queue",
     "cortex-m/critical-section-single-core",
 ]
 
@@ -313,9 +335,9 @@ tst-rp2040 = [
     #"with-laser", "printhor-hwi_rp_2040/with-laser",
     #"enable_vrefint-with-delay",
 
-    #"float-point-f32-impl",
+    "float-point-f32-impl",
     #"float-point-f64-impl",
-    "fixed-point-128-impl",
+    #"fixed-point-128-impl",
 
     "timing-stats",
 
@@ -350,6 +372,7 @@ embassy-sync = { version = "0.5.0", features = [] }
 embassy-time = { version = "0.3.0", features = [] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-embedded-hal = { version = "0.1.0", features = [], optional = true }
+embassy-usb = { version = "0.1.0", features = [], optional = true }
 
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
@@ -422,7 +445,7 @@ incremental = false
 debug-assertions = true
 opt-level = "s"
 lto = true
-panic = "abort"
+panic = "unwind"
 
 [profile.release-opt]
 inherits = "release"
@@ -451,19 +474,14 @@ printhor-hwi_rp_2040 = {path = "hwi-boards/printhor-hwi_rp_2040"}
 
 stm32-metapac = { git = "https://github.com/embassy-rs/stm32-data-generated", tag = "stm32-data-ab2bc2a739324793656ca1640e1caee2d88df72d" }
 
-#embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-
 #embassy-stm32 = { path = "patched-crates/embassy/embassy-stm32" }
+#embassy-rp = { path = "patched-crates/embassy/embassy-rp" }
 #embassy-executor = { path = "patched-crates/embassy/embassy-executor" }
 #embassy-sync = { path = "patched-crates/embassy/embassy-sync" }
 #embassy-time = { path = "patched-crates/embassy/embassy-time" }
 #embassy-futures = { path = "patched-crates/embassy/embassy-futures" }
 #embassy-embedded-hal = { path = "patched-crates/embassy/embassy-embedded-hal" }
+#embassy-usb = { path = "patched-crates/embassy/embassy-usb" }
 
 #[workspace.vars]
 # TBD

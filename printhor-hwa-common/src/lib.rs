@@ -8,7 +8,20 @@ cfg_if::cfg_if! {
         pub use defmt::*;
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "threaded")] {
+        compile_error!("TODO");
+        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+    }
+    else {
+        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
+    }
+}
+
 mod tracked_static_cell;
+
 pub use tracked_static_cell::TrackedStaticCell;
 mod event_bus;
 pub use event_bus::*;

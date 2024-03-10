@@ -1,13 +1,12 @@
 use crate::hwa;
 use crate::control::{GCode, S, XYZ, XYZEFS, XYZW};
 use crate::helpers;
-use alloc::string::String;
 use futures::Stream;
 
 #[cfg_attr(not(feature="with-defmt"), derive(Debug))]
 pub enum GCodeLineParserError {
     ParseError(u32),
-    GCodeNotImplemented(u32, String),
+    GCodeNotImplemented(u32, alloc::string::String),
     #[allow(unused)]
     FatalError,
 }
@@ -399,7 +398,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                 Some(rgs) => {
                                                     // Nice to report all this kind of things, but avoidable to save code size
                                                     let num_part = match rgs.1 {
-                                                        None => {String::new()}
+                                                        None => {alloc::string::String::new()}
                                                         Some(frv) => {
                                                             let dv = 10i32.pow(frv.1.into());
                                                             let p1 = frv.0.abs() / dv;
@@ -453,6 +452,7 @@ impl<STREAM> GCodeLineParser<STREAM>
 /// This trait is just a hack to give backward compatibility with unpatched async-gcode 0.3.0
 /// Normally, won't be used as it is patched in cargo.toml
 /// Purpose of this trait and impl is just to be able to publish printhor in crates.io
+#[allow(unused)]
 trait FixedAdaptor {
     fn integer_part(&self) -> i32;
     fn scale(&self) -> u8;

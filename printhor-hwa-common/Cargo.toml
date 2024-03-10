@@ -17,6 +17,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 with-ui = ["embedded-graphics-core"]
 nightly = []
+threaded = []
 with-log = ["log"]
 with-defmt = ["defmt"]
 with-serial-usb = []

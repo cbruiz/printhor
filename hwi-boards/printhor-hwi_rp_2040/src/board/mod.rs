@@ -362,7 +362,6 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
             serial_port2_tx,
         },
         sys_devices: SysDevices {
-            #[cfg(feature = "with-motion")]
             task_stepper_core: p.CORE1,
             #[cfg(feature = "with-ps-on")]
             ps_on,

@@ -90,19 +90,19 @@ impl Timings {
     }
 
     pub fn report(&self) {
-        hwa::debug!("Segment timings: {} + {} + {} = {}",
+        hwa::info!("Segment timings: {} + {} + {} = {}",
             self.t_segment_preparation.as_micros(),
             self.t_segment_execution.as_micros(),
             self.t_segment_remaining.as_micros(),
             (self.t_segment_preparation + self.t_segment_execution + self.t_segment_remaining).as_micros()
         );
-        hwa::debug!("\tMicro-segment timings: {} + {} + {} = {}",
+        hwa::info!("\tMicro-segment timings: {} + {} + {} = {}",
             self.t_u_segment_computation_agg.as_micros(),
             self.t_u_segment_stepping_agg.as_micros(),
             self.t_u_segment_remaining_agg.as_micros(),
             (self.t_u_segment_computation_agg + self.t_u_segment_stepping_agg + self.t_u_segment_remaining_agg).as_micros()
         );
-        hwa::debug!("\tMicro-segment ranges: [{} .. {}] + [{} .. {}] + [{} .. {}] = [{} .. {}]",
+        hwa::info!("\tMicro-segment ranges: [{} .. {}] + [{} .. {}] + [{} .. {}] = [{} .. {}]",
             self.t_u_segment_computation_min.as_micros(),
             self.t_u_segment_computation_max.as_micros(),
             self.t_u_segment_stepping_min.as_micros(),

@@ -12,17 +12,16 @@ impl<T> TrackedStaticCell<T> {
 
     #[inline]
     #[allow(clippy::mut_from_ref)]
-    pub fn init(&'static self, element_name: &str, val: T) -> &'static mut T {
-        stack_reservation_increment(element_name , core::mem::size_of::<T>());
+    pub fn init<const MAX_SIZE: usize>(&'static self, element_name: &str, val: T) -> &'static mut T {
+        stack_reservation_increment::<MAX_SIZE>(element_name , core::mem::size_of::<T>());
         self.0.init(val)
     }
 
 }
 
-pub(self) fn stack_reservation_increment(_element_name: &str, nbytes: usize) {
-    #[cfg(feature= "with-log")]
-    log::debug!("D; statically allocated {} bytes for {}", nbytes, _element_name);
-    if nbytes > 4096 {
+pub(self) fn stack_reservation_increment<const MAX_SIZE: usize>(_element_name: &str, nbytes: usize) {
+    crate::debug!("D; statically allocated {} bytes for {}", nbytes, _element_name);
+    if nbytes > MAX_SIZE {
         panic!("Too much allocation!")
     }
     unsafe {
