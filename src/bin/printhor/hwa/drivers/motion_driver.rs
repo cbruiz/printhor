@@ -1,18 +1,18 @@
-use core::sync::atomic::compiler_fence;
-use core::sync::atomic::Ordering::SeqCst;
 use embassy_time::Duration;
 #[allow(unused)]
 use crate::{hwa, hwi};
 use crate::control::motion_timing::s_block_for;
 #[allow(unused)]
 use crate::hwa::ControllerRef;
+use crate::hwa::controllers::{ MotionConfigRef};
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
-use crate::math::Real;
-use crate::tgeo::{CoordSel, TVector};
+use crate::math::{Real, ONE};
+use crate::tgeo::{ArithmeticOps, CoordSel, TVector};
 #[cfg(all(feature = "native", feature = "plot-timings"))]
 use super::timing_monitor::*;
+use core::ops::Neg;
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDriverParams {
@@ -271,6 +271,20 @@ impl MotionDriver {
         self.pins.e_step_pin.set_low();
     }
 
+    pub fn endstop_triggered(&self, coordsel: CoordSel) -> bool {
+        let mut triggered = false;
+        if coordsel.contains(CoordSel::X) {
+            triggered |= self.pins.x_endstop_pin.is_high();
+        }
+        if coordsel.contains(CoordSel::Y) {
+            triggered |= self.pins.y_endstop_pin.is_high();
+        }
+        if coordsel.contains(CoordSel::Z) {
+            triggered |= self.pins.z_endstop_pin.is_high();
+        }
+        triggered
+    }
+
     #[inline]
     pub fn enable_and_set_dir(&mut self, vdir: &TVector<Real>) {
         self.enable_x_stepper();
@@ -306,80 +320,47 @@ impl MotionDriver {
         }
     }
 
-    pub async fn homing_action(&mut self) -> Result<(), ()>{
+    pub async fn homing_action(&mut self, motion_config_ref: &MotionConfigRef) -> Result<(), ()>{
         hwa::info!("Homing");
 
-        compiler_fence(SeqCst);
+        let motion_config = motion_config_ref.lock().await;
+        let steps_per_mm = motion_config.mm_per_unit * TVector::from_coords(
+            Some(Real::from_lit(motion_config.usteps[0].into(),0 )),
+            Some(Real::from_lit(motion_config.usteps[1].into(), 0)),
+            Some(Real::from_lit(motion_config.usteps[2].into(), 0)),
+            None,
+        );
+        hwa::info!("Steps per mm: {}", steps_per_mm);
+        let machine_bounds = motion_config.machine_bounds;
+        drop(motion_config);
 
-        let mm_per_second = Real::new(50, 0);
-        let microsteps = Real::new(16, 0);
-        let axis_pulses_width = TVector::<Real>::one() * Real::from_lit(1000000, 0) / (TVector::<Real>::one() * mm_per_second * microsteps);
-        let bounds = TVector::one() * Real::from_lit(200, 0) * microsteps;
-        let mut advanced = TVector::zero();
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-        hwa::info!("Homing speed: {}", axis_pulses_width );
-        hwa::info!("Homing bounds: {}", bounds );
-
-        #[cfg(feature="with-laser")]
-        self.laser_controller.lock().await.set_power(0).await;
+        hwa::info!("Machine bounds: {}", machine_bounds );
 
         hwa::info!("Homing X axis");
-        self.enable_x_stepper();
-        self.x_dir_pin_low();
-        let mut ticker = embassy_time::Ticker::every(
-            embassy_time::Duration::from_micros(axis_pulses_width.x.unwrap().to_i64().unwrap() as u64)
-        );
-        while self.pins.x_endstop_pin.is_low() {
-            if !advanced.bounded_by(&bounds) {
-                hwa::warn!("Missing X endstop after {}", advanced);
-                return Err(());
-            }
-            self.x_step_pin_high();
-            s_block_for(Duration::from_micros(10));
-            self.x_step_pin_low();
-            s_block_for(Duration::from_micros(10));
-            advanced.increment(CoordSel::X, Real::one());
-            ticker.next().await;
-        }
+        let advanced = self.shabbily_move_to(
+            TVector::from_coords(Some(ONE.neg()), None, None, None),
+            machine_bounds.x.unwrap_or(Real::zero()),
+            steps_per_mm,
+            1000,
+            true,
+        ).await;
+
         hwa::info!("{}", advanced);
-        advanced.set_coord(CoordSel::X, Some(Real::zero()));
 
         hwa::info!("Homing Y axis");
-        self.enable_y_stepper();
-        self.y_dir_pin_low();
-        let mut ticker = embassy_time::Ticker::every(
-            Duration::from_micros(axis_pulses_width.y.unwrap().to_i64().unwrap() as u64)
-        );
-        while self.pins.y_endstop_pin.is_low() {
-            if !advanced.bounded_by(&bounds) {
-                hwa::warn!("Missing Y endstop after {}", advanced);
-                return Err(());
-            }
-            self.y_step_pin_high();
-            s_block_for(Duration::from_micros(10));
-            self.y_step_pin_low();
-            s_block_for(Duration::from_micros(10));
-            advanced.increment(CoordSel::Y, Real::one());
-            ticker.next().await;
-        }
+        let advanced = self.shabbily_move_to(
+            TVector::from_coords(None, Some(ONE.neg()), None, None),
+            machine_bounds.y.unwrap_or(Real::zero()),
+            steps_per_mm,
+            1000,
+            true,
+        ).await;
 
         hwa::info!("{}", advanced);
-        advanced.set_coord(CoordSel::Y, Some(Real::zero()));
 
-        hwa::info!("Move Z up");
-        self.enable_z_stepper();
-        self.z_dir_pin_high();
-        ticker = embassy_time::Ticker::every(
-            Duration::from_micros(axis_pulses_width.z.unwrap().to_i64().unwrap() as u64)
-        );
-        for _i in 0 .. 16 * 10 {
-            self.z_step_pin_high();
-            s_block_for(Duration::from_micros(10));
-            advanced.increment(CoordSel::Z, Real::one());
-            self.z_step_pin_low();
-            s_block_for(Duration::from_micros(10));
-            ticker.next().await;
-        }
+        /*
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
@@ -394,7 +375,61 @@ impl MotionDriver {
         //#[cfg(all(feature = "native", feature = "plot-timings"))]
         //self.end_segment().await;
 
+         */
+
         Ok(())
+    }
+
+    async fn shabbily_move_to(&mut self, vdir: TVector<Real>, module: Real, steps_per_mm: TVector<Real>, step_frequency: u64, check_endstops: bool) -> TVector<u32>
+    {
+        let steps_to_advance: TVector<u32> = (vdir * module * steps_per_mm).abs().round().map_coords(|c| { c.to_i32().and_then(|c| Some(c as u32))});
+        let mut steps_advanced: TVector<u32> = TVector::zero();
+
+        self.enable_and_set_dir(&vdir);
+        let mut coordsel = CoordSel::empty();
+        steps_to_advance.apply_coords(|(coord, v)| {
+            if v.is_defined_positive() {
+                coordsel.set(coord, true);
+            }
+        });
+
+        let mut ticker = embassy_time::Ticker::every(
+            Duration::from_hz(step_frequency)
+        );
+
+        loop {
+            if check_endstops && self.endstop_triggered(coordsel) {
+                hwa::info!("ENDSTOP TRIGGERED");
+                return steps_advanced;
+            }
+            if !steps_advanced.bounded_by(&steps_to_advance) {
+                hwa::info!("FULL ADV");
+                return steps_advanced;
+            }
+            if coordsel.contains(CoordSel::X) {
+                self.x_step_pin_high();
+            }
+            if coordsel.contains(CoordSel::Y) {
+                self.y_step_pin_high();
+            }
+            if coordsel.contains(CoordSel::Z) {
+                self.z_step_pin_high();
+            }
+
+            s_block_for(Duration::from_micros(1));
+            if coordsel.contains(CoordSel::X) {
+                self.x_step_pin_low();
+            }
+            if coordsel.contains(CoordSel::Y) {
+                self.y_step_pin_low();
+            }
+            if coordsel.contains(CoordSel::Z) {
+                self.z_step_pin_low();
+            }
+            steps_advanced.increment(coordsel.clone(), 1);
+
+            ticker.next().await;
+        }
     }
 
 }

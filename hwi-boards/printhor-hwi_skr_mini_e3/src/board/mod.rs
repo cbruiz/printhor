@@ -5,10 +5,6 @@ pub mod io;
 
 use alloc_cortex_m::CortexMHeap;
 use embassy_executor::Spawner;
-#[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature="with-trinamic"))]
-use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-serial-port-1", feature="with-trinamic"))]
-use embassy_stm32::usart;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull, OutputType};
 #[allow(unused)]
@@ -179,37 +175,37 @@ cfg_if::cfg_if! {
     if #[cfg(feature="skr_mini_e3_v2")] {
         #[cfg(feature = "with-serial-usb")]
         bind_interrupts!(struct UsbIrqs {
-            USB_LP_CAN1_RX0 => usb::InterruptHandler<embassy_stm32::peripherals::USB>;
+            USB_LP_CAN1_RX0 => embassy_stm32::usb::InterruptHandler<embassy_stm32::peripherals::USB>;
         });
         #[cfg(feature = "with-serial-port-1")]
         bind_interrupts!(struct UartPort1Irqs {
-            USART1 => usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+            USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
         });
         #[cfg(feature = "with-serial-port-2")]
         bind_interrupts!(struct UartPort2Irqs {
-            USART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+            USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
         });
         #[cfg(feature = "with-trinamic")]
         bind_interrupts!(struct TrinamicIrqs {
-            UART4 => usart::InterruptHandler<embassy_stm32::peripherals::UART4>;
+            UART4 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::UART4>;
         });
     }
     else if #[cfg(feature="skr_mini_e3_v3")] {
         #[cfg(feature = "with-serial-usb")]
         bind_interrupts!(struct UsbIrqs {
-            USB_UCPD1_2 => usb::InterruptHandler<embassy_stm32::peripherals::USB>;
+            USB_UCPD1_2 => embassy_stm32::usb::InterruptHandler<embassy_stm32::peripherals::USB>;
         });
         #[cfg(feature = "with-serial-port-1")]
-        bind_interrupts!(struct UartPort1Irqs {
-            USART1 => usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+        embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
+            USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
         });
         #[cfg(feature = "with-serial-port-2")]
-        bind_interrupts!(struct UartPort2Irqs {
-            USART2_LPUART2 => usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+        embassy_stm32::bind_interrupts!(struct UartPort2Irqs {
+            USART2_LPUART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
         });
         #[cfg(feature = "with-trinamic")]
-        bind_interrupts!(struct TrinamicIrqs {
-            USART3_4_5_6_LPUART1 => usart::InterruptHandler<embassy_stm32::peripherals::USART4>;
+        embassy_stm32::bind_interrupts!(struct TrinamicIrqs {
+            USART3_4_5_6_LPUART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART4>;
         });
     }
 }
@@ -384,7 +380,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 let (usb_serial_rx_device, sender) = usb_serial_device.split();
                 static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
                 let serial_usb_tx = ControllerRef::new(
-                    USB_INST.init("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
+                    USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
                 );
 
                 (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
@@ -393,7 +389,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-serial-port-1")]
             let (serial_port1_tx, serial_port1_rx_stream) = {
 
-                let mut cfg = usart::Config::default();
+                let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
                 cfg.data_bits = DataBits::DataBits8;
                 cfg.stop_bits = StopBits::STOP1;
@@ -416,7 +412,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             #[cfg(feature = "with-serial-port-2")]
             let (serial_port2_tx, serial_port2_rx_stream) = {
 
-                let mut cfg = usart::Config::default();
+                let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = crate::UART_PORT2_BAUD_RATE;
                 cfg.data_bits = DataBits::DataBits8;
                 cfg.stop_bits = StopBits::STOP1;
@@ -438,7 +434,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
             #[cfg(all(feature = "with-trinamic"))]
             let trinamic_uart = {
-                let mut cfg = usart::Config::default();
+                let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = TRINAMIC_UART_BAUD_RATE;
                 cfg.data_bits = DataBits::DataBits8;
                 cfg.stop_bits = StopBits::STOP1;
@@ -544,7 +540,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             let (pwm_laser, pwm_laser_channel) = {
                 static PWM_LASER_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
                 (
-                    ControllerRef::new(PWM_LASER_INST.init(
+                    ControllerRef::new(PWM_LASER_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                         "LaserPwmController",
                         ControllerMutex::new(
                             embassy_stm32::timer::simple_pwm::SimplePwm::new(
@@ -704,11 +700,11 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         #[cfg(feature = "with-serial-port-2")]
         let (serial_port2_tx, serial_port2_rx_stream) = {
 
-                let mut cfg = usart::Config::default();
+                let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = crate::UART_PORT2_BAUD_RATE;
-                cfg.data_bits = DataBits::DataBits8;
-                cfg.stop_bits = StopBits::STOP1;
-                cfg.parity = Parity::ParityNone;
+                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
+                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
                 cfg.detect_previous_overrun = false;
 
                 let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new(p.USART2,
@@ -865,7 +861,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
             static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
-            ControllerRef::new(ADC_INST.init(
+            ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "HotendHotbedAdc",
                 ControllerMutex::new(adc_hotend_hotbed)
             ))

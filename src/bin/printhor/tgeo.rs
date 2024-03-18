@@ -9,7 +9,7 @@ use num_traits::float::FloatCore;
 use bitflags::bitflags;
 
 bitflags! {
-    #[derive(PartialEq, Eq)]
+    #[derive(PartialEq, Clone, Copy, Eq)]
     pub struct CoordSel: u8 {
         const X = 0b00000001;
         const Y = 0b00000010;
@@ -31,6 +31,7 @@ pub trait ArithmeticOps: Copy
     fn zero() -> Self;
     fn one() -> Self;
     fn is_zero(&self) -> bool;
+    fn is_defined_positive(&self) -> bool;
     fn abs(&self) -> Self;
 }
 
@@ -497,6 +498,20 @@ impl<T> TVector<T>
             .sqrt()
     }
 
+    pub fn scalar_product(&self, rhs: TVector<T>) -> T
+        where T: RealOps, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
+    {
+        ((*self) * rhs).sum()
+    }
+
+    /// Computes the orthogonal projection of [other] over this
+    /// proj(self, other) = \frac{self \cdot other}{|self|^(2)}
+    pub fn orthogonal_projection(&self, other: TVector<T>) -> T
+    where T: RealOps + core::ops::Div<Output = T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
+    {
+        (*self).scalar_product(other) / (self.pow(2).sum().abs())
+    }
+
     #[allow(unused)]
     pub fn unit(&self) -> Self
     {
@@ -786,6 +801,12 @@ impl ArithmeticOps for i32 {
         self.eq(&0)
     }
 
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialOrd
+    {
+        self.gt(&0)
+    }
+
     fn abs(&self) -> Self {
         i32::abs(*self)
     }
@@ -805,6 +826,39 @@ impl ArithmeticOps for u32 {
         where Self: core::cmp::PartialEq
     {
         self.eq(&0)
+    }
+
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.gt(&0)
+    }
+
+    fn abs(&self) -> Self {
+        *self
+    }
+}
+
+impl ArithmeticOps for u64 {
+    #[inline]
+    fn zero() -> Self {
+        0
+    }
+    #[inline]
+    fn one() -> Self {
+        1
+    }
+
+    fn is_zero(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.eq(&0)
+    }
+
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.gt(&0)
     }
 
     fn abs(&self) -> Self {
@@ -828,6 +882,12 @@ impl ArithmeticOps for u16 {
         self.eq(&0)
     }
 
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.gt(&0)
+    }
+
     fn abs(&self) -> Self {
         *self
     }
@@ -849,6 +909,12 @@ impl ArithmeticOps for u8 {
         self.eq(&0)
     }
 
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.gt(&0)
+    }
+
     fn abs(&self) -> Self {
         *self
     }
@@ -868,6 +934,12 @@ impl ArithmeticOps for f32 {
         where Self: core::cmp::PartialEq
     {
         self.eq(&0.0f32)
+    }
+
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.gt(&0.0f32)
     }
 
     fn abs(&self) -> Self {
@@ -915,6 +987,12 @@ impl ArithmeticOps for Real {
 
     fn is_zero(&self) -> bool {
         Real::is_zero(self)
+    }
+
+    fn is_defined_positive(&self) -> bool
+        where Self: core::cmp::PartialEq
+    {
+        self.gt(&Real::zero())
     }
 
     fn abs(&self) -> Self {

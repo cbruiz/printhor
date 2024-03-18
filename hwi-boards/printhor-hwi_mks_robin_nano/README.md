@@ -9,5 +9,26 @@
 
 # Overview
 
-Doc WIP: The Printhor HWI module for MKS Robin Nano v3.1
+This board (https://www.makerbase.store/pages/mks-robin-nano-v3-1-intro) is still work in progress
 
+### Binary image production (standard with defmt)
+
+The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
+
+```shell
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor -- -O binary firmware.bin
+```
+
+Firmware size if 200kB as of now with previous settings.
+
+### Minimal-size binary image production
+
+```shell
+DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor -- -O binary firmware.bin
+```
+
+Firmware size if 164kB as of now with previous settings.
+
+### Run with JLink/SWD device
+
+DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="mks_robin_nano"' cargo run --release --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor

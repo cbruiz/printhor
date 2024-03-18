@@ -59,6 +59,12 @@ fn main() {
         println!("cargo:rustc-link-arg-bins=--nmagic");
         println!("cargo:rustc-link-arg-bins=-Tlink.x");
     }
+    cfg_if::cfg_if! {
+        if #[cfg(feature="rp_2040")] {
+            println!("cargo:rustc-link-arg-bins=-Tlink-rp.x");
+        }
+    }
+
     #[cfg(feature = "with-defmt")]
     println!("cargo:rustc-link-arg-bins=-Tdefmt.x");
     // make native lvgl more platform independent

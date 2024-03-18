@@ -9,7 +9,35 @@
 
 # Overview
 
-Doc WIP: The Printhor HWI for:
-* SKR Mini E3 V2.0
-* SKR Mini E3 V3.0
+This boards are quite functional:
+* https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3
+* https://biqu.equipment/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-integrated-tmc2209-uart-for-ender-4
+
+### Binary image production (standard with defmt)
+
+The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
+
+```
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+```
+or
+
+```shell
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+```
+
+Firmware size around 196kB as of now with previous settings.
+
+### Minimal-size binary image production
+
+```shell
+DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+```
+
+Firmware size if 180kB as of now with previous settings.
+
+### Run with JLink/SWD device
+
+DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3_v3"' cargo run --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor
+
 

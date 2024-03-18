@@ -27,12 +27,20 @@ pub fn now() -> Instant {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-end")] {
+        const MULTITIMER_CHANNELS: usize = 4;
+    }
+    else {
+        const MULTITIMER_CHANNELS: usize = 3;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "no-real-time")] {
-        pub struct MultiTimer<const N: usize> {
-            #[cfg(feature = "no-real-time")]
+        pub struct MultiTimer {
             ref_time: u64,
             interval_width: u64,
-            channels: [ChannelStatus; N],
+            channels: [ChannelStatus; MULTITIMER_CHANNELS],
         }
     }
     else {
@@ -46,16 +54,17 @@ cfg_if::cfg_if! {
         /// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
         /// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
         ///
-        pub struct MultiTimer<const N: usize> {
+        pub struct MultiTimer {
             interval_width: u64,
-            channels: [ChannelStatus; N],
+            channels: [ChannelStatus; MULTITIMER_CHANNELS],
         }
     }
 }
 
 
-impl<const N: usize> MultiTimer<N> {
-    pub fn new(interval_width: u64, mut s: [ChannelStatus; N]) -> Self {
+impl MultiTimer {
+    #[allow(unused)]
+    pub fn new_using(interval_width: u64, mut s: [ChannelStatus; MULTITIMER_CHANNELS]) -> Self {
         let t0 = now().as_ticks();
         for i in s.iter_mut() {
             i.next_tick = (i.width / 2) + t0
@@ -66,6 +75,47 @@ impl<const N: usize> MultiTimer<N> {
             interval_width: t0 + interval_width,
             channels: s,
         }
+    }
+
+    pub const fn new() -> Self {
+        Self {
+            #[cfg(feature = "no-real-time")]
+            ref_time: 0,
+            interval_width: 0,
+            channels: [
+                ChannelStatus::new(StepperChannel::X, 0),
+                ChannelStatus::new(StepperChannel::Y, 0),
+                ChannelStatus::new(StepperChannel::Z, 0),
+                #[cfg(feature = "with-hot-end")]
+                ChannelStatus::new(StepperChannel::E, 0),
+            ],
+        }
+    }
+
+    pub fn reset(&mut self, interval_width: u64) {
+        let t0 = now().as_ticks();
+        for i in self.channels.iter_mut() {
+            i.next_tick = (i.width / 2) + t0
+        }
+        self.interval_width = t0 + interval_width;
+    }
+
+    pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: u64) {
+
+        if channel.contains(StepperChannel::X) {
+            self.channels[0].width = ticks;
+        }
+        if channel.contains(StepperChannel::Y) {
+            self.channels[1].width = ticks;
+        }
+        if channel.contains(StepperChannel::Z) {
+            self.channels[2].width = ticks;
+        }
+        #[cfg(feature = "with-hot-end")]
+        if channel.contains(StepperChannel::E) {
+            self.channels[3].width = ticks;
+        }
+
     }
 
     pub fn next(&mut self) -> Option<(StepperChannel, Duration)> {
@@ -92,6 +142,7 @@ impl<const N: usize> MultiTimer<N> {
                 else {
                     let ref_time = now().as_ticks();
                     let tw = Duration::from_ticks((channel.next_tick as i64 - ref_time as i64).max(0) as u64);
+                    //crate::hwa::trace!("Awaiting {}", tw.as_micros());
                     while now().as_ticks() < channel.next_tick {}
                     channel.next_tick += channel.width;
                     Some((channel.name, tw))

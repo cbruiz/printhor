@@ -386,7 +386,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotbed>> = TrackedStaticCell::new();
 
         device::HotbedPeripherals {
-            power_pwm: ControllerRef::new(PWM_INST.init(
+            power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "PwmHotbed",
                 ControllerMutex::new(pwm_hotbed)
             )),

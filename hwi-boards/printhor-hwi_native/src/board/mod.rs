@@ -23,7 +23,6 @@ use crate::board::mocked_peripherals::MockedIOPin;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
 pub const MACHINE_BOARD: &str = "PC";
-/// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
 pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
@@ -83,7 +82,7 @@ pub struct Controllers {
 }
 
 pub struct SysDevices {
-    #[cfg(feature = "with-motion")]
+    #[cfg(all(feature = "with-motion", feature="threaded"))]
     pub task_stepper_core: printhor_hwa_common::NoDevice,
     #[cfg(feature = "with-ps-on")]
     pub ps_on: device::PsOnRef,
@@ -300,6 +299,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             serial_port2_tx,
         },
         sys_devices: SysDevices {
+            #[cfg(all(feature = "with-motion", feature="threaded"))]
             task_stepper_core: printhor_hwa_common::NoDevice::new(),
             #[cfg(feature = "with-ps-on")]
             ps_on

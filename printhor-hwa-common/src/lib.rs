@@ -11,7 +11,6 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "threaded")] {
-        compile_error!("TODO");
         pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
     }

@@ -38,7 +38,7 @@ pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: usize = 4096;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
-pub(crate) const WATCHDOG_TIMEOUT_MS: u32 = 30_000_000;
+pub(crate) const WATCHDOG_TIMEOUT_MS: u32 = 5_000;
 #[cfg(feature = "with-spi")]
 pub(crate) const SPI_FREQUENCY_HZ: u32 = 2_000_000;
 

@@ -237,18 +237,18 @@ impl GCodeProcessor {
             #[cfg(feature = "with-motion")]
             GCode::G90 => {
                 self.motion_planner.set_absolute_positioning(true).await;
-                Ok(CodeExecutionSuccess::CONSUMED)
+                Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCode::G91 => {
                 self.motion_planner.set_absolute_positioning(false).await;
-                Ok(CodeExecutionSuccess::CONSUMED)
+                Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCode::G92 => {
                 // FIXME
                 self.motion_planner.set_last_planned_pos(&TVector::zero()).await;
-                Ok(CodeExecutionSuccess::CONSUMED)
+                Ok(CodeExecutionSuccess::OK)
             },
             GCode::G94 => Ok(CodeExecutionSuccess::OK),
             GCode::M => {
@@ -394,6 +394,9 @@ impl GCodeProcessor {
                     Ok(CodeExecutionSuccess::OK)
                 }
             }
+            GCode::M110(_n) => {
+                Ok(CodeExecutionSuccess::OK)
+            }
             #[cfg(feature = "with-motion")]
             GCode::M114 => {
                 let _pos = self.motion_planner.get_last_planned_pos().await
@@ -497,6 +500,7 @@ impl GCodeProcessor {
             GCode::M203 => Ok(CodeExecutionSuccess::OK),
             GCode::M204 => Ok(CodeExecutionSuccess::OK),
             GCode::M205 => Ok(CodeExecutionSuccess::OK),
+            GCode::M206 => Ok(CodeExecutionSuccess::OK),
             GCode::M220(_) => Ok(CodeExecutionSuccess::OK),
             GCode::M221(_) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-trinamic")]
@@ -513,7 +517,7 @@ impl GCodeProcessor {
                 if success {
                     let _ = self.write(channel, "ok; M502\n").await;
                 } else {
-                    let _ = self.write(channel, "error; M502 (internal error)\n").await;
+                    let _ = self.write(channel, "Error; M502 (internal error)\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }

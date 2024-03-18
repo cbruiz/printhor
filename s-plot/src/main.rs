@@ -1,52 +1,42 @@
 #![allow(unused)]
-#[path = "printhor/math/mod.rs"]
-mod math;
-use math::Real;
-#[path = "printhor/hwa/mod.rs"]
-mod hwa;
-#[path = "printhor/hwi/mod.rs"]
-mod hwi;
-#[path = "printhor/sync/mod.rs"]
-mod sync;
-#[path = "printhor/tgeo.rs"]
-mod tgeo;
-use tgeo::*;
-extern crate alloc;
-#[path = "printhor/control/mod.rs"]
-mod control;
-#[path = "printhor/helpers/mod.rs"]
-mod helpers;
-#[path = "printhor/machine.rs"]
-mod machine;
-use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
-use crate::control::motion_planning::{Constraints, PlanProfile, SCurveMotionProfile};
-#[allow(unused)]
-use crate::math::{ONE, ZERO};
-#[allow(unused)]
-fn initialization_error() {
 
-}
+mod prelude;
+use prelude::*;
+
+use crate::tgeo::{TVector, CoordSel};
+use crate::control::motion_planning::*;
+use crate::hwa::controllers::motion::*;
+use crate::prelude::math::TWO;
 
 fn main() {
 
-    hwa::init_logger();
+    env_logger::init();
 
-    let dts = Real::from_f32(100.0); // default_travel_speed
+    let sampling_period = Real::from_f32(0.01);
+
+    let dts = Real::from_f32(300.0); // default_travel_speed
     let flow_rate = Real::one();
     let speed_rate = Real::one();
-    let max_speed = Real::from_f32(300.0);
-    let max_accel = Real::from_f32(600.0);
-    let max_jerk = Real::from_f32(1200.0);
+    let max_speed = Real::from_f32(3000.0);
+    let max_accel = Real::from_f32(9000.0);
+    let max_jerk = Real::from_f32(12000.0);
 
-    let requested_motion_speed = Some(Real::from_f32(100.0f32));
+    let requested_motion_speed = Some(Real::from_f32(300.0));
+    let v0 = Real::from_f32(0.0);
+    let v1 = Real::from_f32(0.0);
 
     let p0: TVector<Real> = TVector::zero();
     let p1: TVector<Real> = TVector::from_coords(
-        Some(Real::from_f32(10.0)),
+        Some(Real::from_f32(100.0)),
         None,
         None,
         None,
     );
+
+    hwa::info!("----");
+    hwa::info!("P0 ({})", p0);
+    hwa::info!("P1 ({})", p1);
+    hwa::info!("--");
 
     // Compute distance and decompose as unit vector and module.
     // When dist is zero, value is map to None (NaN).
@@ -95,41 +85,11 @@ fn main() {
     if !module_target_distance.is_zero() {
         match !module_target_speed.is_zero() && !max_accel.is_zero() && !max_jerk.is_zero() {
             true => {
-                let t2 = embassy_time::Instant::now();
-                let _constraints = Constraints {
-                    v_max: module_target_speed,
-                    a_max: max_accel,
-                    j_max: max_jerk,
-                };
-                let segment = Segment::new(
-                    SegmentData {
-                        speed_enter_mms: 0,
-                        speed_exit_mms: 0,
-                        displacement_u: (module_target_distance / Real::from_lit(1000, 0)).to_i32().unwrap_or(0) as u32,
-                        vdir,
-                        dest_pos: Default::default(),
-                        tool_power: 0,
-                    },
-                    SCurveMotionProfile::compute(
-                        module_target_distance, ZERO, ZERO,
-                        &_constraints).unwrap()
+                execute(v0, v1, module_target_speed, vdir,
+                        module_target_distance,
+                        max_accel, max_jerk,
+                        sampling_period
                 );
-                let t3 = embassy_time::Instant::now();
-
-                hwa::info!("----");
-                hwa::info!("P0 ({})", p0);
-                hwa::info!("P1 ({})", p1);
-                hwa::info!("--");
-                hwa::info!("dist: {}", module_target_distance.rdp(4));
-                hwa::info!("speed: {}", module_target_speed.rdp(4));
-                hwa::info!("accel: {}", max_accel);
-                hwa::info!("jerk: {}", max_jerk);
-                hwa::info!("--");
-                hwa::info!("plan computed in : {} us", (t3-t2).as_micros());
-                hwa::info!("Profile: {}", segment.motion_profile);
-
-                PlanProfile::new(segment.motion_profile, Real::from_f32(0.01))
-                    .plot(true, true, true, true);
             },
             false => {
                 hwa::error!("p0: {}", p0.rdp(4));
@@ -142,4 +102,50 @@ fn main() {
             }
         };
     }
+}
+
+
+fn execute(v0: Real, v1: Real, module_target_speed: Real,
+           vdir: TVector<Real>, module_target_distance: Real,
+           max_accel: Real, max_jerk: Real, sampling_period: Real,
+) {
+    let t2 = embassy_time::Instant::now();
+    let _constraints = Constraints {
+        v_max: module_target_speed,
+        a_max: max_accel,
+        j_max: max_jerk,
+    };
+    let mut segment = Segment::new(
+        SegmentData {
+            speed_enter_mms: v0,
+            speed_exit_mms: v1,
+            displacement_mm: module_target_distance,
+            vdir,
+            dest_pos: Default::default(),
+            tool_power: Real::zero(),
+        },
+        SCurveMotionProfile::compute(
+            module_target_distance, v0, v1,
+            &_constraints, false).unwrap()
+    );
+    let t3 = embassy_time::Instant::now();
+
+    hwa::info!("real dist: {}", module_target_distance.rdp(4));
+    hwa::info!("speed: {}", module_target_speed.rdp(4));
+
+    let final_pos = segment.motion_profile.s_i7(&segment.motion_profile.i7_end());
+    let delta_e = module_target_distance - final_pos;
+    hwa::info!("practical dist(2): {}", final_pos);
+    hwa::info!("practical dist(2): {}", segment.motion_profile.q1);
+    hwa::info!("\\delta_{{e}}: {}", delta_e);
+
+    hwa::info!("--");
+    hwa::info!("plan computed in : {} us", (t3-t2).as_micros());
+    hwa::info!("Profile: {}", segment.motion_profile);
+    let _ = segment.motion_profile.extend(delta_e);
+    hwa::info!("Refined profile: {}", segment.motion_profile);
+
+    let mut profile = PlanProfile::new(segment.motion_profile, sampling_period);
+
+    profile.plot(true, true, true, true);
 }
