@@ -1,4 +1,5 @@
 #![no_std]
+#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
 extern crate alloc;
 
 use alloc::boxed::Box;
@@ -55,7 +56,8 @@ use embassy_executor::Executor;
 use embassy_rp::multicore::{spawn_core1, Stack};
 use printhor_hwa_common::TrackedStaticCell;
 
-static CORE1_STACK: TrackedStaticCell<Stack<8192>> = TrackedStaticCell::new();
+
+static CORE1_STACK: TrackedStaticCell<Stack<4096>> = TrackedStaticCell::new();
 static EXECUTOR_HIGH: TrackedStaticCell<Executor> = TrackedStaticCell::new();
 
 struct TokenHolder<S> {

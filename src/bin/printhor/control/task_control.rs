@@ -47,16 +47,16 @@ pub async fn task_control(
             }
             Ok((Err(GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
-                processor.write(channel, "error; (ParserError)\n").await;
+                processor.write(channel, "Error; (ParserError)\n").await;
             }
             Ok((Err(GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)), channel)) => {
                 hwa::error!("GCode {} (NotImplemented)", _gcode_name.as_str());
-                let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
+                let s = alloc::format!("Error; {} (NotImplemented)\n", _gcode_name);
                 processor.write(channel, &s).await;
             }
             Ok((Err(GCodeLineParserError::FatalError), channel)) => {
                 hwa::error!("[{:?}] GCode N/A (Internal error)", channel);
-                let s = "error; Internal error\n";
+                let s = "Error; Internal error\n";
                 processor.write(channel, s).await;
             }
             Ok((Ok(None), _channel)) => {
@@ -103,7 +103,7 @@ pub async fn task_control(
                                             }
                                         },
                                         Err(_e) => {
-                                            let s = alloc::format!("error; M20; Error listing: {:?}\n", _e);
+                                            let s = alloc::format!("Error; M20; Error listing: {:?}\n", _e);
                                             processor.write(channel, s.as_str()).await;
                                         }
                                     }
@@ -112,7 +112,7 @@ pub async fn task_control(
                                 processor.write(channel, "ok; M20\n").await;
                             },
                             Err(_e) => {
-                                let s = alloc::format!("error; M20 (Unable to list: {:?})\n", _e);
+                                let s = alloc::format!("Error; M20 (Unable to list: {:?})\n", _e);
                                 processor.write(channel, s.as_str()).await;
                             }
                         }
@@ -179,7 +179,7 @@ pub async fn task_control(
                             }
                             Err(_e) => {
                                 hwa::debug!("Control sending ERR");
-                                let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
+                                let s = alloc::format!("Error; {} ({:?})\n", gc.as_ref(), _e);
                                 processor.write(channel, s.as_str()).await;
                             }
                         }

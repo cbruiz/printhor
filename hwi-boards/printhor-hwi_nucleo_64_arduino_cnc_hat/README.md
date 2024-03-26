@@ -9,6 +9,29 @@
 
 # Overview
 
-Doc WIP: The Printhor HWI for few RP2040 boards:
-* Test
+There are two base boards supported in this category.
+The assumption/requirement is to use any of these generic purpose development board with the Arduino CNC Shield v3 (hat):
+![alt text](../../datasheets/NUCLEO-L476RG_CNC_SHIELD_V3/Arduino-CNC-Shield-Pinout-V3.XX.jpeg "Arduino CNC Shield v3")
+
+In these development boards, flash and run can be directly performed with probe-rs just connecting USB as they have a built-in SWD/JTAG interface:
+
+### nucleo-f410rb
+Please, note that this board is very limited in terms of flash and memory (48kB SRAM, 128kB flash).
+You might not assume that a firwmare not optimized for size (LTO, etc...) will fit in flash.
+
+Note: This target uses flip-link by default, requiring flip-link tool. To change this behavior please check .cargo/config.toml
+```shell
+cargo install flip-link
+```
+
+```shell
+DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-f410rb"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-f410rb --target thumbv7em-none-eabihf --bin printhor
+```
+
+### nucleo-l476rg
+This one is a bit slower but much more RAM and flash. Enough even though with non very optimized firmware and may features
+
+```shell
+DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-l476rg"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-l476rg --target thumbv7em-none-eabihf --bin printhor
+```
 

@@ -6,7 +6,7 @@ use printhor_hwa_common::DeferEvent;
 use crate::control::GCode;
 use crate::control::{CodeExecutionSuccess, CodeExecutionFailure};
 use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
-use crate::math::{Real, ZERO};
+use crate::math::{ONE_HUNDRED, Real, ZERO};
 use crate::sync::config::Config;
 use crate::tgeo::TVector;
 use crate::tgeo::CoordSel;
@@ -22,25 +22,25 @@ pub enum ScheduledMove {
 /////
 #[allow(unused)]
 pub struct MotionConfig {
-    pub(crate) microsteps: TVector<u8>,
-    pub(crate) max_accel: TVector<u16>,
-    pub(crate) max_speed: TVector<u16>,
-    pub(crate) max_jerk: TVector<u32>,
-    pub(crate) default_travel_speed: u16,
-    pub(crate) steps_per_mm: TVector<Real>,
-    pub(crate) usteps: [u16; 4],
-    pub(crate) flow_rate: u8,
-    pub(crate) speed_rate: u8,
+    pub max_accel: TVector<u16>,
+    pub max_speed: TVector<u16>,
+    pub max_jerk: TVector<u32>,
+    pub default_travel_speed: u16,
+    pub mm_per_unit: TVector<Real>,
+    pub machine_bounds: TVector<Real>,
+    pub usteps: [u16; 4],
+    flow_rate: u8,
+    speed_rate: u8,
 }
 
 impl MotionConfig {
     pub const fn new() -> Self {
         Self {
-            microsteps: TVector::new(),
             max_accel: TVector::new(),
             max_speed: TVector::new(),
             max_jerk: TVector::new(),
-            steps_per_mm: TVector::new(),
+            mm_per_unit: TVector::new(),
+            machine_bounds: TVector::new(),
             usteps: [0; 4],
             default_travel_speed: 1,
             flow_rate: 100,
@@ -140,7 +140,7 @@ impl MotionPlanner {
                     },
                     PlanEntry::Executing(_, _) => {
                         self.move_planned.reset();
-                        hwa::error!("Unexpected error");
+                        hwa::error!("Unexpected error: RingBuffer Overrun");
                     },
                 }
             }
@@ -150,7 +150,7 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn consume_current_segment_data(&self) {
+    pub async fn consume_current_segment_data(&self) -> u8 {
         let mut rb = self.ringbuffer.lock().await;
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
@@ -182,6 +182,7 @@ impl MotionPlanner {
             self.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
         }
         self.available.signal(true);
+        rb.used
     }
 
     pub async fn schedule_raw_move(&self, channel: CommChannel, action: DeferAction, move_type: ScheduledMove, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
@@ -198,11 +199,11 @@ impl MotionPlanner {
                     let head = rb.head;
                     let mut could_replan = false;
 
-                    let (entry, event) = match move_type {
+                    let (next_planned_entry, event) = match &move_type {
                         ScheduledMove::Move(segment_data, motion_profile) => {
                             could_replan = true;
                             self.update_last_planned_pos(&segment_data.dest_pos).await;
-                            (PlanEntry::PlannedMove(Segment::new(segment_data, motion_profile), action, channel, is_defer), EventStatus::new())
+                            (PlanEntry::PlannedMove(Segment::new(*segment_data, *motion_profile), action, channel, is_defer), EventStatus::new())
                         }
                         ScheduledMove::Homing => {
                             is_defer = true;
@@ -214,37 +215,62 @@ impl MotionPlanner {
                         }
                     };
 
-                    let index = head as u16 + used as u16;
+                    let next_insert_index = rb.index_from_tail(0);
 
-                    let index = match index < hwa::SEGMENT_QUEUE_SIZE as u16 {
-                        true => index,
-                        false => index - hwa::SEGMENT_QUEUE_SIZE as u16,
-                    } as u8;
-
-                    rb.data[index as usize] = entry;
-
-                    hwa::debug!("Mov queued @{} ({} / {})", index, rb.used + 1, hwa::SEGMENT_QUEUE_SIZE);
+                    hwa::debug!("Mov queued @{} ({} / {})", next_insert_index, rb.used + 1, hwa::SEGMENT_QUEUE_SIZE);
                     if could_replan && used > 0 {
-                        let last_inserted_idx = rb.head as u16 + rb.used as u16 - 1;
-                        let last_inserted_idx = match last_inserted_idx < (hwa::SEGMENT_QUEUE_SIZE as u16) {
-                            true => last_inserted_idx,
-                            false => 0,
-                        };
-                        hwa::debug!(" - check_replan {}", last_inserted_idx);
-                        let current_slot = &mut rb.data[last_inserted_idx as usize];
-                        match current_slot {
+                        let last_inserted_index = rb.index_from_tail(1);
+                        hwa::debug!(" - check_replan {} -> {}", last_inserted_index, next_insert_index);
+                        match &rb.data[last_inserted_index as usize] {
                             PlanEntry::Executing(_, _) | PlanEntry::Homing(_, _) | PlanEntry::Empty => {
-                                hwa::debug!(" -- not chained")
+                                hwa::debug!(" -- not chained");
+                                rb.data[next_insert_index as usize] = next_planned_entry;
                             }
-                            PlanEntry::PlannedMove(old_data, _action, _channel, _deferred) => {
-                                old_data.motion_profile.recalculate();
-                                hwa::debug!(" -- chained")
+                            PlanEntry::PlannedMove(last_planned_segment, last_planned_segment_action, last_planned_segment_channel, last_planned_segment_deferred) => {
+                                match next_planned_entry {
+                                    PlanEntry::PlannedMove(mut next_planned_segment, next_planned_segment_action, next_planned_segment_channel, next_planned_segment_deferred) => {
+                                        let vd1 = last_planned_segment.segment_data.vdir;
+                                        let vm1 = last_planned_segment.motion_profile.v_lim;
+                                        let vd2 = next_planned_segment.segment_data.vdir;
+                                        let vm2 = next_planned_segment.motion_profile.v_lim;
+                                        let proj = vd1.orthogonal_projection(vd2);
+                                        let x = proj.is_positive();
+
+                                        if proj.is_defined_positive() {
+                                            hwa::debug!("RingBuffer [{}, {}] chained: ({}) proj ({}) = ({}) ", last_inserted_index, next_insert_index, vd1, vd2, proj);
+                                            let v_exit_module = last_planned_segment.motion_profile.v_lim.min(next_planned_segment.motion_profile.v_lim).min(last_planned_segment.motion_profile.constraints.v_max).min(next_planned_segment.motion_profile.constraints.v_max);
+                                            let v = (last_planned_segment.segment_data.vdir * v_exit_module).norm2().unwrap_or(Real::zero());
+                                            rb.data[last_inserted_index as usize] = PlanEntry::PlannedMove(
+                                                last_planned_segment.recalculate(last_planned_segment.segment_data.speed_enter_mms, v, true),
+                                                *last_planned_segment_action, *last_planned_segment_channel, *last_planned_segment_deferred,
+                                            );
+                                            rb.data[next_insert_index as usize] = PlanEntry::PlannedMove(
+                                                next_planned_segment.recalculate(v, Real::zero(), true),
+                                                next_planned_segment_action, next_planned_segment_channel, next_planned_segment_deferred,
+                                            );
+                                        }
+                                        else {
+                                            hwa::debug!("RingBuffer [{}, {}] not chained: ({}) proj ({}) = ({})",  last_inserted_index, next_insert_index, vd1, vd2, proj);
+                                            rb.data[next_insert_index as usize] = next_planned_entry;
+                                        }
+
+                                    }
+                                    _ => {
+                                        rb.data[next_insert_index as usize] = next_planned_entry;
+                                    }
+                                }
+
                             }
                             _ => {
                                 unreachable!("Could not happen");
                             }
                         }
+
                     }
+                    else {
+                        rb.data[next_insert_index as usize] = next_planned_entry;
+                    }
+
                     rb.used += 1;
                     self.event_bus.publish_event(EventStatus::not_containing(EventFlags::MOV_QUEUE_EMPTY)).await;
                     self.move_planned.signal(true);
@@ -313,20 +339,12 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn get_flow_rate(&self) -> u8 {
-        self.motion_config.lock().await.flow_rate
-    }
-
     pub async fn set_flow_rate(&self, rate: u8) {
         self.motion_config.lock().await.flow_rate = rate;
     }
 
     pub async fn get_flow_rate_as_real(&self) -> Real {
-        Real::new(self.motion_config.lock().await.flow_rate as i64, 0)
-    }
-
-    pub async fn get_speed_rate(&self) -> u8 {
-        self.motion_config.lock().await.speed_rate
+        Real::new(self.motion_config.lock().await.flow_rate as i64, 0) / ONE_HUNDRED
     }
 
     pub async fn set_speed_rate(&self, rate: u8) {
@@ -334,7 +352,7 @@ impl MotionPlanner {
     }
 
     pub async fn get_speed_rate_as_real(&self) -> Real {
-        Real::new(self.motion_config.lock().await.speed_rate as i64, 0)
+        Real::new(self.motion_config.lock().await.speed_rate as i64, 0) / ONE_HUNDRED
     }
 
     pub async fn get_default_travel_speed(&self) -> u16 {
@@ -345,7 +363,7 @@ impl MotionPlanner {
     }
 
     pub async fn set_steps_per_mm(&self, x_spm: Real, y_spm: Real, z_spm: Real, e_spm: Real) {
-        self.motion_config.lock().await.steps_per_mm = TVector::from_coords(
+        self.motion_config.lock().await.mm_per_unit = TVector::from_coords(
             Some(x_spm),
             Some(y_spm),
             Some(z_spm),
@@ -354,13 +372,22 @@ impl MotionPlanner {
     }
 
     pub async fn get_steps_per_mm_as_vector(&self) -> TVector<Real> {
-        self.motion_config.lock().await.steps_per_mm
+        self.motion_config.lock().await.mm_per_unit
     }
 
     pub async fn set_usteps(&self, x_usteps: u8, y_usteps: u8, z_usteps: u8, e_usteps: u8) {
         self.motion_config.lock().await.usteps = [
             x_usteps.into(), y_usteps.into(), z_usteps.into(), e_usteps.into()
         ];
+    }
+
+    pub async fn set_machine_bounds(&self, x: u16, y: u16, z: u16) {
+        self.motion_config.lock().await.machine_bounds = TVector::from_coords(
+            Some(Real::new(x.into(), 0)),
+            Some(Real::new(y.into(), 0)),
+            Some(Real::new(z.into(), 0)),
+            None,
+        );
     }
 
     pub async fn get_usteps_as_vector(&self) -> TVector<Real> {
@@ -448,8 +475,8 @@ impl MotionPlanner {
         let cfg_g = cfg.lock().await;
         //----
         let dts = Real::from_lit(cfg_g.default_travel_speed as i64, 0);
-        let flow_rate = Real::from_lit(cfg_g.flow_rate as i64, 2);
-        let speed_rate = Real::from_lit(cfg_g.speed_rate as i64, 2);
+        let flow_rate = Real::from_lit(cfg_g.flow_rate as i64, 0) / ONE_HUNDRED;
+        let speed_rate = Real::from_lit(cfg_g.speed_rate as i64, 0) / ONE_HUNDRED;
         let max_speed = cfg_g.max_speed.map_coords(|c| Some(Real::from_lit(c as i64, 0)));
         let max_accel = cfg_g.max_accel.map_coords(|c| Some(Real::from_lit(c as i64, 0)));
         let max_jerk = cfg_g.max_jerk.map_coords(|c| Some(Real::from_lit(c as i64, 0)));
@@ -481,7 +508,7 @@ impl MotionPlanner {
             }).decompose_normal();
 
         // Compute the speed module applying speed_rate factor
-        let speed_module = requested_motion_speed.unwrap_or(dts) * speed_rate;
+        let speed_module = requested_motion_speed.unwrap_or(dts);
         // Compute per-axis distance
         let disp_vector: TVector<Real> = vdir.abs() * speed_module;
         // Clamp per-axis target speed to the physical restrictions
@@ -489,7 +516,7 @@ impl MotionPlanner {
         // Compute max time
         let max_time = (disp_vector / clamped_speed).max().unwrap_or(ZERO);
         // Finally, per-axis relative speed
-        let speed_vector = disp_vector / max_time;
+        let speed_vector = (disp_vector / max_time) * speed_rate;
 
         let module_target_speed = speed_vector.norm2().unwrap_or(ZERO);
         let module_target_accel = (vdir.abs() * max_accel).norm2().unwrap_or(ZERO);
@@ -509,7 +536,7 @@ impl MotionPlanner {
                         a_max: module_target_accel,
                         j_max: module_target_jerk,
                     };
-                    let profile = SCurveMotionProfile::compute(module_target_distance.clone(), ZERO, ZERO, &_constraints)?;
+                    let profile = SCurveMotionProfile::compute(module_target_distance.clone(), ZERO, ZERO, &_constraints, true)?;
                     Some(profile)
                 },
                 false => {
@@ -536,12 +563,12 @@ impl MotionPlanner {
             match profile {
                 Some(profile) => {
                     let segment_data = SegmentData {
-                        speed_enter_mms: 0,
-                        speed_exit_mms: 0,
-                        displacement_u: (module_target_distance * Real::from_lit(1000, 0)) .to_i32().unwrap_or(0) as u32,
+                        speed_enter_mms: Real::zero(),
+                        speed_exit_mms: Real::zero(),
+                        displacement_mm: module_target_distance,
                         vdir,
                         dest_pos: p1,
-                        tool_power: 0,
+                        tool_power: Real::zero(),
                     };
                     let r = self.schedule_raw_move(
                         channel,
@@ -586,7 +613,7 @@ impl MotionPlanner {
     }
 
     pub async fn do_homing(&self) -> Result<(), ()>{
-        let r = self.motion_driver.lock().await.homing_action().await;
+        let r = self.motion_driver.lock().await.homing_action(&self.motion_config).await;
         if r.is_err() {
             hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
             //self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
@@ -626,6 +653,19 @@ impl RingBuffer {
             data: [PlanEntry::Empty; hwa::SEGMENT_QUEUE_SIZE as usize],
             head: 0,
             used: 0,
+        }
+    }
+
+    /// A proper helper to get the index of relative offset starting from tail in reverse order.
+    /// Example:
+    /// * index_from_tail(0) returns the index of tail position
+    /// * index_from_tail(1) returns the index of last inserted element
+    pub fn index_from_tail(&self, offset: u8) -> u8 {
+        let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
+        let len =  self.data.len() as u16;
+        match absolute_offset < len {
+            true => absolute_offset as u8,
+            false => (absolute_offset - len) as u8,
         }
     }
 }

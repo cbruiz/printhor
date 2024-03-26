@@ -1,6 +1,3 @@
-#[cfg(feature = "native")]
-use core::fmt::Display;
-use crate::hwa::EventStatus;
 use crate::math::Real;
 #[cfg(feature = "native")]
 use strum::Display;
@@ -24,12 +21,19 @@ pub mod task_defer;
 pub mod task_temperature;
 #[cfg(feature = "with-motion")]
 pub mod task_stepper;
+mod base;
 
 #[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
 pub struct S {
     pub(crate) ln: Option<u32>,
     pub(crate) s: Option<Real>,
+}
+#[allow(dead_code)]
+#[derive(Clone, Default, Debug)]
+pub struct N {
+    pub(crate) ln: Option<u32>,
+    pub(crate) n: Option<Real>,
 }
 #[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
@@ -67,14 +71,14 @@ impl crate::hwa::defmt::Format for XYZ {
 }
 
 #[cfg(feature = "native")]
-impl Display for XYZ {
+impl core::fmt::Display for XYZ {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::write!(f,
-               "X {} Y {} Z {} F {}",
-               self.x.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-               self.y.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-               self.z.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-               self.f.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
+                     "X {} Y {} Z {} F {}",
+                     self.x.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
+                     self.y.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
+                     self.z.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
+                     self.f.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
         )
     }
 }
@@ -213,7 +217,7 @@ pub enum GCode {
     M107,
     /// Wait for hotend temp
     M109(S),
-    M110, // Settings
+    M110(N), // Settings
     /// Debug level
     M111,
     /// Full emergency stop
@@ -241,7 +245,9 @@ pub enum GCode {
     /// Set Max Feedrate
     M203, M204,
     /// Set Advanced Settings
-    M205, M206, M207, M208, M209, M210, M211, M212, M218, // Settings
+    M205,
+    /// Set Home Offsets
+    M206, M207, M208, M209, M210, M211, M212, M218, // Settings
     /// Set Feedrate percentage
     M220(S),
     /// Set Flow Percentage
@@ -283,38 +289,4 @@ impl crate::hwa::defmt::Format for GCode {
     }
 }
 
-#[cfg_attr(all(feature = "defmt", feature = "native"), derive(defmt::Format))]
-#[cfg_attr(feature = "native", derive(Debug))]
-#[cfg_attr(feature = "native", derive(strum::Display))]
-#[allow(unused)]
-pub enum CodeExecutionSuccess {
-    /// Immediately executed
-    OK,
-    /// Immediately executed and reported
-    CONSUMED,
-    /// Queued but assumed it will be executed not too long, so practically same as OK
-    QUEUED,
-    /// Executed but it will take time to get a final response. EventStatus contains the needed flags to wait for
-    DEFERRED(EventStatus),
-}
-
-#[cfg_attr(all(feature = "defmt", feature = "native"), derive(defmt::Format))]
-#[cfg_attr(feature = "native", derive(strum::Display))]
-#[derive(Debug)]
-#[allow(unused)]
-pub enum CodeExecutionFailure {
-    /// Cannot perform because there is the same or something else running
-    BUSY,
-    /// Generic internal error
-    ERR,
-    /// Cannot perform because requires homing before
-    HomingRequired,
-    /// Cannot perform because requires homing before
-    PowerRequired,
-    /// Specific internal error: Numerical computation issue (division by 0, sqrt(x<0) or any other kind of ambiguity)
-    NumericalError,
-    /// The GCode is considered, but not yet implemented
-    NotYetImplemented,
-}
-#[allow(unused)]
-pub type CodeExecutionResult = Result<CodeExecutionSuccess, CodeExecutionFailure>;
+pub use base::*;

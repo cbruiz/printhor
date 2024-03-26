@@ -28,13 +28,16 @@ Which means the principal short-term goal is not to develop a productive firmwar
 ## Features
 * "Clean" hardware abstraction.
 * Vector geometry / linear algebra calculus for kinematics
-  * High precision and deterministic kinematics and computations.
+  * Smooth acceleration and jerk limited motion plan leveraging "Trajectory with Double S Velocity Profile" [1]. Briefly explained at [Plan implementation](src/bin/printhor/control/motion_planning/plan.rs) and visualy explained in [Printhor motion plan. A simplified overview of the velocity integration](https://www.geogebra.org/m/hwpnmhcu) (GeoGebra).
+    
+    "[1] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)"
+  * High precision and deterministic kinematics and computations with configurable resolution. Briefly explained at [Stepper Task](src/bin/printhor/control/task_stepper.rs).
+  * Simple and efficient cornering algorithm based on pure linear algebra. Foundation implicitly explained at [Printhor näive cornering algorithm](https://www.geogebra.org/m/ft8svrwd) (GeoGebra).
+* Precise thermal control plan with PID. Briefly exlained [Temperature Task](src/bin/printhor/control/task_temperature.rs).
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
 * Wide GCode standard coverage.
 * Native simulation for development and benchmarking.
-  * Smooth acceleration and jerk limited motion plan.
-  * Precise thermal control.
   * Many others coming.
 
 ## Overall status
@@ -45,15 +48,18 @@ Which means the principal short-term goal is not to develop a productive firmwar
     </thead>
     <tbody>
         <tr><td>Simulation</td><td>Functional</td></tr>
-        <tr><td>I/O</td><td>Functional</td></tr>
+        <tr><td>I/O</td><td>Testing</td></tr>
         <tr><td>State and logic</td><td>Incubation</td></tr>
-        <tr><td>Motion Planner</td><td>Incubation</td></tr>
-        <tr><td>Kinematics</td><td>Draft</td></tr>
-        <tr><td>Thermal Control</td><td>Draft</td></tr>
-        <tr><td>Display</td><td>Draft</td></tr>
-        <tr><td>Laser/CNC</td><td>TODO</td></tr>
+        <tr><td>Motion Planner</td><td>Testing</td></tr>
+        <tr><td>Kinematics</td><td>Testing</td></tr>
+        <tr><td>Thermal Control</td><td>Incubation</td></tr>
+        <tr><td>Display</td><td>TODO</td></tr>
+        <tr><td>Laser/CNC</td><td>Draft</td></tr>
     </tbody>
 </table>
+
+Assuming the following maturity convention:
+ TODO -> Draft -> Incubation -> Testing -> Functional -> Done
 
 # Help wanted
 If you are interested in this project and want to collaborate, you are welcome.
@@ -74,7 +80,7 @@ The minimal toolset required to build and run is:
 * cargo binutils, to produce the image binary that you can flash via SD card as usual.
 * __[Optionally]__ probe-run, if you are willing to use a SWD/Jlink debugger (https://github.com/knurling-rs/probe-run)
 * __[Optionally]__ cargo-bloat and cargo-size utils are great to analyze the code size.
-* __[Optionally]__ A Rust IDE, like VStudio Code (recommended), Jetbrains IDE (IntelliJ, CLion or RustRover (recommended)), or others
+* __[Optionally]__ A Rust IDE, like [Jetbrains IDE suite](https://www.jetbrains.com/) (IntelliJ, CLion or RustRover) (recommended), Visual Studio Code (also fine), or others
 
 ## Prerequisites: Rust and toolchain
 
@@ -131,92 +137,16 @@ RUST_LOG=info cargo build --bin printhor
 socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 ```
 
-## MKS Robin Nano (Currently v3.1 only)
+## Supported boards and specific instructions
 
-This board (https://www.makerbase.store/pages/mks-robin-nano-v3-1-intro) is still work in progress
-
-### Binary image production (standard with defmt)
-
-The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
-
-```shell
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor -- -O binary firmware.bin
-```
-
-Firmware size if 200kB as of now with previous settings.
-
-### Minimal-size binary image production
-
-```shell
-DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor -- -O binary firmware.bin
-```
-
-Firmware size if 164kB as of now with previous settings.
-
-### Run with JLink/SWD device
-
-DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="mks_robin_nano"' cargo run --release --no-default-features --features mks_robin_nano --target thumbv7em-none-eabihf --bin printhor
-
-## Nucleo-64
-
-There are two base boards supported in this category.
-The assumption/requirement is to use any of these generic purpose development board with the Arduino CNC Shield v3 (hat):
-![alt text](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3/Arduino-CNC-Shield-Pinout-V3.XX.jpeg "Arduino CNC Shield v3")
-
-In these development boards, flash and run can be directly performed with probe-rs just connecting USB as they have a built-in SWD/JTAG interface:
-
-### nucleo-f410rb
-Please, note that this board is very limited in terms of flash and memory (48kB SRAM, 128kB flash).
-You might not assume that a firwmare not optimized for size (LTO, etc...) will fit in flash.
-
-Note: This target uses flip-link by default, requiring flip-link tool. To change this behavior please check .cargo/config.toml
-```shell
-cargo install flip-link
-```
-
-```shell
-DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-f410rb"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-f410rb --target thumbv7em-none-eabihf --bin printhor
-```
-
-### nucleo-l476rg
-This one is a bit slower but much more RAM and flash. Enough even though with non very optimized firmware and may features
-
-```shell
-DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-l476rg"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-l476rg --target thumbv7em-none-eabihf --bin printhor
-```
-
-## SKR Mini E3 (currently 2.0 and v3.0)
-
-This boards are quite functional:
-* https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3
-* https://biqu.equipment/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-integrated-tmc2209-uart-for-ender-4
-
-### Binary image production (standard with defmt)
-
-The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
-
-```
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
-```
-or
-
-```shell
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
-```
-
-Firmware size around 196kB as of now with previous settings.
-
-### Minimal-size binary image production
-
-```shell
-DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
-```
-
-Firmware size if 180kB as of now with previous settings.
-
-### Run with JLink/SWD device
-
-DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3_v3"' cargo run --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor
+| Board                                                                                             | Status           |
+|---------------------------------------------------------------------------------------------------|------------------|
+| [SKR Mini E3 V2.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Initial          |
+| [SKR Mini E3 V3.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Almost Funtional |
+| [MKS Robin Nano v3.1](hwi-boards/printhor-hwi_mks_robin_nano/README.md)                           | Almost Funtional |
+| [Nucleo-f410rb + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Funtional |
+| [Nucleo-l476rg + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Funtional |
+| [Raspberry PI 2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                    | Draft            |
 
 
 ## Extra utilery
@@ -224,7 +154,8 @@ DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3_v3"' cargo r
 A simple stand-alone std binary to experiment with motion plan (kind of playground):
 
 ```shell
-cargo run --bin scurve_plot
+cd s-plot
+cargo run
 ```
 Example output:
 
@@ -272,6 +203,7 @@ Diagram is Work in Progress
 # Similar, related software and shout-outs
 
 * https://embassy.dev/ Rust Embassy; The next-generation framework for embedded applications. The most important and core framework conforming the pillars of this project.
+* https://github.com/ithinuel/async-gcode This powerful GCode implementation is a fundamental piece of this project.
 * https://github.com/nviennot/turbo-resin Exactly the same a printhor but focused in resin printers. The Project which inspired and motivated this one.
 * https://github.com/marcbone/s_curve A really appreciated know-how. The current selected motion profile is based on this work, but intense reinterpretation were performed to make this project work.The book referenced by the author of s-curve is a key reading considered to conduct the goals of the motion plan. Nevertheless, our implementation is still un-mature/unproven to ask for a merge. 
 

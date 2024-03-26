@@ -1,5 +1,5 @@
 use crate::hwa;
-use crate::control::{GCode, S, XYZ, XYZEFS, XYZW};
+use crate::control::{GCode, N, S, XYZ, XYZEFS, XYZW};
 use crate::helpers;
 use futures::Stream;
 
@@ -243,6 +243,9 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             })
                                                         )
                                                     }
+                                                    ('m', Some((110, 0))) => {
+                                                        Some(GCode::M110(N{ln: None, n: None}))
+                                                    }
                                                     ('m', Some((114, 0))) => {
                                                         Some(GCode::M114)
                                                     }
@@ -272,6 +275,9 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                     }
                                                     ('m', Some((205, 0))) => {
                                                         Some(GCode::M205)
+                                                    }
+                                                    ('m', Some((206, 0))) => {
+                                                        Some(GCode::M206)
                                                     }
                                                     ('m', Some((220, 0))) => {
                                                         Some(GCode::M220(S{ ln: None, s: None }))
@@ -377,6 +383,14 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                         match (ch, frx) {
                                                             ('s', Some(val)) => {
                                                                 coord.s.replace(helpers::to_fixed(val));
+                                                            },
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                    GCode::M110(coord)  => {
+                                                        match (ch, frx) {
+                                                            ('n', Some(val)) => {
+                                                                coord.n.replace(helpers::to_fixed(val));
                                                             },
                                                             _ => {}
                                                         }

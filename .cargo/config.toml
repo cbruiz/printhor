@@ -23,7 +23,7 @@ HOT_BED_THERM_BETA = "3950.0"
 ## Pure technical stuff ##
 
 DEFMT_LOG = "info"
-RUST_LOG = "info"
+RUST_LOG = "warn"
 ASYNC_STD_THREAD_COUNT = "1"
 EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 
@@ -51,8 +51,8 @@ runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format 
 runner = "probe-rs run --chip STM32F407VETx --disable-progressbars"
 
 [target.'cfg(all(any(board="rp2040"), target_arch="arm", target_os="none"))']
-#runner = "probe-run --chip RP2040"
-runner = "elf2uf2-rs --deploy --serial --verbose"
+runner = "probe-rs run --chip RP2040"
+#runner = "elf2uf2-rs --deploy --serial --verbose"
 
 [build]
 

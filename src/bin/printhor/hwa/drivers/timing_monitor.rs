@@ -88,7 +88,7 @@ impl TimingsMonitor {
         hwa::info!("Plotting {} events", self.timings.len());
         let mut file = File::create(format!("data/timing-{}.puml", self.move_id)).unwrap();
         const PRE: &'static str = r###"@startuml
-clock "RefClock" as C0 with period 20000
+clock "RefClock" as C0 with period 2500
 concise "uSegment" as US
 binary "X_ENA" as XE
 binary "Y_ENA" as YE
@@ -102,7 +102,7 @@ binary "X_STEP" as XS
 binary "Y_STEP" as YS
 binary "Z_STEP" as ZS
 binary "E_STEP" as ES
-scale 10000 as 60 pixels
+scale 1000 as 60 pixels
 
 "###;
         const POS: &'static str = r###"@enduml"###;

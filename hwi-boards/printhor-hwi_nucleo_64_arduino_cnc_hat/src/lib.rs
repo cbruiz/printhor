@@ -28,7 +28,7 @@ pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
 const USBSERIAL_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-serial-port-1")]
-const UART_PORT1_BUFFER_SIZE: usize = 32;
+const UART_PORT1_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
 cfg_if::cfg_if! {

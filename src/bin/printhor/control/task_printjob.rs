@@ -76,22 +76,22 @@ pub async fn task_printjob(
                             hwa::debug!("Line {}: Executing {}", current_line, gcode);
                             match processor.execute(CommChannel::Internal, &gcode, true).await {
                                 Ok(CodeExecutionSuccess::OK) => {
-                                    hwa::info!("Line {}: OK {} (I)", current_line, gcode);
+                                    hwa::debug!("Line {}: OK {} (I)", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::CONSUMED) => {
-                                    hwa::info!("Line {}: OK {} (C)", current_line, gcode);
+                                    hwa::debug!("Line {}: OK {} (C)", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::QUEUED) => {
-                                    hwa::info!("Line {}: OK {} (Q)", current_line, gcode);
+                                    hwa::debug!("Line {}: OK {} (Q)", current_line, gcode);
                                 }
                                 Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
-                                    //hwa::info!("Line {}: DEFERRED {}", current_line, gcode);
+                                    //hwa::debug!("Line {}: DEFERRED {}", current_line, gcode);
                                     if subscriber.ft_wait_for(_status).await.is_err() {
                                         // Must pause. Recoverable when SYS_ALARM go down
                                         break;
                                     }
                                     else {
-                                        hwa::info!("Line {}: OK {} (D)", current_line, gcode);
+                                        hwa::debug!("Line {}: OK {} (D)", current_line, gcode);
                                     }
                                 }
                                 Err(CodeExecutionFailure::BUSY) => {

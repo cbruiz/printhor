@@ -3,7 +3,8 @@ use crate::hwa;
 use crate::control::*;
 #[allow(unused)]
 use crate::math::Real;
-use printhor_hwa_common::{CommChannel, EventBusSubscriber, EventFlags};
+#[allow(unused)]
+use printhor_hwa_common::{CommChannel, EventBusSubscriber, EventStatus, EventFlags};
 
 pub struct IntegrationaskParams {
     pub processor: hwa::GCodeProcessor,
@@ -125,9 +126,9 @@ pub async fn task_integration(mut params: IntegrationaskParams)
         let g1_code = GCode::G1(crate::control::XYZEFS {
             ln: None,
             x: Some(Real::new(20, 0)),
-            y: Some(Real::new(5, 0)),
+            y: Some(Real::new(20, 0)),
             z: None,
-            e: Some(Real::new(1414, 3)),
+            e: Some(Real::new(25, 1)),
             f: None,
             s: None
         });

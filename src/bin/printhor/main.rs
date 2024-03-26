@@ -44,6 +44,7 @@ use crate::hwa::controllers::PrinterController;
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) -> ! {
 
+    hwa::info!("Init");
     hwa::init_logger();
 
     hwa::info!("Init printhor {}", machine::MACHINE_INFO.firmware_version);
@@ -54,8 +55,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     hwa::info!("HWI setup completed. Allocated {} bytes for context.", core::mem::size_of_val(&context));
 
     let event_bus: EventBusRef = printhor_hwa_common::init_event_bus::<{hwa::MAX_STATIC_MEMORY}>();
-    #[cfg(feature = "with-motion")]
-    let mut event_suscriber = event_bus.subscriber().await;
+
     event_bus.publish_event(
         EventStatus::containing(EventFlags::SYS_BOOTING)
     ).await;
@@ -79,6 +79,7 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
+                let mut event_suscriber = event_bus.subscriber().await;
                 if event_suscriber.ft_wait_until(EventFlags::MOV_QUEUE_EMPTY).await.is_err() {
                     initialization_error()
                 }
@@ -99,13 +100,15 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         hwa::error!("Unable start. Any task launch failed");
     }
 
-    let mut ticker = embassy_time::Ticker::every(embassy_time::Duration::from_secs(5));
+    let mut ticker = embassy_time::Ticker::every(embassy_time::Duration::from_secs(2));
     let _t0 = embassy_time::Instant::now();
     loop {
         let _r = event_bus.get_status().await;
         //hwa::info!("STATUS: {:?}", _r);
         //hwa::info!("watchdog feed at {}", _t0.elapsed().as_micros());
-        wdt.lock().await.pet();
+        {
+            wdt.lock().await.pet();
+        }
         ticker.next().await;
     }
 
@@ -305,22 +308,23 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(600), Some(600))).await;
-        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(9000), Some(9000), Some(150), Some(150))).await;
-        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(12000), Some(12000), Some(300), Some(300))).await;
-        motion_planer.set_default_travel_speed(300).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(100), Some(3000))).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(9000), Some(9000), Some(9000), Some(9000))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(12000), Some(12000), Some(12000), Some(12000))).await;
+        motion_planer.set_default_travel_speed(1000).await;
 
         cfg_if::cfg_if! {
-            if #[cfg(any(feature = "skr_mini_e3_v3",feature = "nucleo_64_arduino_cnc_hat"))] {
-                motion_planer.set_steps_per_mm(math::Real::new(5, 0), math::Real::new(5, 0), math::Real::new(200, 0), math::Real::new(200, 0)).await;
-                motion_planer.set_usteps(16, 16, 16, 16).await;
+            if #[cfg(feature = "native")] {
+                motion_planer.set_steps_per_mm(math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0)).await;
+                motion_planer.set_usteps(4, 8, 16, 8).await;
             }
             else {
-                motion_planer.set_steps_per_mm(math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0)).await;
-                motion_planer.set_usteps(2, 2, 2, 2).await;
+                motion_planer.set_steps_per_mm(math::Real::new(80, 0), math::Real::new(160, 0), math::Real::new(400, 0), math::Real::new(2, 0)).await;
+                motion_planer.set_usteps(1, 2, 4, 1).await;
             }
         }
 
+        motion_planer.set_machine_bounds(200, 200, 200).await;
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
