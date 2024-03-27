@@ -32,8 +32,8 @@ Which means the principal short-term goal is not to develop a productive firmwar
     
     "[1] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)"
   * High precision and deterministic kinematics and computations with configurable resolution. Briefly explained at [Stepper Task](src/bin/printhor/control/task_stepper.rs).
-  * Simple and efficient cornering algorithm based on pure linear algebra. Foundation implicitly explained at [Printhor näive cornering algorithm](https://www.geogebra.org/m/ft8svrwd) (GeoGebra).
-* Precise thermal control plan with PID. Briefly exlained [Temperature Task](src/bin/printhor/control/task_temperature.rs).
+  * Simple and efficient cornering algorithm based on pure linear algebra. Foundation implicitly explained at [Printhor naïve cornering algorithm](https://www.geogebra.org/m/ft8svrwd) (GeoGebra).
+* Precise thermal control plan with PID. Briefly exlained at [Temperature Task](src/bin/printhor/control/task_temperature.rs).
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
 * Wide GCode standard coverage.
