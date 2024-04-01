@@ -40,7 +40,8 @@ rustflags = [ "-C", "linker=flip-link" ]
 runner = "probe-rs run --chip STM32L476RG --disable-progressbars"
 
 [target.'cfg(all(any(board="skr_mini_e3_v2"), target_arch="arm", target_os="none"))']
-runner = "probe-run --chip STM32F103RC"
+#runner = "probe-run --chip STM32F103RC"
+runner = "probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s}"
 
 [target.'cfg(all(any(board="skr_mini_e3_v3"), target_arch="arm", target_os="none"))']
 #runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --base-address 08002000"

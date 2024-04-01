@@ -43,7 +43,7 @@ pub use board::ADC_VREF_DEFAULT_MV;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         cfg_if::cfg_if! {
-            if #[cfg(feature = "threaded")] {
+            if #[cfg(feature = "executor-interrupt")] {
                 use embassy_stm32::interrupt;
                 use embassy_executor::InterruptExecutor;
 

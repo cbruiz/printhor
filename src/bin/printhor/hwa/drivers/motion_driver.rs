@@ -1,18 +1,19 @@
 use embassy_time::Duration;
 #[allow(unused)]
 use crate::{hwa, hwi};
-use crate::control::motion_timing::s_block_for;
 #[allow(unused)]
 use crate::hwa::ControllerRef;
 use crate::hwa::controllers::{ MotionConfigRef};
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
-use crate::math::{Real, ONE};
+use crate::math::{Real, ONE, TWO};
 use crate::tgeo::{ArithmeticOps, CoordSel, TVector};
 #[cfg(all(feature = "native", feature = "plot-timings"))]
 use super::timing_monitor::*;
 use core::ops::Neg;
+
+use crate::control::motion_planning::StepperChannel;
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDriverParams {
@@ -285,7 +286,6 @@ impl MotionDriver {
         triggered
     }
 
-    #[inline]
     pub fn enable_and_set_dir(&mut self, vdir: &TVector<Real>) {
         self.enable_x_stepper();
         self.enable_y_stepper();
@@ -320,12 +320,81 @@ impl MotionDriver {
         }
     }
 
-    pub async fn homing_action(&mut self, motion_config_ref: &MotionConfigRef) -> Result<(), ()>{
+    #[allow(unused)]
+    pub fn enable_all(&mut self) {
+        self.enable_x_stepper();
+        self.enable_y_stepper();
+        self.enable_z_stepper();
+        #[cfg(feature = "with-hot-end")]
+        self.enable_e_stepper();
+    }
+
+    #[inline]
+    pub fn set_ena(&mut self, enabled_steppers: StepperChannel) {
+        if enabled_steppers.contains(StepperChannel::X) {
+            self.enable_x_stepper();
+        }
+        else {
+            self.disable_x_stepper();
+        }
+        if enabled_steppers.contains(StepperChannel::Y) {
+            self.enable_y_stepper();
+        }
+        else {
+            self.disable_y_stepper();
+        }
+        if enabled_steppers.contains(StepperChannel::Z) {
+            self.enable_z_stepper();
+        }
+        else {
+            self.disable_z_stepper();
+        }
+        #[cfg(feature = "with-hot-end")]
+        if enabled_steppers.contains(StepperChannel::E) {
+            self.enable_e_stepper();
+        }
+        else {
+            self.disable_e_stepper();
+        }
+    }
+
+    #[inline]
+    pub fn set_fwd(&mut self, dir_fwd_steppers: StepperChannel) {
+        if dir_fwd_steppers.contains(StepperChannel::X) {
+            self.x_dir_pin_high();
+        }
+        else {
+            self.x_dir_pin_low();
+        }
+        if dir_fwd_steppers.contains(StepperChannel::Y) {
+            self.y_dir_pin_high();
+        }
+        else {
+            self.y_dir_pin_low();
+        }
+        if dir_fwd_steppers.contains(StepperChannel::Z) {
+            self.z_dir_pin_high();
+        }
+        else {
+            self.z_dir_pin_low();
+        }
+        #[cfg(feature = "with-hot-end")]
+        if dir_fwd_steppers.contains(StepperChannel::E) {
+            self.e_dir_pin_high();
+        }
+        else {
+            self.e_dir_pin_low();
+        }
+    }
+
+    pub async fn homing_action(&mut self, motion_config_ref: &MotionConfigRef) -> Result<TVector<Real>, TVector<Real>>{
         hwa::info!("Homing");
+
+        let mut homming_position = TVector::zero();
 
         let motion_config = motion_config_ref.lock().await;
         let steps_per_mm = motion_config.mm_per_unit * TVector::from_coords(
-            Some(Real::from_lit(motion_config.usteps[0].into(),0 )),
+            Some(Real::from_lit(motion_config.usteps[0].into(), 0)),
             Some(Real::from_lit(motion_config.usteps[1].into(), 0)),
             Some(Real::from_lit(motion_config.usteps[2].into(), 0)),
             None,
@@ -334,53 +403,90 @@ impl MotionDriver {
         let machine_bounds = motion_config.machine_bounds;
         drop(motion_config);
 
-        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-
         hwa::info!("Machine bounds: {}", machine_bounds );
+
+        hwa::info!("Raise Z");
+        let advanced = self.shabbily_move_to(
+            TVector::from_coords(None, None, Some(ONE), None),
+            Real::from_lit(10, 0),
+            steps_per_mm,
+            2000,
+            false,
+            Some(&mut homming_position),
+        ).await;
+        hwa::info!("ADV: {}", advanced);
 
         hwa::info!("Homing X axis");
         let advanced = self.shabbily_move_to(
             TVector::from_coords(Some(ONE.neg()), None, None, None),
             machine_bounds.x.unwrap_or(Real::zero()),
             steps_per_mm,
-            1000,
+            2000,
             true,
+            None,
+        ).await;
+        hwa::info!("ADV: {}", advanced);
+
+        let advanced = self.shabbily_move_to(
+            TVector::from_coords(Some(ONE), None, None, None),
+            machine_bounds.x.unwrap_or(Real::zero()) / TWO,
+            steps_per_mm,
+            2000,
+            false,
+            Some(&mut homming_position),
         ).await;
 
-        hwa::info!("{}", advanced);
+        hwa::info!("ADV: {}", advanced);
 
         hwa::info!("Homing Y axis");
         let advanced = self.shabbily_move_to(
             TVector::from_coords(None, Some(ONE.neg()), None, None),
             machine_bounds.y.unwrap_or(Real::zero()),
             steps_per_mm,
-            1000,
+            8000,
             true,
+            None,
         ).await;
-
         hwa::info!("{}", advanced);
 
-        /*
+        let advanced = self.shabbily_move_to(
+            TVector::from_coords(None, Some(ONE), None, None),
+            machine_bounds.y.unwrap_or(Real::zero()) / TWO,
+            steps_per_mm,
+            8000,
+            false,
+            Some(&mut homming_position),
+        ).await;
+
+        hwa::info!("ADV: {}", advanced);
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
-                hwa::info!("probe down...");
                 self.probe_controller.lock().await.probe_pin_down(100).await;
-                hwa::info!("TODO: Homing Z axis");
-                embassy_time::Timer::after_secs(1).await;
+            }
+        }
+
+        hwa::info!("Homing Z axis");
+        let advanced = self.shabbily_move_to(
+            TVector::from_coords(None, None, Some(ONE.neg()), None),
+            Real::from_lit(10, 0),
+            steps_per_mm,
+            2000,
+            true,
+            None,
+        ).await;
+        hwa::info!("ADV {}", advanced);
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-probe")] {
                 self.probe_controller.lock().await.probe_pin_up(100).await;
             }
         }
 
-        //#[cfg(all(feature = "native", feature = "plot-timings"))]
-        //self.end_segment().await;
-
-         */
-
-        Ok(())
+        Ok(homming_position)
     }
 
-    async fn shabbily_move_to(&mut self, vdir: TVector<Real>, module: Real, steps_per_mm: TVector<Real>, step_frequency: u64, check_endstops: bool) -> TVector<u32>
+    async fn shabbily_move_to(&mut self, vdir: TVector<Real>, module: Real, steps_per_mm: TVector<Real>, step_frequency: u64, check_endstops: bool, position: Option<&mut TVector<Real>>) -> TVector<u32>
     {
         let steps_to_advance: TVector<u32> = (vdir * module * steps_per_mm).abs().round().map_coords(|c| { c.to_i32().and_then(|c| Some(c as u32))});
         let mut steps_advanced: TVector<u32> = TVector::zero();
@@ -398,12 +504,24 @@ impl MotionDriver {
         );
 
         loop {
+            let mut completed = false;
             if check_endstops && self.endstop_triggered(coordsel) {
                 hwa::info!("ENDSTOP TRIGGERED");
-                return steps_advanced;
+                completed = true;
             }
             if !steps_advanced.bounded_by(&steps_to_advance) {
                 hwa::info!("FULL ADV");
+                completed = true;
+            }
+            if completed {
+                match position {
+                    Some(mut _p) => {
+                        *_p += vdir * steps_advanced.map_coords(|c| Some(Real::from_lit(c.into(), 0))) / steps_per_mm;
+                    }
+                    None => {
+                    }
+                }
+
                 return steps_advanced;
             }
             if coordsel.contains(CoordSel::X) {
@@ -415,8 +533,7 @@ impl MotionDriver {
             if coordsel.contains(CoordSel::Z) {
                 self.z_step_pin_high();
             }
-
-            s_block_for(Duration::from_micros(1));
+            crate::control::motion_timing::s_block_for(Duration::from_micros(1));
             if coordsel.contains(CoordSel::X) {
                 self.x_step_pin_low();
             }
@@ -427,7 +544,6 @@ impl MotionDriver {
                 self.z_step_pin_low();
             }
             steps_advanced.increment(coordsel.clone(), 1);
-
             ticker.next().await;
         }
     }

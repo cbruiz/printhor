@@ -37,7 +37,7 @@ cfg_if::cfg_if! {
                         pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UsartPort1Peri, UsartPort1RxDma>;
                     }
                 }
-                pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
+                pub type UartPort1TxControllerRef = crate::board::ControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort1TxDevice>>;
                 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
             }
         }
@@ -60,7 +60,7 @@ cfg_if::cfg_if! {
                     }
                 }
 
-                pub type UartPort2TxControllerRef = crate::board::ControllerRef<UartPort2TxDevice>;
+                pub type UartPort2TxControllerRef = crate::board::ControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort2TxDevice>>;
                 pub use crate::board::io::uart_port2::UartPort2RxInputStream;
             }
         }
@@ -131,9 +131,9 @@ cfg_if::cfg_if! {
                 pub(crate) type UartPort1Device = embassy_stm32::usart::Uart<'static, UsartPort1Peri, UsartPort1TxDma, UsartPort1RxDma>;
                 pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UsartPort1Peri, UsartPort1TxDma>;
                 pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UsartPort1Peri, UsartPort1RxDma>;
-                pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UsartPort1Peri, UsartPort1RxDma>;
+                pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UsartPort1Peri>;
 
-                pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
+                pub type UartPort1TxControllerRef = crate::board::ControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort1TxDevice>>;
                 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
             }
         }
@@ -146,6 +146,7 @@ cfg_if::cfg_if! {
 
                 pub(crate) type UartPort2Device = embassy_stm32::usart::Uart<'static, UsartPort2Peri, UsartPort2TxDma, UsartPort2RxDma>;
                 pub type UartPort2TxDevice = embassy_stm32::usart::UartTx<'static, UsartPort2Peri, UsartPort2TxDma>;
+
                 pub type UartPort2RxDevice = embassy_stm32::usart::UartRx<'static, UsartPort2Peri, UsartPort2RxDma>;
                 cfg_if::cfg_if! {
                     if #[cfg(feature="upstream-embassy")] {
@@ -156,8 +157,7 @@ cfg_if::cfg_if! {
                     }
                 }
 
-
-                pub type UartPort2TxControllerRef = crate::board::ControllerRef<UartPort2TxDevice>;
+                pub type UartPort2TxControllerRef = crate::board::ControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort2TxDevice>>;
                 pub use crate::board::io::uart_port2::UartPort2RxInputStream;
             }
         }
@@ -235,7 +235,15 @@ cfg_if::cfg_if! {
         }
     }
 }
-pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
+cfg_if::cfg_if! {
+    if #[cfg(feature="upstream-embassy")] {
+        pub use embassy_stm32::timer::GeneralInstance4Channel as PwmTrait;
+    }
+    else {
+        pub use embassy_stm32::timer::CaptureCompare16bitInstance as PwmTrait;
+    }
+}
+
 #[cfg(feature = "with-trinamic")]
 use crate::board::io::TrinamicUartWrapper;
 

@@ -3,6 +3,7 @@
 #![allow(stable_features)]
 #![allow(nonstandard_style)]
 #![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
+#![cfg_attr(all(feature="nightly", feature="upstream-embassy"), feature(impl_trait_in_assoc_type))]
 
 extern crate alloc;
 extern crate core;
@@ -38,6 +39,7 @@ use crate::hwa::controllers::HotendPwmController;
 use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::PrinterController;
+use crate::tgeo::TVector;
 
 //noinspection RsUnresolvedReference
 /// Entry point
@@ -308,19 +310,21 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(100), Some(3000))).await;
-        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(9000), Some(9000), Some(9000), Some(9000))).await;
-        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(12000), Some(12000), Some(12000), Some(12000))).await;
-        motion_planer.set_default_travel_speed(1000).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(100), Some(100), Some(100), Some(100))).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(3000), Some(3000))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(9000), Some(9000), Some(9000), Some(9000))).await;
+        motion_planer.set_default_travel_speed(200).await;
+        // Homing unneeded
+        motion_planer.set_last_planned_pos(&TVector::zero()).await;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "native")] {
-                motion_planer.set_steps_per_mm(math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0), math::Real::new(2, 0)).await;
-                motion_planer.set_usteps(4, 8, 16, 8).await;
+                motion_planer.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0)).await;
+                motion_planer.set_usteps(8, 8, 8, 8).await;
             }
             else {
-                motion_planer.set_steps_per_mm(math::Real::new(80, 0), math::Real::new(160, 0), math::Real::new(400, 0), math::Real::new(2, 0)).await;
-                motion_planer.set_usteps(1, 2, 4, 1).await;
+                motion_planer.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0)).await;
+                motion_planer.set_usteps(16, 16, 16, 16).await;
             }
         }
 
@@ -328,18 +332,35 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
+        static PSem : TrackedStaticCell<control::task_stepper::ParkingSemaphore> = TrackedStaticCell::new();
+        let parking_semaphore = PSem.init::<{hwa::MAX_STATIC_MEMORY}>("ParkingSem", control::task_stepper::ParkingSemaphore::new(0));
+
+        static PChan : TrackedStaticCell<control::task_stepper::TaskChannel> = TrackedStaticCell::new();
+        let task_channel = PChan.init::<{hwa::MAX_STATIC_MEMORY}>("TaskChannel", control::task_stepper::TaskChannel::new());
+
+        let tm = control::task_stepper::TaskMaster {
+            semaphore: parking_semaphore,
+            sender: task_channel.sender(),
+        };
+
+        let ts = control::task_stepper::TaskSlave {
+            semaphore: parking_semaphore,
+            receiver: task_channel.receiver(),
+        };
+
+        spawner.spawn(control::task_stepper::task_stepper(motion_planer.clone(), _wd, tm)).map_err(|_| ())?;
+
         cfg_if::cfg_if! {
-            if #[cfg(feature = "threaded")] {
+            if #[cfg(feature = "executor-interrupt")] {
                 hwa::launch_high_priotity( _sys_devices.task_stepper_core,
-                                   spawner,
-                                   control::task_stepper::task_stepper(motion_planer, _wd)
+                                   control::task_stepper::task_stepper_worker(motion_planer, ts)
                 ).and_then(|_| {
                     hwa::debug!("stepper_start() spawned");
                     Ok(())
                 })?;
             }
             else {
-                spawner.spawn(control::task_stepper::task_stepper(motion_planer, _wd)).map_err(|_| ())?;
+                spawner.spawn(control::task_stepper::task_stepper_worker(motion_planer, ts)).map_err(|_| ())?;
             }
         }
     }

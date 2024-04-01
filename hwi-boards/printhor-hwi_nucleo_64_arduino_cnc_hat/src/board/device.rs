@@ -25,7 +25,7 @@ cfg_if::cfg_if! {
                         pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
                     }
                 }
-                pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1TxDevice>;
+                pub type UartPort1TxControllerRef = crate::board::ControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort1TxDevice>>;
                 pub use crate::board::io::uart_port1::UartPort1RxInputStream;
             }
         }
@@ -167,8 +167,16 @@ pub type AdcHotbedPin = embassy_stm32::peripherals::PC3;
 #[cfg(feature = "nucleo64-f410rb")]
 pub type AdcHotbedPin = embassy_stm32::peripherals::PB1;
 
-pub trait PwmTrait: embassy_stm32::timer::CaptureCompare16bitInstance {}
-pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
+cfg_if::cfg_if! {
+    if #[cfg(feature="upstream-embassy")] {
+
+    }
+    else {
+        pub trait PwmTrait: embassy_stm32::timer::CaptureCompare16bitInstance {}
+        pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
+    }
+}
+
 
 #[cfg(feature = "nucleo64-l476rg")]
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM3>;

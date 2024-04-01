@@ -1,15 +1,16 @@
 //! A computing geometry Q&D API to make facilitate vector operations and provide numerically stability (undefs, etc).
 //! It implies a cost, of course
+use core::ops::Mul;
 #[allow(unused)]
 use crate::hwa;
 #[cfg(not(feature = "native"))]
 use crate::alloc::string::ToString;
-use crate::math::Real;
+use crate::math::{Real, RealImpl};
 use num_traits::float::FloatCore;
 use bitflags::bitflags;
 
 bitflags! {
-    #[derive(PartialEq, Clone, Copy, Eq)]
+    #[derive(PartialEq, Clone, Copy, Eq, Debug)]
     pub struct CoordSel: u8 {
         const X = 0b00000001;
         const Y = 0b00000010;
@@ -40,7 +41,11 @@ pub trait RealOps
     fn pow(&self, power: i32) -> Self;
     fn sqrt(&self) -> Option<Self> where Self: Sized;
     fn rdp(&self, digits: u32) -> Self;
+    fn ceil(&self) -> Self;
     fn floor(&self) -> Self;
+
+    fn epsilon() -> Self;
+
 }
 
 #[derive(Copy, Clone)]
@@ -97,6 +102,29 @@ where T: ArithmeticOps
         }
         if let Some(v) = &self.e {
             f((CoordSel::E, v))
+        }
+    }
+
+    #[allow(unused)]
+    #[inline]
+    pub fn apply(&self, rhs: &TVector<T>) -> TVector<T> {
+        TVector {
+            x: match rhs.x {
+                None => self.x,
+                Some(lv) => Some(lv),
+            },
+            y: match rhs.y {
+                None => self.y,
+                Some(lv) => Some(lv),
+            },
+            z: match rhs.z {
+                None => self.z,
+                Some(lv) => Some(lv),
+            },
+            e: match rhs.e {
+                None => self.e,
+                Some(lv) => Some(lv),
+            },
         }
     }
 
@@ -234,7 +262,54 @@ where T: ArithmeticOps
 
     #[allow(unused)]
     #[inline]
-    pub fn max(&self) -> Option<T> {
+    pub fn clamp_min(&self, rhs: TVector<T>) -> TVector<T> {
+        TVector {
+            x: match self.x {
+                None => None,
+                Some(lv) => match rhs.x {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+            y: match self.y {
+                None => None,
+                Some(lv) => match rhs.y {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+            z: match self.z {
+                None => None,
+                Some(lv) => match rhs.z {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+            e: match self.e {
+                None => None,
+                Some(lv) => match rhs.e {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+        }
+    }
+
+    #[allow(unused)]
+    #[inline]
+    pub fn vmax(&self) -> Option<T> {
         let mut m: Option<T> = None;
         if let Some(x) = self.x {
             m = Some(x);
@@ -274,7 +349,7 @@ where T: ArithmeticOps
 
     #[allow(unused)]
     #[inline]
-    pub fn min(&self) -> Option<T> {
+    pub fn vmin(&self) -> Option<T> {
         let mut m: Option<T> = None;
         if let Some(x) = self.x {
             m = Some(x);
@@ -424,12 +499,12 @@ where T: ArithmeticOps
         }
     }
 
-    pub fn map_nan(&self, value: T) -> Self {
+    pub fn map_nan(&self, value: &T) -> Self {
         Self {
-            x: self.x.map_or_else(|| Some(value), |cv| Some(cv)),
-            y: self.y.map_or_else(|| Some(value), |cv| Some(cv)),
-            z: self.z.map_or_else(|| Some(value), |cv| Some(cv)),
-            e: self.e.map_or_else(|| Some(value), |cv| Some(cv)),
+            x: self.x.map_or_else(|| Some(*value), |cv| Some(cv)),
+            y: self.y.map_or_else(|| Some(*value), |cv| Some(cv)),
+            z: self.z.map_or_else(|| Some(*value), |cv| Some(cv)),
+            e: self.e.map_or_else(|| Some(*value), |cv| Some(cv)),
         }
     }
 
@@ -492,10 +567,7 @@ impl<T> TVector<T>
     pub fn norm2(&self) -> Option<T>
     where T: RealOps
     {
-        self
-            .pow(2)
-            .sum()
-            .sqrt()
+        self.mul(*self).sum().sqrt()
     }
 
     pub fn scalar_product(&self, rhs: TVector<T>) -> T
@@ -539,7 +611,7 @@ impl<T> TVector<T>
             Some(norm) => match norm.is_zero() {
                 true => (Self::nan(), T::zero()),
                 false => {
-                    ((*self) / norm.clone(), norm)
+                    ((*self) / norm, norm)
                 }
             }
         }
@@ -564,6 +636,18 @@ impl<T> TVector<T>
             y: self.y.map_or_else(|| None, |v| Some(v.floor())),
             z: self.z.map_or_else(|| None, |v| Some(v.floor())),
             e: self.e.map_or_else(|| None, |v| Some(v.floor())),
+        }
+    }
+
+    #[allow(unused)]
+    pub fn ceil(&self) -> TVector<T>
+        where T: RealOps
+    {
+        Self {
+            x: self.x.map_or_else(|| None, |v| Some(v.ceil())),
+            y: self.y.map_or_else(|| None, |v| Some(v.ceil())),
+            z: self.z.map_or_else(|| None, |v| Some(v.ceil())),
+            e: self.e.map_or_else(|| None, |v| Some(v.ceil())),
         }
     }
 
@@ -971,6 +1055,15 @@ impl RealOps for f32 {
     fn floor(&self) -> Self {
         <f32 as FloatCore>::floor(*self)
     }
+
+    fn ceil(&self) -> Self {
+        <f32 as FloatCore>::ceil(*self)
+    }
+
+    fn epsilon() -> Self {
+        <f32 as FloatCore>::epsilon()
+    }
+
 }
 
 
@@ -1014,9 +1107,19 @@ impl RealOps for Real {
         Real::round_dp(self, digits)
     }
 
+    fn ceil(&self) -> Self {
+        Real::ceil(self)
+    }
+
     fn floor(&self) -> Self {
         Real::floor(self)
     }
+
+    fn epsilon() -> Self {
+        Real(<RealImpl as RealOps>::epsilon())
+    }
+    
+
 }
 
 #[allow(unused)]
@@ -1024,7 +1127,7 @@ pub fn test() {
     let pos: TVector<i32> = TVector::new();
     let p1: TVector<i32> = TVector::one();
 
-    let p0 = pos.map_nan(0);
+    let p0 = pos.map_nan(&0);
 
     let r = p0 + p1;
     crate::hwa::info!("{}", r);

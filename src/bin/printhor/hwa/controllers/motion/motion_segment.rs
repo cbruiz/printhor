@@ -1,82 +1,84 @@
 //! TODO: This feature is still in incubation
-use embassy_time::{Duration, Instant};
 use crate::math::Real;
-use crate::control::motion_planning::{MotionProfile, SCurveMotionProfile};
+use crate::control::motion_planning::{Constraints, MotionProfile};
 use crate::tgeo::TVector;
 
-#[allow(unused)]
 #[derive(Clone, Copy)]
 pub struct SegmentData {
     /// Enter speed in mm/s
     pub speed_enter_mms: Real,
     /// Exit speed in mm/s
     pub speed_exit_mms: Real,
+    /// Target speed in mm/s
+    pub speed_target_mms: Real,
     /// Total displacement to complete the movement in millimeters
     pub displacement_mm: Real,
+
+    pub speed_enter_constrained_mms: Real,
+    //pub speed_max_gain_mms: Real,
+    pub speed_exit_constrained_mms: Real,
+    pub proj_prev: Real,
+    pub proj_next: Real,
 
     pub vdir: TVector<Real>,
     pub dest_pos: TVector<Real>,
 
     pub tool_power: Real,
+    pub constraints: Constraints,
 }
 
-#[allow(unused)]
 #[derive(Clone, Copy)]
 pub struct Segment {
     pub segment_data: SegmentData,
-    pub motion_profile: SCurveMotionProfile,
+    #[cfg(feature = "native")]
+    pub id: u32,
 }
 
 impl Segment {
-    pub const fn new(segment_data: SegmentData, motion_profile: SCurveMotionProfile) -> Self {
-        Self {segment_data, motion_profile}
-    }
-
-    pub fn recalculate(&self, v_0: Real, v_1: Real, error_correction: bool) -> Self {
-        Self {
-            segment_data: SegmentData {
-                speed_enter_mms: v_0,
-                speed_exit_mms: v_1,
-                displacement_mm: self.segment_data.displacement_mm,
-                vdir: self.segment_data.vdir,
-                dest_pos: self.segment_data.dest_pos,
-                tool_power: self.segment_data.tool_power,
-            },
-            motion_profile: SCurveMotionProfile::compute(self.motion_profile.q1, v_0, v_1, &self.motion_profile.constraints, error_correction).unwrap(),
+    pub fn new(segment_data: SegmentData) -> Self {
+        cfg_if::cfg_if! {
+            if #[cfg(feature="native")] {
+                static mut COUNTER: u32 = 0;
+                let id = unsafe {
+                    COUNTER += 1;
+                    COUNTER
+                };
+                Self {segment_data, id}
+            }
+            else {
+                Self {segment_data}
+            }
         }
+
     }
 }
 
 pub struct SegmentIterator<'a, P> {
     profile: &'a P,
-    ref_time: Instant,
-    offset: u64,
+    ref_time: Real,
     exhausted: bool,
 }
 
 impl<'a, P> SegmentIterator<'a, P>
 where P: MotionProfile
 {
-    pub const fn new(profile: &'a P, ref_time: Instant, offset: Duration) -> Self {
+    pub const fn new(profile: &'a P, ref_time: Real) -> Self {
         SegmentIterator {
             profile,
             ref_time,
-            offset: offset.as_micros(),
             exhausted: false,
         }
     }
 
-    pub fn next(&mut self, now: Instant) -> Option<Real> {
+    pub fn next(&mut self, now: Real) -> Option<Real> {
         if self.exhausted {
             None
         }
         else {
-            let relative_instant = self.offset + now.duration_since(self.ref_time).as_micros();
-            let relative_time = Real::from_lit(relative_instant as i64, 6);
+            let relative_time = now - self.ref_time;
             if relative_time > self.profile.end() {
                 self.exhausted = true
             }
-            //crate::hwa::trace!("t = {:0.4}", relative_time);
             self.profile.eval_position(relative_time)
         }
     }

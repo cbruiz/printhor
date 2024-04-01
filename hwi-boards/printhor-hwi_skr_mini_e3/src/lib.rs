@@ -1,8 +1,10 @@
 #![no_std]
 #![allow(stable_features)]
 #![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
+#![cfg_attr(feature="nightly", feature(impl_trait_in_assoc_type))]
+extern crate alloc;
 
-pub use defmt::{trace,debug,info,warn, error};
+pub use defmt::{trace, debug, info, warn, error};
 pub use defmt;
 
 mod board;
@@ -28,7 +30,7 @@ pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
 const USBSERIAL_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-serial-port-1")]
-const UART_PORT1_BUFFER_SIZE: usize = 32;
+const UART_PORT1_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
 #[cfg(feature = "with-serial-port-2")]
@@ -38,7 +40,7 @@ const UART_PORT2_BAUD_RATE: u32 = 115200;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-        pub const SEGMENT_QUEUE_SIZE: u8 = 20;
+        pub const SEGMENT_QUEUE_SIZE: u8 = 80;
     }
 }
 
@@ -51,7 +53,7 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature="threaded")] {
+    if #[cfg(feature="executor-interrupt")] {
 
         use embassy_stm32::interrupt;
         use embassy_stm32::interrupt::Priority;
@@ -68,9 +70,12 @@ cfg_if::cfg_if! {
                 }
 
                 #[inline]
-                pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, spawner: embassy_executor::Spawner, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
+                pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
                     interrupt::RTC_ALARM.set_priority(Priority::P2);
-
+                    interrupt::USB_LP_CAN1_RX0.set_priority(Priority::P3);
+                    interrupt::USART1.set_priority(Priority::P3);
+                    interrupt::USART2.set_priority(Priority::P3);
+                    interrupt::UART4.set_priority(Priority::P4);
                     let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
                     spawner.spawn(token).map_err(|_| ())
                 }
@@ -84,9 +89,11 @@ cfg_if::cfg_if! {
                 #[inline]
                 pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
 
-                    #[cfg(feature = "with-usbserial")]
-                    interrupt::USB_UCPD1_2.set_priority(Priority::P3);
                     interrupt::CEC.set_priority(Priority::P2);
+                    interrupt::USB_UCPD1_2.set_priority(Priority::P3);
+                    interrupt::USART1.set_priority(Priority::P3);
+                    interrupt::USART2_LPUART2.set_priority(Priority::P3);
+                    interrupt::USART3_4_5_6_LPUART1.set_priority(Priority::P4);
 
                     let spawner = EXECUTOR_HIGH.start(interrupt::CEC);
                     spawner.spawn(token).map_err(|_| ())

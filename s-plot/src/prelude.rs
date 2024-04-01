@@ -32,7 +32,6 @@ pub mod control {
         pub use crate::prelude::core_motion_planing::Boundaries;
         pub use crate::prelude::core_motion_planing::SCurveMotionProfile;
         pub use crate::prelude::core_motion_planing::Cache;
-        pub use crate::prelude::core_motion_planing::PlanProfile;
         pub use crate::prelude::core_motion_planing::MotionProfile;
     }
 }

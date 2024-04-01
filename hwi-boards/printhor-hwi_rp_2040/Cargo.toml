@@ -36,7 +36,7 @@ with-trinamic = []
 with-ps-on = []
 
 nightly = ["embassy-executor/nightly"]
-threaded = ["embassy-executor/executor-interrupt"]
+executor-interrupt = ["embassy-executor/executor-interrupt"]
 verbose-timings = []
 without-uart-until_idle = []
 with-uart-buffered = []

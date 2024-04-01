@@ -55,7 +55,6 @@ pub mod usbserial {
                 device_descriptor,
                 config_descriptor,
                 bos_descriptor,
-                &mut [],
                 control_buf,
             );
 
@@ -167,7 +166,6 @@ pub mod uart_port1 {
     use crate::device::UartPort1RxDevice;
     use futures::Stream;
     use core::pin::Pin;
-    use core::sync::atomic::{compiler_fence, Ordering};
     use futures::task::Context;
     use futures::task::Poll;
     use futures::Future;
@@ -220,7 +218,6 @@ pub mod uart_port1 {
         type Item = Result<u8, async_gcode::Error>;
 
         fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
-            compiler_fence(Ordering::SeqCst);
             let this = self.get_mut();
             if this.current_byte_index < this.bytes_read {
                 let byte = this.buffer[this.current_byte_index as usize];
@@ -243,6 +240,7 @@ pub mod uart_port1 {
                 }).poll(ctx);
                 match r {
                     Poll::Ready(Ok(n)) => {
+                        defmt::trace!("P1: RCV: {}", this.buffer[0..n]);
                         this.bytes_read = n as u8;
                         if n > 0 {
                             let byte = this.buffer[this.current_byte_index as usize];
@@ -253,11 +251,11 @@ pub mod uart_port1 {
                         }
                     }
                     Poll::Ready(Err(_e)) => {
-                        defmt::warn!("poll() -> Error {:?}", _e);
+                        defmt::warn!("P1: Error {:?}", _e);
                         Poll::Ready(None)
                     }
                     Poll::Pending => {
-                        defmt::trace!("poll() -> Pending");
+                        defmt::trace!("P1: Pending");
                         Poll::Pending
                     }
                 }
@@ -271,7 +269,6 @@ pub mod uart_port2 {
     use crate::device::UartPort2RxDevice;
     use futures::Stream;
     use core::pin::Pin;
-    use core::sync::atomic::{compiler_fence, Ordering};
     use futures::task::Context;
     use futures::task::Poll;
     use futures::Future;
@@ -324,7 +321,6 @@ pub mod uart_port2 {
         type Item = Result<u8, async_gcode::Error>;
 
         fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
-            compiler_fence(Ordering::SeqCst);
             let this = self.get_mut();
             if this.current_byte_index < this.bytes_read {
                 let byte = this.buffer[this.current_byte_index as usize];
@@ -347,6 +343,7 @@ pub mod uart_port2 {
                 }).poll(ctx);
                 match r {
                     Poll::Ready(Ok(n)) => {
+                        defmt::trace!("P2: RCV: {}", this.buffer[0..n]);
                         this.bytes_read = n as u8;
                         if n > 0 {
                             let byte = this.buffer[this.current_byte_index as usize];

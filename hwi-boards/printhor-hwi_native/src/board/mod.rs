@@ -82,7 +82,7 @@ pub struct Controllers {
 }
 
 pub struct SysDevices {
-    #[cfg(all(feature = "with-motion", feature="threaded"))]
+    #[cfg(all(feature = "with-motion", feature="executor-interrupt"))]
     pub task_stepper_core: printhor_hwa_common::NoDevice,
     #[cfg(feature = "with-ps-on")]
     pub ps_on: device::PsOnRef,
@@ -299,7 +299,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             serial_port2_tx,
         },
         sys_devices: SysDevices {
-            #[cfg(all(feature = "with-motion", feature="threaded"))]
+            #[cfg(all(feature = "with-motion", feature="executor-interrupt"))]
             task_stepper_core: printhor_hwa_common::NoDevice::new(),
             #[cfg(feature = "with-ps-on")]
             ps_on

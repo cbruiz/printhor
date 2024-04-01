@@ -7,16 +7,7 @@ use crate::{hwa, math};
 use core::fmt::Display;
 #[cfg(feature = "native")]
 use core::fmt::Formatter;
-use core::ops::{Div, Neg};
-use core::ops::Mul;
-#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
-use num_traits::float::FloatCore;
-#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
-use crate::{math::Real, math::RealInclusiveRange};
-#[cfg(all(feature = "native", feature = "plot-motion-plan"))]
-use rust_decimal::prelude::ToPrimitive;
-#[cfg(all(not(feature = "native"), feature = "plot-motion-plan"))]
-use num_traits::ToPrimitive;
+use core::ops::{Mul, Div};
 use crate::math::*;
 use crate::control::CodeExecutionFailure;
 
@@ -76,7 +67,6 @@ pub struct SCurveMotionProfile {
     pub v_0: Real,
     pub v_1: Real,
     pub j_max: Real,
-    pub j_min: Real,
     pub a_lim_a: Real,
     pub a_lim_d: Real,
     pub v_lim: Real,
@@ -92,29 +82,41 @@ impl SCurveMotionProfile {
     pub fn compute(q_1: Real, v_0: Real, v_1:Real, constraints: &Constraints, error_correction: bool) -> Result<SCurveMotionProfile, CodeExecutionFailure>  {
 
         hwa::debug!("compute q_{{1}} = {} v_{{0}} = {} v_{{1}} = {}", q_1, v_0, v_1);
-        let _t0 = embassy_time::Instant::now();
+        cfg_if::cfg_if! {
+            if #[cfg(feature="verbose-timings")] {
+                let _t0 = embassy_time::Instant::now();
+            }
+        }
 
         let t_jmax = constraints.a_max / constraints.j_max;
-        let t_jstar = Real::min(
-            Some((((v_1 - v_0).abs()) / constraints.j_max).sqrt().unwrap()),
+        let t_jstar = Real::vmin(
+            (((v_1 - v_0).abs()) / constraints.j_max).sqrt(),
             Some(t_jmax),
-        ).unwrap();
+        ).unwrap_or(ZERO);
 
         hwa::debug!("t_jstar = {} t_jmax = {}", t_jstar, t_jmax);
 
-        let feasible = if t_jstar < t_jmax {
-            q_1 > t_jstar * (v_0 + v_1)
-        }
-        else if t_jstar == t_jmax {
-            q_1 > ((v_0 + v_1) / TWO)
-                * (t_jstar + ((v_1 - v_0).abs() / constraints.a_max))
+        let q_lim = if t_jstar < t_jmax {
+            t_jstar * (v_0 + v_1)
         }
         else {
-            hwa::error!("unhandled situation");
-            return Err(CodeExecutionFailure::ERR)
+            ((v_0 + v_1) / TWO) * (t_jstar + ((v_1 - v_0).abs() / constraints.a_max))
         };
+
+        let feasible = q_1 > q_lim;
+
         if !feasible {
-            hwa::error!("Movement NOT FEASIBLE");
+            hwa::error!("Movement NOT FEASIBLE:");
+
+            let jm = t_jmax;
+            hwa::error!("* constraint: {}", (q_1 * q_1 * jm) + v_0);
+
+            if t_jstar < t_jmax {
+                hwa::error!(" => cannot accel to travel {} mm from {} to {} ({}). Will take {} mm ({} * (v0+v1))", q_1, v_0, v_1, (v_1 - v_0).abs(), q_lim, t_jstar);
+            }
+            else {
+                hwa::error!("=> cannot accel to travel {} mm from {} to {}. Will take {} mm (((v_0 + v_1) / TWO) * ({} + ((v_1 - v_0).abs() / {})))", q_1, v_0, v_1, q_lim, t_jstar, constraints.a_max);
+            }
             return Err(CodeExecutionFailure::ERR)
         }
 
@@ -145,6 +147,9 @@ impl SCurveMotionProfile {
             let a_lim_a = constraints.j_max * t_j1;
             let a_lim_d = constraints.j_max * t_j2;
             let v_lim = v_0 + (t_a - t_j1) * a_lim_a;
+            if v_lim.is_zero() {
+                return Err(CodeExecutionFailure::ERR);
+            }
             let t = t_a + t_v + t_d;
             (SCurveMotionProfile {
                 t_j1,
@@ -155,7 +160,6 @@ impl SCurveMotionProfile {
                 v_0: v_0,
                 v_1: v_1,
                 j_max: constraints.j_max,
-                j_min: constraints.j_max.neg(),
                 a_lim_a,
                 a_lim_d,
                 v_lim,
@@ -209,7 +213,7 @@ impl SCurveMotionProfile {
                 t_j1_2 = Real::zero();
                 t_d_2 = (q_1.mul(TWO)).div(v_1 + v_0);
                 t_j2_2 = (constraints.j_max.mul(q_1) - (constraints.j_max.mul(
-                    (constraints.j_max.mul(q_1.powi(2))) + ((v_1 + v_0).powi(2)).mul(v_1 - v_0)
+                    (constraints.j_max.mul(q_1 * q_1)) + ((v_1 + v_0)*(v_1 + v_0)).mul(v_1 - v_0)
                 )
                 ).sqrt().unwrap()).div(
                     constraints.j_max.mul(v_1 + v_0)
@@ -220,7 +224,7 @@ impl SCurveMotionProfile {
                 t_j2_2 = Real::zero();
                 t_a_2 = (q_1.mul(TWO)).div(v_1 + v_0);
                 t_j1_2 = (constraints.j_max.mul(q_1) - (constraints.j_max.mul(
-                    (constraints.j_max.mul(q_1.powi(2))) + ((v_1 + v_0).powi(2)).mul(v_0 - v_1)
+                    (constraints.j_max.mul(q_1 * q_1)) + ((v_1 + v_0) * (v_1 + v_0)).mul(v_0 - v_1)
                 )
                 ).sqrt().unwrap()).div(
                     constraints.j_max.mul(v_1 + v_0)
@@ -228,6 +232,9 @@ impl SCurveMotionProfile {
             }
             let a_lim_a = constraints.j_max * t_j1_2;
             let a_lim_d = constraints.j_max * t_j2_2;
+            if v_lim.is_zero() {
+                return Err(CodeExecutionFailure::ERR)
+            }
             let t = t_a_2 + t_d_2;
             (SCurveMotionProfile {
                 t_j1: t_j1_2,
@@ -238,7 +245,6 @@ impl SCurveMotionProfile {
                 v_0,
                 v_1,
                 j_max: constraints.j_max,
-                j_min: constraints.j_max.neg(),
                 a_lim_a,
                 a_lim_d,
                 v_lim,
@@ -249,29 +255,15 @@ impl SCurveMotionProfile {
         };
 
         cfg_if::cfg_if! {
-            if #[cfg(feature="timing-stats")] {
-                let _t = intervals.t_a + intervals.t_v + intervals.t_d;
-                #[allow(unused)]
-                let a_lim_a = constraints.j_max * intervals.t_j1;
-                #[allow(unused)]
-                let a_lim_d = constraints.j_max.neg() * intervals.t_j2;
-                #[allow(unused)]
-                let v_lim = v_0 + ((intervals.t_a - intervals.t_j1) * a_lim_a);
-            }
-        }
-
-        cfg_if::cfg_if! {
             if #[cfg(feature="verbose-timings")] {
-                hwa::info!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
             }
         }
         intervals.compute_cache();
         if error_correction {
             let final_pos = intervals.s_i7(&intervals.i7_end());
             let delta_e = intervals.q1 - final_pos;
-            if delta_e > ZERO {
-                intervals.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
-            }
+            intervals.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
         }
         Ok(intervals)
     }
@@ -412,12 +404,15 @@ impl SCurveMotionProfile {
     }
 
     pub fn extend(&mut self, delta_e: Real)  -> Result<(), ()> {
-        let extra_time =  delta_e / self.v_lim;
-        self.t_v += extra_time;
-        self.cache.s4_pt += delta_e;
-        self.cache.s5_pt += delta_e;
-        self.cache.s6_pt += delta_e;
-        self.cache.s7_pt += delta_e;
+        let extra_time = delta_e / self.v_lim;
+        if self.t_v + extra_time > math::ZERO {
+            self.t_v += extra_time;
+            self.cache.s4_pt += delta_e;
+            self.cache.s5_pt += delta_e;
+            self.cache.s6_pt += delta_e;
+            self.cache.s7_pt += delta_e;
+        }
+
         Ok(())
     }
 
@@ -635,224 +630,3 @@ impl Display for SCurveMotionProfile {
     }
 }
 
-pub struct PlanProfile {
-    plan: SCurveMotionProfile,
-    lin_space: RealInclusiveRange,
-    #[allow(unused)]
-    advanced: Real,
-}
-
-
-#[allow(unused)]
-impl PlanProfile
-{
-    pub fn new(intervals: SCurveMotionProfile, step_size: Real) -> Self {
-
-        let lin_space = RealInclusiveRange::new(
-            ZERO,
-            intervals.i7_end(),
-            step_size);
-        Self{
-            plan: intervals,
-            lin_space,
-            advanced: Real::zero(),
-        }
-    }
-
-    #[allow(unused)]
-    #[inline]
-    pub fn reset(&mut self) {
-        self.advanced = Real::zero();
-        self.lin_space.reset();
-    }
-
-    #[allow(unused)]
-    #[inline]
-    pub fn total_duration(&self) -> Real {
-        self.lin_space.width()
-
-    }
-
-    #[allow(unused)]
-    #[allow(dead_code)]
-    #[cfg(feature = "native")]
-    pub fn plot(&mut self, plot_pos: bool, plot_vel: bool, plot_accel: bool, plot_jerk: bool) {
-
-        use gnuplot::{AxesCommon, Figure};
-        use gnuplot::{AutoOption, Tick, MultiplotFillOrder::RowsFirst, MultiplotFillDirection::{Downwards}};
-        use gnuplot::{DashType, PlotOption};
-
-        let p = &(self.plan);
-
-        let steps_per_unit = Real::from_lit(2, 0);
-
-        let mut time: Vec<f64> = Vec::with_capacity(1000);
-        let mut time_step_by_pulse: Vec<f64> = Vec::with_capacity(1000);
-        let mut step_by_pulse: Vec<f64> = Vec::with_capacity(1000);
-        let mut pos: Vec<f64> = Vec::with_capacity(1000);
-
-        let mut spd: Vec<f64> = Vec::with_capacity(1000);
-        let mut acc: Vec<f64> = Vec::with_capacity(1000);
-        let mut jerk: Vec<f64> = Vec::with_capacity(1000);
-
-        let mut inter: Vec<f64> = Vec::with_capacity(1000);
-
-        let mut time_ref = &mut time;
-        let mut pos_ref = &mut pos;
-        let mut spd_ref = &mut spd;
-        let mut acc_ref = &mut acc;
-        let mut jerk_ref = &mut jerk;
-        let mut cnt = 0;
-        let mut last_t = 0.;
-        let mut last_p = 0.;
-        let mut last_s = 0.;
-        let mut last_a = 0.;
-        let mut last_j = 0.;
-        let mut real_advanced = Real::zero();
-        let mut abs_advanced = 0u32;
-        let mut abs_steps_advanced = 0u32;
-
-        time_step_by_pulse.push(last_t);
-        step_by_pulse.push(f64::nan());
-
-        let pv0 = self.plan.v_0.rdp(4);
-        let pv1 = self.plan.v_1.rdp(4);
-        let pvm = self.plan.v_lim.rdp(4);
-        let pdisp = self.plan.q1.rdp(4);
-        let pres = self.lin_space.step_size().rdp(4);
-
-        for (inte, ti, pos) in self.into_iter() {
-
-            real_advanced = pos;
-
-            let ti_v = ti.inner();
-            let real_pos = pos.max(Real::zero()).inner();
-            let c_ti = ti_v.to_f64().unwrap();
-            let c_pos = real_pos.to_f64().unwrap();
-
-            let dt = c_ti.clone() - last_t;
-
-            let pos_abs = real_pos.to_i32().unwrap() as u32;
-
-            let real_steps = (pos * steps_per_unit).round();
-
-            let abs_steps = real_steps.to_i64().unwrap() as u32;
-            let steps = core::cmp::max(abs_steps, abs_steps_advanced) - abs_steps_advanced;
-            abs_steps_advanced = abs_steps;
-
-            if steps > 0 {
-                let dt_step = dt / (steps as f64);
-                let mut dt_acc = ti_v.to_f64().unwrap();
-                for _i in 0..steps {
-                    time_step_by_pulse.push(dt_acc);
-                    step_by_pulse.push(abs_steps_advanced as f64);
-                    abs_steps_advanced += 1;
-                    time_step_by_pulse.push(dt_acc);
-                    step_by_pulse.push(abs_steps_advanced as f64);
-                    dt_acc += dt_step;
-                }
-            }
-
-            abs_advanced = pos_abs;
-
-            let s = (c_pos - last_p) / dt.clone().abs();
-            let a = ((s.clone() - last_s) / dt.clone());
-            let j = ((a.clone() - last_a) / dt.clone());
-
-            time_ref.push(c_ti.clone());
-            pos_ref.push(c_pos.clone());
-
-            inter.push(inte.to_f64().unwrap());
-
-            if plot_vel {
-                spd_ref.push(s.clone());
-            }
-            if plot_accel {
-                acc_ref.push(a.clone());
-            }
-            if plot_jerk {
-                jerk_ref.push(j.clone());
-            }
-            cnt += 1;
-            last_t = c_ti;
-            last_p = c_pos;
-            last_s = if s.is_nan() {0.} else {s};
-            last_a = if a.is_nan() {0.} else {a};
-            last_j = if j.is_nan() {0.} else {j};
-        }
-        time_step_by_pulse.push(last_t);
-        step_by_pulse.push(abs_steps_advanced as f64);
-        println!("D; Advanced: est: {} mm, real: {:.03} mm ({} steps)", real_advanced.rdp(4), (abs_steps_advanced.to_f64().unwrap() / steps_per_unit.to_f64()), abs_steps_advanced);
-        let mut fg = Figure::new();
-
-        fg.set_multiplot_layout(6, 1)
-            .set_title(
-                format!(
-                    "FixedPoint Double S-Curve velocity profile\n[vin={} mm/s, vmax={} mm/s, vout={} mm/s, displacement={} mm, sample\\_period={} s]",
-                    pv0, pvm, pv1, pdisp, pres,
-                ).as_str()
-            )
-            .set_scale(1.0, 1.0)
-            .set_offset(0.0, 0.0)
-            .set_multiplot_fill_order(RowsFirst, Downwards);
-
-        fg.axes2d()
-            .set_y_label("Position (mm)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap() * 0.5), AutoOption::Auto)
-            .lines(time.clone(), pos.clone(), &[PlotOption::Color("blue")])
-        ;
-        fg.axes2d()
-            .set_y_label("interv", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), inter.clone(), &[PlotOption::Color("black")])
-        ;
-        fg.axes2d()
-            .set_y_label("Velocity (mm/s)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), spd.clone(), &[PlotOption::Color("green")])
-        ;
-        fg.axes2d()
-            .set_y_label("Acceleration (mm/s²)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), acc.clone(), &[PlotOption::Color("red")])
-        ;
-        fg.axes2d()
-            .set_y_label("Jerk (m/s³)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), jerk.clone(), &[PlotOption::Color("orange")])
-        ;
-        fg.axes2d()
-            .set_x_label("Time in seconds", &[])
-            .set_y_label("Discrete\nsteps", &[])
-            .set_x2_grid(true)
-            .set_x2_minor_grid(true)
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .set_grid_options(true, &[PlotOption::Color("gray"),PlotOption::LineStyle(DashType::Dash)])
-            .lines(time_step_by_pulse.clone(), step_by_pulse.clone(), &[PlotOption::Color("black")])
-        ;
-        fg.show_and_keep_running().unwrap();
-    }
-
-}
-
-impl Iterator for PlanProfile
-{
-    type Item = (u8, Real, Real);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.lin_space.next() {
-            None => {
-                None
-            },
-            Some(tp) => {
-                let (s, v) = self.plan.eval_position(tp);
-                Some((s, tp, v?))
-            }
-        }
-    }
-}

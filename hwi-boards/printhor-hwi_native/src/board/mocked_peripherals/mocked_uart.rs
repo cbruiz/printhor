@@ -74,9 +74,9 @@ impl MockedUartTx {
         Self {
         }
     }
-    pub fn blocking_flush(&mut self) {
+    pub async fn wrapped_flush(&mut self) {
     }
-    pub async fn write(&mut self, b: &[u8]) {
+    pub async fn wrapped_write(&mut self, b: &[u8]) {
         print!("{}", std::str::from_utf8(b).unwrap());
         let _ = stdout().flush().ok();
     }

@@ -29,7 +29,7 @@ cfg_if::cfg_if! {
         /// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
         pub const MACHINE_PROCESSOR: &str = "STM32F410RB";
         #[allow(unused)]
-        pub const PROCESSOR_SYS_CK_MHZ: &str = "100_000_000";
+        pub const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
         // https://www.st.com/resource/en/datasheet/DM00214043.pdf
         pub const ADC_START_TIME_US: u16 = 10;
         // https://www.st.com/resource/en/datasheet/DM00214043.pdf
@@ -281,9 +281,11 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             p.DMA1_CH7, p.DMA1_CH6, cfg
         ).expect("Ready").split();
 
-        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
+        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<printhor_hwa_common::SerialAsyncWrapper<device::UartPort1TxDevice>>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
-            UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port1_tx_device))
+            UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(
+                printhor_hwa_common::SerialAsyncWrapper::new(uart_port1_tx_device, crate::UART_PORT1_BAUD_RATE)
+            ))
         );
         (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };

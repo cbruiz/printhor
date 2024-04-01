@@ -37,18 +37,18 @@ pub struct N {
 }
 #[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
-pub struct XYZW {
+pub struct XYZE {
     pub(crate) ln: Option<u32>,
     pub(crate) x: Option<Real>,
     pub(crate) y: Option<Real>,
     pub(crate) z: Option<Real>,
-    pub(crate) w: Option<Real>,
+    pub(crate) e: Option<Real>,
 }
 
 #[cfg(feature = "with-defmt")]
-impl crate::hwa::defmt::Format for XYZW {
+impl crate::hwa::defmt::Format for XYZE {
     fn format(&self, fmt: crate::hwa::defmt::Formatter) {
-        crate::hwa::defmt::write!(fmt, "XYZW {:?}", self.ln)
+        crate::hwa::defmt::write!(fmt, "XYZE {:?}", self.ln)
     }
 }
 
@@ -145,7 +145,7 @@ pub enum GCode {
     G22, G23, // Retraction
 
     /// Move to Origin (Home)
-    G28(XYZW),
+    G28(XYZE),
     /// Detailed Z-Probe
     G29,
     /// Set Z probe head offset
@@ -165,7 +165,7 @@ pub enum GCode {
     /// Set to Relative Positioning
     G91,
     /// Set position
-    G92,
+    G92(XYZE),
     #[strum(serialize = "G92.1")]
     G92_1,
     #[strum(serialize = "G92.2")]

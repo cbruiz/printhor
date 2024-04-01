@@ -26,7 +26,7 @@ const UART_PORT1_BUFFER_SIZE: usize = 32;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-        pub const SEGMENT_QUEUE_SIZE: u8 = 40;
+        pub const SEGMENT_QUEUE_SIZE: u8 = 100;
     }
 }
 pub use board::ADC_START_TIME_US;
@@ -42,7 +42,7 @@ cfg_if::cfg_if!{
 pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, _spawner: Spawner, token: embassy_executor::SpawnToken<S>) -> Result<(),()>
 {
     cfg_if::cfg_if! {
-        if #[cfg(feature="threaded")] {
+        if #[cfg(feature="executor-interrupt")] {
             static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
 
             let executor: &'static mut embassy_executor::Executor = EXECUTOR_HIGH.init("StepperExecutor", embassy_executor::Executor::new());
@@ -60,7 +60,12 @@ pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDev
 
 #[inline]
 pub fn init_logger() {
-    env_logger::init();
+    use std::io::Write;
+    env_logger::builder()
+        .format(|buf, record| {
+            writeln!(buf, "{}: {}", record.level(), record.args())
+        })
+        .init();
 }
 
 #[inline]

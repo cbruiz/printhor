@@ -4,6 +4,7 @@ use crate::hwa;
 use crate::math;
 use crate::machine::MACHINE_INFO;
 
+
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 use alloc::format;
@@ -13,9 +14,15 @@ use math::Real;
 use strum::VariantNames;
 #[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
-#[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
-#[allow(unused)]
-use embedded_io_async::Write;
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
+    {
+        #[allow(unused)]
+        use embedded_io_async::Write;
+        #[allow(unused)]
+        use printhor_hwa_common::AsyncWrapper;
+    }
+}
 
 pub struct GCodeProcessorParams {
     pub event_bus: EventBusRef,
@@ -102,7 +109,11 @@ impl GCodeProcessor {
         }
     }
 
-    pub(crate) async fn write(&self, channel: CommChannel, _msg: &str) {
+    pub async fn write_ok(&self, channel: CommChannel) {
+        self.write(channel, "ok\n").await;
+    }
+
+    pub async fn write(&self, channel: CommChannel, _msg: &str) {
         match channel {
             #[cfg(feature = "with-serial-usb")]
             CommChannel::SerialUsb => {
@@ -110,39 +121,43 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
-                let _ = self.serial_port1_tx.lock().await.write(_msg.as_bytes()).await;
+
+                let mut mg = self.serial_port1_tx.lock().await;
+                let _ = mg.wrapped_write(_msg.as_bytes()).await;
+                mg.wrapped_flush().await;
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
-                let _ = self.serial_port2_tx.lock().await.write(_msg.as_bytes()).await;
+                let mut mg = self.serial_port2_tx.lock().await;
+                let _ = mg.wrapped_write(_msg.as_bytes()).await;
+                mg.wrapped_flush().await;
+
             }
             CommChannel::Internal => {}
         }
     }
 
     #[allow(unused)]
-    pub(crate) async fn flush(&self, channel: CommChannel) {
+    pub async fn flush(&self, channel: CommChannel) {
         match channel {
             #[cfg(feature = "with-serial-usb")]
             CommChannel::SerialUsb => {
-                let _ = self.serial_usb_tx.lock().await.write_packet(b"").await;
+                //let _ = self.serial_usb_tx.lock().await.write_packet(b"").await;
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
-                let _ = self.serial_port1_tx.lock().await.blocking_flush();
+                use printhor_hwa_common::AsyncWrapper;
+                let mut mg = self.serial_port1_tx.lock().await;
+                mg.wrapped_flush().await;
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
-                let _ = self.serial_port2_tx.lock().await.blocking_flush();
+                use printhor_hwa_common::AsyncWrapper;
+                let mut mg = self.serial_port2_tx.lock().await;
+                mg.wrapped_flush().await;
             }
             CommChannel::Internal => {}
         }
-    }
-
-    #[allow(unused)]
-    pub(crate) async fn writeln(&self, channel: CommChannel, msg: &str) {
-        let _ = self.write(channel, msg).await;
-        let _ = self.write(channel, "\n").await;
     }
 
     /***
@@ -165,8 +180,7 @@ impl GCodeProcessor {
             }
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
-                    let _ = self.write(channel, "echo: ").await;
-                    let _ = self.writeln(channel, x).await;
+                    let _ = self.write(channel, format!("echo: {}\n", x).as_str()).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -245,16 +259,16 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
-            GCode::G92 => {
-                // FIXME
-                self.motion_planner.set_last_planned_pos(&TVector::zero()).await;
+            GCode::G92(_pos) => {
+                self.motion_planner.set_last_planned_pos(&TVector{
+                    x: _pos.x, y: _pos.y, z: _pos.z, e: _pos.e,
+                }).await;
                 Ok(CodeExecutionSuccess::OK)
             },
             GCode::G94 => Ok(CodeExecutionSuccess::OK),
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
-                    let _ = self.write(channel,"echo: ").await;
-                    let _ = self.writeln(channel, x).await;
+                    let _ = self.write(channel, format!("echo: {}\n", x).as_str()).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -274,9 +288,11 @@ impl GCodeProcessor {
                         embassy_time::Timer::after_secs(1).await;
                     }
                 }
-
-                #[cfg(feature = "with-trinamic")]
-                let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-trinamic")] {
+                        let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
+                    }
+                }
                 self.event_bus.publish_event(EventStatus::containing(EventFlags::ATX_ON)).await;
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -517,7 +533,7 @@ impl GCodeProcessor {
                 if success {
                     let _ = self.write(channel, "ok; M502\n").await;
                 } else {
-                    let _ = self.write(channel, "Error; M502 (internal error)\n").await;
+                    let _ = self.write(channel, "error; M502 (internal error)\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }

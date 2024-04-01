@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 # Versions/boards
 skr_mini_e3_v2 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
-skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
+skr_mini_e3_v3 = ["embassy-time/tick-hz-2_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["printhor-hwa-common/defmt", "embassy-stm32/defmt", "embassy-usb?/defmt"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
@@ -37,7 +37,8 @@ with-ps-on = []
 without-bootloader = ["embassy-stm32/memory-x"]
 
 nightly = []
-threaded = ["embassy-executor/executor-interrupt"]
+cooperative = ["embassy-executor/integrated-timers"]
+executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue", "embassy-time/generic-queue-128"]
 verbose-timings = []
 sdcard-uses-spi = []
 ili9341_parallel = []
@@ -52,7 +53,7 @@ defmt = {version = "0.3", default-features = false }
 printhor-hwa-common = { version = "0.0"}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
-embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "integrated-timers", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0.5.0", features = ["defmt"] }
 embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-futures = { version = "0.1.1", features = [] }

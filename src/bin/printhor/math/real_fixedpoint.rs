@@ -131,7 +131,7 @@ cfg_if::cfg_if! {
                 if s.is_zero() {Real::one()} else {Real(s)}
             }
 
-            pub(crate) fn min(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);
@@ -146,7 +146,7 @@ cfg_if::cfg_if! {
                 m
             }
 
-            pub(crate) fn max(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmax(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);

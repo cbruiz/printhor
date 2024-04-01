@@ -1,4 +1,5 @@
 //! Common Hardware Abstraction types and traits
+#![allow(async_fn_in_trait)]
 #![no_std]
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-log")] {
@@ -10,7 +11,7 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "threaded")] {
+    if #[cfg(feature = "executor-interrupt")] {
         pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
     }
@@ -35,6 +36,10 @@ mod context;
 pub use context::*;
 
 pub use tracked_static_cell::COUNTER;
+
+mod asynch;
+pub use asynch::*;
+
 
 use strum::EnumCount;
 

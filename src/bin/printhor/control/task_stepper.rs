@@ -16,75 +16,78 @@
 //! TODO: Refactor pending
 //!
 //! Average Error Deviation in runtime: around 200us (Still pending to measure precisely)
-use crate::control::motion_planning::StepperChannel;
+use embassy_sync::semaphore::{GreedySemaphore, Semaphore};
+use crate::control::motion_planning::{StepperChannel};
 #[allow(unused)]
 use crate::math::{Real, ONE_MILLION, ONE_THOUSAND, ONE_HUNDRED};
 #[allow(unused_imports)]
 use crate::tgeo::{CoordSel, TVector};
-#[allow(unused)]
-use embassy_time::{Instant, Duration, with_timeout};
 #[allow(unused_imports)]
 use crate::hwa;
-use printhor_hwa_common::{DeferAction, DeferEvent};
+use printhor_hwa_common::{ControllerMutexType, DeferAction, DeferEvent};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
-#[cfg(feature = "timing-stats")]
-use hwa::drivers::timing_stats::Timings;
+use hwa::controllers::motion_segment::SegmentIterator;
+use crate::control::motion_planning::SCurveMotionProfile;
 
 use super::motion_timing::*;
 
 /// Micro-segment sampling frequency in Hz
-const MICRO_SEGMENT_PERIOD_HZ: u64 = 400;
+const MICRO_SEGMENT_PERIOD_HZ: u64 = 200;
 /// Stepper pulse period in microseconds
-const STEPPER_PULSE_WIDTH_US: Duration = Duration::from_micros(Duration::from_hz(embassy_time::TICK_HZ).as_micros());
-const STEPPER_PULSE_WIDTH_TICKS: u32 = STEPPER_PULSE_WIDTH_US.as_ticks() as u32;
+const STEPPER_PULSE_WIDTH_US: embassy_time::Duration = embassy_time::Duration::from_micros(1);
 
 const DO_NOTHING: bool = false;
 
 /// Inactivity Timeout until steppers are disabled
-const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(20);
+const STEPPER_INACTIVITY_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_secs(5);
 
 /// Precomputed micro-segment period in microseconds
-const MICRO_SEGMENT_PERIOD_US: u32 = Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_micros() as u32;
+const MICRO_SEGMENT_PERIOD_US: u32 = embassy_time::Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_micros() as u32;
 /// Precomputed micro-segment period in ticks
-const MICRO_SEGMENT_PERIOD_TICKS: u32 = Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_ticks() as u32;
-/// Precomputed micro-segment period in milliseconds
-#[cfg(feature="verbose-timings")]
-const PERIOD_MS: i32 = (MICRO_SEGMENT_PERIOD_US / 1000) as i32;
-
-/// Precomputed default rate
-const DEFAULT_RATE: u64 = (MICRO_SEGMENT_PERIOD_TICKS + MICRO_SEGMENT_PERIOD_TICKS) as u64;
+const MICRO_SEGMENT_PERIOD_TICKS: u32 = embassy_time::Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_ticks() as u32;
 
 /***
 This task feeds watchdog to ensure no reset happen due high CPU starvation when feed rate is very high
  */
 #[embassy_executor::task]
 pub async fn task_stepper(
-    motion_planner: hwa::controllers::MotionPlannerRef, _watchdog: hwa::WatchdogRef)
-{
+    motion_planner: hwa::controllers::MotionPlannerRef, _watchdog: hwa::WatchdogRef,
+    task_master: TaskMaster,
+) -> ! {
     let mut steppers_off = true;
+    let mut position_deviation: TVector<Real> = TVector::zero();
 
     motion_planner.start().await;
 
     let mut s = motion_planner.event_bus.subscriber().await;
 
     hwa::info!("Micro-segment controller starting with {} us ({} ticks) micro-segment period and {} us step hold", MICRO_SEGMENT_PERIOD_US, MICRO_SEGMENT_PERIOD_TICKS, STEPPER_PULSE_WIDTH_US.as_micros());
+
     #[cfg(feature = "with-hotend")]
     hwa::info!("Extruder enabled");
+
     motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
 
     cfg_if::cfg_if! {
-        if #[cfg(any(feature="verbose-timings", feature="timing-stats"))] {
-            let mut segment_id = 1;
+        if #[cfg(feature="verbose-timings")] {
+            let mut global_timer = embassy_time::Instant::now();
         }
     }
-
-    let mut global_timer = embassy_time::Instant::now();
 
     loop {
         let mut wait_for_sysalarm = false;
         if !s.get_status().await.contains(EventFlags::ATX_ON) {
+            task_master.semaphore.set(0);
             hwa::info!("task_stepper waiting for ATX_ON");
+            // For safely, disable steppers
+            cfg_if::cfg_if! {
+                if #[cfg(not(feature="digital-probe-hack"))] {
+                    motion_planner.motion_driver.lock().await.pins.disable_all_steppers();
+                }
+            }
+            steppers_off = true;
+
             if s.ft_wait_until(EventFlags::ATX_ON).await.is_err() {
                 hwa::info!("Interrupted waiting for ATX_ON. SYS_ALARM?");
                 wait_for_sysalarm = true;
@@ -95,179 +98,217 @@ pub async fn task_stepper(
         }
         if wait_for_sysalarm || s.get_status().await.contains(EventFlags::SYS_ALARM) {
             hwa::warn!("task stepper waiting for SYS_ALARM release");
+            task_master.semaphore.set(0);
+            cfg_if::cfg_if! {
+                if #[cfg(not(feature="digital-probe-hack"))] {
+                    motion_planner.motion_driver.lock().await.pins.disable_all_steppers();
+                }
+            }
+            steppers_off = true;
             if s.ft_wait_while(EventFlags::SYS_ALARM).await.is_err() {
                 panic!("Unexpected situation");
             }
         }
-        match with_timeout(STEPPER_INACTIVITY_TIMEOUT, motion_planner.get_current_segment_data()).await {
+        match embassy_time::with_timeout(STEPPER_INACTIVITY_TIMEOUT, motion_planner.get_current_segment_data()).await {
             // Timeout
             Err(_) => {
                 hwa::trace!("stepper_task timeout");
+                task_master.semaphore.set(0);
                 if !steppers_off {
                     hwa::info!("Timeout. Powering steppers off");
-                    let mut drv = motion_planner.motion_driver.lock().await;
-                    drv.pins.disable_all_steppers();
+                    cfg_if::cfg_if! {
+                        if #[cfg(not(feature="digital-probe-hack"))] {
+                            motion_planner.motion_driver.lock().await.pins.disable_all_steppers();
+                        }
+                    }
                     steppers_off = true;
                 }
             }
             // Process segment plan
             Ok(Some((segment, channel))) => {
 
-                core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
-
-                // segment metronome
-                let absolute_ticker_period = Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS.into());
-                let mut absolute_ticker_start = now();
-                let t_segment_start = now();
-                // Annotate how much time in ticks the executor is duty in this segment
-                let mut duty = Duration::from_ticks(0);
-
-                duty += t_segment_start.elapsed();
-
+                let tx = embassy_time::Instant::now();
                 motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOVING)).await;
 
                 let neutral_element = segment.segment_data.vdir.map_val(Real::zero());
 
+                hwa::debug!("S {} * {}  v0={} v1={}",
+                    segment.segment_data.vdir,
+                    segment.segment_data.displacement_mm,
+                    segment.segment_data.speed_enter_mms,
+                    segment.segment_data.speed_exit_mms
+                );
+
                 let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
                     segment.segment_data.vdir.abs(),
-                    segment.segment_data.displacement_mm,
                     (neutral_element + motion_planner.get_steps_per_mm_as_vector().await) * motion_planner.get_usteps_as_vector().await
                 );
 
-                let mut t_ref = t_segment_start;
-                #[cfg(all(feature = "native", feature = "plot-timings"))]
-                {
-                    motion_planner.start_segment(t_segment_start, t_segment_start).await;
-                }
+                let mut enabled = StepperChannel::empty();
+                let mut dir_fwd = StepperChannel::ALL;
+                segment.segment_data.vdir.apply_coords(|cs| {
 
-                motion_planner.motion_driver.lock().await.enable_and_set_dir(&segment.segment_data.vdir);
+                    if cs.0.contains(CoordSel::X) {
+                        enabled.set(StepperChannel::X, true);
+                        dir_fwd.set(StepperChannel::X, cs.1.is_defined_positive());
+                    }
+                    else if cs.0.contains(CoordSel::Y) {
+                        enabled.set(StepperChannel::Y, true);
+                        dir_fwd.set(StepperChannel::Y, cs.1.is_defined_positive());
+                    }
+                    else if cs.0.contains(CoordSel::Z) {
+                        enabled.set(StepperChannel::Z, true);
+                        dir_fwd.set(StepperChannel::Z, cs.1.is_defined_positive());
+                    }
+                    else {
+                        #[cfg(feature = "with-hot-end")]
+                        if cs.0.contains(CoordSel::E) {
+                            enabled.set(StepperChannel::E, true);
+                            dir_fwd.set(StepperChannel::E, cs.1.is_defined_positive());
+                        }
+                    }
+                });
+
                 if steppers_off {
                     hwa::info!("\tPowering steppers on");
                 }
                 steppers_off = false;
 
-                use hwa::controllers::motion_segment::SegmentIterator;
+                task_master.sender.send(
+                    TaskAction::PulseStart(TaskHeader {
+                        enable: enabled,
+                        dir_fwd,
+                    })
+                ).await;
+                task_master.semaphore.set(1);
 
-                // The reference time. Threathed as logic zero
-                let t_segment_start = embassy_time::Instant::now();
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="verbose-timings")] {
+                        let leap = global_timer.elapsed();
+                    }
+                }
+                const U_SEGMENT_TIME: Real = Real::from_f32((embassy_time::Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ as u64).as_micros() as f64  / 1000000.0) as f32);
+                let mut micro_segment_real_time_rel_pos = U_SEGMENT_TIME;
 
-                let leap = global_timer.elapsed();
-                // Micro-segment realtime timer is sliced one period in the future
-                // Also, compensate leap due response times with a max of half period
-                let offset = Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS as u64) +
-                    Duration::from_ticks(leap.as_ticks().min((MICRO_SEGMENT_PERIOD_TICKS >> 1) as u64));
-                let mut microsegment_iterator = SegmentIterator::new(&segment.motion_profile, t_segment_start, offset);
+                let motion_profile = SCurveMotionProfile::compute(segment.segment_data.displacement_mm, segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms, &segment.segment_data.constraints, true).unwrap();
+                let mut microsegment_iterator = SegmentIterator::new(&motion_profile, micro_segment_real_time_rel_pos);
 
-                //hwa::debug!("Micro-segment interpolation START");
+                hwa::trace!("Calculation elapsed: {} us", tx.elapsed().as_micros());
+
+                //// MICROSEGMENTS INTERP START
+                hwa::debug!("Micro-segment interpolation START");
+
                 // Micro-segments interpolation along segment
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="verbose-timings")] {
+                        let mut num_loops = 0;
+                    }
+                }
+
                 loop {
+                    micro_segment_real_time_rel_pos += U_SEGMENT_TIME;
+                    // Microsegment start
+
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature="verbose-timings")] {
+                            num_loops += 1;
+                        }
+                    }
                     if DO_NOTHING {
                         break;
                     }
-                    //hwa::info!("\tMicro-segment START");
+                    hwa::debug!("Micro-segment START");
 
-                    // Feed watchdog because this high prio task could cause CPU starvation
-                    cfg_if::cfg_if! {
-                        if #[cfg(feature="motion-async-task-preemptive")] {
-                            _watchdog.lock().await.pet();
-                        }
-                    }
+                    if let Some(estimated_position) = microsegment_iterator.next(micro_segment_real_time_rel_pos) {
 
-                    t_ref += Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS as u64);
+                        hwa::debug!("at t = {}: p = {}, err = {}", micro_segment_real_time_rel_pos.rdp(3), estimated_position.rdp(3), position_deviation.rdp(4));
 
-                    if let Some(estimated_position) = microsegment_iterator.next(embassy_time::Instant::now()) {
-                        hwa::trace!("p = {:?}", estimated_position);
+                        // Micro-segment logic
+                        microsegment_interpolator.advance_to(estimated_position, position_deviation);
+                        hwa::debug!("\t\t+Advanced: {} mm", microsegment_interpolator.advanced_mm());
 
-                        // Microsegment logic
-                        microsegment_interpolator.advance_to(estimated_position);
-
-                        // The default rate is larger than a micro-segment period when there is not move in an axis, so no pulses are driven
-                        cfg_if::cfg_if! {
-                            if #[cfg(feature = "no-real-time")] {
-                                microsegment_interpolator.set_microsegment_time(t_ref)
-                            }
-                        }
-
-                        microsegment_interpolator.interpolate(&motion_planner.motion_driver).await;
-
-                        if !microsegment_interpolator.bounded() {
-                            //hwa::debug!("Segment completed");
-                            break;
-                        }
-
-                        let tn = now();
-                        let elapsed = tn.checked_duration_since(absolute_ticker_start).unwrap_or(Duration::from_ticks(0));
-/////////////////////////
-// PREEMPTION START
-/////////////////////////
-                        if absolute_ticker_period > elapsed {
-                            let pend = absolute_ticker_period - elapsed;
-                            absolute_ticker_start = tn + pend;
-                            cfg_if::cfg_if! {
-                                if #[cfg(feature="motion-async-task-preemptive")] {
-                                    s_block_for(pend);
-                                }
-                                else {
-                                    embassy_time::Timer::after(pend).await;
-                                }
-                            }
-                        }
-                        else {
-                            absolute_ticker_start = tn;
-                            hwa::debug!("\t\tuSegment lagging");
-                        }
-////////////////////////
-// PREEMPTION END
-////////////////////////
-                        #[cfg(all(feature = "native", feature = "plot-timings"))]
-                        motion_planner.mark_microsegment().await;
+                        task_master.sender.send(
+                            TaskAction::PulseTrain(TaskPayload {
+                                state: microsegment_interpolator.state(),
+                            })
+                        ).await;
                     }
                     else { // No advance
-                        // Reached end-of-segment, but still missing any step
                         break;
                     }
-                    //hwa::trace!("\tMicro-segment END");
-                    hwa::trace!("\t\t+Advanced: {}", microsegment_interpolator.advanced_mm());
+                    hwa::debug!("Micro-segment END");
+                    // Microsegment end
                 }
-                //hwa::debug!("Micro-segment interpolation END");
+                // TODO: Big deviation on large segments
+                hwa::debug!("\t\t+Advanced: {}", microsegment_interpolator.advanced_mm());
+                hwa::debug!("\t\t+Advanced: {}", microsegment_interpolator.advanced_steps());
 
-                cfg_if::cfg_if! {
-                    if #[cfg(feature="plot-timings")] {
-                        motion_planner.end_segment().await;
+                task_master.sender.send(TaskAction::PulseEnd).await;
+                /*
+                match task_master.semaphore.acquire(1).await {
+                    Ok(_o) => {
+                        task_master.semaphore.release(1);
+                    }
+                    Err(_e) => {
+                        panic!("acq err");
                     }
                 }
-                cfg_if::cfg_if! {
-                    if #[cfg(feature="verbose-timings")] {
-                        let segment_time = t_segment_start.elapsed();
-                    }
-                }
+                */
+
+                ////
+                //// MICROSEGMENTS INTERP END
+                ////
+
+                hwa::debug!("Micro-segment interpolation END");
+
                 let _moves_left = motion_planner.consume_current_segment_data().await;
                 motion_planner.defer_channel.send(DeferEvent::Completed(DeferAction::LinearMove, channel)).await;
                 motion_planner.event_bus.publish_event(EventStatus::not_containing(EventFlags::MOVING)).await;
-                let do_linger = _moves_left < 1 && segment.segment_data.speed_exit_mms.is_defined_positive();
+
+                let adv_exp = segment.segment_data.vdir.abs() * segment.segment_data.displacement_mm;
+                let adv_real = microsegment_interpolator.advanced_mm();
+                position_deviation = position_deviation.apply(&(adv_exp - adv_real)).map_nan(&crate::math::ZERO);
 
                 cfg_if::cfg_if! {
                     if #[cfg(feature="verbose-timings")] {
-                        let segment_time_us = Real::from_lit(segment_time.as_micros().try_into().unwrap_or(0), 6).rdp(3);
-                        hwa::info!("\tSEGMENT at +{} us, v_0 = {}, v_lim = {}, v_1 = {} |disp| = {} took: {} s adv: [{}] steps [{}] mm spd: [{}] mm/s",
+                        let segment_time_s = Real::from_lit(num_loops, 0) * U_SEGMENT_TIME;
+                        let steps = microsegment_interpolator.advanced_steps().map_coords(|c| Some(Real::from_lit(c as i64, 0)) );
+                        hwa::info!("\tSEGMENT at +{} us, v_0 = {}, v_lim = {}, v_1 = {}\n\t|disp| = {} took: {} s adv: [{}] steps [{}] mm spd: [{}] mm/s [{}] steps/s, {} loops",
                             leap.as_micros(),
                             segment.segment_data.speed_enter_mms.rdp(3).inner(),
-                            segment.motion_profile.v_lim.rdp(3).inner(),
+                            motion_profile.v_lim.rdp(3).inner(),
                             segment.segment_data.speed_exit_mms.rdp(3).inner(),
                             segment.segment_data.displacement_mm.rdp(3).inner(),
-                            segment_time,
+                            segment_time_s,
                             microsegment_interpolator.advanced_steps(),
-                            microsegment_interpolator.advanced_mm(),
-                            microsegment_interpolator.advanced_mm() / segment_time,
+                            microsegment_interpolator.advanced_mm().rdp(2),
+                            (microsegment_interpolator.advanced_mm() / segment_time_s).rdp(1),
+                            (steps / segment_time_s).rdp(1),
+                            num_loops,
                         );
+                        hwa::debug!("{} moves ahead, {} us leap", _moves_left, leap.as_micros());
+                        hwa::debug!("mm adv: expected: [{}] real: [{}] diff: [{}]", adv_exp, adv_real, position_deviation);
+                        hwa::debug!("st adv: expected: [{}] real: [{}]", adv_exp * microsegment_interpolator.usteps_per_mm, microsegment_interpolator.advanced_steps());
+
+                    }
+                    else {
+                        hwa::debug!("\tSEGMENT v_0 = {}, v_lim = {}, v_1 = {}",
+                            segment.segment_data.speed_enter_mms.rdp(3).inner(),
+                            motion_profile.v_lim.rdp(3).inner(),
+                            segment.segment_data.speed_exit_mms.rdp(3).inner()
+                        );
+                        hwa::debug!("{} moves ahead", _moves_left);
                     }
                 }
-                hwa::info!("{} moves ahead, {} leap", _moves_left, leap);
-                if do_linger {
-                    hwa::info!("linger");
-                    embassy_time::Timer::after(Duration::from_micros(500)).await;
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="verbose-timings")] {
+                        global_timer = embassy_time::Instant::now();
+                    }
                 }
-                global_timer = embassy_time::Instant::now();
+
+                // segment end
             }
             // Homing
             Ok(None) => {
@@ -277,8 +318,15 @@ pub async fn task_stepper(
                     hwa::info!("\tPowering steppers on");
                 }
                 steppers_off = false;
-                if !motion_planner.do_homing().await.is_ok() {
-                    // TODO
+                cfg_if::cfg_if!{
+                    if #[cfg(feature="debug-skip-homing")] {
+                        // Do nothing
+                    }
+                    else {
+                        if !motion_planner.do_homing().await.is_ok() {
+                            // TODO
+                        }
+                    }
                 }
                 motion_planner.consume_current_segment_data().await;
                 hwa::debug!("Homing done");
@@ -291,62 +339,52 @@ pub struct LinearMicrosegmentStepInterpolator {
     vdir_abs: TVector<Real>,
     usteps_per_mm: TVector<Real>,
 
-    /// Number of discrete steps to advance in total
-    usteps_to_advance: TVector<u32>,
-    /// Number of discrete steps already advanced
+    /// Number of discrete steps along vector already advanced
     usteps_advanced: TVector<u32>,
 
-    /// The number of discrete steps already advanced
+    /// The number of discrete steps by axis already advanced
     axis_steps_advanced_precise: TVector<Real>,
 
     multi_timer: MultiTimer,
-
-    #[cfg(feature = "no-real-time")]
-    t_micro_segment: embassy_time::Instant,
 }
 
 impl LinearMicrosegmentStepInterpolator {
 
-    fn new(vdir_abs: TVector<Real>, displacement_module: Real, usteps_per_mm: TVector<Real>) -> Self {
-
-        let usteps_to_advance: TVector<u32> = (
-            (vdir_abs * displacement_module) * usteps_per_mm
-        ).round().map_coords(|c| { Some(c.to_i32().unwrap_or(0) as u32) });
+    fn new(vdir_abs: TVector<Real>, usteps_per_mm: TVector<Real>) -> Self {
 
         Self {
             vdir_abs,
             usteps_per_mm,
-            usteps_to_advance,
             usteps_advanced: TVector::zero(),
             axis_steps_advanced_precise: TVector::zero(),
             multi_timer: MultiTimer::new(),
-            #[cfg(feature = "no-real-time")]
-            t_micro_segment: embassy_time::Instant::now(),
         }
     }
 
-    fn advance_to(&mut self, estimated_position: Real) {
-
+    fn advance_to(&mut self, estimated_position: Real, acc_deviation: TVector<Real>) {
         let axial_pos: TVector<Real> = self.vdir_abs * estimated_position;
-        let step_pos: TVector<Real> = axial_pos * self.usteps_per_mm;
-        let steps_to_advance_precise: TVector<Real> = (step_pos - self.axis_steps_advanced_precise).round();
+        let step_pos: TVector<Real> = axial_pos * self.usteps_per_mm - acc_deviation;
+        let steps_to_advance_precise: TVector<Real> = (step_pos - self.axis_steps_advanced_precise).round().clamp_min(TVector::zero());
         self.axis_steps_advanced_precise += steps_to_advance_precise;
 
-        let tick_period_by_axis_rounded: TVector<Real> = (steps_to_advance_precise
-            .map_val(Real::from_lit((MICRO_SEGMENT_PERIOD_TICKS - STEPPER_PULSE_WIDTH_TICKS) as i64, 0)) / steps_to_advance_precise
-        ).round();
-
-        let ticks = tick_period_by_axis_rounded.map_coords(|cv|
-            cv.to_i64().and_then(|v| Some(v as u64))
+        let tick_period_by_axis: TVector<u64> = (steps_to_advance_precise
+            .map_val(Real::from_lit((MICRO_SEGMENT_PERIOD_TICKS) as i64, 0)) / (steps_to_advance_precise)
+        ).round().map_coords(|cv|
+            cv.to_i32().and_then(|c| Some(c as u64))
         );
 
-        self.multi_timer.set_channel_ticks( StepperChannel::X, ticks.x.unwrap_or(DEFAULT_RATE));
-        self.multi_timer.set_channel_ticks( StepperChannel::Y, ticks.y.unwrap_or(DEFAULT_RATE));
-        self.multi_timer.set_channel_ticks( StepperChannel::Z, ticks.z.unwrap_or(DEFAULT_RATE));
+        self.usteps_advanced += steps_to_advance_precise.map_coords(|cv|
+            cv.to_i32().and_then(|c| Some(c as u32))
+        );
+
+        self.multi_timer.set_channel_ticks( StepperChannel::X, tick_period_by_axis.x);
+        self.multi_timer.set_channel_ticks( StepperChannel::Y, tick_period_by_axis.y);
+        self.multi_timer.set_channel_ticks( StepperChannel::Z, tick_period_by_axis.z);
         #[cfg(feature = "with-hot-end")]
-        self.multi_timer.set_channel_ticks( StepperChannel::E, ticks.e.unwrap_or(DEFAULT_RATE));
-        self.multi_timer.reset(MICRO_SEGMENT_PERIOD_TICKS as u64);
+        self.multi_timer.set_channel_ticks( StepperChannel::E, tick_period_by_axis.e);
     }
+
+    fn state(&self) -> MultiTimer { self.multi_timer.clone() }
 
     #[inline]
     fn advanced_steps(&self) -> TVector<u32> {
@@ -357,83 +395,166 @@ impl LinearMicrosegmentStepInterpolator {
     fn advanced_mm(&self) -> TVector<Real> {
         self.advanced_steps().map_coords(|c| Some(Real::from_lit(c.into(), 0))) / self.usteps_per_mm
     }
+}
 
-    fn bounded(&self) -> bool {
-        // eof && usteps_advanced.is_nan_or_zero()) || !usteps_advanced.bounded_by(&usteps_to_advance)
-        true
-    }
+pub struct TaskHeader {
+    enable: StepperChannel,
+    dir_fwd: StepperChannel,
+}
 
-    #[cfg(feature = "no-real-time")]
-    fn set_microsegment_time(&mut self, t_tick: embassy_time::Instant) {
-        self.t_micro_segment = t_tick;
-    }
+pub struct TaskPayload {
+    state: MultiTimer,
+}
 
-    async fn interpolate(&mut self, driver: &embassy_sync::mutex::Mutex<hwa::ControllerMutexType, hwa::drivers::MotionDriver>) {
 
-        let mut drv = driver.lock().await;
-        loop {
-            match self.multi_timer.next() {
-                None => {
-                    break;
-                },
-                Some((channel, _delay)) => {
-                    if !self.usteps_advanced.bounded_by(&self.usteps_to_advance) {
-                        // Prevent infinite loop when reaching the limits and delay is 0
-                        break;
-                    }
-
-                    #[cfg(all(feature = "native", feature = "plot-timings", feature = "no-real-time"))]
-                    {
-                        self.t_micro_segment += Duration::from_ticks(_delay.as_ticks());
-                        drv.update_clock(self.t_micro_segment);
-                    }
-
-                    //drv.laser_controller.lock().await.set_power(1.0f32).await;
-                    if channel.contains(StepperChannel::X) {
-                        self.usteps_advanced.increment(CoordSel::X, 1u32);
-                        drv.x_step_pin_high();
-                    }
-                    if channel.contains(StepperChannel::Y) {
-                        self.usteps_advanced.increment(CoordSel::Y, 1u32);
-                        drv.y_step_pin_high();
-                    }
-                    if channel.contains(StepperChannel::Z) {
-                        self.usteps_advanced.increment(CoordSel::Z, 1u32);
-                        drv.z_step_pin_high();
-                    }
-                    #[cfg(feature = "with-hot-end")]
-                    if channel.contains(StepperChannel::E) {
-                        self.usteps_advanced.increment(CoordSel::E, 1u32);
-                        drv.e_step_pin_high();
-                    }
-
-                    #[cfg(all(feature = "native", feature = "plot-timings", feature = "no-real-time"))]
-                    {
-                        self.t_micro_segment += STEPPER_PULSE_WIDTH_US;
-                        drv.update_clock(self.t_micro_segment);
-                    }
-                    s_block_for(STEPPER_PULSE_WIDTH_US);
-                    if channel.contains(StepperChannel::X) {
-                        drv.x_step_pin_low();
-                    }
-                    if channel.contains(StepperChannel::Y) {
-                        drv.y_step_pin_low();
-                    }
-                    if channel.contains(StepperChannel::Z) {
-                        drv.z_step_pin_low();
-                    }
-                    #[cfg(feature = "with-hot-end")]
-                    if channel.contains(StepperChannel::E) {
-                        drv.e_step_pin_low();
-                    }
-                    #[cfg(feature = "no-real-time")]
-                    {
-                        self.multi_timer.sync_clock(STEPPER_PULSE_WIDTH_US);
-                    }
-                },
-            }
+impl Default for TaskPayload {
+    fn default() -> Self {
+        TaskPayload {
+            state: MultiTimer::new(),
         }
     }
 }
 
+pub enum TaskAction {
+    PulseStart(TaskHeader),
+    PulseTrain(TaskPayload),
+    PulseEnd,
+}
 
+pub type TaskChannel = embassy_sync::channel::Channel<ControllerMutexType, TaskAction, 6>;
+pub type TaskChannelReceiver = embassy_sync::channel::Receiver<'static, ControllerMutexType, TaskAction, 6>;
+pub type TaskChannelSender = embassy_sync::channel::Sender<'static, ControllerMutexType, TaskAction, 6>;
+
+pub type ParkingSemaphore = GreedySemaphore::<ControllerMutexType>;
+
+pub struct TaskMaster {
+    pub semaphore: &'static ParkingSemaphore,
+    pub sender: TaskChannelSender,
+}
+
+pub struct TaskSlave {
+    pub semaphore: &'static ParkingSemaphore,
+    pub receiver: TaskChannelReceiver,
+}
+
+#[embassy_executor::task]
+pub async fn task_stepper_worker(motion_planner: hwa::controllers::MotionPlannerRef, s: TaskSlave) -> !
+{
+    loop {
+        let _ = s.semaphore.acquire(1).await;
+
+        // The reference time. Chained between consecutive pulse trains
+        let mut ref_time = embassy_time::Instant::now();
+
+        // Controls when pulse train is consecutive
+        let mut continuous_train = false;
+
+        // The time spent on micro-segment
+        let mut usegment_spent_time = embassy_time::Duration::from_ticks(0);
+        let mut usteps_advanced = TVector::zero();
+
+        let period = embassy_time::Duration::from_ticks(MICRO_SEGMENT_PERIOD_TICKS.into());
+        loop {
+            match embassy_time::with_timeout(embassy_time::Duration::from_ticks((MICRO_SEGMENT_PERIOD_TICKS) as u64), s.receiver.receive()).await {
+                #[allow(unused_assignments)]
+                Err(_timeout) => {
+                    if continuous_train {
+                        hwa::debug!("Continuous train reset");
+                        ref_time = embassy_time::Instant::now();
+                        usegment_spent_time = embassy_time::Duration::from_ticks(0);
+                        continuous_train = false;
+                    }
+                    break;
+                }
+                Ok(TaskAction::PulseStart(header)) => {
+
+                    hwa::trace!("PulseStart at t={}, s={}",
+                        ref_time.elapsed().as_micros(),
+                        usegment_spent_time.as_micros());
+                    usteps_advanced = TVector::zero();
+                    let mut drv = motion_planner.motion_driver.lock().await;
+                    drv.set_ena(header.enable);
+                    drv.set_fwd(header.dir_fwd);
+                }
+                Ok(TaskAction::PulseEnd) => {
+                    hwa::trace!("PulseEnd at {}. Advanced {} usteps",
+                        ref_time.elapsed().as_micros(),
+                        usteps_advanced
+                    );
+                }
+                Ok(TaskAction::PulseTrain(mut u_segment)) => {
+                    if !continuous_train {
+                        ref_time = embassy_time::Instant::now();
+                        usegment_spent_time = embassy_time::Duration::from_ticks(0);
+                        continuous_train = true;
+                    }
+
+                    let mut drv = motion_planner.motion_driver.lock().await;
+
+                    let mut awaited: embassy_time::Duration = embassy_time::Duration::from_ticks(0);
+                    u_segment.state.reset(MICRO_SEGMENT_PERIOD_TICKS as u64);
+                    //let t0 = embassy_time::Instant::now();
+                    loop {
+                        match u_segment.state.next() {
+                            None => {
+                                break;
+                            },
+                            Some((channel, _delay)) => {
+                                let now = embassy_time::Instant::now();
+                                // Compute times relatively to reference time to compensate deviations
+                                let tick_instant = ref_time + usegment_spent_time + awaited + _delay;
+                                if tick_instant < now {
+                                    let deviation = now - tick_instant;
+                                    //hwa::warn!("u-segment lagging {} us. ref_time displaced", deviation.as_micros() );
+                                    // Displace reference time as it is not possible to time travel
+                                    ref_time += deviation;
+                                }
+                                embassy_time::Timer::at(tick_instant).await;
+
+                                awaited += _delay;
+
+                                //drv.laser_controller.lock().await.set_power(1.0f32).await;
+                                if channel.contains(StepperChannel::X) {
+                                    usteps_advanced.increment(CoordSel::X, 1u32);
+                                    drv.x_step_pin_high();
+                                }
+                                if channel.contains(StepperChannel::Y) {
+                                    usteps_advanced.increment(CoordSel::Y, 1u32);
+                                    drv.y_step_pin_high();
+                                }
+                                if channel.contains(StepperChannel::Z) {
+                                    usteps_advanced.increment(CoordSel::Z, 1u32);
+                                    drv.z_step_pin_high();
+                                }
+                                #[cfg(feature = "with-hot-end")]
+                                if channel.contains(StepperChannel::E) {
+                                    usteps_advanced.increment(CoordSel::E, 1u32);
+                                    drv.e_step_pin_high();
+                                }
+                                embassy_time::Timer::after(STEPPER_PULSE_WIDTH_US).await;
+                                // s_block_for(STEPPER_PULSE_WIDTH_US);
+                                if channel.contains(StepperChannel::X) {
+                                    drv.x_step_pin_low();
+                                }
+                                if channel.contains(StepperChannel::Y) {
+                                    drv.y_step_pin_low();
+                                }
+                                if channel.contains(StepperChannel::Z) {
+                                    drv.z_step_pin_low();
+                                }
+                                #[cfg(feature = "with-hot-end")]
+                                if channel.contains(StepperChannel::E) {
+                                    drv.e_step_pin_low();
+                                }
+                            },
+                        }
+
+                    }
+                    usegment_spent_time += period;
+                    //hwa::debug!("Segment loop took {} us", t0.elapsed().as_micros())
+                }
+            }
+        }
+        s.semaphore.release(1);
+    }
+}

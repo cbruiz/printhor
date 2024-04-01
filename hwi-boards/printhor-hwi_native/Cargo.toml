@@ -32,7 +32,7 @@ with-trinamic = ["tmc2209"]
 with-ps-on = []
 
 nightly = ["embassy-executor/nightly"]
-threaded = []
+executor-interrupt = []
 verbose-timings = []
 sdcard-uses-spi = []
 without-vref-int = []

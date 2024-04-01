@@ -17,7 +17,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 with-ui = ["embedded-graphics-core"]
 nightly = []
-threaded = []
+executor-interrupt = []
 with-log = ["log"]
 with-defmt = ["defmt"]
 with-serial-usb = []
@@ -36,6 +36,7 @@ embassy-time = { version = "0.3.0", features = [] }
 
 embedded-hal = { version = "1.0.0", default-features = false }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
+embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 
 embedded-graphics-core = {version = "0.3.3", optional = true }
 bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }
