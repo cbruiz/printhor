@@ -21,6 +21,10 @@ cfg_if::cfg_if! {
                 Self::from_lit(num, scale)
             }
             #[inline]
+            pub const fn from_inner(num: f32) -> Self {
+                Self(num)
+            }
+            #[inline]
             pub fn from_lit(num: i64, scale: u32) -> Self {
                 let s = FloatCore::powi(10.0f32, scale as i32);
                 Self((num as f32) / s)
@@ -114,14 +118,14 @@ cfg_if::cfg_if! {
             pub fn sqrt(self) -> Option<Self> {
                 let num = self.rdp(2).0;
                 // The famous inverse square root approximation of Id software
-                //let _r = 1.0f32 / Self::quake_isqrt(num);
+                let _r = 1.0f32 / Self::quake_isqrt(num);
 
                 // Micromath crate, based on https://bits.stephan-brumme.com/squareRoot.html
                 //let _r = micromath::F32(num).sqrt().0;
                 // ARM intrinsics, https://developer.arm.com/architectures/instruction-sets/intrinsics/vrsqrtes_f32
                 //let _r3 = unsafe { Inv::inv(core::arch::aarch64::vrsqrtes_f32(num)) };
 
-                let _r = 0.1f32 / Self::quake_isqrt(100.0f32 * num);
+                //let _r = 0.1f32 / Self::quake_isqrt(100.0f32 * num);
 
                 if _r.is_nan() {
                     None

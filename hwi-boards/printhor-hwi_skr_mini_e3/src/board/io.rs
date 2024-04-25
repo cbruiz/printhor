@@ -374,7 +374,7 @@ cfg_if::cfg_if!{
             if #[cfg(feature = "upstream-embassy")] {
                 pub struct TrinamicUartWrapper {
                     rx: embassy_stm32::usart::RingBufferedUartRx<'static, crate::device::TrinamicUartPeri>,
-                    tx: embassy_stm32::usart::UartTx<'static, crate::device::TrinamicUartPeri, crate::device::TrinamicUartTxDma>,
+                    tx: embassy_stm32::usart::UartTx<'static, crate::device::TrinamicUartPeri, embassy_stm32::mode::Async>,
                 }
 
             }

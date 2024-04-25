@@ -418,15 +418,15 @@ impl GCodeProcessor {
                 let _pos = self.motion_planner.get_last_planned_pos().await
                     .unwrap_or(TVector::zero())
                     .rdp(6);
-                let _spos = self.motion_planner.get_last_planned_step_pos().await.unwrap_or(TVector::zero());
+                let _spos = self.motion_planner.get_last_planned_real_pos().await.unwrap_or(TVector::zero());
                 let z = format!("X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
                                 _pos.x.unwrap_or(crate::math::ZERO),
                                 _pos.y.unwrap_or(crate::math::ZERO),
                                 _pos.z.unwrap_or(crate::math::ZERO),
                                 _pos.e.unwrap_or(crate::math::ZERO),
-                                _spos.x.unwrap_or(0),
-                                _spos.y.unwrap_or(0),
-                                _spos.z.unwrap_or(0),
+                                _spos.x.unwrap_or(crate::math::ZERO),
+                                _spos.y.unwrap_or(crate::math::ZERO),
+                                _spos.z.unwrap_or(crate::math::ZERO),
                 );
                 let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)

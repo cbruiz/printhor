@@ -47,13 +47,21 @@ impl MotionConfig {
             speed_rate: 100,
         }
     }
+
+    pub fn get_usteps_as_vector(&self) -> TVector<Real> {
+        TVector::from_coords(
+            Some(Real::new(self.usteps[0].into(), 0)),
+            Some(Real::new(self.usteps[1].into(), 0)),
+            Some(Real::new(self.usteps[2].into(), 0)),
+            Some(Real::new(self.usteps[3].into(), 0)),
+        )
+    }
 }
 
 pub type MotionConfigRef = ControllerRef<MotionConfig>;
 
 pub struct MotionStatus {
-    #[allow(unused)]
-    pub(crate) current_pos_steps: Option<TVector<u32>>,
+    pub(crate) last_real_pos: Option<TVector<Real>>,
     pub(crate) last_planned_pos: Option<TVector<Real>>,
     pub(crate) absolute_positioning: bool,
     #[cfg(feature="with-laser")]
@@ -64,7 +72,7 @@ pub struct MotionStatus {
 impl MotionStatus {
     pub const fn new() -> Self {
         Self {
-            current_pos_steps: None,
+            last_real_pos: None,
             last_planned_pos: None,
             absolute_positioning: true,
             #[cfg(feature="with-laser")]
@@ -197,6 +205,7 @@ impl MotionPlanner {
                     let used = rb.used;
                     let head = rb.head;
 
+                    #[cfg(feature = "cornering")]
                     let mut do_adjust = false;
 
                     let curr_insert_index = rb.index_from_tail(0).unwrap();
@@ -215,6 +224,7 @@ impl MotionPlanner {
                             let mut curr_vmax = math::ZERO;
 
                             let mut curr_vmax = curr_segment.segment_data.speed_target_mms;
+                            #[cfg(feature = "cornering")]
                             {
                                 let q_1 = curr_segment.segment_data.displacement_mm;
                                 let v_0 = curr_segment.segment_data.speed_enter_mms;
@@ -237,7 +247,7 @@ impl MotionPlanner {
                                         break;
                                     }
                                     else {
-                                        curr_vmax *= Real::from_f32(0.9);
+                                        curr_vmax *= Real::from_f32(0.5);
                                     }
                                 }
                             }
@@ -277,7 +287,11 @@ impl MotionPlanner {
                                                 prev_segment.segment_data.speed_exit_mms, prev_segment.segment_data.speed_exit_constrained_mms,
                                             );
                                             hwa::debug!("\t\tproj = {}", proj);
-                                            do_adjust = true;
+                                            cfg_if::cfg_if! {
+                                                if #[cfg(feature = "cornering")] {
+                                                    do_adjust = true;
+                                                }
+                                            }
                                             prev_segment.segment_data.proj_next = proj;
                                             curr_segment.segment_data.proj_prev = proj;
                                         }
@@ -303,6 +317,7 @@ impl MotionPlanner {
 
                     rb.data[curr_insert_index as usize] = curr_planned_entry;
                     rb.used += 1;
+                    #[cfg(feature = "cornering")]
                     if do_adjust {
                         let r = perform_cornering(rb);
                     }
@@ -359,11 +374,11 @@ impl MotionPlanner {
         mg.last_planned_pos.replace(p.apply(pos));
     }
 
-    pub async fn get_last_planned_step_pos(&self) -> Option<TVector<u32>> {
-        self.motion_st.lock().await.current_pos_steps.clone()
+    pub async fn get_last_planned_real_pos(&self) -> Option<TVector<Real>> {
+        self.motion_st.lock().await.last_real_pos.clone()
     }
-    pub async fn set_last_planned_step_pos(&self, pos: &TVector<u32>) {
-        self.motion_st.lock().await.current_pos_steps.replace(pos.map_nan(&0));
+    pub async fn set_last_planned_real_pos(&self, pos: &TVector<Real>) {
+        self.motion_st.lock().await.last_real_pos.replace(pos.map_nan(&crate::math::ZERO));
     }
 
     /***
@@ -428,13 +443,7 @@ impl MotionPlanner {
     }
 
     pub async fn get_usteps_as_vector(&self) -> TVector<Real> {
-        let mcfg = self.motion_config.lock().await;
-        TVector::from_coords(
-            Some(Real::new(mcfg.usteps[0].into(), 0)),
-            Some(Real::new(mcfg.usteps[1].into(), 0)),
-            Some(Real::new(mcfg.usteps[2].into(), 0)),
-            Some(Real::new(mcfg.usteps[3].into(), 0)),
-        )
+        self.motion_config.lock().await.get_usteps_as_vector()
     }
 
     pub async fn get_default_travel_speed_as_real(&self) -> Real {
@@ -501,12 +510,18 @@ impl MotionPlanner {
         }
     }
 
-    async fn schedule_move(&self, channel: CommChannel, action: DeferAction, p1: TVector<Real>, requested_motion_speed: Option<Real>, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
+    async fn schedule_move(&self, channel: CommChannel, action: DeferAction, p1_t: TVector<Real>, requested_motion_speed: Option<Real>, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
 
         let t0 = embassy_time::Instant::now();
 
         let p0 = self.get_last_planned_pos().await.ok_or(CodeExecutionFailure::HomingRequired)?;
-        let p1 = if self.is_absolute_positioning().await { p1 } else { p0 + p1 };
+        let _pdest = if self.is_absolute_positioning().await { p1_t } else { p0 + p1_t };
+
+        let steps_per_unit = self.get_steps_per_mm_as_vector().await * self.get_usteps_as_vector().await;
+        let rounded_pos: TVector<Real> = ((_pdest - p0) * steps_per_unit).ceil() / steps_per_unit;
+
+        let p1 = p0 + rounded_pos;
+        hwa::debug!("p1 [{}] -> [{}]", p1_t, p1);
 
         let cfg = self.motion_cfg();
         let cfg_g = cfg.lock().await;
@@ -649,6 +664,7 @@ impl MotionPlanner {
     }
 }
 
+#[cfg(feature = "cornering")]
 fn perform_cornering(mut rb: MutexGuard<ControllerMutexType, RingBuffer>) -> Result<(),()>{
     let mut left_offset = 2;
     let mut left_watermark = math::ZERO;
@@ -780,6 +796,7 @@ impl RingBuffer {
         }
     }
 
+    #[allow(unused)]
     pub fn entry_from_tail(&self, offset: u8) -> Option<&PlanEntry> {
         let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
         let len =  self.data.len() as u16;
@@ -790,6 +807,7 @@ impl RingBuffer {
         };
         self.data.get(index as usize)
     }
+    #[allow(unused)]
     pub fn mut_entry_from_tail(&mut self, offset: u8) -> Option<&mut PlanEntry> {
         let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
         let len =  self.data.len() as u16;
@@ -800,6 +818,7 @@ impl RingBuffer {
         };
         self.data.get_mut(index as usize)
     }
+    #[allow(unused)]
     pub fn mut_planned_segment_from_tail(&mut self, offset: u8) -> Result<&mut Segment, ()> {
         match self.mut_entry_from_tail(offset) {
             Some(PlanEntry::PlannedMove(_s, _, _, _)) => { Ok(_s) }
@@ -815,6 +834,7 @@ impl RingBuffer {
         }
     }
 
+    #[allow(unused)]
     pub fn entries_from_tail(&mut self, offset1: u8, offset2: u8) -> (Option<&mut PlanEntry>, Option<&mut PlanEntry>) {
         let len =  self.data.len();
         let absolute_offset1 = self.head as usize + self.used as usize - offset1 as usize;

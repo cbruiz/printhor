@@ -45,6 +45,7 @@ with-display = [
     "embedded-graphics-core", "embedded-graphics", "printhor-hwa-common/with-ui"
 ]
 with-ps-on = []
+cornering = []
 
 # Wheter motion task is preemtive (takes exclusively the CPU when driving segments) or not
 # The optimal case is NOT preemtive, but MCU must be powerful enough to provide very short response times.
@@ -82,22 +83,23 @@ ili9341_parallel = []
 ili9341_spi = []
 
 integration-test = [
+    "cornering",
     #"motion-async-task-exclusive",
     "integration-test-m100",
     "integration-test-power-on",
     #"integration-test-homing",
     "integration-test-reset-pos",
     #"integration-test-move-ortho",
-    "integration-test-move-oblique",
+    #"integration-test-move-oblique",
     #"integration-test-move-boundaries",
     #"integration-test-trinamic",
     #"integration-test-benchy",
-    #"integration-test-pen",
+    "integration-test-pen",
     #"integration-test-laser-engrave",
     #"plot-timings",
     "debug-skip-homing",
     #"numerical-robusticity-check",
-    #"verbose-timings",
+    "verbose-timings",
     #"no-real-time",
 ]
 integration-test-m100 = []
@@ -275,8 +277,8 @@ nucleo_64_arduino_cnc_hat = [
 skr_mini_e3_v2 = [
     "nightly",
     "upstream-embassy",
-    #"executor-interrupt",
-    "cooperative",
+    "executor-interrupt",
+    #"cooperative",
     "motion-async-task-exclusive",
     #"verbose-timings",
     #"printhor-hwi_skr_mini_e3/without-ringbuffer",
@@ -309,6 +311,7 @@ skr_mini_e3_v2 = [
 skr_mini_e3_v3 = [
     "upstream-embassy",
     "nightly",
+    "cornering",
     "executor-interrupt",
     #"cooperative",
     #"motion-async-task-exclusive",

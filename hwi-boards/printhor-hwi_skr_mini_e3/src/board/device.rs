@@ -141,18 +141,20 @@ cfg_if::cfg_if! {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-port-2")] {
                 type UsartPort2Peri = embassy_stm32::peripherals::USART2;
-                type UsartPort2TxDma = embassy_stm32::peripherals::DMA2_CH4;
-                type UsartPort2RxDma = embassy_stm32::peripherals::DMA2_CH3;
 
-                pub(crate) type UartPort2Device = embassy_stm32::usart::Uart<'static, UsartPort2Peri, UsartPort2TxDma, UsartPort2RxDma>;
-                pub type UartPort2TxDevice = embassy_stm32::usart::UartTx<'static, UsartPort2Peri, UsartPort2TxDma>;
-
-                pub type UartPort2RxDevice = embassy_stm32::usart::UartRx<'static, UsartPort2Peri, UsartPort2RxDma>;
                 cfg_if::cfg_if! {
                     if #[cfg(feature="upstream-embassy")] {
+                        pub type UartPort2Device = embassy_stm32::usart::Uart<'static, UsartPort2Peri, embassy_stm32::mode::Async>;
+                        pub type UartPort2TxDevice = embassy_stm32::usart::UartTx<'static, UsartPort2Peri, embassy_stm32::mode::Async>;
+                        pub type UartPort2RxDevice = embassy_stm32::usart::UartRx<'static, UsartPort2Peri, embassy_stm32::mode::Async>;
                         pub type UartPort2RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UsartPort2Peri>;
                     }
                     else {
+                        type UsartPort2TxDma = embassy_stm32::peripherals::DMA2_CH4;
+                        type UsartPort2RxDma = embassy_stm32::peripherals::DMA2_CH3;
+                        pub type UartPort2Device = embassy_stm32::usart::Uart<'static, UsartPort2Peri, UsartPort2TxDma, UsartPort2RxDma>;
+                        pub type UartPort2TxDevice = embassy_stm32::usart::UartTx<'static, UsartPort2Peri, UsartPort2TxDma>;
+                        pub type UartPort2RxDevice = embassy_stm32::usart::UartRx<'static, UsartPort2Peri, UsartPort2RxDma>;
                         pub type UartPort2RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UsartPort2Peri, UsartPort2RxDma>;
                     }
                 }
@@ -165,18 +167,39 @@ cfg_if::cfg_if! {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-trinamic")] {
                 pub type TrinamicUartPeri = embassy_stm32::peripherals::USART4;
-                pub type TrinamicUartTxDma = embassy_stm32::peripherals::DMA1_CH7;
-                pub type TrinamicUartRxDma = embassy_stm32::peripherals::DMA1_CH6;
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub type TrinamicUartDevice = embassy_stm32::usart::Uart<'static, TrinamicUartPeri, embassy_stm32::mode::Async>;
+                    }
+                    else {
 
-                pub type TrinamicUartDevice = embassy_stm32::usart::Uart<'static, TrinamicUartPeri, TrinamicUartTxDma, TrinamicUartRxDma>;
+                        pub type TrinamicUartTxDma = embassy_stm32::peripherals::DMA1_CH7;
+                        pub type TrinamicUartRxDma = embassy_stm32::peripherals::DMA1_CH6;
+
+                        pub type TrinamicUartDevice = embassy_stm32::usart::Uart<'static, TrinamicUartPeri, TrinamicUartTxDma, TrinamicUartRxDma>;
+                    }
+                }
+
                 pub type TrinamicUart = TrinamicUartWrapper;
             }
         }
 
-        #[cfg(feature = "with-spi")]
-        pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
-            embassy_stm32::peripherals::SPI1,
-            embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3>;
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-spi")] {
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
+                        embassy_stm32::peripherals::SPI1,
+                        embassy_stm32::mode::Async>;
+                    }
+                    else {
+                        pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
+                        embassy_stm32::peripherals::SPI1,
+                        embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3>;
+                    }
+                }
+            }
+        }
 
         #[cfg(feature = "with-laser")]
         pub type PwmLaser = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM16>;

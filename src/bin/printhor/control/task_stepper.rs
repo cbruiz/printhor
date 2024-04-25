@@ -56,11 +56,13 @@ pub async fn task_stepper(
     task_master: TaskMaster,
 ) -> ! {
     let mut steppers_off = true;
-    let mut position_deviation: TVector<Real> = TVector::zero();
+    //let mut position_deviation: TVector<Real> = TVector::zero();
 
     motion_planner.start().await;
 
     let mut s = motion_planner.event_bus.subscriber().await;
+    let u_segment_time: Real = Real::from_lit(embassy_time::Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ).as_micros() as i64,  6);
+
 
     hwa::info!("Micro-segment controller starting with {} us ({} ticks) micro-segment period and {} us step hold", MICRO_SEGMENT_PERIOD_US, MICRO_SEGMENT_PERIOD_TICKS, STEPPER_PULSE_WIDTH_US.as_micros());
 
@@ -127,6 +129,7 @@ pub async fn task_stepper(
             // Process segment plan
             Ok(Some((segment, channel))) => {
 
+                #[cfg(feature = "verbose-timings")]
                 let tx = embassy_time::Instant::now();
                 motion_planner.event_bus.publish_event(EventStatus::containing(EventFlags::MOVING)).await;
 
@@ -182,17 +185,15 @@ pub async fn task_stepper(
                 ).await;
                 task_master.semaphore.set(1);
 
-                cfg_if::cfg_if! {
-                    if #[cfg(feature="verbose-timings")] {
-                        let leap = global_timer.elapsed();
-                    }
-                }
-                const U_SEGMENT_TIME: Real = Real::from_f32((embassy_time::Duration::from_hz(MICRO_SEGMENT_PERIOD_HZ as u64).as_micros() as f64  / 1000000.0) as f32);
-                let mut micro_segment_real_time_rel_pos = U_SEGMENT_TIME;
+                #[cfg(feature = "verbose-timings")]
+                let leap = global_timer.elapsed();
+
+                let mut micro_segment_real_time_rel_pos = u_segment_time;
 
                 let motion_profile = SCurveMotionProfile::compute(segment.segment_data.displacement_mm, segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms, &segment.segment_data.constraints, true).unwrap();
                 let mut microsegment_iterator = SegmentIterator::new(&motion_profile, micro_segment_real_time_rel_pos);
 
+                #[cfg(feature = "verbose-timings")]
                 hwa::trace!("Calculation elapsed: {} us", tx.elapsed().as_micros());
 
                 //// MICROSEGMENTS INTERP START
@@ -207,7 +208,7 @@ pub async fn task_stepper(
                 }
 
                 loop {
-                    micro_segment_real_time_rel_pos += U_SEGMENT_TIME;
+                    micro_segment_real_time_rel_pos += u_segment_time;
                     // Microsegment start
 
                     cfg_if::cfg_if! {
@@ -222,11 +223,12 @@ pub async fn task_stepper(
 
                     if let Some(estimated_position) = microsegment_iterator.next(micro_segment_real_time_rel_pos) {
 
-                        hwa::debug!("at t = {}: p = {}, err = {}", micro_segment_real_time_rel_pos.rdp(3), estimated_position.rdp(3), position_deviation.rdp(4));
+                        hwa::trace!("\tat t = {}: p = {}", micro_segment_real_time_rel_pos.rdp(3), estimated_position.rdp(3));
 
                         // Micro-segment logic
-                        microsegment_interpolator.advance_to(estimated_position, position_deviation);
-                        hwa::debug!("\t\t+Advanced: {} mm", microsegment_interpolator.advanced_mm());
+                        microsegment_interpolator.advance_to(estimated_position);
+                        hwa::trace!("\t\t+Advanced: {} mm", microsegment_interpolator.advanced_mm());
+                        hwa::trace!("\t\t+Advanced: {} steps", microsegment_interpolator.advanced_steps());
 
                         task_master.sender.send(
                             TaskAction::PulseTrain(TaskPayload {
@@ -242,7 +244,7 @@ pub async fn task_stepper(
                 }
                 // TODO: Big deviation on large segments
                 hwa::debug!("\t\t+Advanced: {}", microsegment_interpolator.advanced_mm());
-                hwa::debug!("\t\t+Advanced: {}", microsegment_interpolator.advanced_steps());
+                hwa::debug!("segment advanced: {}", microsegment_interpolator.advanced_steps());
 
                 task_master.sender.send(TaskAction::PulseEnd).await;
                 /*
@@ -266,13 +268,13 @@ pub async fn task_stepper(
                 motion_planner.defer_channel.send(DeferEvent::Completed(DeferAction::LinearMove, channel)).await;
                 motion_planner.event_bus.publish_event(EventStatus::not_containing(EventFlags::MOVING)).await;
 
-                let adv_exp = segment.segment_data.vdir.abs() * segment.segment_data.displacement_mm;
-                let adv_real = microsegment_interpolator.advanced_mm();
-                position_deviation = position_deviation.apply(&(adv_exp - adv_real)).map_nan(&crate::math::ZERO);
+                //let adv_exp = segment.segment_data.vdir.abs() * segment.segment_data.displacement_mm;
+                //let adv_real = microsegment_interpolator.advanced_mm();
+                //position_deviation = position_deviation.apply(&(adv_exp - adv_real)).map_nan(&crate::math::ZERO);
 
                 cfg_if::cfg_if! {
                     if #[cfg(feature="verbose-timings")] {
-                        let segment_time_s = Real::from_lit(num_loops, 0) * U_SEGMENT_TIME;
+                        let segment_time_s = Real::from_lit(num_loops, 0) * u_segment_time;
                         let steps = microsegment_interpolator.advanced_steps().map_coords(|c| Some(Real::from_lit(c as i64, 0)) );
                         hwa::info!("\tSEGMENT at +{} us, v_0 = {}, v_lim = {}, v_1 = {}\n\t|disp| = {} took: {} s adv: [{}] steps [{}] mm spd: [{}] mm/s [{}] steps/s, {} loops",
                             leap.as_micros(),
@@ -287,9 +289,9 @@ pub async fn task_stepper(
                             (steps / segment_time_s).rdp(1),
                             num_loops,
                         );
-                        hwa::debug!("{} moves ahead, {} us leap", _moves_left, leap.as_micros());
-                        hwa::debug!("mm adv: expected: [{}] real: [{}] diff: [{}]", adv_exp, adv_real, position_deviation);
-                        hwa::debug!("st adv: expected: [{}] real: [{}]", adv_exp * microsegment_interpolator.usteps_per_mm, microsegment_interpolator.advanced_steps());
+                        hwa::info!("{} moves ahead, {} us leap", _moves_left, leap.as_micros());
+                        //hwa::debug!("mm adv: expected: [{}] real: [{}] diff: [{}]", adv_exp, adv_real, position_deviation);
+                        //hwa::debug!("st adv: expected: [{}] real: [{}]", adv_exp * microsegment_interpolator.usteps_per_mm, microsegment_interpolator.advanced_steps());
 
                     }
                     else {
@@ -361,9 +363,9 @@ impl LinearMicrosegmentStepInterpolator {
         }
     }
 
-    fn advance_to(&mut self, estimated_position: Real, acc_deviation: TVector<Real>) {
+    fn advance_to(&mut self, estimated_position: Real) {
         let axial_pos: TVector<Real> = self.vdir_abs * estimated_position;
-        let step_pos: TVector<Real> = axial_pos * self.usteps_per_mm - acc_deviation;
+        let step_pos: TVector<Real> = axial_pos * self.usteps_per_mm;
         let steps_to_advance_precise: TVector<Real> = (step_pos - self.axis_steps_advanced_precise).round().clamp_min(TVector::zero());
         self.axis_steps_advanced_precise += steps_to_advance_precise;
 

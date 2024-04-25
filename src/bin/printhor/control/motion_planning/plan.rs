@@ -580,7 +580,7 @@ impl MotionProfile for SCurveMotionProfile {
             Some(self.s_i7(&t))
         }
         else {
-            None
+            Some(self.q1)
         }
     }
 }

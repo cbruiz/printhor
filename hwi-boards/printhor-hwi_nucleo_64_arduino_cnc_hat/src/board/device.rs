@@ -11,18 +11,21 @@ cfg_if::cfg_if! {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-port-1")] {
                 type UartPort1Peri = embassy_stm32::peripherals::USART2;
-                type UartPort1TxDma = embassy_stm32::peripherals::DMA1_CH6;
-                type UartPort1RxDma = embassy_stm32::peripherals::DMA1_CH5;
-                pub type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, UartPort1TxDma, UartPort1RxDma>;
-                pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, UartPort1TxDma>;
-                pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, UartPort1RxDma>;
 
                 cfg_if::cfg_if! {
                     if #[cfg(feature="upstream-embassy")] {
+                        pub type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, embassy_stm32::mode::Async>;
                         pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri>;
+                        pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, embassy_stm32::mode::Async>;
+                        pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, embassy_stm32::mode::Async>;
                     }
                     else {
+                        type UartPort1TxDma = embassy_stm32::peripherals::DMA1_CH6;
+                        type UartPort1RxDma = embassy_stm32::peripherals::DMA1_CH5;
+                        pub type UartPort1Device = embassy_stm32::usart::Uart<'static, UartPort1Peri, UartPort1TxDma, UartPort1RxDma>;
                         pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static, UartPort1Peri, UartPort1RxDma>;
+                        pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, UartPort1Peri, UartPort1TxDma>;
+                        pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, UartPort1Peri, UartPort1RxDma>;
                     }
                 }
                 pub type UartPort1TxControllerRef = crate::board::ControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort1TxDevice>>;

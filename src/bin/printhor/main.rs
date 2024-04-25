@@ -310,9 +310,9 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(100), Some(100), Some(100), Some(100))).await;
-        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(3000), Some(3000))).await;
-        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(9000), Some(9000), Some(9000), Some(9000))).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(50), Some(300))).await;
+        motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(12000), Some(12000), Some(100), Some(12000))).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(24000), Some(24000), Some(300), Some(24000))).await;
         motion_planer.set_default_travel_speed(200).await;
         // Homing unneeded
         motion_planer.set_last_planned_pos(&TVector::zero()).await;

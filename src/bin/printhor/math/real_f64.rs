@@ -11,7 +11,8 @@ cfg_if::cfg_if! {
 
         type F = f64;
         #[derive(Copy, Clone, Default, Debug)]
-        pub struct Real(F);
+        pub struct Real(pub F);
+        pub type RealImpl = f64;
 
         #[allow(dead_code)]
         impl Real {
@@ -51,6 +52,11 @@ cfg_if::cfg_if! {
             #[inline]
             pub(crate) fn is_zero(&self) -> bool {
                 F::is_zero(&self.0)
+            }
+
+            #[inline]
+            pub fn is_negligible(&self) -> bool {
+                FloatCore::abs(self.0) < <f64 as FloatCore>::epsilon()
             }
 
             pub(crate) fn is_defined_positive(&self) -> bool {

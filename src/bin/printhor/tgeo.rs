@@ -5,7 +5,7 @@ use core::ops::Mul;
 use crate::hwa;
 #[cfg(not(feature = "native"))]
 use crate::alloc::string::ToString;
-use crate::math::{Real, RealImpl};
+use crate::math::{Real};
 use num_traits::float::FloatCore;
 use bitflags::bitflags;
 
@@ -1116,7 +1116,7 @@ impl RealOps for Real {
     }
 
     fn epsilon() -> Self {
-        Real(<RealImpl as RealOps>::epsilon())
+        todo!();
     }
     
 

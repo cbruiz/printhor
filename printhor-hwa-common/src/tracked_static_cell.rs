@@ -22,7 +22,7 @@ impl<T> TrackedStaticCell<T> {
 pub(self) fn stack_reservation_increment<const MAX_SIZE: usize>(_element_name: &str, nbytes: usize) {
     crate::debug!("D; statically allocated {} bytes for {}", nbytes, _element_name);
     if nbytes > MAX_SIZE {
-        panic!("Too much allocation!")
+        panic!("Too much allocation! {} / {}", nbytes, MAX_SIZE)
     }
     unsafe {
         COUNTER += nbytes

@@ -77,7 +77,7 @@ where P: MotionProfile
         else {
             let relative_time = now - self.ref_time;
             if relative_time > self.profile.end() {
-                self.exhausted = true
+                self.exhausted = true;
             }
             self.profile.eval_position(relative_time)
         }

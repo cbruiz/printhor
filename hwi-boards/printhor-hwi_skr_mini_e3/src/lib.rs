@@ -40,7 +40,7 @@ const UART_PORT2_BAUD_RATE: u32 = 115200;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-        pub const SEGMENT_QUEUE_SIZE: u8 = 80;
+        pub const SEGMENT_QUEUE_SIZE: u8 = 100;
     }
 }
 
