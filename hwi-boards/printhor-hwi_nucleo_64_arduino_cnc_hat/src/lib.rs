@@ -21,6 +21,8 @@ pub use board::MACHINE_TYPE;
 pub use board::MACHINE_PROCESSOR;
 pub use board::HEAP_SIZE_BYTES;
 pub use board::MAX_STATIC_MEMORY;
+pub use board::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+pub use board::STEPPER_PLANNER_CLOCK_FREQUENCY;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
@@ -66,6 +68,30 @@ cfg_if::cfg_if! {
     }
 }
 
+pub fn setup_timer() {
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+        // Target: 0.000010 seg (10us)
+        let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
+        defmt::info!("SYST reload set to {}", reload);
+        syst.set_reload(reload);
+        syst.enable_counter();
+        syst.enable_interrupt();
+    }
+}
+
+extern "Rust" {fn do_tick();}
+
+use cortex_m_rt::exception;
+
+#[exception]
+fn SysTick() {
+    unsafe {
+        do_tick();
+    }
+}
 
 #[inline]
 pub fn init_logger() {
@@ -75,3 +101,4 @@ pub fn init_logger() {
 pub fn sys_reset() {
     cortex_m::peripheral::SCB::sys_reset();
 }
+

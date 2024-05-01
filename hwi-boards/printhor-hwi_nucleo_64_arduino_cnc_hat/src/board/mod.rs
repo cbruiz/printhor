@@ -34,6 +34,9 @@ cfg_if::cfg_if! {
         pub const ADC_START_TIME_US: u16 = 10;
         // https://www.st.com/resource/en/datasheet/DM00214043.pdf
         pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
+        /// Micro-segment sampling frequency in Hz
+        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
+        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
     }
     else if #[cfg(feature="nucleo64-l476rg")] {
@@ -45,6 +48,11 @@ cfg_if::cfg_if! {
         pub const ADC_START_TIME_US: u16 = 12;
         // http://www.st.com/resource/en/datasheet/DM00108832.pdf
         pub const ADC_VREF_DEFAULT_MV: u16 = 1212;
+
+        /// Micro-segment sampling frequency in Hz
+        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
+        /// Micro-segment clock frequency in Hz
+        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
     }
 }
 
@@ -581,6 +589,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
+
+    crate::setup_timer();
 
     MachineContext {
         controllers: Controllers {

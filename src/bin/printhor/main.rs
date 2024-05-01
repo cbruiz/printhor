@@ -310,7 +310,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(300), Some(300), Some(50), Some(300))).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(200), Some(200), Some(50), Some(200))).await;
         motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(12000), Some(12000), Some(100), Some(12000))).await;
         motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(24000), Some(24000), Some(300), Some(24000))).await;
         motion_planer.set_default_travel_speed(200).await;
@@ -320,7 +320,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         cfg_if::cfg_if! {
             if #[cfg(feature = "native")] {
                 motion_planer.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0)).await;
-                motion_planer.set_usteps(8, 8, 8, 8).await;
+                motion_planer.set_usteps(16, 16, 16, 16).await;
             }
             else {
                 motion_planer.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0)).await;
@@ -332,37 +332,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         motion_planer.set_flow_rate(100).await;
         motion_planer.set_speed_rate(100).await;
 
-        static PSem : TrackedStaticCell<control::task_stepper::ParkingSemaphore> = TrackedStaticCell::new();
-        let parking_semaphore = PSem.init::<{hwa::MAX_STATIC_MEMORY}>("ParkingSem", control::task_stepper::ParkingSemaphore::new(0));
-
-        static PChan : TrackedStaticCell<control::task_stepper::TaskChannel> = TrackedStaticCell::new();
-        let task_channel = PChan.init::<{hwa::MAX_STATIC_MEMORY}>("TaskChannel", control::task_stepper::TaskChannel::new());
-
-        let tm = control::task_stepper::TaskMaster {
-            semaphore: parking_semaphore,
-            sender: task_channel.sender(),
-        };
-
-        let ts = control::task_stepper::TaskSlave {
-            semaphore: parking_semaphore,
-            receiver: task_channel.receiver(),
-        };
-
-        spawner.spawn(control::task_stepper::task_stepper(motion_planer.clone(), _wd, tm)).map_err(|_| ())?;
-
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "executor-interrupt")] {
-                hwa::launch_high_priotity( _sys_devices.task_stepper_core,
-                                   control::task_stepper::task_stepper_worker(motion_planer, ts)
-                ).and_then(|_| {
-                    hwa::debug!("stepper_start() spawned");
-                    Ok(())
-                })?;
-            }
-            else {
-                spawner.spawn(control::task_stepper::task_stepper_worker(motion_planer, ts)).map_err(|_| ())?;
-            }
-        }
+        spawner.spawn(control::task_stepper::task_stepper(motion_planer.clone(), _wd)).map_err(|_| ())?;
     }
 
     #[cfg(feature = "integration-test")]

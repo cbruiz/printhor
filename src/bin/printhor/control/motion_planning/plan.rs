@@ -3,10 +3,6 @@
 //! [[1]] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)
 
 use crate::{hwa, math};
-#[cfg(feature = "native")]
-use core::fmt::Display;
-#[cfg(feature = "native")]
-use core::fmt::Formatter;
 use core::ops::{Mul, Div};
 use crate::math::*;
 use crate::control::CodeExecutionFailure;
@@ -29,9 +25,9 @@ pub struct Boundaries {
 }
 
 #[cfg(feature = "native")]
-impl Display for Boundaries {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f,
+impl core::fmt::Display for Boundaries {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::write!(f,
                "q_{{1}}={} v_{{0}}={} v_{{1}}={}", self.q_1, self.v_0, self.v_1
         )
     }
@@ -48,9 +44,9 @@ pub struct Constraints {
 }
 
 #[cfg(feature = "native")]
-impl Display for Constraints {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        write!(f,
+impl core::fmt::Display for Constraints {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::write!(f,
                "v_{{max}}={} a_{{max}}={} j_{{max}}={}", self.v_max, self.a_max, self.j_max
         )
     }
@@ -611,8 +607,8 @@ pub struct Cache {
 
 
 #[cfg(feature = "native")]
-impl Display for SCurveMotionProfile {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+impl core::fmt::Display for SCurveMotionProfile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f,
                "\n\tt_j1={}, t_a={}, t_v={}, t_d={}, t_j2={}",
                self.t_j1.rdp(4),

@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-mod plan;
+pub(crate) mod plan;
 pub use plan::*;
 
 bitflags! {

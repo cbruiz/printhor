@@ -84,8 +84,8 @@ impl TrinamicController
             hwa::debug!("Trinamic_uart applying chopconf on {}", addr);
             let mut chopconf = tmc2209::reg::CHOPCONF::default();
             chopconf.set_intpol(false);
-            // Nice to have
-            //chopconf.set_dedge(true);
+            #[cfg(not(feature = "pulsed"))]
+            chopconf.set_dedge(true);
             chopconf.set_mres(micro_steps_pow_of_2);
             if self.write_register(addr, chopconf).await.is_ok() {
                 hwa::debug!("Done {}", addr);

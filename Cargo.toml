@@ -99,7 +99,7 @@ integration-test = [
     #"plot-timings",
     "debug-skip-homing",
     #"numerical-robusticity-check",
-    "verbose-timings",
+    #"verbose-timings",
     #"no-real-time",
 ]
 integration-test-m100 = []
@@ -233,11 +233,11 @@ nucleo64-l476rg = [
 ]
 
 nucleo64-f410rb = [
+    "cornering",
     "nightly",
     "upstream-embassy",
-    "executor-interrupt",
-    #"cooperative",
-    "motion-async-task-exclusive",
+    #"executor-interrupt",
+    "cooperative",
     #"digital-probe-hack",
 
     #"verbose-timings",
@@ -277,9 +277,8 @@ nucleo_64_arduino_cnc_hat = [
 skr_mini_e3_v2 = [
     "nightly",
     "upstream-embassy",
-    "executor-interrupt",
-    #"cooperative",
-    "motion-async-task-exclusive",
+    #"executor-interrupt",
+    "cooperative",
     #"verbose-timings",
     #"printhor-hwi_skr_mini_e3/without-ringbuffer",
     "without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader",
@@ -312,8 +311,8 @@ skr_mini_e3_v3 = [
     "upstream-embassy",
     "nightly",
     "cornering",
-    "executor-interrupt",
-    #"cooperative",
+    #"executor-interrupt",
+    "cooperative",
     #"motion-async-task-exclusive",
     #"verbose-timings",
     "without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader",
@@ -322,7 +321,7 @@ skr_mini_e3_v3 = [
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
     "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
-    "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", # Broken with bootloader?
+    #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", # Broken with bootloader?
     #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", # Broken
     "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
@@ -399,6 +398,7 @@ defmt-rtt = { version = "0.4.0", optional = true }
 cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
 cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
+critical-section = {version = "1.1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = [], optional = true }
 embassy-executor = { version = "0.5.0", default-features = false, features = [], optional = true }

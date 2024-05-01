@@ -37,6 +37,11 @@ cfg_if::cfg_if! {
         pub const MAX_STATIC_MEMORY: usize = 8192;
         pub const HEAP_SIZE_BYTES: usize = 512;
 
+                /// Micro-segment sampling frequency in Hz
+        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
+        /// Micro-segment clock frequency in Hz
+        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
         // https://www.st.com/resource/en/datasheet/CD00191185.pdf
         pub const ADC_START_TIME_US: u16 = 17;
         // https://www.st.com/resource/en/datasheet/CD00191185.pdf
@@ -58,6 +63,11 @@ cfg_if::cfg_if! {
 
         pub const MAX_STATIC_MEMORY: usize = 16386;
         pub const HEAP_SIZE_BYTES: usize = 1024;
+
+                /// Micro-segment sampling frequency in Hz
+        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 50;
+        /// Micro-segment clock frequency in Hz
+        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 50_000;
 
         // https://www.st.com/resource/en/datasheet/dm00748675.pdf
         pub const ADC_START_TIME_US: u16 = 12;
@@ -1009,6 +1019,8 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
+
+    crate::setup_timer();
 
     MachineContext {
         controllers: Controllers {

@@ -20,6 +20,7 @@ use printhor_hwa_common::{ControllerMutex, ControllerRef, TrackedStaticCell, Mac
 
 #[allow(unused)]
 use crate::board::mocked_peripherals::MockedIOPin;
+use crate::task_stepper_ticker;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
 pub const MACHINE_BOARD: &str = "PC";
@@ -40,6 +41,11 @@ pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1650;
 #[allow(unused)]
 pub const ADC_VREF_DEFAULT_SAMPLE: u16 = 2048;
+
+#[const_env::from_env("STEPPER_PLANNER_MICROSEGMENT_FREQUENCY")]
+pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 50;
+#[const_env::from_env("STEPPER_PLANNER_CLOCK_FREQUENCY")]
+pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 50_000;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-end")] {
@@ -141,6 +147,8 @@ pub fn init() -> HWIPeripherals {
 }
 
 pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
+
+    let _ = _spawner.spawn(task_stepper_ticker());
 
     let _pin_state = mocked_peripherals::init_pin_state();
 

@@ -94,14 +94,15 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn enable_x_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::X_ENA, false);
         self.pins.enable_x_stepper()
     }
 
-    #[allow(unused)]
     #[inline(always)]
+    #[allow(unused)]
     pub fn disable_x_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::X_ENA, true);
@@ -109,14 +110,15 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn enable_y_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Y_ENA, false);
         self.pins.enable_y_stepper()
     }
 
-    #[allow(unused)]
     #[inline(always)]
+    #[allow(unused)]
     pub fn disable_y_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Y_ENA, true);
@@ -124,14 +126,15 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn enable_z_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Z_ENA, false);
         self.pins.enable_z_stepper()
     }
 
-    #[allow(unused)]
     #[inline(always)]
+    #[allow(unused)]
     pub fn disable_z_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Z_ENA, true);
@@ -140,6 +143,7 @@ impl MotionDriver {
 
     #[cfg(feature = "with-hot-end")]
     #[inline(always)]
+    #[allow(unused)]
     pub fn enable_e_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::E_ENA, false);
@@ -148,8 +152,8 @@ impl MotionDriver {
 
 
     #[cfg(feature = "with-hot-end")]
-    #[allow(unused)]
     #[inline(always)]
+    #[allow(unused)]
     pub fn disable_e_stepper(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::E_ENA, true);
@@ -157,6 +161,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn x_dir_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::X_DIR, true);
@@ -164,6 +169,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn y_dir_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Y_DIR, true);
@@ -171,6 +177,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn z_dir_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Z_DIR, true);
@@ -179,6 +186,7 @@ impl MotionDriver {
 
     #[cfg(feature = "with-hot-end")]
     #[inline(always)]
+    #[allow(unused)]
     pub fn e_dir_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::E_DIR, true);
@@ -186,6 +194,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn x_dir_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::X_DIR, false);
@@ -193,6 +202,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn y_dir_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Y_DIR, false);
@@ -200,6 +210,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn z_dir_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Z_DIR, false);
@@ -208,6 +219,7 @@ impl MotionDriver {
 
     #[cfg(feature = "with-hot-end")]
     #[inline(always)]
+    #[allow(unused)]
     pub fn e_dir_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::E_DIR, false);
@@ -215,6 +227,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn x_step_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::X_STEP, true);
@@ -222,6 +235,13 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
+    pub fn x_step_pin_toggle(&mut self) {
+        self.pins.x_step_pin.toggle();
+    }
+
+    #[inline(always)]
+    #[allow(unused)]
     pub fn y_step_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Y_STEP, true);
@@ -229,21 +249,43 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
+    pub fn y_step_pin_toggle(&mut self) {
+        self.pins.y_step_pin.toggle();
+    }
+
+    #[inline(always)]
+    #[allow(unused)]
     pub fn z_step_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Z_STEP, true);
         self.pins.z_step_pin.set_high();
     }
 
+    #[inline(always)]
+    #[allow(unused)]
+    pub fn z_step_pin_toggle(&mut self) {
+        self.pins.z_step_pin.toggle();
+    }
+
     #[cfg(feature = "with-hot-end")]
     #[inline(always)]
+    #[allow(unused)]
     pub fn e_step_pin_high(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::E_STEP, true);
         self.pins.e_step_pin.set_high();
     }
 
+    #[cfg(feature = "with-hot-end")]
     #[inline(always)]
+    #[allow(unused)]
+    pub fn e_step_pin_toggle(&mut self) {
+        self.pins.e_step_pin.toggle();
+    }
+
+    #[inline(always)]
+    #[allow(unused)]
     pub fn x_step_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::X_STEP, false);
@@ -251,6 +293,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn y_step_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Y_STEP, false);
@@ -258,6 +301,7 @@ impl MotionDriver {
     }
 
     #[inline(always)]
+    #[allow(unused)]
     pub fn z_step_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::Z_STEP, false);
@@ -266,6 +310,7 @@ impl MotionDriver {
 
     #[cfg(feature = "with-hot-end")]
     #[inline(always)]
+    #[allow(unused)]
     pub fn e_step_pin_low(&mut self) {
         #[cfg(all(feature = "native", feature = "plot-timings"))]
         self.tmon.update(PinState::E_STEP, false);
@@ -330,6 +375,7 @@ impl MotionDriver {
     }
 
     #[inline]
+    #[allow(unused)]
     pub fn set_ena(&mut self, enabled_steppers: StepperChannel) {
         if enabled_steppers.contains(StepperChannel::X) {
             self.enable_x_stepper();
@@ -359,6 +405,7 @@ impl MotionDriver {
     }
 
     #[inline]
+    #[allow(unused)]
     pub fn set_fwd(&mut self, dir_fwd_steppers: StepperChannel) {
         if dir_fwd_steppers.contains(StepperChannel::X) {
             self.x_dir_pin_high();
@@ -421,7 +468,7 @@ impl MotionDriver {
             TVector::from_coords(Some(ONE.neg()), None, None, None),
             machine_bounds.x.unwrap_or(Real::zero()),
             steps_per_mm,
-            2000,
+            8000,
             true,
             None,
         ).await;
@@ -431,7 +478,7 @@ impl MotionDriver {
             TVector::from_coords(Some(ONE), None, None, None),
             machine_bounds.x.unwrap_or(Real::zero()) / TWO,
             steps_per_mm,
-            2000,
+            8000,
             false,
             Some(&mut homming_position),
         ).await;
@@ -525,23 +572,35 @@ impl MotionDriver {
                 return steps_advanced;
             }
             if coordsel.contains(CoordSel::X) {
-                self.x_step_pin_high();
+                #[cfg(feature = "pulsed")]
+                drv.x_step_pin_high();
+                #[cfg(not(feature = "pulsed"))]
+                self.x_step_pin_toggle();
             }
             if coordsel.contains(CoordSel::Y) {
+                #[cfg(feature = "pulsed")]
                 self.y_step_pin_high();
+                #[cfg(not(feature = "pulsed"))]
+                self.y_step_pin_toggle();
             }
             if coordsel.contains(CoordSel::Z) {
+                #[cfg(feature = "pulsed")]
                 self.z_step_pin_high();
+                #[cfg(not(feature = "pulsed"))]
+                self.z_step_pin_toggle();
             }
-            crate::control::motion_timing::s_block_for(Duration::from_micros(1));
-            if coordsel.contains(CoordSel::X) {
-                self.x_step_pin_low();
-            }
-            if coordsel.contains(CoordSel::Y) {
-                self.y_step_pin_low();
-            }
-            if coordsel.contains(CoordSel::Z) {
-                self.z_step_pin_low();
+            #[cfg(feature = "pulsed")]
+            {
+                crate::control::motion_timing::s_block_for(Duration::from_micros(1));
+                if coordsel.contains(CoordSel::X) {
+                    self.x_step_pin_low();
+                }
+                if coordsel.contains(CoordSel::Y) {
+                    self.y_step_pin_low();
+                }
+                if coordsel.contains(CoordSel::Z) {
+                    self.z_step_pin_low();
+                }
             }
             steps_advanced.increment(coordsel.clone(), 1);
             ticker.next().await;

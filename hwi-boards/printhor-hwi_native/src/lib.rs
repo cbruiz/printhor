@@ -19,6 +19,8 @@ pub use board::MACHINE_PROCESSOR;
 pub use board::HEAP_SIZE_BYTES;
 pub use board::MAX_STATIC_MEMORY;
 pub use board::VREF_SAMPLE;
+pub use board::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+pub use board::STEPPER_PLANNER_CLOCK_FREQUENCY;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-port-1")]
@@ -32,6 +34,7 @@ cfg_if::cfg_if! {
 pub use board::ADC_START_TIME_US;
 pub use board::ADC_VREF_DEFAULT_MV;
 use embassy_executor::Spawner;
+use embassy_time::Duration;
 cfg_if::cfg_if!{
     if #[cfg(feature="without-vref-int")] {
         pub use board::ADC_VREF_DEFAULT_SAMPLE;
@@ -41,6 +44,7 @@ cfg_if::cfg_if!{
 #[inline]
 pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, _spawner: Spawner, token: embassy_executor::SpawnToken<S>) -> Result<(),()>
 {
+
     cfg_if::cfg_if! {
         if #[cfg(feature="executor-interrupt")] {
             static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
@@ -49,7 +53,7 @@ pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDev
             executor.run(|s| {
                 let x = s.make_send();
                 thread_priority::ThreadPriority::Max.set_for_current().unwrap();
-                x.spawn(token).unwrap();
+                x.spawn(task_stepper_isr()).unwrap();
             });
         }
         else {
@@ -71,4 +75,20 @@ pub fn init_logger() {
 #[inline]
 pub fn sys_reset() {
     std::process::exit(0);
+}
+
+extern "Rust" {fn do_tick();}
+
+
+
+#[embassy_executor::task]
+pub async fn task_stepper_ticker()
+{
+    let mut t = embassy_time::Ticker::every(Duration::from_micros((1_000_000 / board::STEPPER_PLANNER_CLOCK_FREQUENCY) as u64));
+    loop {
+        unsafe {
+            do_tick();
+        }
+        t.next().await;
+    }
 }

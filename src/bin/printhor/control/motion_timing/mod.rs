@@ -1,4 +1,3 @@
-use embassy_time::{Duration, Instant};
 use crate::control::motion_planning::StepperChannel;
 
 #[derive(Clone, Copy)]
@@ -20,10 +19,10 @@ impl ChannelStatus {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-hot-end")] {
-        const MULTITIMER_CHANNELS: usize = 4;
+        pub const MULTITIMER_CHANNELS: usize = 4;
     }
     else {
-        const MULTITIMER_CHANNELS: usize = 3;
+        pub const MULTITIMER_CHANNELS: usize = 3;
     }
 }
 
@@ -37,18 +36,16 @@ cfg_if::cfg_if! {
 /// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
 /// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
 ///
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct MultiTimer {
-    interval_width: u64,
-    ref_time: u64,
+    max_count: u32,
     channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
 }
 
 impl MultiTimer {
     pub const fn new() -> Self {
         Self {
-            interval_width: 0,
-            ref_time: 0,
+            max_count: 0,
             channels: [
                 None,
                 None,
@@ -57,20 +54,6 @@ impl MultiTimer {
                 None,
             ],
         }
-    }
-
-    pub fn reset(&mut self, interval_width: u64) {
-        self.ref_time = 0;
-        for channel in self.channels.iter_mut() {
-            match channel.as_mut() {
-                None => {
-                }
-                Some(w) => {
-                    w.next_tick = (w.width + 1) >> 1
-                }
-            }
-        }
-        self.interval_width = interval_width;
     }
 
     pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u64>) {
@@ -119,37 +102,108 @@ impl MultiTimer {
 
     }
 
-    pub fn next(&mut self) -> Option<(StepperChannel, Duration)> {
-        let mut next_tick = self.interval_width + 1;
-        let mut triggered_channels = StepperChannel::empty();
-        for channel in self.channels.iter() {
-            if let Some(_ch) = &channel {
-                if _ch.next_tick < next_tick  {
-                    next_tick = _ch.next_tick;
+    pub fn set_max_count(&mut self, max_count: u32) {
+        self.max_count = max_count;
+    }
+
+    pub fn channels(&self) -> [Option<ChannelStatus>; MULTITIMER_CHANNELS] {
+        self.channels
+    }
+
+    pub fn max_count(&self) -> u32 {
+        self.max_count
+    }
+}
+
+/// A utility to feed forward a uniformly distributed pulse train at different rates by channel
+///
+/// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
+/// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](crate::control::motion_timing::MultiTimer::new())
+///
+/// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
+/// - Each pulse period (pulse width) is: **`t=T/x`**.
+/// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
+/// - Iterator ends when **`t(i)`** exceed [`interval_width`](crate::control::motion_timing::MultiTimer::new()) in all channels.
+///
+#[derive(Clone, Copy)]
+pub struct StepPlanner {
+    interval_width: u64,
+    ref_time: u64,
+    channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+    max_count: u32,
+    pulse_count: u32,
+    pub(crate) stepper_enable_flags: StepperChannel,
+    pub(crate) stepper_dir_fwd_flags: StepperChannel,
+}
+
+impl crate::control::motion_timing::StepPlanner {
+    pub const fn new() -> Self {
+        Self {
+            interval_width: 0,
+            ref_time: 0,
+            channels: [
+                None,
+                None,
+                None,
+                #[cfg(feature = "with-hot-end")]
+                    None,
+            ],
+            max_count: 0,
+            pulse_count: 0,
+            stepper_enable_flags: StepperChannel::empty(),
+            stepper_dir_fwd_flags: StepperChannel::empty(),
+        }
+    }
+
+    pub const fn from(channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+                      max_count: u32,
+                      stepper_enable_flags: StepperChannel,
+                      stepper_dir_fwd_flags: StepperChannel,
+
+    ) -> Self {
+        Self {
+            interval_width: 0,
+            ref_time: 0,
+            channels,
+            max_count,
+            pulse_count: 0,
+            stepper_enable_flags,
+            stepper_dir_fwd_flags,
+        }
+    }
+
+    pub fn reset(&mut self, interval_width: u64) {
+        self.ref_time = 0;
+        self.pulse_count = 0;
+        for channel in self.channels.iter_mut() {
+            match channel.as_mut() {
+                None => {
+                }
+                Some(w) => {
+                    w.next_tick = (w.width + 1) >> 1
                 }
             }
         }
-        if next_tick > self.interval_width {
-            self.ref_time = self.interval_width;
-            return None
-        }
+        self.interval_width = interval_width;
+    }
+
+    pub fn next(&mut self, step_width: u64) -> Option<StepperChannel> {
+        self.ref_time += step_width;
+        let mut triggered_channels = StepperChannel::empty();
         for channel in self.channels.iter_mut() {
             if let Some(_ch) = channel.as_mut() {
-                if _ch.next_tick <= next_tick  {
+                if _ch.next_tick <= self.ref_time  {
+                    if _ch.width < step_width {
+                        unreachable!("Feedrate exceeded: width: {} max: {}", _ch.width, step_width);
+                    }
                     _ch.next_tick += _ch.width;
                     triggered_channels.set(_ch.name, true);
                 }
             }
-
         }
-        let tw = next_tick - self.ref_time;
-        self.ref_time = next_tick;
-        return Some((triggered_channels, Duration::from_ticks(tw)));
+        if triggered_channels.is_empty() {
+            self.pulse_count += 1;
+        }
+        return Some(triggered_channels);
     }
-}
-
-#[inline(always)]
-pub fn s_block_for(duration: Duration) {
-    let expires_at = Instant::now() + duration;
-    while Instant::now() < expires_at {}
 }
