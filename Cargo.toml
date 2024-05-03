@@ -19,7 +19,7 @@ status = "experimental"
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 
-default = ["native"]
+default = ["no-board"]
 
 # Hardware device features
 without-bootloader = []
@@ -46,6 +46,16 @@ with-display = [
 ]
 with-ps-on = []
 cornering = []
+pulsed = []
+# Tests which are not yet working or completed :-/
+wip-tests = []
+
+grbl-compat = []
+
+with-x-axis = ["printhor-hwa-common/with-x-axis", "printhor-hwi_native?/with-x-axis", "printhor-hwi_skr_mini_e3?/with-x-axis", "printhor-hwi_mks_robin_nano?/with-x-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-x-axis", "printhor-hwi_rp_2040?/with-x-axis"]
+with-y-axis = ["printhor-hwa-common/with-y-axis", "printhor-hwi_native?/with-y-axis", "printhor-hwi_skr_mini_e3?/with-y-axis", "printhor-hwi_mks_robin_nano?/with-y-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-y-axis", "printhor-hwi_rp_2040?/with-y-axis"]
+with-z-axis = ["printhor-hwa-common/with-z-axis", "printhor-hwi_native?/with-z-axis", "printhor-hwi_skr_mini_e3?/with-z-axis", "printhor-hwi_mks_robin_nano?/with-z-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-z-axis", "printhor-hwi_rp_2040?/with-z-axis"]
+with-e-axis = ["printhor-hwa-common/with-e-axis", "printhor-hwi_native?/with-e-axis", "printhor-hwi_skr_mini_e3?/with-e-axis", "printhor-hwi_mks_robin_nano?/with-e-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-e-axis", "printhor-hwi_rp_2040?/with-e-axis"]
 
 # Wheter motion task is preemtive (takes exclusively the CPU when driving segments) or not
 # The optimal case is NOT preemtive, but MCU must be powerful enough to provide very short response times.
@@ -99,8 +109,9 @@ integration-test = [
     #"plot-timings",
     "debug-skip-homing",
     #"numerical-robusticity-check",
-    #"verbose-timings",
+    "verbose-timings",
     #"no-real-time",
+    "native",
 ]
 integration-test-m100 = []
 integration-test-power-on = []
@@ -139,6 +150,10 @@ plot-motion-plan = ["gnuplot"]
 #### BOARDS #####
 #################
 
+no-board = [
+]
+
+
 native = [
     #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
     "with-motion", "printhor-hwi_native/with-motion",
@@ -151,13 +166,15 @@ native = [
     #"with-hot-bed", "printhor-hwi_native/with-hot-bed",
     "with-fan-layer", "printhor-hwi_native/with-fan-layer",
     "with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
-    "with-laser", "printhor-hwi_native/with-laser",
+    #"with-laser", "printhor-hwi_native/with-laser",
     "with-ps-on", "printhor-hwi_native/with-ps-on",
     #"with-display", "printhor-hwi_native/with-display",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
+
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
 
     "plot-motion-plan",
     #"itertools",
@@ -236,8 +253,10 @@ nucleo64-f410rb = [
     "cornering",
     "nightly",
     "upstream-embassy",
+    #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
     #"executor-interrupt",
     "cooperative",
+    "with-x-axis", "with-y-axis", "with-z-axis",
     #"digital-probe-hack",
 
     #"verbose-timings",
@@ -311,11 +330,8 @@ skr_mini_e3_v3 = [
     "upstream-embassy",
     "nightly",
     "cornering",
-    #"executor-interrupt",
     "cooperative",
-    #"motion-async-task-exclusive",
-    #"verbose-timings",
-    "without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
     #"printhor-hwi_skr_mini_e3/without-ringbuffer",
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
@@ -355,7 +371,8 @@ skr_mini_e3 = [
 
 tst-rp2040 = [
     "nightly", "with-defmt",
-    "with-motion", "printhor-hwi_rp_2040/with-motion",
+    "upstream-embassy",
+    #"with-motion", "printhor-hwi_rp_2040/with-motion",
     #"with-ps-on", "printhor-hwi_rp_2040/with-ps-on",
     "with-serial-usb", "printhor-hwi_rp_2040/with-serial-usb",
     #"with-serial-port-1", "printhor-hwi_rp_2040/with-serial-port-1",

@@ -27,6 +27,11 @@ with-motion = []
 with-hot-end = []
 with-hot-bed = []
 
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
+
 [dependencies]
 portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.0.0",  default-features = false, features = [] }

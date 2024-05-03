@@ -1,5 +1,5 @@
 #[cfg(feature = "with-motion")]
-pub(in crate::hwa) mod motion_driver;
+pub mod motion_driver;
 #[cfg(all(feature = "native", feature = "plot-timings"))]
 mod timing_monitor;
 

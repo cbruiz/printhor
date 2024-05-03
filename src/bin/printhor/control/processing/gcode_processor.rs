@@ -1,3 +1,4 @@
+use printhor_hwa_common::StepperChannel;
 use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::control::GCode;
 use crate::hwa;
@@ -7,11 +8,11 @@ use crate::machine::MACHINE_INFO;
 
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
-use alloc::format;
 #[allow(unused)]
 use hwa::{CommChannel, EventBusRef, EventFlags, EventStatus, DeferEvent, DeferAction};
 use math::Real;
 use strum::VariantNames;
+
 #[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
 cfg_if::cfg_if! {
@@ -66,6 +67,7 @@ pub struct GCodeProcessor {
     #[cfg(feature = "with-ps-on")]
     pub ps_on: hwa::controllers::PsOnRef,
     #[cfg(feature = "with-probe")]
+    #[allow(unused)]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hot-end")]
     pub hotend: hwa::controllers::HotendControllerRef,
@@ -74,6 +76,7 @@ pub struct GCodeProcessor {
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
     #[cfg(feature = "with-fan-extra-1")]
+    #[allow(unused)]
     pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
@@ -180,7 +183,7 @@ impl GCodeProcessor {
             }
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
-                    let _ = self.write(channel, format!("echo: {}\n", x).as_str()).await;
+                    let _ = self.write(channel, alloc::format!("echo: {}\n", x).as_str()).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -189,7 +192,7 @@ impl GCodeProcessor {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
-                Ok(self.motion_planner.plan(channel, &gc, blocking).await?)
+                Ok(self.motion_planner.plan(channel, &gc, blocking, &self.event_bus).await?)
             }
             #[cfg(feature = "with-motion")]
             GCode::G4 => {
@@ -199,7 +202,7 @@ impl GCodeProcessor {
                         .send(DeferEvent::AwaitRequested(DeferAction::Dwell, channel))
                         .await;
                 }
-                Ok(self.motion_planner.plan(channel, &gc, blocking).await?)
+                Ok(self.motion_planner.plan(channel, &gc, blocking, &self.event_bus).await?)
             }
             GCode::G10 => Ok(CodeExecutionSuccess::OK),
             GCode::G17 => Ok(CodeExecutionSuccess::OK),
@@ -212,7 +215,7 @@ impl GCodeProcessor {
                         return Err(CodeExecutionFailure::PowerRequired)
                     }
                     hwa::debug!("Planing homing");
-                    let result = self.motion_planner.plan(channel, &gc, blocking).await;
+                    let result = self.motion_planner.plan(channel, &gc, blocking, &self.event_bus).await;
                     hwa::debug!("Homing planned");
                     result
                 }
@@ -268,7 +271,7 @@ impl GCodeProcessor {
             GCode::G94 => Ok(CodeExecutionSuccess::OK),
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
-                    let _ = self.write(channel, format!("echo: {}\n", x).as_str()).await;
+                    let _ = self.write(channel, alloc::format!("echo: {}\n", x).as_str()).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -278,6 +281,7 @@ impl GCodeProcessor {
             GCode::M79 => {
                 let _ = self.write(channel, "echo: Software reset\n").await;
                 self.flush(channel).await;
+                #[cfg(not(feature = "no-board"))]
                 hwa::sys_reset();
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -310,7 +314,7 @@ impl GCodeProcessor {
                 let stack_current = hwa::mem::stack_reservation_current_size();
                 let stack_max = hwa::mem::stack_reservation_max_size();
 
-                let z1 = format!(
+                let z1 = alloc::format!(
                     "echo: {}/{} {}% of heap usage\n",
                     heap_current,
                     heap_max,
@@ -318,7 +322,7 @@ impl GCodeProcessor {
                 );
                 self.write(channel, z1.as_str()).await;
 
-                let z2 = format!(
+                let z2 = alloc::format!(
                     "echo: {}/{} {}% of stack reservation\n",
                     stack_current,
                     stack_max,
@@ -370,7 +374,7 @@ impl GCodeProcessor {
                     #[cfg(not(feature = "with-hot-bed"))]
                     alloc::string::String::new()
                 };
-                let report = format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
+                let report = alloc::format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
@@ -419,7 +423,7 @@ impl GCodeProcessor {
                     .unwrap_or(TVector::zero())
                     .rdp(6);
                 let _spos = self.motion_planner.get_last_planned_real_pos().await.unwrap_or(TVector::zero());
-                let z = format!("X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
+                let z = alloc::format!("X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
                                 _pos.x.unwrap_or(crate::math::ZERO),
                                 _pos.y.unwrap_or(crate::math::ZERO),
                                 _pos.z.unwrap_or(crate::math::ZERO),
@@ -448,7 +452,7 @@ impl GCodeProcessor {
                 let _ = self.write(channel, MACHINE_INFO.machine_uuid).await;
                 let _ = self.write(channel," EXTRUDER_COUNT: ").await;
                 let _ = self
-                    .write(channel, format!("{}\n", MACHINE_INFO.extruder_count).as_str())
+                    .write(channel, alloc::format!("{}\n", MACHINE_INFO.extruder_count).as_str())
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -459,19 +463,19 @@ impl GCodeProcessor {
             #[cfg(feature = "with-motion")]
             GCode::M119 => {
                 let mut d = self.motion_planner.motion_driver.lock().await;
-                let z = format!(
+                let z = alloc::format!(
                     "M119 X {} Y {} Z {}\n",
-                    if d.pins.x_endstop_pin.is_high() {
+                    if d.endstop_triggered(StepperChannel::X) {
                         "1"
                     } else {
                         "0"
                     },
-                    if d.pins.y_endstop_pin.is_high() {
+                    if d.endstop_triggered(StepperChannel::Y) {
                         "1"
                     } else {
                         "0"
                     },
-                    if d.pins.z_endstop_pin.is_high() {
+                    if d.endstop_triggered(StepperChannel::Z) {
                         "1"
                     } else {
                         "0"

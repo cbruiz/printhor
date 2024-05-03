@@ -8,6 +8,7 @@ use crate::alloc::string::ToString;
 use crate::math::{Real};
 use num_traits::float::FloatCore;
 use bitflags::bitflags;
+use printhor_hwa_common::StepperChannel;
 
 bitflags! {
     #[derive(PartialEq, Clone, Copy, Eq, Debug)]
@@ -18,6 +19,21 @@ bitflags! {
         const E = 0b00001000;
         const XYZ = Self::X.bits() | Self::Y.bits() | Self::Z.bits();
         const XYZE = Self::X.bits() | Self::Y.bits() | Self::Z.bits() | Self::E.bits();
+    }
+}
+
+impl From<StepperChannel> for CoordSel {
+    fn from(value: StepperChannel) -> Self {
+        let mut coordsel = CoordSel::empty();
+        #[cfg(feature = "with-x-axis")]
+        coordsel.set(CoordSel::X, value.contains(StepperChannel::X));
+        #[cfg(feature = "with-y-axis")]
+        coordsel.set(CoordSel::Y, value.contains(StepperChannel::Y));
+        #[cfg(feature = "with-z-axis")]
+        coordsel.set(CoordSel::Z, value.contains(StepperChannel::Z));
+        #[cfg(feature = "with-e-axis")]
+        coordsel.set(CoordSel::E, value.contains(StepperChannel::E));
+        coordsel
     }
 }
 
@@ -44,11 +60,9 @@ pub trait RealOps
     fn ceil(&self) -> Self;
     fn floor(&self) -> Self;
 
-    fn epsilon() -> Self;
-
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct TVector<T>
     where T: ArithmeticOps
 {
@@ -508,23 +522,24 @@ where T: ArithmeticOps
         }
     }
 
-    pub fn map_val(&self, value: T) -> Self {
+    pub fn map_val(&self, value: &T) -> Self {
         Self {
-            x: self.x.and(Some(value)),
-            y: self.y.and(Some(value)),
-            z: self.z.and(Some(value)),
-            e: self.e.and(Some(value)),
+            x: self.x.and(Some(*value)),
+            y: self.y.and(Some(*value)),
+            z: self.z.and(Some(*value)),
+            e: self.e.and(Some(*value)),
         }
     }
 
     pub fn sum(&self) -> T
-        where T: core::ops::Add<T, Output=T>
+        where T: core::ops::AddAssign<T>
     {
-        let x = self.x.unwrap_or(T::zero());
-        let y = self.y.unwrap_or(T::zero());
-        let z = self.z.unwrap_or(T::zero());
-        let e = self.e.unwrap_or(T::zero());
-        x + y + z + e
+        let mut acc_sum = T::zero();
+        acc_sum.add_assign(self.x.unwrap_or(T::zero()));
+        acc_sum.add_assign(self.y.unwrap_or(T::zero()));
+        acc_sum.add_assign(self.z.unwrap_or(T::zero()));
+        acc_sum.add_assign(self.e.unwrap_or(T::zero()));
+        acc_sum
     }
 
     pub fn abs(&self) -> Self
@@ -540,7 +555,7 @@ where T: ArithmeticOps
 }
 
 impl<T> TVector<T>
-    where T: ArithmeticOps + RealOps,
+    where T: ArithmeticOps + RealOps + core::ops::AddAssign,
           TVector<T>: core::ops::Div<T, Output = TVector<T>>
           + core::ops::Div<TVector<T>, Output = TVector<T>>
 
@@ -565,13 +580,15 @@ impl<T> TVector<T>
     }
 
     pub fn norm2(&self) -> Option<T>
-    where T: RealOps
+    where T: RealOps + core::ops::AddAssign<T>
     {
-        self.mul(*self).sum().sqrt()
+        let n = self.mul(*self).sum();
+        let r = n.sqrt();
+        return r;
     }
 
     pub fn scalar_product(&self, rhs: TVector<T>) -> T
-        where T: RealOps, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
+        where T: RealOps + core::ops::AddAssign<T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
     {
         ((*self) * rhs).sum()
     }
@@ -579,7 +596,7 @@ impl<T> TVector<T>
     /// Computes the orthogonal projection of [other] over this
     /// proj(self, other) = \frac{self \cdot other}{|self|^(2)}
     pub fn orthogonal_projection(&self, other: TVector<T>) -> T
-    where T: RealOps + core::ops::Div<Output = T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
+    where T: RealOps + core::ops::AddAssign<T> + core::ops::Div<Output = T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
     {
         (*self).scalar_product(other) / (self.pow(2).sum().abs())
     }
@@ -1060,10 +1077,6 @@ impl RealOps for f32 {
         <f32 as FloatCore>::ceil(*self)
     }
 
-    fn epsilon() -> Self {
-        <f32 as FloatCore>::epsilon()
-    }
-
 }
 
 
@@ -1114,12 +1127,6 @@ impl RealOps for Real {
     fn floor(&self) -> Self {
         Real::floor(self)
     }
-
-    fn epsilon() -> Self {
-        todo!();
-    }
-    
-
 }
 
 #[allow(unused)]

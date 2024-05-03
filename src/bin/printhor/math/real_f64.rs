@@ -60,7 +60,7 @@ cfg_if::cfg_if! {
             }
 
             pub(crate) fn is_defined_positive(&self) -> bool {
-                self.0 > Self::zero()
+                self.0 > 0.0
             }
 
             #[inline]
@@ -116,8 +116,8 @@ cfg_if::cfg_if! {
             #[inline]
             pub(crate) fn sqrt(self) -> Option<Self> {
                 //#[cfg(feature = "native")]
-                //let w = self.0.sqrt();
-                let v = 1.0f64 / Self::quake_isqrt(self.0);
+                let v = self.0.sqrt();
+                //let v = 1.0f64 / Self::quake_isqrt(self.0);
                 //let v = 1.0f64 / core::intrinsics::sqrt(self.0);
                 //let x = micromath::F32Ext::sqrt(self.0 as f32);
                 //#[cfg(not(feature = "native"))]
@@ -158,7 +158,7 @@ cfg_if::cfg_if! {
                 if s.is_zero() {Real::one()} else {Real(s)}
             }
 
-            pub(crate) fn min(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub(crate) fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);
@@ -173,7 +173,7 @@ cfg_if::cfg_if! {
                 m
             }
 
-            pub(crate) fn max(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub(crate) fn vmax(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);

@@ -30,12 +30,18 @@ with-laser = ["embedded-hal"]
 with-defmt = ["printhor-hwa-common/with-defmt"]
 with-trinamic = []
 with-ps-on = []
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
 
 nightly = []
 executor-interrupt = ["embassy-executor/executor-interrupt"]
 verbose-timings = []
 upstream-embassy = []
 sdcard-uses-spi = []
+
+
 
 [dependencies]
 defmt = {version = "0.3", default-features = false}

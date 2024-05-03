@@ -77,9 +77,17 @@ pub fn sys_reset() {
     std::process::exit(0);
 }
 
+#[inline]
+// Execute closure f in an interrupt-free context.
+// In native this is not required, so does nothing
+pub fn interrupt_free<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R,
+{
+    f()
+}
+
 extern "Rust" {fn do_tick();}
-
-
 
 #[embassy_executor::task]
 pub async fn task_stepper_ticker()

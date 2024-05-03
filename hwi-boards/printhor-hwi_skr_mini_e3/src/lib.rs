@@ -110,32 +110,50 @@ cfg_if::cfg_if! {
 pub fn init_logger() {
 }
 
-pub fn setup_timer() {
-    unsafe {
-        let p = cortex_m::Peripherals::steal();
-        let mut syst = p.SYST;
-        syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-        // Target: 0.000010 seg (10us)
-        let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
-        defmt::info!("SYST reload set to {}", reload);
-        syst.set_reload(reload);
-        syst.enable_counter();
-        syst.enable_interrupt();
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion")] {
+        pub fn setup_timer() {
+            unsafe {
+                let p = cortex_m::Peripherals::steal();
+                let mut syst = p.SYST;
+                syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+                // Target: 0.000010 seg (10us)
+                let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
+                defmt::info!("SYST reload set to {}", reload);
+                syst.set_reload(reload);
+                syst.enable_counter();
+                syst.enable_interrupt();
+            }
+        }
+
+        extern "Rust" {fn do_tick();}
+
+        use cortex_m_rt::exception;
+
+        #[exception]
+        fn SysTick() {
+            unsafe {
+                do_tick();
+            }
+        }
     }
 }
 
-extern "Rust" {fn do_tick();}
 
-use cortex_m_rt::exception;
-
-#[exception]
-fn SysTick() {
-    unsafe {
-        do_tick();
-    }
-}
 
 #[inline]
 pub fn sys_reset() {
     cortex_m::peripheral::SCB::sys_reset();
+}
+
+// Execute closure f in an interrupt-free context.
+// Required to safety lock a resource that can be also requested by an ISR.
+// Such ISR, hence, won't miss it's interrupt and won't be too much delayed
+pub fn interrupt_free<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R,
+{
+    cortex_m::interrupt::free(|_| {
+        f()
+    })
 }

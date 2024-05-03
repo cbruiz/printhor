@@ -45,6 +45,12 @@ cfg_if::cfg_if! {
             pub fn powi(self, x: i32) -> Self {
                 Self(FloatCore::powi(self.0, x))
             }
+
+            #[inline]
+            pub fn recip(self) -> Self {
+                Self(FloatCore::recip(self.0))
+            }
+
             #[inline]
             pub const fn zero() -> Self {
                 Self(0.0f32)
@@ -52,6 +58,10 @@ cfg_if::cfg_if! {
             #[inline]
             pub fn is_zero(&self) -> bool {
                 f32::is_zero(&self.0)
+            }
+
+            pub fn epsilon() -> Self {
+                Real(<f32 as FloatCore>::epsilon())
             }
 
             #[inline]
@@ -114,9 +124,8 @@ cfg_if::cfg_if! {
                 self.0.to_i64().unwrap()
             }
 
-            #[inline]
             pub fn sqrt(self) -> Option<Self> {
-                let num = self.rdp(2).0;
+                let num = self.inner();
                 // The famous inverse square root approximation of Id software
                 let _r = 1.0f32 / Self::quake_isqrt(num);
 
@@ -138,10 +147,16 @@ cfg_if::cfg_if! {
             }
 
             fn quake_isqrt(number: f32) -> f32 {
-                let mut i: i32 = number.to_bits() as i32;
-                i = 0x5F375A86_i32.wrapping_sub(i >> 1);
-                let y = f32::from_bits(i as u32);
-                y * (1.5 - (number * 0.5 * y * y))
+
+                let xhalf = number * 0.5f32;
+                let mut y = f32::from_bits(0x5F375A86_i32.wrapping_sub(number.to_bits() as i32 >> 1) as u32);
+                y = y * (1.5f32 - xhalf * y * y);
+                //log::info!("sqrt({}) = {} [i1]", number, y);
+                y = y * (1.5f32 - xhalf * y * y);
+                //log::info!("sqrt({}) = {} [i2]", number, y);
+                y = y * (1.5f32 - xhalf * y * y);
+                //log::info!("sqrt({}) = {} [i3]", number, 1.0f32 / y);
+                y
             }
 
             fn iterative_sqrt(_number: f32) -> f32 {

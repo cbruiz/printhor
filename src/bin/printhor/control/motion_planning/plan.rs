@@ -3,34 +3,15 @@
 //! [[1]] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)
 
 use crate::{hwa, math};
-use core::ops::{Mul, Div};
 use crate::math::*;
 use crate::control::CodeExecutionFailure;
 
 pub trait MotionProfile {
 
-    fn end(&self) -> Real;
+    fn end_time(&self) -> Real;
+    fn end_pos(&self) -> Real;
 
-    fn eval_position(&self, t: Real) -> Option<Real>;
-}
-
-#[derive(Clone, Default)]
-pub struct Boundaries {
-    /// Final position
-    pub q_1: Real,
-    /// Start speed
-    pub v_0: Real,
-    /// Final speed
-    pub v_1: Real,
-}
-
-#[cfg(feature = "native")]
-impl core::fmt::Display for Boundaries {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(f,
-               "q_{{1}}={} v_{{0}}={} v_{{1}}={}", self.q_1, self.v_0, self.v_1
-        )
-    }
+    fn eval_position(&self, t: Real) -> Option<(Real, u8)>;
 }
 
 #[derive(Clone, Copy, Default)]
@@ -50,6 +31,14 @@ impl core::fmt::Display for Constraints {
                "v_{{max}}={} a_{{max}}={} j_{{max}}={}", self.v_max, self.a_max, self.j_max
         )
     }
+}
+
+pub struct Times {
+    pub t_j1: Real,
+    pub t_a: Real,
+    pub t_v: Real,
+    pub t_d: Real,
+    pub t_j2: Real,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -77,35 +66,160 @@ pub struct SCurveMotionProfile {
 impl SCurveMotionProfile {
     pub fn compute(q_1: Real, v_0: Real, v_1:Real, constraints: &Constraints, error_correction: bool) -> Result<SCurveMotionProfile, CodeExecutionFailure>  {
 
-        hwa::debug!("compute q_{{1}} = {} v_{{0}} = {} v_{{1}} = {}", q_1, v_0, v_1);
+        // Clamp v_ma to be equal or higher than v_0 and v_1
+        let v_min = v_0.max(v_1);
+        let mut v_max = v_min.max(constraints.v_max);
+
+        hwa::info!("compute q_{{1}} = {} v_{{0}} = {} v_{{1}} = {}", q_1, v_0, v_1);
         cfg_if::cfg_if! {
             if #[cfg(feature="verbose-timings")] {
                 let _t0 = embassy_time::Instant::now();
             }
         }
 
-        let t_jmax = constraints.a_max / constraints.j_max;
+        // First, compute the displacement
+
+        // [[1]] First necessary to verify whether a trajectory can be actually performed or not.
+        // As a matter of fact, there are several cases in which a trajectory cannot be computed
+        // with the given constraints. For example, if the desired displacement h is small with
+        // respect to the difference between the initial and final velocities v0 and v1, it might be not possible
+        // to change the velocity (with the given limits on jerk and acceleration), while accomplishing the displacement h.
+
+        let j_max_inv = constraints.j_max.recip();
+        let t_jmax = constraints.a_max * j_max_inv;
+        // [eq 3.17]
         let t_jstar = Real::vmin(
-            (((v_1 - v_0).abs()) / constraints.j_max).sqrt(),
+            (((v_1 - v_0).abs()) * j_max_inv).sqrt(),
             Some(t_jmax),
         ).unwrap_or(ZERO);
 
-        hwa::debug!("t_jstar = {} t_jmax = {}", t_jstar, t_jmax);
+        // [[1]] If t_jstar = amax/jmax, the acceleration reaches its maximum value and a segment with zero jerk may exist.
 
-        let q_lim = if t_jstar < t_jmax {
-            t_jstar * (v_0 + v_1)
+        if (t_jstar - t_jmax).is_negligible() {
+            // the acceleration reaches its maximum value and a segment with zero jerk may exist
+            hwa::debug!("The acceleration reaches its maximum value");
         }
         else {
-            ((v_0 + v_1) / TWO) * (t_jstar + ((v_1 - v_0).abs() / constraints.a_max))
+            hwa::debug!("The acceleration does not reach its maximum value");
+        }
+
+        hwa::debug!("t_jstar = {} t_jmax = {}", t_jstar, t_jmax);
+
+        // [[1]] (3.18)
+        let q_lim = if t_jstar < t_jmax {
+            t_jstar * (v_0 + v_1) // H
+        }
+        else {
+            (HALF * (v_0 + v_1)) * (t_jstar + ((v_1 - v_0).abs() * j_max_inv))
         };
 
-        let feasible = q_1 > q_lim;
+        let not_feasible = q_1 <= q_lim;
 
-        if !feasible {
-            hwa::error!("Movement NOT FEASIBLE:");
+        if not_feasible {
+            hwa::warn!("Movement NOT FEASIBLE. Performing unconstrained parabolic blends");
 
-            let jm = t_jmax;
-            hwa::error!("* constraint: {}", (q_1 * q_1 * jm) + v_0);
+            // y := j_max
+            // e1: q1 = (y * t^3) / 6 + v0 * t
+            // e2: v1 = v0 + y * t^2 / 2 => 2*(v1 - v0) = y * t^2 => y = 2*(v1-v0) / t^2
+            // e1|e2: q1 = ((2*(v1-v0) / t^2) * t^3) / 6 + v0 * t
+            // t = 3*q1 / 2*v0 + v1 | v0+v1 >0 and q1 > 0
+
+            // v1(t) = v0 + j_max * t^2 / 2
+            // s1(t) = (y * t^3) / 6 + v0*t
+            // v2(t) = 2*v1(t_j1) - v0 - j_max * (t - 2t_j1)^2 / 2
+            //  2*v0 + j_max * t_j1^2 / 2
+            // v2(t) = 2*(v0 + j_max * t^2 / 2) - v0 - j_max * (t - 2t_j1)^2 / 2
+
+
+            // e1: q1 = (y * t^3) / 6 + v0*t
+            // e2: q1 = (- y * t^3) / 6 + a*t^2*T_j1 - a * t * T_j1^2 + t*v_0
+            // e3: T_j1 = t/2
+            // y = q1/x
+
+            // solving -1/6 a x^3 + d/x *x^3/2 - d/x* x^3/4 + v x = d for x
+            // x = (2 (sqrt(d^2 + v^2) - v))/d y d!=0 y a = 0
+
+            // v1(t) = v0 + a * (t^2 / 2)
+            // s1(t) = (a * t^3) / 6 + v0 * t
+
+            // v2(t) = v_1 - a * (((T - t)^2)/2)
+            // s2(t) = v_{1} * t - (1/6) * a * t (t^2 - 3*t*T + 3*T^2)
+
+            // q_b = Int{T/2, T} ( v_1 - a * (((T - t)^2)/2) ) = s2(T) - s2(T/2)
+            // q_b = v_1 * T - (1/6) * a * T (T^2 - 3*T*T + 3*T^2) - ( v_1 * T/2 - (1/6) * a * T/2 ((T/2)^2 - 3*(T/2)*T + 3*T^2) )
+            //   = 1/2 T v_1 - (a T^3)/48
+            //
+            // q_a = Int{0, T/2} (v_0 + a * (t^2 / 2)) = s1(T/2) - s1(0)
+            // q_a = (a * (T/2)^3) / 6 + v_0 * T/2 - ( (a * 0^3) / 6 + v_0 * 0 )
+            // = 1/48 T (a T^2 + 24 * v_0)
+
+            // s = q_a + q_b = 1/2 * T * v_1 - (a * T^3) / 48 + 1/48 * T * (-a T^2 + 24 * v_0) =
+            //   = 1/2 T (v_0 + v_1)
+            // T = (2 * s) / (v_0 + v_1)
+
+            // q_a = 1/48 T (a T^2 + 24 * v_0)
+            // q_b = 1/2 T v_1 - (a T^3)/48
+            // simplifiying q_a = 1/48 ((2 * s) / (v_0 + v_1)) (a ((2 * s) / (v_0 + v_1))^2 + 24 * v_0)
+            // q_a = (s (a s^2 + 6 v_0 (v_0 + v_1)^2))/(6 (v_0 + v_1)^3)
+            // simplifiying q_b = 1/2 ((2 * s) / (v_0 + v_1)) v_1 - (a ((2 * s) / (v_0 + v_1))^3)/48
+            // q_b = (s v_1)/(v_0 + v_1) - (a s^3)/(6 (v_0 + v_1)^3)
+
+            // (q_1 (q_1 q_1^2 + 6 v_0 (v_0 + v_1)^2))/(6 (v_0 + v_1)^3)
+            // (q_1 v_1)/(v_0 + v_1) - (a q_1^3)/(6 (v_0 + v_1)^3)
+
+            // Compute the time need to accel
+            let t_a = TWO * (q_1 / (v_0 + v_1));
+
+            // Compute the accel
+            let a = (v_1 - v_0) / t_a;
+            let t_j1 = HALF * t_a;
+
+            // Constructively define the two parabolas:
+            // The first one (smooth accel from v_0):
+            // v_{1}(t) := a_{v1} * (t - 0)^2 + v_{0}
+            // with a_{v_1} as:
+            //  a_{1} = \frac{a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+            // The second one (smooth decel to v_1); TBD
+            //  a_{2} = \frac{-a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+
+            let a_1 = (a * t_j1) / (t_j1 * t_j1);
+
+            // Finally, reformulating to meet the paper convention it is trivial to determine that:
+            // In \dot{q}(t) = v_{0} + j_{max} \frac{t^2}{2}:
+            // a_{v1} = j_max / 2, hence j_max = 2 * a_{v1}
+
+            let j_max = TWO * a_1;
+
+            let mut profile = SCurveMotionProfile {
+                t_j1,
+                t_a,
+                t_v: math::ZERO,
+                t_d: math::ZERO,
+                t_j2: math::ZERO,
+                v_0: v_0,
+                v_1: v_1,
+                j_max,
+                a_lim_a: math::ZERO,
+                a_lim_d: math::ZERO,
+                v_lim: v_1,
+                q1: q_1,
+                cache: Cache::default(),
+                constraints: *constraints,
+            };
+            cfg_if::cfg_if! {
+                if #[cfg(feature="verbose-timings")] {
+                    hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                }
+            }
+            profile.compute_cache();
+            if error_correction {
+                let final_pos = profile.s_i7(&profile.i7_end());
+                let delta_e = profile.q1 - final_pos;
+                profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+
+            }
+            return Ok(profile);
+            /*
 
             if t_jstar < t_jmax {
                 hwa::error!(" => cannot accel to travel {} mm from {} to {} ({}). Will take {} mm ({} * (v0+v1))", q_1, v_0, v_1, (v_1 - v_0).abs(), q_lim, t_jstar);
@@ -114,155 +228,434 @@ impl SCurveMotionProfile {
                 hwa::error!("=> cannot accel to travel {} mm from {} to {}. Will take {} mm (((v_0 + v_1) / TWO) * ({} + ((v_1 - v_0).abs() / {})))", q_1, v_0, v_1, q_lim, t_jstar, constraints.a_max);
             }
             return Err(CodeExecutionFailure::ERR)
-        }
 
-        let amax_squared = constraints.a_max * constraints.a_max;
-
-        let (t_j1, t_a) = if (constraints.v_max - v_0) * constraints.j_max < amax_squared {
-            let t_j1 = ( ( constraints.v_max - v_0 ).abs() / constraints.j_max ).sqrt().ok_or(CodeExecutionFailure::NumericalError)?;
-            (t_j1, t_j1 + t_j1)
-        } else {
-            let t_j1 = constraints.a_max / constraints.j_max;
-            (t_j1, t_j1 + (constraints.v_max - v_0).abs() / constraints.a_max)
-        };
-
-        let (t_j2, t_d) = if (constraints.v_max - v_1) * constraints.j_max < amax_squared {
-            let t_j1 = ( ( constraints.v_max - v_1 ).abs() / constraints.j_max ).sqrt().ok_or(CodeExecutionFailure::NumericalError)?;
-            (t_j1, t_j1 + t_j1)
-        } else {
-            let t_j1 = constraints.a_max / constraints.j_max;
-            (t_j1, t_j1 + (constraints.v_max - v_1).abs() / constraints.a_max)
-        };
-
-        let t_v = (q_1 / constraints.v_max )
-            - ((t_a * HALF) * ( ONE + (v_0 / constraints.v_max)))
-            - ((t_d * HALF) * ( ONE + (v_1 / constraints.v_max)));
-
-        let (mut intervals, _j_max) = if t_v >= ZERO {
-
-            let a_lim_a = constraints.j_max * t_j1;
-            let a_lim_d = constraints.j_max * t_j2;
-            let v_lim = v_0 + (t_a - t_j1) * a_lim_a;
-            if v_lim.is_zero() {
-                return Err(CodeExecutionFailure::ERR);
-            }
-            let t = t_a + t_v + t_d;
-            (SCurveMotionProfile {
-                t_j1,
-                t_a,
-                t_v,
-                t_d,
-                t_j2,
-                v_0: v_0,
-                v_1: v_1,
-                j_max: constraints.j_max,
-                a_lim_a,
-                a_lim_d,
-                v_lim,
-                q1: q_1,
-                cache: Cache::default(),
-                constraints: *constraints,
-            }, constraints.j_max)
+             */
         }
         else {
+            //Procedure:
+            // Assuming that vmax and amax are reached (*case_1*) compute the time intervals:
+            // if (vmax − v0) * jmax < a_max^2 =⇒ a_max is not reached (3.19) and hence:
+            //      T_j1 = sqrt( (v_max - v_0) / j_max ) , Ta = 2 * T_j1,
+            // else
+            //      T_j1 = a_max / j_max, T_a = T_j1 + (v_max - v_0) / a_max
+            // if (vmax − v1) * jmax < a_max^2 =⇒ a_max is not reached (3.20) and hence:
+            //      T_j2 = sqrt( (v_max - v_1) / j_max ) , Td = 2 * T_j2,
+            // else
+            //      T_j1 = a_max / j_max, T_a = T_j2 + (v_max - v_1) / a_max
 
-            let mut gamma = ONE;
-            let mut t_a_2 = ZERO;
-            let mut t_d_2 = ZERO;
-            let mut t_j = ZERO;
-            #[allow(unused_assignments)]
-                let mut t_j1_2 = ZERO;
-            #[allow(unused_assignments)]
-                let mut t_j2_2 = ZERO;
-            #[allow(unused_variables)]
-                let mut v_lim = ZERO;
+            let mut a_max = constraints.a_max;
+            let mut a_max_inv = a_max.recip();
+            let mut a_max_squared = a_max * a_max;
+            // aj_ratio = a_max / j_max
+            let mut aj_ratio = a_max * j_max_inv;
 
-            let mut a_max_2 = constraints.a_max;
+            let mut prev_vmax = v_max;
+            let gamma = Real::from_f32(0.9);
+            loop {
+                match Self::compute_case1(q_1, v_0, v_1, v_max, a_max, constraints.j_max, aj_ratio, a_max_squared) {
+                    Ok(times) => {
+                        if times.t_v <= ZERO {
 
-            for _i in 0..10 {
-                // TODO: lagrange multipliers
-                //println!("Trying with gamma={}", gamma.rdp(4));
+                            // TODO: lagrange multipliers or something better to find a solution with less iterations
 
-                t_j = a_max_2 / constraints.j_max;
+                            let t_j = aj_ratio;
 
-                let sqrt_delta = (((a_max_2 * a_max_2 * a_max_2 * a_max_2) / (constraints.j_max * constraints.j_max))
-                    + (TWO * ((v_0 * v_0) + (v_1 * v_1))
-                    + (a_max_2 * ((FOUR * q_1)
-                    - (TWO * (a_max_2 / constraints.j_max) * (v_0 + v_1)))))).sqrt().unwrap();
-                let aj = (a_max_2 * a_max_2) / constraints.j_max;
-                t_a_2 = (aj - (TWO * v_0) + sqrt_delta) / (TWO * a_max_2);
-                t_d_2 = (aj - (TWO * v_1) + sqrt_delta) / (TWO * a_max_2);
+                            let sqrt_delta = ((a_max * a_max * a_max * a_max * j_max_inv * j_max_inv)
+                                + (TWO * ((v_0 * v_0) + (v_1 * v_1))
+                                + (a_max * ((FOUR * q_1)
+                                - (TWO * (t_j) * (v_0 + v_1)))))).sqrt().unwrap();
+                            let aj = (a_max * a_max) * j_max_inv;
+                            let mut t_a_2 = ((aj - (v_0 + v_0) + sqrt_delta) * HALF * a_max_inv);
+                            let mut t_d_2 = ((aj - (v_1 + v_1) + sqrt_delta) * HALF * a_max_inv);
+                            let mut t_j1 = t_j;
+                            let mut t_j2 = t_j;
 
-                let a_lim_a = constraints.j_max * t_j;
-                v_lim = v_0 + (t_a_2 - t_j) * a_lim_a;
+                            if t_a_2 < math::ZERO || t_d_2 < math::ZERO {
+                                // it may happen that Ta or Td becomes negative. In this case, only one of the acceleration or deceleration phase is necessary
+                                let qd = (q_1 / (v_0 + v_1));
+                                let vsum_sq = (v_0 + v_1) * (v_0 + v_1);
+                                if t_a_2 < math::ZERO {
+                                    t_a_2 = math::ZERO;
+                                    t_j1 = math::ZERO;
 
-                if t_a_2 > (TWO * t_j) && t_d_2 > (TWO * t_j) {
-                    break;
+                                    t_d_2 = qd * TWO;
+                                    t_j2 = ((constraints.j_max * q_1) - (
+                                        constraints.j_max * (constraints.j_max * q_1 * q_1 + (v_1 + v_0) * (v_1 + v_0) * (v_1 - v_0))
+                                    ).sqrt().unwrap()) / (
+                                        constraints.j_max * (v_1 + v_0)
+                                    );
+                                } else if t_d_2 < math::ZERO {
+                                    t_d_2 = math::ZERO;
+                                    t_j2 = math::ZERO;
+                                    t_a_2 = qd * TWO;
+                                    t_j1 = ((constraints.j_max * q_1) - (
+                                        constraints.j_max * (constraints.j_max * q_1 * q_1 + (v_1 + v_0) * (v_1 + v_0) * (v_0 - v_1))
+                                    ).sqrt().unwrap()) / (
+                                        constraints.j_max * (v_1 + v_0)
+                                    );
+                                }
+                            } else {
+                                t_j1 = t_j;
+                                t_j2 = t_j;
+                            }
+
+                            /*
+                            #[cfg(feature = "native")]
+                            std::println!("gamma={} -> a={} -> t_j1={}, t_a_2={} t_j2={} t_d_2={}",
+                                          gamma.rdp(4),
+                                a_max, t_j1, t_a_2, t_j2, t_d_2
+                            );
+                            */
+
+                            if t_a_2 >= (t_j1 + t_j1) && t_d_2 >= (t_j2 + t_j2) {
+                                let a_lim_a = constraints.j_max * t_j1;
+                                let a_lim_d = -constraints.j_max * t_j2;
+
+                                let v_lim = v_0 + (t_a_2 - t_j1) * a_lim_a;
+                                let t = t_a_2 + math::ZERO + t_d_2;
+                                let mut profile = SCurveMotionProfile {
+                                    t_j1,
+                                    t_a: t_a_2,
+                                    t_v: math::ZERO,
+                                    t_d: t_d_2,
+                                    t_j2,
+                                    v_0: v_0,
+                                    v_1: v_1,
+                                    j_max: constraints.j_max,
+                                    a_lim_a,
+                                    a_lim_d,
+                                    v_lim,
+                                    q1: q_1,
+                                    cache: Cache::default(),
+                                    constraints: *constraints,
+                                };
+                                cfg_if::cfg_if! {
+                                if #[cfg(feature="verbose-timings")] {
+                                        hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                                    }
+                                }
+                                profile.compute_cache();
+                                if error_correction {
+                                    let final_pos = profile.s_i7(&profile.i7_end()) + Real::epsilon();
+                                    let delta_e = profile.q1 - final_pos;
+                                    profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+                                }
+                                return Ok(profile);
+                            }
+                            a_max *= gamma;
+                            a_max_inv = a_max.recip();
+                            a_max_squared = a_max * a_max;
+                            aj_ratio = a_max * j_max_inv;
+                            if a_max < Real::from_f32(0.1) {
+                                if (v_1 - v_0).abs().is_negligible() {
+                                    let t_v = TWO * (q_1 / (v_0 + v_1));
+                                    let mut profile = SCurveMotionProfile {
+                                        t_j1: math::ZERO,
+                                        t_a: math::ZERO,
+                                        t_v,
+                                        t_d: math::ZERO,
+                                        t_j2: math::ZERO,
+                                        v_0: v_0,
+                                        v_1: v_1,
+                                        j_max: constraints.j_max,
+                                        a_lim_a: math::ZERO,
+                                        a_lim_d: math::ZERO,
+                                        v_lim: v_1,
+                                        q1: q_1,
+                                        cache: Cache::default(),
+                                        constraints: *constraints,
+                                    };
+                                    cfg_if::cfg_if! {
+                                    if #[cfg(feature="verbose-timings")] {
+                                            hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                                        }
+                                    }
+                                    profile.compute_cache();
+                                    if error_correction {
+                                        let final_pos = profile.s_i7(&profile.i7_end());
+                                        let delta_e = profile.q1 - final_pos;
+                                        profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+                                    }
+                                    return Ok(profile);
+                                } else {
+                                    // Compute the time need to accel
+                                    let t_a = TWO * (q_1 / (v_0 + v_1));
+
+                                    // Compute the accel
+                                    let a = (v_1 - v_0) / t_a;
+                                    let t_j1 = HALF * t_a;
+
+                                    // Constructively define the two parabolas:
+                                    // The first one (smooth accel from v_0):
+                                    // v_{1}(t) := a_{v1} * (t - 0)^2 + v_{0}
+                                    // with a_{v_1} as:
+                                    //  a_{1} = \frac{a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+                                    // The second one (smooth decel to v_1); TBD
+                                    //  a_{2} = \frac{-a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+
+                                    let a_1 = (a * t_j1) / (t_j1 * t_j1);
+
+                                    // Finally, reformulating to meet the paper convention it is trivial to determine that:
+                                    // In \dot{q}(t) = v_{0} + j_{max} \frac{t^2}{2}:
+                                    // a_{v1} = j_max / 2, hence j_max = 2 * a_{v1}
+
+                                    let j_max = TWO * a_1;
+
+                                    let mut profile = SCurveMotionProfile {
+                                        t_j1,
+                                        t_a,
+                                        t_v: math::ZERO,
+                                        t_d: math::ZERO,
+                                        t_j2: math::ZERO,
+                                        v_0: v_0,
+                                        v_1: v_1,
+                                        j_max,
+                                        a_lim_a: math::ZERO,
+                                        a_lim_d: math::ZERO,
+                                        v_lim: v_1.max(v_0),
+                                        q1: q_1,
+                                        cache: Cache::default(),
+                                        constraints: *constraints,
+                                    };
+                                    cfg_if::cfg_if! {
+                                    if #[cfg(feature="verbose-timings")] {
+                                            hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                                        }
+                                    }
+                                    profile.compute_cache();
+                                    if error_correction {
+                                        let final_pos = profile.s_i7(&profile.i7_end());
+                                        let delta_e = profile.q1 - final_pos;
+                                        profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+                                    }
+                                    return Ok(profile);
+                                }
+                            }
+                            /*
+                        let tv_excess = times.t_v.abs();
+                        if tv_excess > times.t_a + times.t_d {
+                            panic!("Unable to handle this")
+                        }
+                        let ta = times.t_a * Real::from_f32(0.1);
+                        let td = times.t_d * Real::from_f32(0.1);
+                        let tj1 = times.t_j1 * Real::from_f32(0.1);
+                        let tj2 = times.t_j2 * Real::from_f32(0.1);
+                        let a_lim_a = constraints.j_max * tj1;
+                        let a_lim_d = constraints.j_max * tj2;
+                        let v_lim0 = v_0 + (ta - tj1) * a_lim_a;
+                        let v_lim1 = v_1 + (td - tj2) * a_lim_d;
+                        v_max = v_lim0.max(v_lim1);
+                        let vred = prev_vmax - v_max;
+                        if vred < Real::from_lit(1,1) {
+
+                            let mut profile = SCurveMotionProfile {
+                                t_j1: times.t_j1,
+                                t_a: times.t_a,
+                                t_v: times.t_v,
+                                t_d: times.t_d,
+                                t_j2: times.t_j2,
+                                v_0: v_0,
+                                v_1: v_1,
+                                j_max: constraints.j_max,
+                                a_lim_a,
+                                a_lim_d,
+                                v_lim: v_max,
+                                q1: q_1,
+                                cache: Cache::default(),
+                                constraints: *constraints,
+                            };
+                            cfg_if::cfg_if! {
+                                if #[cfg(feature="verbose-timings")] {
+                                    hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                                }
+                            }
+                            profile.compute_cache();
+                            if error_correction {
+                                let final_pos = profile.s_i7(&profile.i7_end());
+                                let delta_e = profile.q1 - final_pos;
+                                profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+
+                            }
+                            return Ok(profile);
+                        }
+                        else {
+                            prev_vmax = v_max;
+                        }
+                        */
+
+                            /*
+                        let t_a = TWO * (q_1 / (v_0 + v_1));
+
+                        // Compute the accel
+                        let a = (v_1 - v_0) / t_a;
+                        let t_j1 = HALF * t_a;
+
+
+                        // Constructively define the two parabolas:
+                        // The first one (smooth accel from v_0):
+                        // v_{1}(t) := a_{v1} * (t - 0)^2 + v_{0}
+                        // with a_{v_1} as:
+                        //  a_{1} = \frac{a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+                        // The second one (smooth decel to v_1); TBD
+                        //  a_{2} = \frac{-a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+
+                        let a_1 = (a * t_j1) / (t_j1 * t_j1);
+
+                        // Finally, reformulating to meet the paper convention it is trivial to determine that:
+                        // In \dot{q}(t) = v_{0} + j_{max} \frac{t^2}{2}:
+                        // a_{v1} = j_max / 2, hence j_max = 2 * a_{v1}
+
+                        let j_max = TWO * a_1;
+
+                        let mut profile = SCurveMotionProfile {
+                            t_j1,
+                            t_a,
+                            t_v: math::ZERO,
+                            t_d: math::ZERO,
+                            t_j2: math::ZERO,
+                            v_0: v_0,
+                            v_1: v_1,
+                            j_max,
+                            a_lim_a: math::ZERO,
+                            a_lim_d: math::ZERO,
+                            v_lim: v_1,
+                            q1: q_1,
+                            cache: Cache::default(),
+                            constraints: *constraints,
+                        };
+                        cfg_if::cfg_if! {
+                            if #[cfg(feature="verbose-timings")] {
+                                hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                            }
+                        }
+                        profile.compute_cache();
+                        if error_correction {
+                            let final_pos = profile.s_i7(&profile.i7_end());
+                            let delta_e = profile.q1 - final_pos;
+                            profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+
+                        }
+                        return Ok(profile);
+
+                         */
+                        } else { // H
+                            hwa::debug!("OK at {} -> ta = {} td = {} tv = {}", v_max, times.t_a, times.t_d, times.t_v);
+                            let a_lim_a = constraints.j_max * times.t_j1;
+                            let a_lim_d = constraints.j_max * times.t_j2;
+                            let v_lim = v_0 + (times.t_a - times.t_j1) * a_lim_a;
+                            let t = times.t_a + times.t_v + times.t_d;
+                            let mut profile = SCurveMotionProfile {
+                                t_j1: times.t_j1,
+                                t_a: times.t_a,
+                                t_v: times.t_v,
+                                t_d: times.t_d,
+                                t_j2: times.t_j2,
+                                v_0: v_0,
+                                v_1: v_1,
+                                j_max: constraints.j_max,
+                                a_lim_a,
+                                a_lim_d,
+                                v_lim,
+                                q1: q_1,
+                                cache: Cache::default(),
+                                constraints: *constraints,
+                            };
+                            cfg_if::cfg_if! {
+                                if #[cfg(feature="verbose-timings")] {
+                                    hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
+                                }
+                            }
+                            profile.compute_cache();
+                            if error_correction {
+                                let final_pos = profile.s_i7(&profile.i7_end());
+                                let delta_e = profile.q1 - final_pos;
+                                profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+                            }
+                            return Ok(profile);
+                        }
+                    }
+                    Err(_e) => {
+                        return Err(_e)
+                    }
                 }
-                gamma = gamma * HALF;
-                a_max_2 = constraints.a_max * gamma;
             }
-            t_j1_2 = t_j;
-            t_j2_2 = t_j;
-            if t_a_2 < Real::zero() {
-                t_a_2 = Real::zero();
-                t_j1_2 = Real::zero();
-                t_d_2 = (q_1.mul(TWO)).div(v_1 + v_0);
-                t_j2_2 = (constraints.j_max.mul(q_1) - (constraints.j_max.mul(
-                    (constraints.j_max.mul(q_1 * q_1)) + ((v_1 + v_0)*(v_1 + v_0)).mul(v_1 - v_0)
-                )
-                ).sqrt().unwrap()).div(
-                    constraints.j_max.mul(v_1 + v_0)
-                )
-            }
-            else if t_d_2 < Real::zero() {
-                t_d_2 = Real::zero();
-                t_j2_2 = Real::zero();
-                t_a_2 = (q_1.mul(TWO)).div(v_1 + v_0);
-                t_j1_2 = (constraints.j_max.mul(q_1) - (constraints.j_max.mul(
-                    (constraints.j_max.mul(q_1 * q_1)) + ((v_1 + v_0) * (v_1 + v_0)).mul(v_0 - v_1)
-                )
-                ).sqrt().unwrap()).div(
-                    constraints.j_max.mul(v_1 + v_0)
-                )
-            }
-            let a_lim_a = constraints.j_max * t_j1_2;
-            let a_lim_d = constraints.j_max * t_j2_2;
-            if v_lim.is_zero() {
-                return Err(CodeExecutionFailure::ERR)
-            }
-            let t = t_a_2 + t_d_2;
-            (SCurveMotionProfile {
-                t_j1: t_j1_2,
-                t_a: t_a_2,
-                t_v: ZERO,
-                t_d: t_d_2,
-                t_j2: t_j2_2,
-                v_0,
-                v_1,
-                j_max: constraints.j_max,
-                a_lim_a,
-                a_lim_d,
-                v_lim,
-                q1: q_1,
-                cache: Cache::default(),
-                constraints: *constraints,
-            }, a_max_2)
+        }
+
+    }
+
+    fn compute_case1(q_1: Real, v_0: Real, v_1: Real, v_max: Real, a_max: Real, j_max: Real, aj_ratio: Real, amax_squared: Real) -> Result<Times, CodeExecutionFailure> {
+
+        let a_max_not_reached = (v_max - v_0) * j_max < amax_squared;
+        let a_min_not_reached = (v_max - v_1) * j_max < amax_squared;
+
+        let j_max_inv = if a_max_not_reached || a_min_not_reached {
+            j_max.recip()
+        } else {
+            math::ZERO
         };
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature="verbose-timings")] {
-                hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-            }
+        let a_max_inv = if !a_max_not_reached || !a_min_not_reached {
+            a_max.recip()
+        } else {
+            math::ZERO
+        };
+
+        let (t_j1, t_a) = if a_max_not_reached {
+            let t_j = ( ( v_max - v_0).max(math::ZERO) * j_max_inv ).sqrt().ok_or(CodeExecutionFailure::NumericalError)?;
+            (t_j, t_j + t_j)
         }
-        intervals.compute_cache();
-        if error_correction {
-            let final_pos = intervals.s_i7(&intervals.i7_end());
-            let delta_e = intervals.q1 - final_pos;
-            intervals.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+        else {
+            let t_j = aj_ratio;
+            (t_j, t_j + (v_max - v_0).max(math::ZERO) * a_max_inv)
+        };
+        let (t_j2, t_d) = if a_min_not_reached {
+            let t_j = ( ( v_max - v_1).max(math::ZERO) * j_max_inv ).sqrt().ok_or(CodeExecutionFailure::NumericalError)?;
+            (t_j, t_j + t_j)
         }
-        Ok(intervals)
+        else {
+            let t_j = aj_ratio;
+            (t_j, t_j + (v_max - v_1).max(math::ZERO) * a_max_inv)
+        };
+
+        // Efficently compute: (q_1 / v_max) - (t_a / 2) * (1 + (v_0 / v_max)) - (t_d / 2) * (1 + (v_1 / v_max))
+        // ... with maximum possible numerical precision
+
+        let v_max_inv = v_max.recip();
+        let half_ta = t_a * HALF;
+        let term1 = half_ta + half_ta * (v_0 * v_max_inv);
+        let half_td = t_d * HALF;
+        let term2 = half_td + half_td * (v_1 * v_max_inv);
+
+        let t_v = (q_1 * v_max_inv) - term1 - term2;
+        Ok(Times { t_j1, t_a, t_v, t_j2, t_d })
     }
+
+    pub fn params_dump(&self) {
+        hwa::debug!("Params:\nq_{{1}} = {}\nv_{{0}} = {}\nv_{{1}} = {}\nv_{{max}} = {}\na_{{max}} = {}\nj_{{max}} = {}\nT_{{j1}} = {}\nT_{{a}} = {}\nT_{{v}} = {}\nT_{{j2}} = {}\nT_{{d}} = {}\na_{{lima}} = {}\na_{{limd}} = {}\nv_{{lim}} = {}",
+            self.q1, self.v_0, self.v_1,
+            self.constraints.v_max,
+            self.constraints.a_max,
+            self.constraints.j_max,
+            self.t_j1, self.t_a,
+            self.t_v,
+            self.t_j2, self.t_d,
+            self.a_lim_a, self.a_lim_d, self.v_lim,
+        );
+
+        hwa::debug!("V_{{1}}(t) = v_{{0}} + j_{{max}} * \\frac{{t^2}}{{2}}");
+        hwa::debug!("V_{{2}}(t) = v_{{0}} + a_{{lima}} * (t - \\frac{{T_{{j1}}}}{{2}})");
+        hwa::debug!("V_{{3}}(t) = v_{{lim}} - j_{{max}} * \\frac{{(T_{{a}} - t)^2}}{{2}}");
+        hwa::debug!("V_{{4}}(t) = v_{{lim}}");
+        hwa::debug!("V_{{5}}(t) = v_{{lim}} - j_{{max}} * \\frac{{(t - T_{{a}} - T_{{v}})^2}}{{2}}");
+        hwa::debug!("V_{{6}}(t) = v_{{lim}} - a_{{limd}} * (t - T_{{a}} - T_{{v}} - \\frac{{T_{{j2}}}}{{2}})");
+        hwa::debug!("V_{{7}}(t) = v_{{1}} + j_{{max}} * \\frac{{(t - T_{{a}} - T_{{v}} - T_{{d}})^2}}{{2}}");
+        hwa::debug!("V(t) = if( t < 0, v_{{0}}, if( 0 <= t < T_{{j1}}, V_{{1}}(t), if( T_{{j1}} <= t < T_{{a}} - T_{{j1}}, V_{{2}}(t), if( T_{{a}} - T_{{j1}} <= t < T_{{a}}, V_{{3}}(t), if( T_{{a}} <= t < T_{{a}} + T_{{v}}, V_{{4}}(t), if( T_{{a}} + T_{{v}} <= t < T_{{a}} + T_{{v}} + T_{{j2}}, V_{{5}}(t), if( T_{{a}} + T_{{v}} + T_{{j2}} <= t < T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}}, V_{{6}}(t), if( T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}} <= t < T_{{a}} + T_{{v}} + T_{{d}}, V_{{7}}(t), v_{{1}} ) ) ) ) ) ) ) )");
+        hwa::debug!("Points:\nP_{{j1a}}=(T_{{j1}}, 0)\nP_{{j1d}}=(T_{{a}} - T_{{j1}}, 0)\nP_{{a}}=(T_{{a}}, 0)\nP_{{v}}=(T_{{a}} + T_{{v}}, 0)\nP_{{v}}=(T_{{a}} + T_{{v}}, 0)\nP_{{j2a}}=(T_{{a}} + T_{{v}} + T_{{j2}}, 0)\nP_{{j2d}}=(T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}}, 0)\nP_{{j2a}}=(T_{{a}} + T_{{v}} + T_{{d}}, 0)");
+        hwa::debug!("s_i7 = {}", self.s_i7(&self.i7_end()));
+        hwa::debug!("--");
+
+    }
+
 
     /// The time at the start of 1st interval
     /// Interval is:
@@ -389,24 +782,31 @@ impl SCurveMotionProfile {
     }
 
     /// Compute intermediate piecewise function points to speedup equations
+    /// A max between previous segment max pos and next one is applied to guarantee consistency
+    /// when the move is (pseudo)triangular, given that position can never decrease
     fn compute_cache(&mut self)  {
+        if self.v_lim.is_negligible() {
+            panic!("vlim is zero");
+        }
         self.cache.s1_pt = self.s_i1(&self.i1_end());
-        self.cache.s2_pt = self.s_i2(&self.i2_end());
-        self.cache.s3_pt = self.s_i3(&self.i3_end());
-        self.cache.s4_pt = self.s_i4(&self.i4_end());
-        self.cache.s5_pt = self.s_i5(&self.i5_end());
-        self.cache.s6_pt = self.s_i6(&self.i6_end());
-        self.cache.s7_pt = self.s_i7(&self.i7_end());
+        self.cache.s2_pt = self.cache.s1_pt.max(self.s_i2(&self.i2_end()));
+        self.cache.s3_pt = self.cache.s2_pt.max(self.s_i3(&self.i3_end()));
+        self.cache.s4_pt = self.cache.s3_pt.max(self.s_i4(&self.i4_end()));
+        self.cache.s5_pt = self.cache.s4_pt.max(self.s_i5(&self.i5_end()));
+        self.cache.s6_pt = self.cache.s5_pt.max(self.s_i6(&self.i6_end()));
+        self.cache.s7_pt = self.cache.s6_pt.max(self.s_i7(&self.i7_end()));
     }
 
     pub fn extend(&mut self, delta_e: Real)  -> Result<(), ()> {
-        let extra_time = delta_e / self.v_lim;
-        if self.t_v + extra_time > math::ZERO {
-            self.t_v += extra_time;
-            self.cache.s4_pt += delta_e;
-            self.cache.s5_pt += delta_e;
-            self.cache.s6_pt += delta_e;
-            self.cache.s7_pt += delta_e;
+        if self.v_lim > Real::epsilon() {
+            let extra_time = delta_e / self.v_lim;
+            if self.t_v + extra_time > math::ZERO {
+                self.t_v += extra_time;
+                self.cache.s4_pt += delta_e;
+                self.cache.s5_pt += delta_e;
+                self.cache.s6_pt += delta_e;
+                self.cache.s7_pt += delta_e;
+            }
         }
 
         Ok(())
@@ -546,37 +946,40 @@ impl SCurveMotionProfile {
 
 impl MotionProfile for SCurveMotionProfile {
     #[inline(always)]
-    fn end(&self) -> Real {
+    fn end_time(&self) -> Real {
         self.i7_end()
     }
+    fn end_pos(&self) -> Real {
+        self.q1
+    }
 
-    fn eval_position(&self, t: Real) -> Option<Real> {
+    fn eval_position(&self, t: Real) -> Option<(Real, u8)> {
         if t < math::ZERO {
             None
         }
         else if t >= self.i1_start() && t < self.i1_end() {
-            Some(self.s_i1(&t))
+            Some((self.s_i1(&t), 1))
         }
         else if t >= self.i2_start() && t < self.i2_end() {
-            Some(self.s_i2(&t))
+            Some((self.s_i2(&t), 2))
         }
         else if t >= self.i3_start() && t < self.i3_end() {
-            Some(self.s_i3(&t))
+            Some((self.s_i3(&t), 3))
         }
         else if t >= self.i4_start() && t < self.i4_end() {
-            Some(self.s_i4(&t))
+            Some((self.s_i4(&t), 4))
         }
         else if t >= self.i5_start() && t < self.i5_end() {
-            Some(self.s_i5(&t))
+            Some((self.s_i5(&t), 5))
         }
         else if t >= self.i6_start() && t < self.i6_end() {
-            Some(self.s_i6(&t))
+            Some((self.s_i6(&t), 6))
         }
         else if t >= self.i7_start() && t <= self.i7_end() {
-            Some(self.s_i7(&t))
+            Some((self.s_i7(&t), 7))
         }
         else {
-            Some(self.q1)
+            Some((self.q1, 8))
         }
     }
 }
@@ -626,3 +1029,116 @@ impl core::fmt::Display for SCurveMotionProfile {
     }
 }
 
+#[cfg(test)]
+pub mod test {
+    //Example 3.9
+
+    use num_traits::ToPrimitive;
+    use crate::control::CodeExecutionFailure;
+    use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+    use crate::math::Real;
+
+    pub fn do_compute(q1: f32, v_0: f32, v_1: f32, v_max: f32, a_max: f32, j_max: f32) -> Result<SCurveMotionProfile, CodeExecutionFailure> {
+        let constraints = Constraints {
+            v_max: Real::from_f32(v_max),
+            a_max: Real::from_f32(a_max),
+            j_max: Real::from_f32(j_max),
+        };
+        SCurveMotionProfile::compute(Real::from_f32(q1),
+                                     Real::from_f32(v_0), Real::from_f32(v_1),
+                                     &constraints, false)
+    }
+
+    fn approx_equal(what: &str, v: Real, expected: f32, tolerance: f32) {
+        let v1 = v.to_f64().to_f32().unwrap();
+        let ok = (v1 - expected).abs() < tolerance;
+        assert!(ok, "{} = {} but should be = {}", what, v1, expected);
+    }
+
+    //#[cfg(feature = "a")]
+    #[test]
+    fn ex_3_9() {
+
+        // With: q_1 = 10, v_0 = 1, v_1 = 0
+        // Given: v_max = 5, a_max = 10, j_max = 30
+        // Exp: T_a = 0.7333, T_v = 1.1433, T_d = 0.8333, T_j1 = 0.3333, T_j2 = 0.3333
+        let r = do_compute(10., 1., 0., 5., 10., 30.).unwrap();
+
+        approx_equal("T_a", r.t_a, 0.7333, 0.001);
+        approx_equal("T_d", r.t_d, 0.8333, 0.001);
+        approx_equal("T_j1", r.t_j1, 0.3333, 0.001);
+        approx_equal("T_j2", r.t_j2, 0.3333, 0.001);
+        approx_equal("T_v", r.t_v, 1.1433, 0.001);
+    }
+
+    //#[cfg(feature = "a")]
+    #[test]
+    fn ex_3_10() {
+
+        // With: q_1 = 10, v_0 = 1, v_1 = 0
+        // Given: v_max = 10, a_max = 10, j_max = 30
+        // Exp: Ta = 1.0747, T_v = 0.0, T_d = 1.1747, T_j1 = 0.3333, T_j2 = 0.3333, vlim = 8.4136
+        let r = do_compute(10., 1., 0., 10., 10., 30.).unwrap();
+
+        approx_equal("T_a", r.t_a, 1.0747, 0.001);
+        approx_equal("T_v", r.t_v, 0.0, 0.001);
+        approx_equal("T_d", r.t_d, 1.1747, 0.001);
+        approx_equal("T_j1", r.t_j1, 0.3333, 0.001);
+        approx_equal("T_j2", r.t_j2, 0.3333, 0.001);
+        approx_equal("v_lim", r.v_lim, 8.4136, 0.001);
+    }
+
+    #[cfg(feature = "wip-tests")]
+    #[test]
+    fn ex_3_11() {
+
+        // With: q_1 = 10, v_0 = 7, v_1 = 0
+        // Given: v_max = 10, a_max = 10, j_max = 30
+        // Exp: Ta = 0.4666, T_v = 0.0, T_d = 1.4718, T_j1 = 0.2321, T_j2 = 0.2321, vlim = 8.6329
+        let r = do_compute(10., 7., 0., 10., 10., 30.).unwrap();
+
+        approx_equal("T_a", r.t_a, 0.4666, 0.01);
+        approx_equal("T_v", r.t_v, 0.0, 0.001);
+        approx_equal("T_d", r.t_d, 1.4718, 0.01);
+        approx_equal("T_j1", r.t_j1, 0.2321, 0.01);
+        approx_equal("T_j2", r.t_j2, 0.2321, 0.01);
+
+    }
+
+    //#[cfg(feature = "a")]
+    #[test]
+    fn ex_3_12() {
+
+        // With: q_1 = 10, v_0 = 7.5, v_1 = 0
+        // Given: v_max = 10, a_max = 10, j_max = 30
+        // Exp: Ta = 0.0, T_v = 0.0, T_d = 2.6667, T_j1 = 0.0, T_j2 = 0.0973, vlim = 7.5
+        let r = do_compute(10., 7.5, 0., 10., 10., 30.).unwrap();
+
+        approx_equal("T_a", r.t_a, 0.0, 0.01);
+        approx_equal("T_v", r.t_v, 0.0, 0.001);
+        approx_equal("T_d", r.t_d, 2.6667, 0.01);
+        approx_equal("T_j1", r.t_j1, 0.0, 0.01);
+        approx_equal("T_j2", r.t_j2, 0.0973, 0.01);
+        approx_equal("v_lim", r.v_lim, 7.5, 0.01);
+
+    }
+
+    #[cfg(feature = "wip-tests")]
+    #[test]
+    fn ex_3_13() {
+
+        // With: q_1 = 10, v_0 = 0, v_1 = 0
+        // Given: v_max = 10, a_max = 20, j_max = 30
+        // Exp: Ta = 1.1006, T_v = 0.0, T_d = 1.1006, T_j1 = 0.5503, T_j2 = 0.5503, vlim = 9.0826
+        let r = do_compute(10., 0.0, 0., 10., 20., 30.).unwrap();
+
+        approx_equal("T_a", r.t_a, 1.1006, 0.01);
+        approx_equal("T_v", r.t_v, 0.0, 0.001);
+        approx_equal("T_d", r.t_d, 1.1006, 0.01);
+        approx_equal("T_j1", r.t_j1, 0.5333, 0.01);
+        approx_equal("T_j2", r.t_j2, 0.5333, 0.01);
+        approx_equal("v_lim", r.v_lim, 9.0826, 0.01);
+
+    }
+
+}

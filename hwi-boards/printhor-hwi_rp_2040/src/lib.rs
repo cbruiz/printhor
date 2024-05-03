@@ -1,5 +1,6 @@
 #![no_std]
 #![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
+#![cfg_attr(feature="nightly", feature(impl_trait_in_assoc_type))]
 extern crate alloc;
 
 use alloc::boxed::Box;

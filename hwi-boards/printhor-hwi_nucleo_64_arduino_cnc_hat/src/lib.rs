@@ -68,6 +68,18 @@ cfg_if::cfg_if! {
     }
 }
 
+// Execute closure f in an interrupt-free context.
+// Required to safety lock a resource that can be also requested by an ISR.
+// Such ISR, hence, won't miss it's interrupt and won't be too much delayed
+pub fn interrupt_free<F, R>(f: F) -> R
+    where
+        F: FnOnce() -> R,
+{
+    cortex_m::interrupt::free(|_| {
+        f()
+    })
+}
+
 pub fn setup_timer() {
     unsafe {
         let p = cortex_m::Peripherals::steal();

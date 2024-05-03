@@ -9,7 +9,7 @@ mod mocked_pwm;
 mod mocked_spi;
 #[cfg(feature = "with-sdcard")]
 mod mocked_sdcard;
-#[cfg(any(feature = "with-serial-port-1",feature = "with-serial-usb"))]
+#[cfg(any(feature = "with-serial-port-1",feature = "with-serial-port-usb"))]
 mod mocked_uart;
 #[cfg(feature = "with-serial-port-2")]
 mod mocked_uart_sink;

@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 # Versions/boards
 skr_mini_e3_v2 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
-skr_mini_e3_v3 = ["embassy-time/tick-hz-2_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
+skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["printhor-hwa-common/defmt", "embassy-stm32/defmt", "embassy-usb?/defmt"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
@@ -31,10 +31,19 @@ with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
 with-fan-layer = ["embedded-hal"]
+with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
+with-neo = ["embedded-hal"]
 with-trinamic = []
 with-ps-on = []
+with-display = []
 without-bootloader = ["embassy-stm32/memory-x"]
+use-hsi = []
+
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
 
 nightly = []
 cooperative = ["embassy-executor/integrated-timers"]

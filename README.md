@@ -151,15 +151,35 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 
 ## Extra utilery
 
-A simple stand-alone std binary to experiment with motion plan (kind of playground):
+A simple stand-alone std binary to experiment with motion plan and see what it does (kind of playground):
 
 ```shell
 cd s-plot
 cargo run
 ```
-Example output:
 
+### Example output with the current plotting style approach:
+As Image:
 ![alt text](design/motion_plan.png "Motion Plan")
+As Vector:
+<object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
+  <embed src="./design/motion_plan.pdf">
+    <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
+  </embed>
+</object>
+
+There are (currently) two plots:
+* Position:
+  * A continuous blue curve for the analytic __ideal__ position estimation.
+  * A stepped gray curve for the __real__ (discrete) position. 
+* Velocity:
+  * A continuos green curve for the online derivation of __ideal__ position datapoints.
+  * A slopped gray polyline for the online derivation of __real__ (discrete) position datapoints in the sampling interval.
+
+### Example output with the deprecated plotting style:
+![alt text](design/motion_plan_old.png "Motion Plan")
+This plot were self-explanatory, but deprecated in flavor of the previous one.
+We are keeping it because it is clear and useful for a high level understanding.
 
 # TODO
 * Code productivization. Mostly based on https://dl.acm.org/doi/pdf/10.1145/3519941.3535075 and https://jamesmunns.com/blog/fmt-unreasonably-expensive/:

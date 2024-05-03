@@ -14,9 +14,19 @@ status = "experimental"
 
 [features]
 
-default = ["native", "printhor-hwa-common/with-log"]
+default = ["native",
+    "cornering",
+
+    "printhor-hwa-common/with-log", "with-motion", "printhor-hwa-common/with-motion"
+]
 # Hardware device features
 without-bootloader = []
+cornering = []
+with-motion = []
+with-x-axis = [ "printhor-hwa-common/with-x-axis", "printhor-hwi_native/with-x-axis"]
+with-y-axis = [ "printhor-hwa-common/with-y-axis", "printhor-hwi_native/with-y-axis"]
+with-z-axis = [ "printhor-hwa-common/with-z-axis", "printhor-hwi_native/with-z-axis"]
+with-e-axis = [ "printhor-hwa-common/with-e-axis", "printhor-hwi_native/with-e-axis"]
 numerical-robusticity-check = []
 timing-stats = []
 
@@ -26,9 +36,11 @@ fixed-point-128-impl = []
 plot-motion-plan = []
 
 native = [
+    "printhor-hwi_native/with-log",
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
     "plot-motion-plan",
 ]
 
@@ -51,7 +63,7 @@ micromath = { version = "2.1.0", default-features = false, features = []}
 printhor-hwa-common = { version = "0.0", default-features = false, features = [] }
 
 # Boards
-#printhor-hwi_native = { version = "0.0.4", optional = true }
+printhor-hwi_native = { version = "0.0", optional = true }
 
 log = { version = "0.4.21", default-features = false, features = [] }
 env_logger = { version = "0.11.3", default-features = false, features = [] }
@@ -59,8 +71,10 @@ gnuplot = {version = "0.0.39", default-features = false, features=[]}
 
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-sync = { version = "0.5.0", features = [] }
-embassy-time = { version = "0.3.0", features = ["mock-driver"] }
+embassy-time = { version = "0.3.0", features = [] }
 critical-section = { version = "1.1.2", features = ["std"] }
+embassy-executor = { version = "0.5.0", features = ["arch-std"] }
+async-gcode = {version = "0.3", features = ["optional-value", "parse-checksum", "parse-comments"]}
 
 # machinery
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
@@ -108,7 +122,7 @@ panic = "abort"
 [patch.crates-io]
 
 printhor-hwa-common = { path = "../printhor-hwa-common" }
-#printhor-hwi_native = { path = "../hwi-boards/printhor-hwi_native" }
+printhor-hwi_native = { path = "../hwi-boards/printhor-hwi_native" }
 
 #[workspace.vars]
 # TBD

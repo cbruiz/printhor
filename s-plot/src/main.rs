@@ -1,307 +1,443 @@
 #![allow(unused)]
 
+extern crate alloc;
 mod prelude;
+use crate::math::Real;
 
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
+use printhor_hwa_common::{ControllerMutex, ControllerRef, DeferChannelRef, EventBusRef, StepperChannel, TrackedStaticCell};
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use prelude::*;
 
 use crate::tgeo::{TVector, CoordSel};
 use crate::control::motion_planning::*;
-use crate::hwa::controllers::motion::*;
-use crate::prelude::math::{RealInclusiveRange, TWO, ZERO};
+use crate::hwa::controllers::motion::MotionPlanner;
+use crate::hwa::controllers::motion_segment::*;
+use crate::hwa::controllers::MotionConfig;
+use crate::hwa::device::MotionDevice;
+use crate::hwa::drivers::{MotionDriver, MotionDriverParams};
+use crate::math::{RealInclusiveRange, TWO, ZERO};
+use crate::hwa::CommChannel;
+use crate::prelude::control::{GCode, XYZ};
+use crate::prelude::control::motion_timing::StepPlanner;
+use crate::prelude::control::task_stepper::LinearMicrosegmentStepInterpolator;
 
-fn main() {
+const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200; // hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 16000; // hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
 
-    env_logger::init();
+const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = embassy_time::Duration::from_hz(STEPPER_PLANNER_MICROSEGMENT_FREQUENCY as u64).as_micros() as u32;
+const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = embassy_time::Duration::from_hz(STEPPER_PLANNER_CLOCK_FREQUENCY as u64).as_micros() as u32;
 
-    let sampling_period = Real::from_f32(0.001);
 
-    let dts = Real::from_f32(300.0); // default_travel_speed
-    let flow_rate = Real::one();
-    let speed_rate = Real::one();
-    let max_speed = Real::from_f32(3000.0);
-    let max_accel = Real::from_f32(2000.0);
-    let max_jerk = Real::from_f32(1000.0);
+struct DataPoints {
+    pub last_time: Option<Real>,
+    pub last_time_discrete: Option<Real>,
+    pub last_pos: Real,
+    pub last_pos_discrete: Real,
+    pub last_spd: Real,
+    pub last_spd_discrete: Real,
+    pub time: Vec<f64>,
+    pub time_seg: Vec<f64>,
+    pub time_discrete: Vec<f64>,
+    pub time_discrete_deriv: Vec<f64>,
+    pub time_discrete_seg: Vec<f64>,
+    pub time_discrete_acc: Vec<f64>,
+    pub pos: Vec<f64>,
+    pub seg_pos: Vec<f64>,
+    pub pos_discrete: Vec<f64>,
+    pub spd: Vec<f64>,
+    pub spd_discrete: Vec<f64>,
+    pub seg_discrete: Vec<f64>,
 
-    let requested_motion_speed = Some(Real::from_f32(300.0));
-    let v0 = Real::from_f32(126.0);
-    let v1 = Real::from_f32(126.0);
+    pub acc_discrete: Vec<f64>,
 
-    let p0: TVector<Real> = TVector::zero();
-    let p1: TVector<Real> = TVector::from_coords(
-        Some(Real::from_f32(0.5)),
-        None,
-        None,
-        None,
-    );
-
-    hwa::info!("----");
-    hwa::info!("P0 ({})", p0);
-    hwa::info!("P1 ({})", p1);
-    hwa::info!("--");
-
-    // Compute distance and decompose as unit vector and module.
-    // When dist is zero, value is map to None (NaN).
-    // In case o E dimension, flow rate factor is applied
-    let (vdir, module_target_distance) = (p1 - p0)
-        .map_coord(CoordSel::all(), |coord_value, coord_idx| {
-            match coord_idx {
-                CoordSel::X | CoordSel::Y | CoordSel::Z => {
-                    match coord_value.is_zero() {
-                        true => None,
-                        false => Some(coord_value),
-                    }
-                },
-                _ => None,
-            }
-        }).decompose_normal();
-
-    // Compute the speed module applying speed_rate factor
-    let speed_module = requested_motion_speed.unwrap_or(dts) * speed_rate;
-    // Compute per-axis target speed
-    let speed_vector: TVector<Real> = vdir.with_coord(CoordSel::E,
-        p1.e.and_then(|v| {
-            match v.is_zero() {
-                true => None,
-                false => Some(v * flow_rate),
-            }
-
-        })
-    ).abs() * speed_module;
-    // Clamp per-axis target speed to the physical restrictions
-    let clamped_speed = speed_vector.clamp(TVector::from_coords(Some(max_speed), Some(max_speed), Some(max_speed), Some(max_speed)));
-    // Finally, per-axis relative speed
-
-    let v = vdir * module_target_distance;
-
-    hwa::info!("v: {}", v);
-    hwa::info!("speed_vector: {}", speed_vector);
-    hwa::info!("speed_vector / v: {}", speed_vector / v);
-    hwa::info!("max_speed: {}", max_speed);
-    hwa::info!("max_speed_v: {}", speed_vector * vdir);
-    hwa::info!("speed_vector / max_speed: {}", speed_vector / max_speed);
-    hwa::info!("clamped_speed: {}", clamped_speed);
-
-    let module_target_speed = clamped_speed.vmin().unwrap();
-
-    if !module_target_distance.is_defined_positive() {
-        match !module_target_speed.is_zero() && !max_accel.is_zero() && !max_jerk.is_zero() {
-            true => {
-                execute(v0, v1, module_target_speed, vdir,
-                        module_target_distance,
-                        max_accel, max_jerk,
-                        sampling_period
-                );
-            },
-            false => {
-                hwa::error!("p0: {}", p0.rdp(4));
-                hwa::error!("p1: {}", p1.rdp(4));
-                hwa::error!("dist: {}", module_target_distance.rdp(4));
-                hwa::error!("vdir: {}", vdir.rdp(4));
-                hwa::error!("speed_vector: {}", speed_vector.rdp(4));
-                hwa::error!("clamped_speed: {}", clamped_speed.rdp(4));
-                hwa::error!("clamped_speed: {}", clamped_speed.rdp(4));
-            }
+    pub t0: Real,
+    pub acc_time: Real,
+    pub acc_disp: Real,
+}
+impl DataPoints {
+    pub fn new(initial_pos: Real, initial_pos_discrete: Real, initial_spd: Real, initial_spd_discrete: Real) -> Self {
+        let mut dp = Self {
+            last_time: None,
+            last_time_discrete: None,
+            last_pos: initial_pos,
+            last_pos_discrete: initial_pos_discrete,
+            last_spd: initial_spd,
+            last_spd_discrete: initial_spd_discrete,
+            time: Vec::new(),
+            time_seg: Vec::new(),
+            time_discrete: Vec::new(),
+            time_discrete_deriv: Vec::new(),
+            time_discrete_seg: Vec::new(),
+            time_discrete_acc: Vec::new(),
+            pos: Vec::new(),
+            seg_pos: Vec::new(),
+            pos_discrete: Vec::new(),
+            spd: Vec::new(),
+            spd_discrete: Vec::new(),
+            seg_discrete: Vec::new(),
+            acc_discrete: Vec::new(),
+            t0: Real::zero(),
+            acc_time: Real::zero(),
+            acc_disp: Real::zero(),
         };
+        dp.time.push(0.0);
+        dp.time_discrete.push(0.0);
+        dp.time_discrete_deriv.push(0.0);
+        dp.pos.push(dp.last_pos.to_f64());
+        dp.pos_discrete.push(dp.last_pos_discrete.to_f64());
+        dp.spd.push(dp.last_spd.to_f64());
+        dp.spd_discrete.push(dp.last_spd_discrete.to_f64());
+        dp
+
+    }
+
+    pub fn add_ideal(&mut self, time: Real, pos: Real) {
+        self.time.push(time.to_f64());
+        let spd= if let Some(t) = self.last_time {
+            let dt = time - t;
+            (pos - self.last_pos) / dt
+        } else {
+            self.last_spd
+        };
+
+        self.pos.push(pos.to_f64());
+        self.spd.push(spd.to_f64());
+        self.last_time = Some(time);
+        self.last_pos = pos;
+        self.last_spd = spd;
+        //hwa::info!("Pos: {} Spd: {}", pos.rdp(3), spd.rdp(3));
+    }
+
+    pub fn seg_start(&mut self, time: Real, pos: Real, speed: Real) {
+        self.time_seg.push(time.to_f64());
+        self.seg_pos.push(pos.to_f64());
+        self.time_discrete_seg.push(time.to_f64());
+        self.seg_discrete.push(speed.to_f64());
+    }
+
+    pub fn acc_pred(&mut self, time0: Real, speed_p0: Real, time1: Real, speed_p1: Real) {
+        self.time_discrete_acc.push(time0.to_f64());
+        self.acc_discrete.push(speed_p0.to_f64());
+        self.time_discrete_acc.push(time1.to_f64());
+        self.acc_discrete.push(speed_p1.to_f64());
+    }
+
+    pub fn real_start(&mut self, time: Real) {
+        self.t0 = time;
+        self.acc_time = Real::zero();
+        self.acc_disp = Real::zero();
+
+    }
+
+    pub fn real_end(&mut self, time: Real, s_id: u32) {
+        let dt = self.acc_time;
+        let spd = if dt.is_zero() {math::ZERO} else {self.acc_disp / dt};
+        self.time_discrete_deriv.push(((time + self.t0) / TWO).to_f64());
+        self.spd_discrete.push(spd.to_f64());
+        self.last_spd_discrete = spd;
+        hwa::trace!("S[{}] Time: {} dt: {}, spd: {}", s_id, time.rdp(4), dt.rdp(4), spd.rdp(2));
+    }
+
+    pub fn add_real(&mut self, time: Real, pos_discrete: Real, _s_id: u32) {
+        self.time_discrete.push(time.to_f64());
+
+        self.acc_time += time - self.last_time_discrete.unwrap_or(math::ZERO);
+        self.acc_disp += pos_discrete - self.last_pos_discrete;
+
+        self.pos_discrete.push(pos_discrete.to_f64());
+        self.last_time_discrete = Some(time);
+        self.last_pos_discrete = pos_discrete;
+        //hwa::info!("RPos: {}", pos_discrete.rdp(3));
     }
 }
 
-
-fn execute(v0: Real, v1: Real, module_target_speed: Real,
-           vdir: TVector<Real>, module_target_distance: Real,
-           max_accel: Real, max_jerk: Real, sampling_period: Real,
-) -> Result<(), ()> {
-    let _constraints = Constraints {
-        v_max: module_target_speed,
-        a_max: max_accel,
-        j_max: max_jerk,
-    };
-    let mut segment = Segment::new(
-        SegmentData {
-            speed_enter_mms: v0,
-            speed_exit_mms: v1,
-            speed_target_mms: Default::default(),
-            displacement_mm: module_target_distance,
-            speed_enter_constrained_mms: Default::default(),
-            speed_exit_constrained_mms: Default::default(),
-            proj_prev: Default::default(),
-            proj_next: Default::default(),
-            vdir,
-            dest_pos: Default::default(),
-            tool_power: Real::zero(),
-            constraints: _constraints,
-        },
-    );
-
-    let mut motion_profile = SCurveMotionProfile::compute(
-        module_target_distance, v0, v1,
-        &_constraints, true).map_err(|_| ())?;
-
-    hwa::info!("real dist: {}", module_target_distance.rdp(4));
-    hwa::info!("speed: {}", module_target_speed.rdp(4));
-
-    hwa::info!("--");
-    hwa::info!("Profile: {}", motion_profile);
-
-    let mut profile = PlanProfile::new(motion_profile, sampling_period);
-
-    profile.plot(v0, true, true, true, true);
-    Ok(())
-}
-pub struct PlanProfile {
-    plan: SCurveMotionProfile,
-    lin_space: RealInclusiveRange,
-    #[allow(unused)]
-    advanced: Real,
-}
-
-#[allow(unused)]
-impl PlanProfile
+#[embassy_executor::main]
+async fn main(spawner: embassy_executor::Spawner)
 {
-    pub fn new(intervals: SCurveMotionProfile, step_size: Real) -> Self {
 
-        let lin_space = RealInclusiveRange::new(
-            ZERO,
-            intervals.i7_end(),
-            step_size);
-        Self{
-            plan: intervals,
-            lin_space,
-            advanced: Real::zero(),
+    // How many us there are in a microsegment period
+    let micro_segment_us_by_period: Real = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 0);
+    let micro_segment_period_secs: Real = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6);
+
+    let sampling_time: Real = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6);
+
+    // First, prepare the underlying machinery
+    env_logger::init();
+    hwa::info!("Micro-segment sampling freq: {} hz ({} us), stepper clock freq: {} hz ({} us)", STEPPER_PLANNER_MICROSEGMENT_FREQUENCY, micro_segment_us_by_period, STEPPER_PLANNER_CLOCK_FREQUENCY, STEPPER_PLANNER_CLOCK_PERIOD_US);
+    let mut data_points = DataPoints::new(Real::zero(), Real::zero(), Real::zero(), Real::zero());
+    let mut ref_time = Real::zero();
+
+    let event_bus: EventBusRef = printhor_hwa_common::init_event_bus::<{hwa::MAX_STATIC_MEMORY}>();
+    let defer_channel: DeferChannelRef = printhor_hwa_common::init_defer_channel::<{hwa::MAX_STATIC_MEMORY}>();
+    let motion_config = {
+        static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> = TrackedStaticCell::new();
+        hwa::ControllerRef::new(
+            MCS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionConfig", hwa::InterruptControllerMutex::new(MotionConfig::new()))
+        )
+    };
+    let motion_driver = {
+        static MDS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionDriver>> = TrackedStaticCell::new();
+        hwa::ControllerRef::new(
+            MDS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionDriver", hwa::InterruptControllerMutex::new(
+                MotionDriver { pins: hwa::device::MotionPins::new() }
+            ))
+        )
+    };
+    let mut motion_planner = MotionPlanner::new(defer_channel, motion_config, motion_driver);
+
+    const V_MAX:u32 = 100;
+    const A_MAX:u32 = 20;
+    const J_MAX:u32 = 40;
+
+    let constraints = Constraints{
+        v_max: Real::from_lit(V_MAX.into(), 0),
+        a_max: Real::from_lit(A_MAX.into(), 0),
+        j_max: Real::from_lit(J_MAX.into(), 0),
+    };
+
+    // Physical Machine configuration
+
+    motion_planner.set_max_speed(TVector::from_coords(Some(V_MAX), Some(V_MAX), Some(V_MAX), Some(V_MAX))).await;
+    motion_planner.set_max_accel(TVector::from_coords(Some(A_MAX), Some(A_MAX), Some(A_MAX), Some(A_MAX))).await;
+    motion_planner.set_max_jerk(TVector::from_coords(Some(J_MAX), Some(J_MAX), Some(J_MAX), Some(J_MAX))).await;
+    motion_planner.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(10, 0)).await;
+    motion_planner.set_usteps(8, 8, 8, 8).await;
+
+    motion_planner.start(&event_bus).await;
+
+
+    /*
+    let s1 = SCurveMotionProfile::compute(
+        Real::from_f32(1.0f32),
+        Real::from_f32(0.0f32),
+        Real::from_f32(0.0f32),
+        &constraints, true,
+    );
+     */
+
+    // Starting motion logic
+
+    //hwa::info!("Set origin to [0, 0, 0]");
+    motion_planner.set_last_planned_pos(&TVector::zero()).await;
+
+    // Enqueue 5 consecutive moves
+    //hwa::info!("Segment from [0, 0, 0] to [1, 0, 0] at 200 mm/s");
+    let _r1 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(1), x: Some(Real::from_f32(1.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+        }), false, &event_bus,
+    ).await;
+
+    //hwa::info!("Segment from [1, 0, 0] to [2, 0, 0] at 200 mm/s");
+    let _r1 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(2), x: Some(Real::from_f32(2.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+        }), false, &event_bus,
+    ).await;
+
+    //hwa::info!("Segment from [2, 0, 0] to [3.0, 0.5, 0] at 200 mm/s");
+    let _r1 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(3), x: Some(Real::from_f32(3.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+        }), false, &event_bus,
+    ).await;
+
+    let _r1 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(4), x: Some(Real::from_f32(4.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+        }), false, &event_bus,
+    ).await;
+
+    let _r1 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(5), x: Some(Real::from_f32(5.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+        }), false, &event_bus,
+    ).await;
+    //hwa::info!("pos = {}", motion_planner.get_last_planned_pos().await.unwrap());
+
+    let mut total_disp = Real::zero();
+    let mut total_disp_discrete = Real::zero();
+    let mut s_id = 0;
+    loop {
+
+        match motion_planner.get_current_segment_data(&event_bus).await {
+            Some((segment, _)) => {
+                s_id += 1;
+                hwa::info!("Dequeuing move at t_ref={}", ref_time);
+                data_points.seg_start(ref_time, total_disp, segment.segment_data.speed_enter_mms);
+                let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+
+                match SCurveMotionProfile::compute(segment.segment_data.displacement_mm, segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
+                                                   &segment.segment_data.constraints, false) {
+                    Ok(motion_profile) => {
+
+                        motion_profile.params_dump();
+                        hwa::info!("S {}", s_id);
+
+                        let units_per_mm = (neutral_element + motion_planner.get_steps_per_mm_as_vector().await);
+
+                        let mm_per_unit = units_per_mm * motion_planner.get_usteps_as_vector().await;
+
+                        let mm_per_step = TVector::one() / mm_per_unit;
+
+                        let mut micro_segment_real_time_rel = micro_segment_period_secs;
+                        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+
+                        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
+                            segment.segment_data.vdir.abs(),
+                            segment.segment_data.displacement_mm,
+                            mm_per_unit,
+                        );
+
+                        let mut max_pos_reached = Real::zero();
+                        let mut max_pos_reached_discrete = Real::zero();
+
+                        let mut us_id = 0;
+                        let mut prev_time = math::ZERO;
+                        let mut p0 = math::ZERO;
+                        loop {
+                            us_id += 1;
+                            if let Some((estimated_position, interval)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+
+                                let tprev = (micro_segment_real_time_rel - prev_time);
+                                let tmax = motion_profile.i7_end() - prev_time;
+                                let dt = tmax.min(tprev);
+
+                                hwa::trace!("at [{}] dt = {}", micro_segment_real_time_rel.rdp(4), dt.rdp(4));
+                                let ds = estimated_position - p0;
+                                p0 = estimated_position;
+                                let current_period_width = if tprev < tmax {
+                                    tprev
+                                }
+                                else {
+                                    if segment.segment_data.speed_exit_mms > math::ZERO {
+                                        (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
+                                    }
+                                    else {
+                                        tmax
+                                    }
+                                };
+
+                                hwa::trace!("  w = {}", current_period_width.rdp(6));
+
+                                ref_time += current_period_width;
+                                prev_time += current_period_width;
+                                micro_segment_real_time_rel += current_period_width;
+
+                                let w = (current_period_width * Real::from_f32(1000000.)).round();
+
+                                let has_more = microsegment_interpolator.advance_to(estimated_position, w);
+
+                                hwa::trace!("\tat t = {}: p = {} [+ {} | {}] [i {}]",
+                                    ref_time, total_disp + estimated_position, estimated_position, microsegment_interpolator.advanced_steps(),
+                                    interval,
+                                );
+
+                                data_points.add_ideal(ref_time, total_disp + estimated_position);
+                                max_pos_reached = estimated_position;
+
+                                /*
+
+                                hwa::info!("\t\tv = {} = {} / {} =  ds / dt",
+                                    ds,
+                                    current_period_width,
+                                    ds / current_period_width,
+                                );
+
+                                */
+
+                                hwa::trace!("\tAdvanced mm: {}", microsegment_interpolator.advanced_mm());
+
+
+                                data_points.real_start(ref_time - current_period_width);
+
+
+                                if microsegment_interpolator.state().max_count() > 0 {
+                                    let mut step_planner = StepPlanner::from(
+                                        microsegment_interpolator.state().channels(),
+                                        microsegment_interpolator.state().max_count(),
+                                        StepperChannel::empty(),
+                                        StepperChannel::empty(),
+                                    );
+
+                                    //step_planner.reset(STEPPER_PLANNER_CLOCK_PERIOD_US.into());
+                                    step_planner.reset(microsegment_interpolator.width().into());
+
+                                    let mut pulse_offset = math::ZERO;
+                                    let mut tick_count = 0;
+
+                                    loop {
+                                        match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US.into()) {
+                                        //match step_planner.next(sampling_time) {
+                                            None => {
+                                                //hwa::info!("eof");
+                                                break;
+                                            }
+                                            Some(_t) => {
+                                                pulse_offset += sampling_time;
+
+                                                if !_t.is_empty() {
+                                                    total_disp_discrete += mm_per_step.sum();
+
+                                                }
+                                                data_points.add_real(ref_time - current_period_width + pulse_offset, total_disp_discrete, s_id);
+
+                                                //data_points.add_real(ref_time - current_period_width + pulse_offset, total_disp_discrete);
+                                                //else {
+                                                //    hwa::info!("?");
+                                                //}
+                                                tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                                                //if tick_count >= STEPPER_PLANNER_CLOCK_PERIOD_US {
+                                                if tick_count >= microsegment_interpolator.width() {
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                data_points.real_end(ref_time, s_id);
+
+                                if !has_more {
+                                    break;
+                                }
+
+                            } else {
+                                break;
+                            }
+                        }
+                        total_disp += max_pos_reached;
+                        total_disp_discrete += max_pos_reached_discrete;
+                    },
+                    _ => unreachable!("Unable to compute motion plan")
+                };
+                if motion_planner.consume_current_segment_data(&event_bus,).await == 0 {
+                    data_points.seg_start(ref_time, total_disp, math::ZERO);
+                    break;
+                }
+            }
+            None => {
+                // No more segments queued
+
+                break;
+            }
         }
     }
 
-    #[allow(unused)]
-    #[inline]
-    pub fn reset(&mut self) {
-        self.advanced = Real::zero();
-        self.lin_space.reset();
-    }
+    hwa::info!("Displ: {} mm, {} disc mm", total_disp, total_disp_discrete);
 
-    #[allow(unused)]
-    #[inline]
-    pub fn total_duration(&self) -> Real {
-        self.lin_space.width()
-
-    }
-
-    pub fn plot(&mut self, initial_speed: Real, plot_pos: bool, plot_vel: bool, plot_accel: bool, plot_jerk: bool) {
-
+    {
         use gnuplot::{AxesCommon, Figure};
         use gnuplot::{AutoOption, Tick, MultiplotFillOrder::RowsFirst, MultiplotFillDirection::{Downwards}};
         use gnuplot::{DashType, PlotOption};
 
-        let p = &(self.plan);
-
-        let steps_per_unit = Real::from_lit(16, 0);
-
-        let mut time: Vec<f64> = Vec::with_capacity(1000);
-        let mut time_step_by_pulse: Vec<f64> = Vec::with_capacity(1000);
-        let mut step_by_pulse: Vec<f64> = Vec::with_capacity(1000);
-        let mut pos: Vec<f64> = Vec::with_capacity(1000);
-
-        let mut spd: Vec<f64> = Vec::with_capacity(1000);
-        let mut acc: Vec<f64> = Vec::with_capacity(1000);
-        let mut jerk: Vec<f64> = Vec::with_capacity(1000);
-
-        let mut inter: Vec<f64> = Vec::with_capacity(1000);
-
-        let mut time_ref = &mut time;
-        let mut pos_ref = &mut pos;
-        let mut spd_ref = &mut spd;
-        let mut acc_ref = &mut acc;
-        let mut jerk_ref = &mut jerk;
-        let mut cnt = 0;
-        let mut last_t = 0.;
-        let mut last_p = 0.;
-        let mut last_s = initial_speed.to_f64();
-        let mut last_a = 0.;
-        let mut last_j = 0.;
-        let mut real_advanced = Real::zero();
-        let mut abs_advanced = 0u32;
-        let mut abs_steps_advanced = 0u32;
-
-        time_step_by_pulse.push(last_t);
-        step_by_pulse.push(f64::nan());
-
-        let pv0 = self.plan.v_0.rdp(4);
-        let pv1 = self.plan.v_1.rdp(4);
-        let pvm = self.plan.v_lim.rdp(4);
-        let pdisp = self.plan.q1.rdp(4);
-        let pres = self.lin_space.step_size().rdp(4);
-
-        for (inte, ti, pos) in self.into_iter() {
-
-            real_advanced = pos;
-
-            let ti_v = ti.inner();
-            let real_pos = pos.max(Real::zero()).inner();
-            let c_ti = ti_v.to_f64().unwrap();
-            let c_pos = real_pos.to_f64().unwrap();
-
-            let dt = c_ti.clone() - last_t;
-
-            let pos_abs = real_pos.to_i32().unwrap() as u32;
-
-            let real_steps = (pos * steps_per_unit).ceil();
-
-            let abs_steps = real_steps.to_i64().unwrap() as u32;
-            let steps = core::cmp::max(abs_steps, abs_steps_advanced) - abs_steps_advanced;
-            abs_steps_advanced = abs_steps;
-
-
-
-            if steps > 0 {
-                let dt_step = dt / (steps as f64);
-                let mut dt_acc = ti_v.to_f64().unwrap();
-                for _i in 0..steps {
-                    time_step_by_pulse.push(dt_acc);
-                    step_by_pulse.push(abs_steps_advanced as f64);
-                    abs_steps_advanced += 1;
-
-                    dt_acc += dt_step;
-                    time_step_by_pulse.push(dt_acc);
-                    step_by_pulse.push(abs_steps_advanced as f64);
-                }
-            }
-            else {
-                time_step_by_pulse.push(last_t);
-                step_by_pulse.push(abs_steps_advanced as f64);
-                time_step_by_pulse.push(ti_v.to_f64().unwrap());
-                step_by_pulse.push(abs_steps_advanced as f64);
-            }
-
-            abs_advanced = pos_abs;
-
-            let s = (c_pos - last_p) / dt.clone().abs();
-            let a = ((s.clone() - last_s) / dt.clone());
-            let j = ((a.clone() - last_a) / dt.clone());
-
-            time_ref.push(c_ti.clone());
-            pos_ref.push(c_pos.clone());
-
-            inter.push(inte.to_f64().unwrap());
-
-            if plot_vel {
-                spd_ref.push(s.clone());
-            }
-            if plot_accel {
-                acc_ref.push(a.clone());
-            }
-            if plot_jerk {
-                jerk_ref.push(j.clone());
-            }
-            cnt += 1;
-            last_t = c_ti;
-            last_p = c_pos;
-            last_s = if s.is_nan() {initial_speed.to_f64()} else {s};
-            last_a = if a.is_nan() {0.} else {a};
-            last_j = if j.is_nan() {0.} else {j};
-        }
-        time_step_by_pulse.push(last_t);
-        step_by_pulse.push(abs_steps_advanced as f64);
-        println!("D; Advanced: est: {} mm, real: {:.03} mm ({} steps)", real_advanced.rdp(4), (abs_steps_advanced.to_f64().unwrap() / steps_per_unit.to_f64()), abs_steps_advanced);
         let mut fg = Figure::new();
 
         cfg_if::cfg_if! {
@@ -319,12 +455,15 @@ impl PlanProfile
             }
         }
 
-        fg.set_multiplot_layout(6, 1)
+        fg.set_multiplot_layout(2, 1)
             .set_title(
                 format!(
-                    "{} Double S-Curve velocity profile\n[vin={} mm/s, vlim={} mm/s, vout={} mm/s, displacement={} mm, sample\\_period={} s]",
+                    "{} Double S-Curve velocity profile\n[{} segments, {} mm displacement, {} hz interp, {} hz sampling]",
                     MATH_PRECISION,
-                    pv0, pvm, pv1, pdisp, pres,
+                    s_id,
+                    total_disp,
+                    STEPPER_PLANNER_MICROSEGMENT_FREQUENCY,
+                    STEPPER_PLANNER_CLOCK_FREQUENCY,
                 ).as_str()
             )
             .set_scale(1.0, 1.0)
@@ -333,61 +472,31 @@ impl PlanProfile
 
         fg.axes2d()
             .set_y_label("Position (mm)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap() * 0.5), AutoOption::Auto)
-            .lines(time.clone(), pos.clone(), &[PlotOption::Color("blue")])
-        ;
-        fg.axes2d()
-            .set_y_label("interv", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), inter.clone(), &[PlotOption::Color("black")])
+            .points(data_points.time_seg.clone(), data_points.seg_pos.clone(), &[PlotOption::Color("black")])
+            .lines(data_points.time.clone(), data_points.pos.clone(), &[PlotOption::Color("blue")])
+            .lines(data_points.time_discrete.clone(), data_points.pos_discrete.clone(), &[PlotOption::Color("gray")])
         ;
         fg.axes2d()
             .set_y_label("Velocity (mm/s)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
+            .points(data_points.time_discrete_seg.clone(), data_points.seg_discrete.clone(), &[PlotOption::Color("black")])
+            //.lines(data_points.time_discrete_acc.clone(), data_points.acc_discrete.clone(), &[PlotOption::Color("red")])
+            .lines(data_points.time.clone(), data_points.spd.clone(), &[PlotOption::Color("green")])
+            .lines(data_points.time_discrete_deriv.clone(), data_points.spd_discrete.clone(), &[PlotOption::Color("gray")])
 
-            .lines(time.clone(), spd.clone(), &[PlotOption::Color("green")])
-        ;
-        fg.axes2d()
-            .set_y_label("Acceleration (mm/s²)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), acc.clone(), &[PlotOption::Color("red")])
-        ;
-        fg.axes2d()
-            .set_y_label("Jerk (m/s³)", &[])
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .lines(time.clone(), jerk.clone(), &[PlotOption::Color("orange")])
-        ;
-        fg.axes2d()
-            .set_x_label("Time in seconds", &[])
-            .set_y_label("Discrete\nsteps", &[])
-            .set_x2_grid(true)
-            .set_x2_minor_grid(true)
-            .set_cb_range(AutoOption::Fix(self.advanced.inner().to_f64().unwrap()), AutoOption::Auto)
-
-            .set_grid_options(true, &[PlotOption::Color("gray"),PlotOption::LineStyle(DashType::Dash)])
-            .lines(time_step_by_pulse.clone(), step_by_pulse.clone(), &[PlotOption::Color("black")])
         ;
         fg.show_and_keep_running().unwrap();
+        fg.save_to_pdf("plot.pdf", 10.0f32, 10.0f32);
+
     }
+
+
+    std::process::exit(0);
 
 }
 
-impl Iterator for PlanProfile
-{
-    type Item = (u8, Real, Real);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.lin_space.next() {
-            None => {
-                None
-            },
-            Some(tp) => {
-                let (s, v) = self.plan.eval_position(tp);
-                Some((s, tp, v?))
-            }
-        }
-    }
+pub fn initialization_error() {
+    let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
+    hwa::error!("{}", msg);
+    panic!("{}", msg);
 }

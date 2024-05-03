@@ -97,7 +97,7 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: ControllerRef<device::Watchdog>,
+    pub sys_watchdog: ControllerRef<ControllerMutexType, device::Watchdog>,
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_tx: device::USBSerialTxControllerRef,
     #[cfg(feature = "with-serial-port-1")]
@@ -289,7 +289,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             p.DMA1_CH7, p.DMA1_CH6, cfg
         ).expect("Ready").split();
 
-        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<printhor_hwa_common::SerialAsyncWrapper<device::UartPort1TxDevice>>> = TrackedStaticCell::new();
+        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<ControllerMutexType, printhor_hwa_common::SerialAsyncWrapper<device::UartPort1TxDevice>>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
             UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(
                 printhor_hwa_common::SerialAsyncWrapper::new(uart_port1_tx_device, crate::UART_PORT1_BAUD_RATE)
@@ -437,7 +437,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(all(feature ="nucleo64-f410rb", any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-layer-fan")))]
+    #[cfg(all(feature ="nucleo64-f410rb", any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1")))]
         let pwm_hotend_hotbed_layer = {
             let pwm = device::PwmHotendHotbedLayer::new(
             p.TIM5,
@@ -579,7 +579,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-ps-on")]
         let ps_on = {
-        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        static PS_ON: TrackedStaticCell<ControllerMutex<ControllerMutexType, device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
             PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(
                 Output::new(p.PA4, Level::Low, Speed::Low)
@@ -587,7 +587,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         )
     };
 
-    static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
+    static WD: TrackedStaticCell<ControllerMutex<ControllerMutexType, device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 
     crate::setup_timer();

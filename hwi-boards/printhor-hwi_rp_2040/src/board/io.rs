@@ -47,7 +47,7 @@ pub mod usbserial {
 
             static STATE_ST: crate::board::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = crate::board::TrackedStaticCell::new();
             let state = STATE_ST.init::<{crate::MAX_STATIC_MEMORY}>("", embassy_usb::class::cdc_acm::State::new());
-            let mut builder = embassy_usb::Builder::new(driver, config, device_descriptor, config_descriptor, bos_descriptor, &mut [], control_buf);
+            let mut builder = embassy_usb::Builder::new(driver, config, device_descriptor, config_descriptor, bos_descriptor, control_buf);
 
             //crate::info!("Creating USB CLASS");
 

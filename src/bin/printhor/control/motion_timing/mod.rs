@@ -1,4 +1,4 @@
-use crate::control::motion_planning::StepperChannel;
+use printhor_hwa_common::StepperChannel;
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {
@@ -18,11 +18,17 @@ impl ChannelStatus {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-hot-end")] {
+    if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis", feature = "with-e-axis"))] {
         pub const MULTITIMER_CHANNELS: usize = 4;
     }
-    else {
+    else if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))] {
         pub const MULTITIMER_CHANNELS: usize = 3;
+    }
+    else if #[cfg(all(feature = "with-z-axis"))]  {
+        pub const MULTITIMER_CHANNELS: usize = 1;
+    }
+    else {
+        compile_error!("Unsupported axis configuration");
     }
 }
 
@@ -38,6 +44,7 @@ cfg_if::cfg_if! {
 ///
 #[derive(Clone, Copy)]
 pub struct MultiTimer {
+    width: u32,
     max_count: u32,
     channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
 }
@@ -45,12 +52,16 @@ pub struct MultiTimer {
 impl MultiTimer {
     pub const fn new() -> Self {
         Self {
+            width: 0,
             max_count: 0,
             channels: [
+                #[cfg(feature = "with-x-axis")]
                 None,
+                #[cfg(feature = "with-y-axis")]
                 None,
+                #[cfg(feature = "with-z-axis")]
                 None,
-                #[cfg(feature = "with-hot-end")]
+                #[cfg(feature = "with-e-axis")]
                 None,
             ],
         }
@@ -58,6 +69,7 @@ impl MultiTimer {
 
     pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u64>) {
 
+        #[cfg(feature = "with-x-axis")]
         if channel.contains(StepperChannel::X) {
             match ticks {
                 Some(_t) => {
@@ -68,6 +80,7 @@ impl MultiTimer {
                 }
             }
         }
+        #[cfg(feature = "with-y-axis")]
         if channel.contains(StepperChannel::Y) {
             match ticks {
                 Some(_t) => {
@@ -78,6 +91,7 @@ impl MultiTimer {
                 }
             }
         }
+        #[cfg(feature = "with-z-axis")]
         if channel.contains(StepperChannel::Z) {
             match ticks {
                 Some(_t) => {
@@ -88,7 +102,7 @@ impl MultiTimer {
                 }
             }
         }
-        #[cfg(feature = "with-hot-end")]
+        #[cfg(feature = "with-e-axis")]
         if channel.contains(StepperChannel::E) {
             match ticks {
                 Some(_t) => {
@@ -99,7 +113,6 @@ impl MultiTimer {
                 }
             }
         }
-
     }
 
     pub fn set_max_count(&mut self, max_count: u32) {
@@ -108,6 +121,14 @@ impl MultiTimer {
 
     pub fn channels(&self) -> [Option<ChannelStatus>; MULTITIMER_CHANNELS] {
         self.channels
+    }
+
+    pub fn set_width(&mut self, width: u32) {
+        self.width = width;
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
     }
 
     pub fn max_count(&self) -> u32 {
@@ -127,13 +148,14 @@ impl MultiTimer {
 ///
 #[derive(Clone, Copy)]
 pub struct StepPlanner {
-    interval_width: u64,
+    pub(crate) interval_width: u64,
     ref_time: u64,
     channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+    #[allow(unused)]
     max_count: u32,
     pulse_count: u32,
-    pub(crate) stepper_enable_flags: StepperChannel,
-    pub(crate) stepper_dir_fwd_flags: StepperChannel,
+    pub stepper_enable_flags: StepperChannel,
+    pub stepper_dir_fwd_flags: StepperChannel,
 }
 
 impl crate::control::motion_timing::StepPlanner {
@@ -142,16 +164,19 @@ impl crate::control::motion_timing::StepPlanner {
             interval_width: 0,
             ref_time: 0,
             channels: [
+                #[cfg(feature = "with-x-axis")]
                 None,
+                #[cfg(feature = "with-y-axis")]
                 None,
+                #[cfg(feature = "with-z-axis")]
                 None,
-                #[cfg(feature = "with-hot-end")]
+                #[cfg(feature = "with-e-axis")]
                     None,
             ],
             max_count: 0,
             pulse_count: 0,
-            stepper_enable_flags: StepperChannel::empty(),
-            stepper_dir_fwd_flags: StepperChannel::empty(),
+            stepper_enable_flags: StepperChannel::UNSET,
+            stepper_dir_fwd_flags: StepperChannel::UNSET,
         }
     }
 

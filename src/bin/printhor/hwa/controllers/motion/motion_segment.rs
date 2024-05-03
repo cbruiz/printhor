@@ -1,6 +1,7 @@
 //! TODO: This feature is still in incubation
 use crate::math::Real;
 use crate::control::motion_planning::{Constraints, MotionProfile};
+use crate::hwa;
 use crate::tgeo::TVector;
 
 #[derive(Clone, Copy)]
@@ -23,6 +24,7 @@ pub struct SegmentData {
     pub vdir: TVector<Real>,
     pub dest_pos: TVector<Real>,
 
+    #[allow(unused)]
     pub tool_power: Real,
     pub constraints: Constraints,
 }
@@ -53,7 +55,9 @@ impl Segment {
     }
 }
 
-pub struct SegmentIterator<'a, P> {
+pub struct SegmentIterator<'a, P>
+where P: MotionProfile
+{
     profile: &'a P,
     ref_time: Real,
     exhausted: bool,
@@ -70,16 +74,32 @@ where P: MotionProfile
         }
     }
 
-    pub fn next(&mut self, now: Real) -> Option<Real> {
+    pub fn next(&mut self, now: Real) -> Option<(Real, u8)> {
         if self.exhausted {
             None
         }
         else {
             let relative_time = now - self.ref_time;
-            if relative_time > self.profile.end() {
+            if relative_time > self.profile.end_time() {
                 self.exhausted = true;
             }
-            self.profile.eval_position(relative_time)
+            match self.profile.eval_position(relative_time) {
+                None => {
+                    None
+                }
+                Some(p) => {
+                    let end_pos = self.profile.end_pos();
+
+                    if p.0 + Real::from_f32(0.00001f32) >= end_pos {
+                        self.exhausted = true;
+                        hwa::trace!("pos exhausted at t={} / {}", relative_time, self.profile.end_time());
+                        Some((end_pos, p.1))
+                    }
+                    else {
+                        Some((p.0, p.1))
+                    }
+                }
+            }
         }
     }
 }

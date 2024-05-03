@@ -18,6 +18,7 @@ homepage = "https://github.com/cbruiz/printhor"
 with-log = ["printhor-hwa-common/with-log"]
 with-serial-port-1 = ["async-std"]
 with-serial-port-2 = []
+with-serial-port-usb = []
 with-printjob = []
 with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
 with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
@@ -30,6 +31,13 @@ with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
 with-ps-on = []
+with-spi = []
+
+
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
 
 nightly = ["embassy-executor/nightly"]
 executor-interrupt = []

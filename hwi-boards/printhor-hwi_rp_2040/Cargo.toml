@@ -35,6 +35,11 @@ with-defmt = ["printhor-hwa-common/with-defmt", "embassy-rp/defmt", "embassy-exe
 with-trinamic = []
 with-ps-on = []
 
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
+
 nightly = ["embassy-executor/nightly"]
 executor-interrupt = ["embassy-executor/executor-interrupt"]
 verbose-timings = []

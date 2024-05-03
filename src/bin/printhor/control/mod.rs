@@ -3,7 +3,7 @@ use crate::math::Real;
 use strum::Display;
 use strum::{AsRefStr, VariantNames};
 #[cfg(feature = "with-motion")]
-pub(crate) mod motion_planning;
+pub mod motion_planning;
 #[cfg(feature = "with-motion")]
 pub(crate) mod motion_timing;
 
@@ -53,14 +53,14 @@ impl crate::hwa::defmt::Format for XYZE {
 }
 
 
-#[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
 pub struct XYZ {
-    pub(crate) ln: Option<u32>,
-    pub(crate) f: Option<Real>,
-    pub(crate) x: Option<Real>,
-    pub(crate) y: Option<Real>,
-    pub(crate) z: Option<Real>,
+    #[allow(unused)]
+    pub ln: Option<u32>,
+    pub f: Option<Real>,
+    pub x: Option<Real>,
+    pub y: Option<Real>,
+    pub z: Option<Real>,
 }
 
 #[cfg(feature = "with-defmt")]
