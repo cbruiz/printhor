@@ -1,5 +1,5 @@
 use crate::hwa;
-use crate::control::{GCode, N, S, XYZ, XYZEFS, XYZW};
+use crate::control::{GCode, N, S, XYZ, XYZEFS, XYZE};
 use crate::helpers;
 use futures::Stream;
 
@@ -66,7 +66,7 @@ impl<STREAM> GCodeLineParser<STREAM>
         loop {
             match self.raw_parser.next().await {
                 None => {
-                    hwa::debug!("EOF reading from stream");
+                    hwa::trace!("EOF reading from stream");
                     return Ok(None);
                 }
                 Some(result) => {
@@ -143,12 +143,12 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                         Some(GCode::G21)
                                                     }
                                                     ('g', Some((28, 0))) => {
-                                                        Some(GCode::G28(XYZW {
+                                                        Some(GCode::G28(XYZE {
                                                             ln: current_line_number.clone(),
                                                             x: None,
                                                             y: None,
                                                             z: None,
-                                                            w: None,
+                                                            e: None,
                                                         }))
                                                     }
                                                     ('g', Some((29, 0))) => {
@@ -170,7 +170,13 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                         Some(GCode::G91)
                                                     }
                                                     ('g', Some((92, 0))) => {
-                                                        Some(GCode::G92)
+                                                        Some(GCode::G92(XYZE {
+                                                            ln: current_line_number.clone(),
+                                                            x: None,
+                                                            y: None,
+                                                            z: None,
+                                                            e: None,
+                                                        }))
                                                     }
                                                     ('g', Some((94, 0))) => {
                                                         Some(GCode::G94)
@@ -334,6 +340,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             _ => {}
                                                         }
                                                     }
+
                                                     GCode::G1(coord) => {
                                                         match (ch, frx) {
                                                             ('x', Some(val)) => {
@@ -361,6 +368,23 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             },
                                                             ('z', Some(val)) => {
                                                                 coord.z.replace(helpers::to_fixed(val));
+                                                            },
+                                                            _ => {}
+                                                        }
+                                                    }
+                                                    GCode::G92(coord) => {
+                                                        match (ch, frx) {
+                                                            ('x', Some(val)) => {
+                                                                coord.x.replace(helpers::to_fixed(val));
+                                                            },
+                                                            ('y', Some(val)) => {
+                                                                coord.y.replace(helpers::to_fixed(val));
+                                                            },
+                                                            ('z', Some(val)) => {
+                                                                coord.z.replace(helpers::to_fixed(val));
+                                                            },
+                                                            ('e', Some(val)) => {
+                                                                coord.e.replace(helpers::to_fixed(val));
                                                             },
                                                             _ => {}
                                                         }

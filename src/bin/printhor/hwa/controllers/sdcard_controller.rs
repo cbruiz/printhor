@@ -4,7 +4,7 @@ use core::pin::Pin;
 use futures::task::{Context, Poll};
 use embedded_sdmmc::{Directory, DirEntry, File, Mode, TimeSource, Timestamp, Volume, VolumeIdx, VolumeManager};
 use futures::Stream;
-use printhor_hwa_common::TrackedStaticCell;
+use printhor_hwa_common::{StandardControllerMutex, TrackedStaticCell};
 use crate::hwa;
 use printhor_hwa_common::ControllerMutex;
 use futures::Future;
@@ -366,13 +366,13 @@ impl TimeSource for DummyTimeSource {
 }
 
 pub struct CardController {
-    instance: &'static ControllerMutex<SDCard>,
+    instance: &'static StandardControllerMutex<SDCard>,
 }
 
 #[allow(unused)]
 impl CardController {
     pub async fn new(device: SDCardBlockDevice) -> Self {
-        static CARD_CTRL_SHARED_STATE: TrackedStaticCell<ControllerMutex<SDCard>> = TrackedStaticCell::new();
+        static CARD_CTRL_SHARED_STATE: TrackedStaticCell<StandardControllerMutex<SDCard>> = TrackedStaticCell::new();
         let mut card = SDCardVolumeManager::new_with_limits(device, DummyTimeSource{});
         #[cfg(feature = "sdcard-uses-spi")]
         card.device().retain().await;
@@ -558,13 +558,13 @@ pub struct SDDirEntry {
 }
 
 pub struct CardAsyncDirIterator {
-    instance: &'static ControllerMutex<SDCard>,
+    instance: &'static StandardControllerMutex<SDCard>,
     path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     current_index: usize,
 }
 
 impl CardAsyncDirIterator {
-    pub fn new(instance: &'static ControllerMutex<SDCard>, path: heapless::Vec<DirectoryRef, MAX_DIRS>) -> Self {
+    pub fn new(instance: &'static StandardControllerMutex<SDCard>, path: heapless::Vec<DirectoryRef, MAX_DIRS>) -> Self {
 
         Self {
             instance,

@@ -359,7 +359,7 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PI
     }
 }
 
-#[cfg_attr(feature = "defmt-log", derive(defmt::Format))]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[derive(Debug, Copy, Clone)]
 pub enum Error {
     /// We got an error from the SPI peripheral

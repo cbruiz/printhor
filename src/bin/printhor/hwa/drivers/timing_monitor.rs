@@ -102,7 +102,7 @@ binary "X_STEP" as XS
 binary "Y_STEP" as YS
 binary "Z_STEP" as ZS
 binary "E_STEP" as ES
-scale 1000 as 60 pixels
+scale 2500 as 40 pixels
 
 "###;
         const POS: &'static str = r###"@enduml"###;

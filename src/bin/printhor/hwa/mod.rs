@@ -109,6 +109,5 @@ impl embedded_sdmmc::TimeSource for DummyTimeSource {
     }
 }
 
-pub type WatchdogRef = ControllerRef<hwi::device::Watchdog>;
-
+pub type WatchdogRef = ControllerRef<ControllerMutexType, hwi::device::Watchdog>;
 

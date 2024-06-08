@@ -18,7 +18,7 @@ fn main() {
             println!("cargo:rustc-link-search={}", out.display());
             println!("cargo:rerun-if-changed={}", memory_x_path_str);
         }
-        else if #[cfg(all(feature="skr_mini_e3_v2", feature="with-bootloader"))] {
+        else if #[cfg(all(feature="skr_mini_e3_v2", not(feature="without-bootloader")))] {
             let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
             let memory_x_path = std::path::PathBuf::from(".")
                 .join("hwi-boards")
@@ -33,7 +33,7 @@ fn main() {
             println!("cargo:rustc-link-search={}", out.display());
             println!("cargo:rerun-if-changed={}", memory_x_path_str);
         }
-        else if #[cfg(all(feature="skr_mini_e3_v3", feature="with-bootloader"))] {
+        else if #[cfg(all(feature="skr_mini_e3_v3", not(feature="without-bootloader")))] {
             let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
             let memory_x_path = std::path::PathBuf::from(".")
                 .join("hwi-boards")

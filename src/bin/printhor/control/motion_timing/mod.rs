@@ -1,5 +1,4 @@
-use embassy_time::{Duration, Instant};
-use crate::control::motion_planning::StepperChannel;
+use printhor_hwa_common::StepperChannel;
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {
@@ -18,159 +17,218 @@ impl ChannelStatus {
     }
 }
 
-#[inline(always)]
-pub fn now() -> Instant {
-    #[cfg(feature = "no-real-time")]
-    return Instant::from_ticks(0);
-    #[cfg(not(feature = "no-real-time"))]
-    return Instant::now();
-}
-
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-hot-end")] {
-        const MULTITIMER_CHANNELS: usize = 4;
+    if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis", feature = "with-e-axis"))] {
+        pub const MULTITIMER_CHANNELS: usize = 4;
+    }
+    else if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))] {
+        pub const MULTITIMER_CHANNELS: usize = 3;
+    }
+    else if #[cfg(all(feature = "with-z-axis"))]  {
+        pub const MULTITIMER_CHANNELS: usize = 1;
     }
     else {
-        const MULTITIMER_CHANNELS: usize = 3;
+        compile_error!("Unsupported axis configuration");
     }
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "no-real-time")] {
-        pub struct MultiTimer {
-            ref_time: u64,
-            interval_width: u64,
-            channels: [ChannelStatus; MULTITIMER_CHANNELS],
-        }
-    }
-    else {
-        /// A utility to feed forward a uniformly distributed pulse train at different rates by channel
-        ///
-        /// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
-        /// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](MultiTimer::new())
-        ///
-        /// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
-        /// - Each pulse period (pulse width) is: **`t=T/x`**.
-        /// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
-        /// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
-        ///
-        pub struct MultiTimer {
-            interval_width: u64,
-            channels: [ChannelStatus; MULTITIMER_CHANNELS],
-        }
-    }
+/// A utility to feed forward a uniformly distributed pulse train at different rates by channel
+///
+/// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
+/// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](MultiTimer::new())
+///
+/// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
+/// - Each pulse period (pulse width) is: **`t=T/x`**.
+/// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
+/// - Iterator ends when **`t(i)`** exceed [`interval_width`](MultiTimer::new()) in all channels.
+///
+#[derive(Clone, Copy)]
+pub struct MultiTimer {
+    width: u32,
+    max_count: u32,
+    channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
 }
-
 
 impl MultiTimer {
-    #[allow(unused)]
-    pub fn new_using(interval_width: u64, mut s: [ChannelStatus; MULTITIMER_CHANNELS]) -> Self {
-        let t0 = now().as_ticks();
-        for i in s.iter_mut() {
-            i.next_tick = (i.width / 2) + t0
-        }
-        Self {
-            #[cfg(feature = "no-real-time")]
-            ref_time: 0,
-            interval_width: t0 + interval_width,
-            channels: s,
-        }
-    }
-
     pub const fn new() -> Self {
         Self {
-            #[cfg(feature = "no-real-time")]
-            ref_time: 0,
-            interval_width: 0,
+            width: 0,
+            max_count: 0,
             channels: [
-                ChannelStatus::new(StepperChannel::X, 0),
-                ChannelStatus::new(StepperChannel::Y, 0),
-                ChannelStatus::new(StepperChannel::Z, 0),
-                #[cfg(feature = "with-hot-end")]
-                ChannelStatus::new(StepperChannel::E, 0),
+                #[cfg(feature = "with-x-axis")]
+                None,
+                #[cfg(feature = "with-y-axis")]
+                None,
+                #[cfg(feature = "with-z-axis")]
+                None,
+                #[cfg(feature = "with-e-axis")]
+                None,
             ],
         }
     }
 
-    pub fn reset(&mut self, interval_width: u64) {
-        let t0 = now().as_ticks();
-        for i in self.channels.iter_mut() {
-            i.next_tick = (i.width / 2) + t0
-        }
-        self.interval_width = t0 + interval_width;
-    }
+    pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u64>) {
 
-    pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: u64) {
-
+        #[cfg(feature = "with-x-axis")]
         if channel.contains(StepperChannel::X) {
-            self.channels[0].width = ticks;
+            match ticks {
+                Some(_t) => {
+                    self.channels[0] = Some(ChannelStatus::new(StepperChannel::X, _t));
+                }
+                None => {
+                    self.channels[0] = None;
+                }
+            }
         }
+        #[cfg(feature = "with-y-axis")]
         if channel.contains(StepperChannel::Y) {
-            self.channels[1].width = ticks;
+            match ticks {
+                Some(_t) => {
+                    self.channels[1] = Some(ChannelStatus::new(StepperChannel::Y, _t));
+                }
+                None => {
+                    self.channels[1] = None;
+                }
+            }
         }
+        #[cfg(feature = "with-z-axis")]
         if channel.contains(StepperChannel::Z) {
-            self.channels[2].width = ticks;
+            match ticks {
+                Some(_t) => {
+                    self.channels[2] = Some(ChannelStatus::new(StepperChannel::Z, _t));
+                }
+                None => {
+                    self.channels[2] = None;
+                }
+            }
         }
-        #[cfg(feature = "with-hot-end")]
+        #[cfg(feature = "with-e-axis")]
         if channel.contains(StepperChannel::E) {
-            self.channels[3].width = ticks;
-        }
-
-    }
-
-    pub fn next(&mut self) -> Option<(StepperChannel, Duration)> {
-        let mut next_tick = self.interval_width;
-        let mut target_channel: Option<&mut ChannelStatus> = None;
-        for c in self.channels.iter_mut() {
-            if c.next_tick < next_tick && c.next_tick < (self.interval_width - (c.width / 4)) {
-                next_tick = c.next_tick;
-                target_channel = Some(c);
-            }
-        }
-        if next_tick >= self.interval_width {
-            return None
-        }
-        return if let Some(channel) = target_channel {
-            cfg_if::cfg_if! {
-                if #[cfg(feature = "no-real-time")] {
-                    let ref_time = self.ref_time;
-                    let tw = Duration::from_ticks((channel.next_tick as i64 - ref_time as i64).max(0) as u64);
-                    channel.next_tick += channel.width;
-                    self.ref_time += tw.as_ticks();
-                    Some((channel.name, tw))
+            match ticks {
+                Some(_t) => {
+                    self.channels[3] = Some(ChannelStatus::new(StepperChannel::E, _t));
                 }
-                else {
-                    let ref_time = now().as_ticks();
-                    let tw = Duration::from_ticks((channel.next_tick as i64 - ref_time as i64).max(0) as u64);
-                    //crate::hwa::trace!("Awaiting {}", tw.as_micros());
-                    while now().as_ticks() < channel.next_tick {}
-                    channel.next_tick += channel.width;
-                    Some((channel.name, tw))
+                None => {
+                    self.channels[3] = None;
                 }
             }
-        } else {
-            None
-        };
+        }
     }
 
-    #[cfg(feature = "no-real-time")]
-    pub fn sync_clock(&mut self, d: Duration) {
-        self.ref_time += d.as_ticks();
+    pub fn set_max_count(&mut self, max_count: u32) {
+        self.max_count = max_count;
+    }
+
+    pub fn channels(&self) -> [Option<ChannelStatus>; MULTITIMER_CHANNELS] {
+        self.channels
+    }
+
+    pub fn set_width(&mut self, width: u32) {
+        self.width = width;
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn max_count(&self) -> u32 {
+        self.max_count
     }
 }
 
-#[inline(always)]
-pub fn s_block_for(duration: Duration) {
-    let expires_at = Instant::now() + duration;
-    while Instant::now() < expires_at {}
+/// A utility to feed forward a uniformly distributed pulse train at different rates by channel
+///
+/// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
+/// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](crate::control::motion_timing::MultiTimer::new())
+///
+/// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
+/// - Each pulse period (pulse width) is: **`t=T/x`**.
+/// - Pulse sequence is **`t(i) = t/2 + (i-1)*t`** with **`i`** starting at 1
+/// - Iterator ends when **`t(i)`** exceed [`interval_width`](crate::control::motion_timing::MultiTimer::new()) in all channels.
+///
+#[derive(Clone, Copy)]
+pub struct StepPlanner {
+    pub(crate) interval_width: u64,
+    ref_time: u64,
+    channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+    #[allow(unused)]
+    max_count: u32,
+    pulse_count: u32,
+    pub stepper_enable_flags: StepperChannel,
+    pub stepper_dir_fwd_flags: StepperChannel,
 }
 
-/*
-#[inline]
-pub async fn s_block_for(duration: Duration) {
-    //let expires_at = Instant::now() + duration;
-    //while Instant::now() < expires_at {}
-    embassy_time::Timer::after(duration).await
-}
+impl crate::control::motion_timing::StepPlanner {
+    pub const fn new() -> Self {
+        Self {
+            interval_width: 0,
+            ref_time: 0,
+            channels: [
+                #[cfg(feature = "with-x-axis")]
+                None,
+                #[cfg(feature = "with-y-axis")]
+                None,
+                #[cfg(feature = "with-z-axis")]
+                None,
+                #[cfg(feature = "with-e-axis")]
+                    None,
+            ],
+            max_count: 0,
+            pulse_count: 0,
+            stepper_enable_flags: StepperChannel::UNSET,
+            stepper_dir_fwd_flags: StepperChannel::UNSET,
+        }
+    }
 
- */
+    pub const fn from(channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+                      max_count: u32,
+                      stepper_enable_flags: StepperChannel,
+                      stepper_dir_fwd_flags: StepperChannel,
+
+    ) -> Self {
+        Self {
+            interval_width: 0,
+            ref_time: 0,
+            channels,
+            max_count,
+            pulse_count: 0,
+            stepper_enable_flags,
+            stepper_dir_fwd_flags,
+        }
+    }
+
+    pub fn reset(&mut self, interval_width: u64) {
+        self.ref_time = 0;
+        self.pulse_count = 0;
+        for channel in self.channels.iter_mut() {
+            match channel.as_mut() {
+                None => {
+                }
+                Some(w) => {
+                    w.next_tick = (w.width + 1) >> 1
+                }
+            }
+        }
+        self.interval_width = interval_width;
+    }
+
+    pub fn next(&mut self, step_width: u64) -> Option<StepperChannel> {
+        self.ref_time += step_width;
+        let mut triggered_channels = StepperChannel::empty();
+        for channel in self.channels.iter_mut() {
+            if let Some(_ch) = channel.as_mut() {
+                if _ch.next_tick <= self.ref_time  {
+                    if _ch.width < step_width {
+                        unreachable!("Feedrate exceeded: width: {} max: {}", _ch.width, step_width);
+                    }
+                    _ch.next_tick += _ch.width;
+                    triggered_channels.set(_ch.name, true);
+                }
+            }
+        }
+        if triggered_channels.is_empty() {
+            self.pulse_count += 1;
+        }
+        return Some(triggered_channels);
+    }
+}

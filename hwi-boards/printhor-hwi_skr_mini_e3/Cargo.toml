@@ -31,13 +31,23 @@ with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
 with-fan-layer = ["embedded-hal"]
+with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
+with-neo = ["embedded-hal"]
 with-trinamic = []
 with-ps-on = []
+with-display = []
 without-bootloader = ["embassy-stm32/memory-x"]
+use-hsi = []
+
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
 
 nightly = []
-threaded = ["embassy-executor/executor-interrupt"]
+cooperative = ["embassy-executor/integrated-timers"]
+executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue", "embassy-time/generic-queue-128"]
 verbose-timings = []
 sdcard-uses-spi = []
 ili9341_parallel = []
@@ -52,13 +62,14 @@ defmt = {version = "0.3", default-features = false }
 printhor-hwa-common = { version = "0.0"}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
-embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "integrated-timers", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0.5.0", features = ["defmt"] }
 embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-usb = { version = "0.1.0", features = [], optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }

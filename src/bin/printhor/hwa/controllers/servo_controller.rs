@@ -1,8 +1,8 @@
 //! TODO: This feature is still in incubation
-use printhor_hwa_common::ControllerRef;
 use crate::hwa;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
+use crate::InterruptControllerRef;
 #[allow(unused)]
 pub trait ProbeTrait {
     async fn probe_pin_down(&mut self, sleep_us: u64);
@@ -13,13 +13,13 @@ pub trait ProbeTrait {
 }
 
 pub struct ServoController {
-    servo: ControllerRef<hwa::device::PwmServo>,
+    servo: InterruptControllerRef<hwa::device::PwmServo>,
     channel: hwa::device::PwmChannel,
 }
 
 impl ServoController {
 
-    pub fn new(servo: ControllerRef<hwa::device::PwmServo>, channel: hwa::device::PwmChannel) -> Self {
+    pub fn new(servo: InterruptControllerRef<hwa::device::PwmServo>, channel: hwa::device::PwmChannel) -> Self {
         Self {servo, channel}
     }
 

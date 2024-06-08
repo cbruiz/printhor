@@ -8,7 +8,8 @@ cfg_if::cfg_if! {
         use crate::hwa;
 
         #[derive(Copy, Clone, Default, Debug)]
-        pub struct Real(Decimal);
+        pub struct Real(pub Decimal);
+        pub type RealImpl = Decimal;
 
         #[allow(dead_code)]
         impl Real {
@@ -26,7 +27,7 @@ cfg_if::cfg_if! {
                 Real(Decimal::from_f32_retain(num).unwrap())
             }
             #[inline]
-            pub(crate) fn from_lit(num: i64, scale: u32) -> Self {
+            pub fn from_lit(num: i64, scale: u32) -> Self {
                 Real(Decimal::new(num, scale))
             }
             #[inline]
@@ -53,6 +54,11 @@ cfg_if::cfg_if! {
             #[inline]
             pub(crate) const fn is_positive(&self) -> bool {
                 !self.0.is_sign_negative()
+            }
+
+            #[inline]
+            pub fn is_negligible(&self) -> bool {
+                self.0.is_zero()
             }
 
             pub(crate) fn is_defined_positive(&self) -> bool {
@@ -131,7 +137,7 @@ cfg_if::cfg_if! {
                 if s.is_zero() {Real::one()} else {Real(s)}
             }
 
-            pub(crate) fn min(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);
@@ -146,7 +152,7 @@ cfg_if::cfg_if! {
                 m
             }
 
-            pub(crate) fn max(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmax(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);

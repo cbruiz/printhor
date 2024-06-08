@@ -1,6 +1,9 @@
+use embassy_time::Duration;
 use crate::hwa;
 #[allow(unused)]
 use crate::control::*;
+#[allow(unused)]
+use crate::math;
 #[allow(unused)]
 use crate::math::Real;
 #[allow(unused)]
@@ -45,7 +48,10 @@ pub async fn task_integration(mut params: IntegrationaskParams)
     #[cfg(feature = "integration-test-m100")]
     {
         hwa::info!("Testing M100");
-        if params.processor.execute(CommChannel::Internal, &GCode::M100, true).await.and_then(expect_immediate).is_err() {
+        if params.processor.execute(CommChannel::Internal, &GCode::M100, true).await.and_then(expect_immediate).is_ok() {
+            hwa::info!("-- M100 OK");
+        }
+        else {
             hwa::error!("M100: Unexpected result");
         }
     }
@@ -76,12 +82,12 @@ pub async fn task_integration(mut params: IntegrationaskParams)
     {
 
         let homing_gcode = GCode::G28(
-            XYZW {
+            XYZE {
                 ln: None,
                 x: None,
                 y: None,
                 z: None,
-                w: None,
+                e: None,
             }
         );
 
@@ -92,9 +98,30 @@ pub async fn task_integration(mut params: IntegrationaskParams)
             if subscriber.ft_wait_for(evt).await.is_err() {
                 hwa::error!("Unexpected state for G28");
             }
-            hwa::info!("G28 OK (took: {} ms)", t0.elapsed().as_millis());
+            hwa::info!("-- G28 OK (took: {} ms)", t0.elapsed().as_millis());
         } else {
             hwa::error!("Unexpected state for G28");
+        }
+    }
+
+    #[cfg(feature = "integration-test-reset-pos")]
+    {
+
+        let set_pos_gcode = GCode::G92(
+            XYZE {
+                ln: None,
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            }
+        );
+
+        hwa::info!("Testing G92");
+        if params.processor.execute(CommChannel::Internal, &set_pos_gcode, false).await.and_then(expect_immediate).is_ok() {
+            hwa::info!("-- G92 OK");
+        } else {
+            hwa::error!("Unexpected state for G92");
         }
     }
 
@@ -247,6 +274,28 @@ pub async fn task_integration(mut params: IntegrationaskParams)
         }
 
     }
+    #[cfg(feature = "integration-test-pen")]
+    {
+        use crate::hwa::controllers::PrinterControllerEvent;
+
+        hwa::info!("Testing GCODE for pen (plotter)");
+        params.printer_controller.set(PrinterControllerEvent::SetFile(String::from("dir/pen.g"))).await.unwrap();
+        match embassy_time::with_timeout(
+            embassy_time::Duration::from_secs(5),
+            subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL).and_containing(EventFlags::JOB_PAUSED))
+        ).await {
+            Ok(_) => {
+                // command resume (eq: M24)
+                params.printer_controller.set(PrinterControllerEvent::Resume).await.unwrap();
+                // wait for job completion
+                subscriber.ft_wait_for(printhor_hwa_common::EventStatus::containing(EventFlags::JOB_COMPLETED)).await.unwrap();
+            }
+            Err(_) => {
+                hwa::error!("Timeout dispatching pen job");
+            }
+        }
+
+    }
     if subscriber.ft_wait_for(
         EventStatus::not_containing(EventFlags::JOB_PRINTING)
             .and_not_containing(EventFlags::MOVING)
@@ -254,6 +303,7 @@ pub async fn task_integration(mut params: IntegrationaskParams)
     ).await.is_err() {
         hwa::error!("Unexpected error processing benchy job");
     }
+    embassy_time::Timer::after(Duration::from_millis(100)).await;
     hwa::info!("D; Integration task END");
     #[cfg(feature = "native")]
     std::process::exit(0)

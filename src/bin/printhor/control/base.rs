@@ -33,5 +33,4 @@ pub enum CodeExecutionFailure {
     /// The GCode is considered, but not yet implemented
     NotYetImplemented,
 }
-#[allow(unused)]
 pub type CodeExecutionResult = Result<CodeExecutionSuccess, CodeExecutionFailure>;

@@ -25,7 +25,7 @@ pub enum DeferEvent {
     Completed(DeferAction, CommChannel),
 }
 
-type ChannelType = Channel<crate::ControllerMutexType, DeferEvent, 4>;
+type ChannelType = Channel<crate::ControllerMutexType, DeferEvent, 40>;
 
 #[derive(Clone)]
 pub struct DeferChannelRef {

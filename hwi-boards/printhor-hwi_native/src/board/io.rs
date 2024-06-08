@@ -1,4 +1,4 @@
-#[cfg(feature = "with-usbserial")]
+#[cfg(feature = "with-serial-port-usb")]
 pub mod usbserial {
     use crate::board::device::USBDrv;
     pub type USBSerialDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
@@ -93,7 +93,7 @@ pub mod usbserial {
         connected: bool,
     }
 
-    #[cfg(feature = "with-usbserial")]
+    #[cfg(feature = "with-serial-port-usb")]
     impl USBSerialDeviceInputStream {
         pub fn new(receiver: USBSerialDeviceReceiver) -> Self {
             Self {
@@ -106,7 +106,7 @@ pub mod usbserial {
         }
     }
 
-    #[cfg(feature = "with-usbserial")]
+    #[cfg(feature = "with-serial-port-usb")]
     impl async_gcode::AsyncRead for USBSerialDeviceInputStream
     {
         async fn read_byte(&mut self) -> Option<Result<u8, async_gcode::Error>> {
@@ -152,7 +152,7 @@ pub mod usbserial {
     }
 }
 
-#[cfg(feature = "with-uart2")]
+#[cfg(feature = "with-serial-port-2")]
 pub mod uart2 {
     use crate::device::Usart2Rx;
 
