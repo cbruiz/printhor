@@ -16,12 +16,13 @@ status = "experimental"
 
 default = ["native",
     "cornering",
-
+    "assert-motion",
     "printhor-hwa-common/with-log", "with-motion", "printhor-hwa-common/with-motion"
 ]
 # Hardware device features
 without-bootloader = []
 cornering = []
+assert-motion = []
 with-motion = []
 with-x-axis = [ "printhor-hwa-common/with-x-axis", "printhor-hwi_native/with-x-axis"]
 with-y-axis = [ "printhor-hwa-common/with-y-axis", "printhor-hwi_native/with-y-axis"]
@@ -69,11 +70,11 @@ log = { version = "0.4.21", default-features = false, features = [] }
 env_logger = { version = "0.11.3", default-features = false, features = [] }
 gnuplot = {version = "0.0.39", default-features = false, features=[]}
 
-embassy-futures = { version = "0.1.1", features = [] }
-embassy-sync = { version = "0.5.0", features = [] }
-embassy-time = { version = "0.3.0", features = [] }
+embassy-futures = { version = "0", features = [] }
+embassy-sync = { version = "0", features = [] }
+embassy-time = { version = "0", features = [] }
 critical-section = { version = "1.1.2", features = ["std"] }
-embassy-executor = { version = "0.5.0", features = ["arch-std"] }
+embassy-executor = { version = "0", features = ["arch-std"] }
 async-gcode = {version = "0.3", features = ["optional-value", "parse-checksum", "parse-comments"]}
 
 # machinery

@@ -144,16 +144,19 @@ impl MotionDriver
 
         let mut dir_fwd = StepperChannel::empty();
 
+        #[cfg(feature = "with-x-axis")]
         if vdir.x.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
             dir_fwd.set(StepperChannel::X, true)
         }
+        #[cfg(feature = "with-y-axis")]
         if vdir.y.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
             dir_fwd.set(StepperChannel::Y, true)
         }
+        #[cfg(feature = "with-z-axis")]
         if vdir.z.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
             dir_fwd.set(StepperChannel::Z, true)
         }
-        #[cfg(feature = "with-hot-end")]
+        #[cfg(feature = "with-e-axis")]
         if vdir.e.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
             dir_fwd.set(StepperChannel::E, true)
         }

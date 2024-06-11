@@ -22,13 +22,13 @@ use crate::math::{RealInclusiveRange, TWO, ZERO};
 use crate::hwa::CommChannel;
 use crate::prelude::control::{GCode, XYZ};
 use crate::prelude::control::motion_timing::StepPlanner;
-use crate::prelude::control::task_stepper::LinearMicrosegmentStepInterpolator;
+use crate::prelude::control::task_stepper::{LinearMicrosegmentStepInterpolator, SoftTimer, SoftTimerDriver};
 
 const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200; // hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
-const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 16000; // hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
+const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000; // hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
 
-const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = embassy_time::Duration::from_hz(STEPPER_PLANNER_MICROSEGMENT_FREQUENCY as u64).as_micros() as u32;
-const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = embassy_time::Duration::from_hz(STEPPER_PLANNER_CLOCK_FREQUENCY as u64).as_micros() as u32;
+const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
 
 
 struct DataPoints {
@@ -186,11 +186,13 @@ async fn main(spawner: embassy_executor::Spawner)
             ))
         )
     };
+    let soft_timer = SoftTimer::new();
+    soft_timer.setup(motion_driver.clone());
     let mut motion_planner = MotionPlanner::new(defer_channel, motion_config, motion_driver);
 
-    const V_MAX:u32 = 100;
-    const A_MAX:u32 = 20;
-    const J_MAX:u32 = 40;
+    const V_MAX:u32 = 200;
+    const A_MAX:u32 = 400;
+    const J_MAX:u32 = 800;
 
     let constraints = Constraints{
         v_max: Real::from_lit(V_MAX.into(), 0),
@@ -209,6 +211,8 @@ async fn main(spawner: embassy_executor::Spawner)
     motion_planner.start(&event_bus).await;
 
 
+
+
     /*
     let s1 = SCurveMotionProfile::compute(
         Real::from_f32(1.0f32),
@@ -222,6 +226,23 @@ async fn main(spawner: embassy_executor::Spawner)
 
     //hwa::info!("Set origin to [0, 0, 0]");
     motion_planner.set_last_planned_pos(&TVector::zero()).await;
+
+
+    //hwa::info!("Segment from [0, 0, 0] to [0, 100, 0] at 200 mm/s");
+    let _r00 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(1), x: None, y: Some(Real::from_f32(100.0f32)), z: None, f:Some(Real::from_f32(200.0f32)),
+        }), false, &event_bus,
+    ).await;
+
+    let _r01 = motion_planner.plan(
+        CommChannel::Internal,
+        &GCode::G0(XYZ{
+            ln: Some(1), x: None, y: Some(Real::from_f32(0.0f32)), z: None, f:Some(Real::from_f32(200.0f32)),
+        }), false, &event_bus,
+    ).await;
+
 
     // Enqueue 5 consecutive moves
     //hwa::info!("Segment from [0, 0, 0] to [1, 0, 0] at 200 mm/s");
@@ -267,7 +288,6 @@ async fn main(spawner: embassy_executor::Spawner)
     let mut total_disp_discrete = Real::zero();
     let mut s_id = 0;
     loop {
-
         match motion_planner.get_current_segment_data(&event_bus).await {
             Some((segment, _)) => {
                 s_id += 1;
@@ -314,7 +334,7 @@ async fn main(spawner: embassy_executor::Spawner)
                                 hwa::trace!("at [{}] dt = {}", micro_segment_real_time_rel.rdp(4), dt.rdp(4));
                                 let ds = estimated_position - p0;
                                 p0 = estimated_position;
-                                let current_period_width = if tprev < tmax {
+                                let current_period_width_0 = if tprev < tmax {
                                     tprev
                                 }
                                 else {
@@ -322,11 +342,15 @@ async fn main(spawner: embassy_executor::Spawner)
                                         (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
                                     }
                                     else {
-                                        tmax
+                                        tmax.max(sampling_time)
                                     }
                                 };
 
+                                let current_period_width = current_period_width_0; // (current_period_width_0 / sampling_time).ceil() * sampling_time;
+
                                 hwa::trace!("  w = {}", current_period_width.rdp(6));
+
+                                data_points.real_start(ref_time);
 
                                 ref_time += current_period_width;
                                 prev_time += current_period_width;
@@ -336,8 +360,8 @@ async fn main(spawner: embassy_executor::Spawner)
 
                                 let has_more = microsegment_interpolator.advance_to(estimated_position, w);
 
-                                hwa::trace!("\tat t = {}: p = {} [+ {} | {}] [i {}]",
-                                    ref_time, total_disp + estimated_position, estimated_position, microsegment_interpolator.advanced_steps(),
+                                hwa::info!("\tat t = {} [+{}]: p = {} [+ {} | {}] [i {}]",
+                                    ref_time.rdp(4), current_period_width.rdp(4), (total_disp + estimated_position).rdp(6), estimated_position.rdp(6), microsegment_interpolator.advanced_steps(),
                                     interval,
                                 );
 
@@ -345,38 +369,69 @@ async fn main(spawner: embassy_executor::Spawner)
                                 max_pos_reached = estimated_position;
 
                                 /*
-
                                 hwa::info!("\t\tv = {} = {} / {} =  ds / dt",
                                     ds,
                                     current_period_width,
                                     ds / current_period_width,
                                 );
-
                                 */
 
                                 hwa::trace!("\tAdvanced mm: {}", microsegment_interpolator.advanced_mm());
 
 
-                                data_points.real_start(ref_time - current_period_width);
-
-
-                                if microsegment_interpolator.state().max_count() > 0 {
+                                if true { //microsegment_interpolator.state().max_count() > 0 {
                                     let mut step_planner = StepPlanner::from(
-                                        microsegment_interpolator.state().channels(),
-                                        microsegment_interpolator.state().max_count(),
+                                        microsegment_interpolator.state().clone(),
                                         StepperChannel::empty(),
                                         StepperChannel::empty(),
                                     );
 
-                                    //step_planner.reset(STEPPER_PLANNER_CLOCK_PERIOD_US.into());
-                                    step_planner.reset(microsegment_interpolator.width().into());
-
                                     let mut pulse_offset = math::ZERO;
                                     let mut tick_count = 0;
 
+                                    soft_timer.push(microsegment_interpolator.state().clone(), StepperChannel::empty(), StepperChannel::empty()).await;
+
+                                    let mut stop = false;
+
+                                    loop {
+
+                                        data_points.add_real(ref_time, total_disp_discrete, s_id);
+
+                                        critical_section::with(|cs| {
+                                            let _t1 = embassy_time::Instant::now();
+                                            let mut counter: core::cell::RefMut<SoftTimerDriver> = soft_timer.0.borrow_ref_mut(cs);
+                                            counter.on_interrupt();
+                                            let _te1 = _t1.elapsed();
+                                            hwa::trace!("on_int took {}", _te1.as_micros());
+
+                                            let x = TVector::from_coords(
+                                                Some(Real::from_lit(counter.pulses[0] as i64, 0)),
+                                                Some(Real::from_lit(counter.pulses[1] as i64, 0)),
+                                                Some(Real::from_lit(counter.pulses[2] as i64, 0)),
+                                                Some(Real::from_lit(counter.pulses[3] as i64, 0))
+                                            ) / mm_per_unit;
+                                            let norm = x.norm2().unwrap();
+
+                                            data_points.add_real(ref_time, total_disp_discrete + norm, s_id);
+
+                                            if counter.state == crate::control::task_stepper::State::Idle {
+                                                total_disp_discrete += norm;
+                                                stop = true;
+                                            }
+
+                                        });
+                                        pulse_offset += sampling_time;
+                                        if stop {
+                                            break;
+                                        }
+                                    }
+
+                                    soft_timer.flush().await;
+
+
+                                    /*
                                     loop {
                                         match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US.into()) {
-                                        //match step_planner.next(sampling_time) {
                                             None => {
                                                 //hwa::info!("eof");
                                                 break;
@@ -386,22 +441,18 @@ async fn main(spawner: embassy_executor::Spawner)
 
                                                 if !_t.is_empty() {
                                                     total_disp_discrete += mm_per_step.sum();
-
                                                 }
                                                 data_points.add_real(ref_time - current_period_width + pulse_offset, total_disp_discrete, s_id);
 
-                                                //data_points.add_real(ref_time - current_period_width + pulse_offset, total_disp_discrete);
-                                                //else {
-                                                //    hwa::info!("?");
-                                                //}
                                                 tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
-                                                //if tick_count >= STEPPER_PLANNER_CLOCK_PERIOD_US {
                                                 if tick_count >= microsegment_interpolator.width() {
                                                     break;
                                                 }
                                             }
                                         }
                                     }
+
+                                     */
                                 }
                                 data_points.real_end(ref_time, s_id);
 

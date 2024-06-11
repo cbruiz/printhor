@@ -4,6 +4,7 @@ pub mod device;
 pub mod io;
 
 use alloc_cortex_m::CortexMHeap;
+use defmt::export::panic;
 use embassy_executor::Spawner;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull, OutputType};
@@ -17,12 +18,13 @@ use embassy_stm32::usb;
 use embassy_stm32::spi;
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext, StandardControllerRef};
+use printhor_hwa_common::{TrackedStaticCell, MachineContext, StandardControllerRef, InterruptControllerMutex};
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 use embassy_stm32::adc::SampleTime;
 use printhor_hwa_common::StandardControllerMutex;
+use crate::device::PwmServo;
 
 #[global_allocator]
 static HEAP: CortexMHeap = CortexMHeap::empty();
@@ -64,10 +66,10 @@ cfg_if::cfg_if! {
         pub const MAX_STATIC_MEMORY: usize = 16386;
         pub const HEAP_SIZE_BYTES: usize = 1024;
 
-                /// Micro-segment sampling frequency in Hz
-        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 64;
+        /// Micro-segment sampling frequency in Hz
+        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
         /// Micro-segment clock frequency in Hz
-        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 64_000;
+        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
 
         // https://www.st.com/resource/en/datasheet/dm00748675.pdf
         pub const ADC_START_TIME_US: u16 = 12;
@@ -723,21 +725,24 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
             });
 
-            #[cfg(feature = "with-spi")]
-            let spi1_device = {
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "with-spi")] {
+                    let mut cfg = spi::Config::default();
+                    cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
+                    static SPI1_INST: TrackedStaticCell<StandardControllerMutex<device::Spi1>> = TrackedStaticCell::new();
+                    let spi1_device = ControllerRef::new(
+                        SPI1_INST.init::<{crate::MAX_STATIC_MEMORY}>(
+                            "SPI1",
+                            ControllerMutex::new(
+                                device::Spi1::new(
+                                    p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH4, p.DMA1_CH3, cfg
+                                )
+                            )
+                        )
+                    );
+                }
+            }
 
-            let mut cfg = spi::Config::default();
-            cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
-            static SPI1_INST: TrackedStaticCell<StandardControllerMutex<device::Spi1>> = TrackedStaticCell::new();
-            ControllerRef::new(SPI1_INST.init::<{crate::MAX_STATIC_MEMORY}>(
-                "SPI1",
-                ControllerMutex::new(
-                    device::Spi1::new(p.SPI1, p.PA5, p.PA7, p.PA6,
-                                      p.DMA1_CH4, p.DMA1_CH3, cfg
-                    )
-                )
-            ))
-        };
 
         #[cfg(feature = "with-serial-usb")]
         let (serial_usb_tx, serial_usb_rx_stream) = {
@@ -973,32 +978,37 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         #[cfg(feature = "with-hot-bed")]
         let adc_hotbed_pin = p.PC4;
 
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-probe")] {
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "upstream-embassy")] {
+                        static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+                        let pwm_dev: device::PwmServo = device::PwmServo::new(
+                              p.TIM2,
+                              None, // PA0 | PA15 | PA5 | PC4
+                              Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, OutputType::PushPull)), // PA1 | PB3 | PC5
+                              None, // PA2 | PB10 | PC6
+                              None, // PA3 | PB11 | PC7
+                              embassy_stm32::time::hz(50),
+                              embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                          );
+
+                        let power_pwm = PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
+                                    "PwmServo", ControllerMutex::new(pwm_dev)
+                        );
+                    }
+                }
+            }
+        }
+
         #[cfg(feature = "with-probe")]
         let probe_device =  {
-
-            #[cfg(feature = "upstream-embassy")]
-                use embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts;
-                #[cfg(not(feature = "upstream-embassy"))]
-                use embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts;
-            static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
-
+                todo!("");
+                /*
             crate::device::ProbePeripherals {
-                power_pwm: ControllerRef::new(
-                    PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>("PwmServo",
-                                  ControllerMutex::new(
-                                      device::PwmServo::new(
-                                          p.TIM2,
-                                          None, // PA0 | PA15 | PA5 | PC4
-                                          Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, OutputType::PushPull)), // PA1 | PB3 | PC5
-                                          None, // PA2 | PB10 | PC6
-                                          None, // PA3 | PB11 | PC7
-                                          embassy_stm32::time::hz(50),
-                                          CenterAlignedBothInterrupts,
-                                      )
-                    ),
-                )),
+                power_pwm,
                 power_channel: embassy_stm32::timer::Channel::Ch2,
-            }
+            }*/
 
         };
 

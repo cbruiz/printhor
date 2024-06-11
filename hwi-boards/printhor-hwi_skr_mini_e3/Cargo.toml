@@ -63,20 +63,20 @@ printhor-hwa-common = { version = "0.0"}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
 embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
-embassy-sync = { version = "0.5.0", features = ["defmt"] }
-embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-sync = { version = "0.6.0", features = ["defmt"] }
+embassy-time = { version = "0.3.1", features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-futures = { version = "0.1.1", features = [] }
-embassy-usb = { version = "0.1.0", features = [], optional = true }
+embassy-usb = { version = "0.2.0", features = [], optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = { version = "0.7.3", default-features = false }
+cortex-m-rt = { version = "0.7.0", default-features = false, features = [] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
 
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.30", default-features = false, features = [] }
+futures = { version = "0.3.17", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }

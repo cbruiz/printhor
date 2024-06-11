@@ -26,7 +26,7 @@ pub use board::STEPPER_PLANNER_CLOCK_FREQUENCY;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
-const USBSERIAL_BUFFER_SIZE: usize = 32;
+const USBSERIAL_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
@@ -86,7 +86,7 @@ pub fn setup_timer() {
         let mut syst = p.SYST;
         syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
         // Target: 0.000010 seg (10us)
-        let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
+        let reload: u32 = ((board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
         defmt::info!("SYST reload set to {}", reload);
         syst.set_reload(reload);
         syst.enable_counter();

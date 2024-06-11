@@ -18,7 +18,8 @@ status = "experimental"
 [features]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
-
+# A specific hack to verify motion distances match the expectations
+assert-motion = []
 default = ["no-board"]
 
 # Hardware device features
@@ -62,8 +63,8 @@ with-e-axis = ["printhor-hwa-common/with-e-axis", "printhor-hwi_native?/with-e-a
 # Otherwise, there will be lagging and hence yanks in motion kinematics
 motion-async-task-exclusive = []
 # Debug trick for testing timings with digital probe. Enable is threated as reference output clock.
-digital-probe-hack = []
 debug-skip-homing = []
+debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
 
 executor-interrupt = [
     "printhor-hwa-common/executor-interrupt",
@@ -110,6 +111,7 @@ integration-test = [
     "debug-skip-homing",
     #"numerical-robusticity-check",
     "verbose-timings",
+    "assert-motion",
     #"no-real-time",
     "native",
 ]
@@ -257,7 +259,7 @@ nucleo64-f410rb = [
     #"executor-interrupt",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    #"digital-probe-hack",
+    #"debug-signals",
 
     #"verbose-timings",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
@@ -267,11 +269,11 @@ nucleo64-f410rb = [
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
     #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
-    #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
-    #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
-    #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
-    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
-    #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
+    "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
+    "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
+    "with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
+    "with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
+    "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
     "with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
 
     "float-point-f32-impl",
@@ -344,7 +346,7 @@ skr_mini_e3_v3 = [
     #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     #"with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
     #"with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
-    #"with-probe", "printhor-hwi_skr_mini_e3/with-probe",
+    "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
     #"with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
     "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
 
@@ -413,17 +415,17 @@ panic-probe = { version = "0.3.1", features = ["print-defmt"], optional = true}
 defmt-rtt = { version = "0.4.0", optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
-cortex-m-rt = { version = "0.7.3", optional = true}
+cortex-m-rt = { version = "0.7.0", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
 critical-section = {version = "1.1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = [], optional = true }
 embassy-executor = { version = "0.5.0", default-features = false, features = [], optional = true }
-embassy-sync = { version = "0.5.0", features = [] }
-embassy-time = { version = "0.3.0", features = [] }
+embassy-sync = { version = "0.6.0", features = [] }
+embassy-time = { version = "0.3.1", features = [] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-embedded-hal = { version = "0.1.0", features = [], optional = true }
-embassy-usb = { version = "0.1.0", features = [], optional = true }
+embassy-usb = { version = "0.2.0", features = [], optional = true }
 
 embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
@@ -433,18 +435,18 @@ embedded-graphics = { version = "0.7.1", optional = true}
 display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}
 ili9341 = {version = "0.5.0", default-features = false, optional = true}
 
-futures = { version = "0.3.30", default-features = false, features = [] }
-futures-util = { version = "0.3.30", default-features = false, features = [] }
-heapless = { version = "0.8.0", default-features = false, features = [] }
+futures = { version = "0.3.17", default-features = false, features = [] }
+futures-util = { version = "0.3", default-features = false, features = [] }
+heapless = { version = "0.8", default-features = false, features = [] }
 
 async-gcode = {version = "0.3", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "parse-checksum"]}
 
-strum = { version = "0.26.1", default-features = false, features = ["derive"] }
+strum = { version = "0.26.3", default-features = false, features = ["derive"] }
 
-rust_decimal = { version = "1.33.1", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { version = "1.33.1" }
+rust_decimal = { version = "1.35.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { version = "1.34.2" }
 pid = { version = "4.0.0", default-features = false, features = []}
-num-traits = {version = "0.2.17", default-features = false, features = [] }
+num-traits = {version = "0.2.19", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = []}
 embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 
@@ -469,7 +471,7 @@ embedded-graphics-core = {version = "0.3.3", optional = true }
 # machinery
 
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
-bitflags = { version = "2.4.1", default-features = false, features = [] }
+bitflags = { version = "2.4.2", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0", features = [] }
 const_env = { version = "0.1" }
@@ -494,6 +496,7 @@ debug = 2
 strip = false
 incremental = false
 debug-assertions = true
+overflow-checks = true
 opt-level = "s"
 lto = true
 panic = "unwind"

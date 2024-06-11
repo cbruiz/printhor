@@ -70,9 +70,9 @@ impl SCurveMotionProfile {
         let v_min = v_0.max(v_1);
         let mut v_max = v_min.max(constraints.v_max);
 
-        hwa::info!("compute q_{{1}} = {} v_{{0}} = {} v_{{1}} = {}", q_1, v_0, v_1);
         cfg_if::cfg_if! {
             if #[cfg(feature="verbose-timings")] {
+                hwa::info!("compute q_{{1}} = {} v_{{0}} = {} v_{{1}} = {}", q_1, v_0, v_1);
                 let _t0 = embassy_time::Instant::now();
             }
         }
@@ -116,6 +116,7 @@ impl SCurveMotionProfile {
         let not_feasible = q_1 <= q_lim;
 
         if not_feasible {
+            #[cfg(feature = "verbose-timings")]
             hwa::warn!("Movement NOT FEASIBLE. Performing unconstrained parabolic blends");
 
             // y := j_max
@@ -1055,7 +1056,7 @@ pub mod test {
         assert!(ok, "{} = {} but should be = {}", what, v1, expected);
     }
 
-    //#[cfg(feature = "a")]
+    //#[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_9() {
 
@@ -1071,7 +1072,7 @@ pub mod test {
         approx_equal("T_v", r.t_v, 1.1433, 0.001);
     }
 
-    //#[cfg(feature = "a")]
+    //#[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_10() {
 
@@ -1105,7 +1106,7 @@ pub mod test {
 
     }
 
-    //#[cfg(feature = "a")]
+    //#[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_12() {
 

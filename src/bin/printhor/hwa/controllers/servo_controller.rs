@@ -38,7 +38,7 @@ impl ServoController {
 
         hwa::debug!("Set probe angle: {} : duty: {} uS | {} max_duty: {}", angle, duty_us, duty_cnt, max_duty);
         self.servo.lock().await.disable(self.channel);
-        self.servo.lock().await.set_duty(self.channel, duty_cnt);
+        self.servo.lock().await.set_duty(self.channel, duty_cnt.into());
         self.servo.lock().await.enable(self.channel);
         embassy_time::Timer::after_micros(sleep_us).await;
     }

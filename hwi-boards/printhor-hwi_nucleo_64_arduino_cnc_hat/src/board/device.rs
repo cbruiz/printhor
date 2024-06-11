@@ -60,6 +60,15 @@ cfg_if::cfg_if! {
                 pub type PsOnRef = printhor_hwa_common::ControllerRef<ControllerMutexType, PsOnPin>;
             }
         }
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-spi")] {
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="upstream-embassy")] {
+                        pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
+                    }
+                }
+            }
+        }
 
     }
     else if #[cfg(feature="nucleo64-l476rg")] {
@@ -115,16 +124,6 @@ cfg_if::cfg_if! {
     }
 }
 
-#[cfg(all(feature = "with-spi", feature = "nucleo64-f410rb"))]
-pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
-    embassy_stm32::peripherals::SPI2,
-    embassy_stm32::peripherals::DMA1_CH4, embassy_stm32::peripherals::DMA1_CH3
->;
-#[cfg(all(feature = "with-spi", feature = "nucleo64-l476rg"))]
-pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,
-    embassy_stm32::peripherals::SPI3,
-    embassy_stm32::peripherals::DMA2_CH2, embassy_stm32::peripherals::DMA2_CH1
->;
 
 #[cfg(feature = "with-spi")]
 pub type SpiCardDevice = Spi1;
@@ -133,11 +132,11 @@ pub type SpiCardDevice = Spi1;
 pub type Spi = Spi1;
 
 #[cfg(feature = "with-spi")]
-pub type SpiDeviceRef = crate::board::ControllerRef<Spi>;
+pub type SpiDeviceRef = printhor_hwa_common::InterruptControllerRef<Spi>;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-sdcard")] {
-        pub type SpiCardDeviceRef = crate::board::ControllerRef<Spi>;
+        pub type SpiCardDeviceRef = printhor_hwa_common::InterruptControllerRef<Spi>;
 
         cfg_if::cfg_if! {
             if #[cfg(feature="upstream-embassy")] {
@@ -154,7 +153,8 @@ pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
 pub use embassy_stm32::adc::Instance as AdcTrait;
 cfg_if::cfg_if! {
     if #[cfg(feature="upstream-embassy")] {
-
+        pub use embassy_stm32::adc::AdcChannel as AdcPinTrait;
+        pub use embassy_stm32::adc::VrefInt as VrefInt;
     }
     else {
         pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
@@ -244,34 +244,34 @@ pub struct HotendPeripherals {
 
 #[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotbed>,
+    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotbed>,
     pub temp_pin: AdcHotbedPin,
     pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-fan-extra-1")]
 pub struct FanExtra1Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanExtra1>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanExtra1>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLaser>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmLaser>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct LayerFanPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLayerFan>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 cfg_if::cfg_if! {
@@ -323,42 +323,6 @@ cfg_if::cfg_if! {
 
 #[cfg(feature = "with-motion")]
 impl MotionPins {
-    #[inline]
-    pub fn enable_x_stepper(&mut self) {
-        self.all_enable_pin.set_low();
-    }
-    #[inline]
-    pub fn enable_y_stepper(&mut self) {
-        self.all_enable_pin.set_low();
-    }
-    #[inline]
-    pub fn enable_z_stepper(&mut self) {
-        self.all_enable_pin.set_low();
-    }
-    #[inline]
-    pub fn enable_e_stepper(&mut self) {
-        self.all_enable_pin.set_low();
-    }
-    #[inline]
-    pub fn disable_x_stepper(&mut self) {
-        self.all_enable_pin.set_high();
-    }
-    #[inline]
-    pub fn disable_y_stepper(&mut self) {
-        self.all_enable_pin.set_high();
-    }
-    #[inline]
-    pub fn disable_z_stepper(&mut self) {
-        self.all_enable_pin.set_high();
-    }
-    #[inline]
-    pub fn disable_e_stepper(&mut self) { self.all_enable_pin.set_high(); }
-    #[inline]
-    pub fn disable_all_steppers(&mut self) {
-        self.all_enable_pin.set_high();
-    }
-    #[inline]
-    pub fn enable_all_steppers(&mut self) { self.all_enable_pin.set_low(); }
 
     pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel)
     {
@@ -372,33 +336,37 @@ impl MotionPins {
 
     pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel)
     {
-        #[cfg(feature = "with-x-axis")]
-        if _channels.contains(printhor_hwa_common::StepperChannel::X) {
-            self.x_dir_pin.set_high();
-        }
-        else {
-            self.x_dir_pin.set_low();
-        }
-        #[cfg(feature = "with-y-axis")]
-        if _channels.contains(printhor_hwa_common::StepperChannel::Y) {
-            self.y_dir_pin.set_high();
-        }
-        else {
-            self.y_dir_pin.set_low();
-        }
-        #[cfg(feature = "with-z-axis")]
-        if _channels.contains(printhor_hwa_common::StepperChannel::Z) {
-            self.z_dir_pin.set_high();
-        }
-        else {
-            self.z_dir_pin.set_low();
-        }
-        #[cfg(feature = "with-e-axis")]
-        if _channels.contains(printhor_hwa_common::StepperChannel::E) {
-            self.e_dir_pin.set_high();
-        }
-        else {
-            self.e_dir_pin.set_low();
+        cfg_if::cfg_if! {
+            if #[cfg(not(feature="debug-signals"))] {
+                #[cfg(feature = "with-x-axis")]
+                if _channels.contains(printhor_hwa_common::StepperChannel::X) {
+                    self.x_dir_pin.set_high();
+                }
+                else {
+                    self.x_dir_pin.set_low();
+                }
+                #[cfg(feature = "with-y-axis")]
+                if _channels.contains(printhor_hwa_common::StepperChannel::Y) {
+                    self.y_dir_pin.set_high();
+                }
+                else {
+                    self.y_dir_pin.set_low();
+                }
+                #[cfg(feature = "with-z-axis")]
+                if _channels.contains(printhor_hwa_common::StepperChannel::Z) {
+                    self.z_dir_pin.set_high();
+                }
+                else {
+                    self.z_dir_pin.set_low();
+                }
+                #[cfg(feature = "with-e-axis")]
+                if _channels.contains(printhor_hwa_common::StepperChannel::E) {
+                    self.e_dir_pin.set_high();
+                }
+                else {
+                    self.e_dir_pin.set_low();
+                }
+            }
         }
     }
 

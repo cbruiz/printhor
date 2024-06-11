@@ -43,6 +43,8 @@ with-y-axis = []
 with-z-axis = []
 with-e-axis = []
 
+debug-signals = []
+
 nightly = []
 executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue-128"]
 cooperative = ["embassy-executor/integrated-timers"]
@@ -54,15 +56,15 @@ ili9341_spi = ["with-spi"]
 [dependencies]
 defmt = {version = "0.3", default-features = false}
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = { version = "0.7.3", default-features = false }
+cortex-m-rt = { version = "0.7.0", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
-embassy-stm32 = { version = "0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0", default-features = false, features = ["executor-thread", "arch-cortex-m"] }
-embassy-sync = { version = "0", features = ["defmt"] }
-embassy-time = { version = "0", features = ["defmt"] }
-embassy-futures = { version = "0", features = ["defmt"] }
-embassy-usb = { version = "0", features = [], optional = true }
+embassy-stm32 = { version = "0.1.0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "0.5.0", default-features = false, features = ["executor-thread", "arch-cortex-m"] }
+embassy-sync = { version = "0.6.0", features = ["defmt"] }
+embassy-time = { version = "0.3.1", features = ["defmt"] }
+embassy-futures = { version = "0.1.1", features = ["defmt"] }
+embassy-usb = { version = "0.2.0", features = [], optional = true }
 
 printhor-hwa-common = { version = "0.0", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
@@ -75,4 +77,4 @@ cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }
 
 [patch.crates-io]
-embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+#embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

@@ -34,18 +34,18 @@ with-e-axis = []
 
 [dependencies]
 portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
-static_cell = { version = "2.0.0",  default-features = false, features = [] }
+static_cell = { version = "2.1",  default-features = false, features = [] }
 
-embassy-sync = { version = "0.5.0", features = [] }
-embassy-time = { version = "0.3.0", features = [] }
+embassy-sync = { version = "0.6.0", features = [] }
+embassy-time = { version = "0.3", features = [] }
 
 embedded-hal = { version = "1.0.0", default-features = false }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
 embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 
 embedded-graphics-core = {version = "0.3.3", optional = true }
-bitflags = { version = "2.4.1", default-features = false, features = ["bytemuck"] }
+bitflags = { version = "2.4.2", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
-log = { version = "0.4.20", default-features = false, optional = true }
-strum = { version = "0.26.1", default-features = false, features = ["derive"] }
+log = { version = "0.4", default-features = false, optional = true }
+strum = { version = "0.26", default-features = false, features = ["derive"] }

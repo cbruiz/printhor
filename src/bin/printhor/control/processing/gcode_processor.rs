@@ -348,7 +348,7 @@ impl GCodeProcessor {
                     #[cfg(feature = "with-hot-end")]
                     {
                         let mut h = self.hotend.lock().await;
-                        format!(
+                        alloc::format!(
                             " T:{} /{} T@:{} TZ:{}",
                             h.get_current_temp(),
                             h.get_target_temp(),
@@ -363,7 +363,7 @@ impl GCodeProcessor {
                     #[cfg(feature = "with-hot-bed")]
                     {
                         let mut h = self.hotbed.lock().await;
-                        format!(
+                        alloc::format!(
                             " B:{} /{} B@:{} BZ:{}",
                             h.get_current_temp(),
                             h.get_target_temp(),

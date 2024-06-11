@@ -11,7 +11,7 @@ where TimPeri: Pwm + 'static
 }
 
 impl<TimPeri> PwmController<TimPeri>
-    where TimPeri: Pwm<Duty=u16> + 'static,
+    where TimPeri: Pwm<Duty=u32> + 'static,
           <TimPeri as Pwm>::Channel: Copy
 {
     pub fn new(pwm: InterruptControllerRef<TimPeri>, pwm_chan: <TimPeri as Pwm>::Channel) -> Self {
@@ -28,7 +28,7 @@ impl<TimPeri> PwmController<TimPeri>
         let mut mg = self.pwm.lock().await;
         if power > 0 {
             let max_duty = mg.get_max_duty();
-            let duty_result: Result<u16, _> = (((power as u32) * (max_duty as u32)) / 100u32).try_into();
+            let duty_result: Result<u32, _> = (((power as u32) * (max_duty as u32)) / 100u32).try_into();
             match duty_result {
                 Ok(duty) => {
                     hwa::trace!("Set duty: {}", duty);

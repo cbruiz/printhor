@@ -39,11 +39,10 @@ pub async fn task_control(
         crate::initialization_error()
     }
     loop {
-
         match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode()).await {
             // Timeout
             Err(_) => {
-                hwa::debug!("task_control: Timeout");
+                hwa::info!("task_control: Timeout");
             }
             Ok((Err(GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
@@ -60,10 +59,11 @@ pub async fn task_control(
                 processor.write(channel, s).await;
             }
             Ok((Ok(None), _channel)) => {
-                hwa::debug!("{:?} Got EOF", _channel);
+                hwa::info!("{:?} Got EOF", _channel);
                 //embassy_time::Timer::after_secs(1).await; // Avoid respawn too fast
             }
             Ok((Ok(Some(gc)), channel)) => {
+                hwa::info!("{:?} Got {:?}", channel, gc);
                 match gc {
                     GCode::NOP => {
                         // Should not happen
@@ -162,7 +162,7 @@ pub async fn task_control(
                     _ => {
                         match processor.execute(channel, &gc, false).await {
                             Ok(CodeExecutionSuccess::OK) => {
-                                hwa::debug!("Control sending OK");
+                                hwa::info!("Control sending OK");
                                 cfg_if::cfg_if! {
                                     if #[cfg(feature="trace-commands")] {
                                         let s = alloc::format!("ok; {}\n", gc.as_ref());
@@ -175,7 +175,7 @@ pub async fn task_control(
 
                             }
                             Ok(CodeExecutionSuccess::QUEUED) => {
-                                hwa::debug!("Control sending OK (Q)");
+                                hwa::info!("Control sending OK (Q) BEGIN");
                                 cfg_if::cfg_if! {
                                     if #[cfg(feature="trace-commands")] {
                                         let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
@@ -185,16 +185,17 @@ pub async fn task_control(
                                         processor.write(channel, "ok\n").await;
                                     }
                                 }
+                                hwa::info!("Control sending OK (Q) END");
 
                             }
                             Ok(CodeExecutionSuccess::DEFERRED(_)) => {
-                                hwa::debug!("Control not sending (deferred)");
+                                hwa::info!("Control not sending (deferred)");
                             }
                             Ok(CodeExecutionSuccess::CONSUMED) => {
-                                hwa::debug!("Control not sending (implicitly consumed)");
+                                hwa::info!("Control not sending (implicitly consumed)");
                             }
                             Err(_e) => {
-                                hwa::debug!("Control sending ERR");
+                                hwa::info!("Control sending ERR");
                                 let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
                                 processor.write(channel, s.as_str()).await;
                             }

@@ -21,7 +21,7 @@ pub mod math;
 use crate::control::task_control::ControlTaskControllers;
 use embassy_executor::Spawner;
 #[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
-use printhor_hwa_common::{ControllerMutex, ControllerRef};
+use printhor_hwa_common::{ControllerRef};
 #[allow(unused)]
 use hwa::{DeferChannelRef, EventBusRef, TrackedStaticCell};
 use hwa::{Controllers, SysDevices, IODevices, MotionDevices, PwmDevices};
@@ -201,10 +201,10 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-laser")]
         let laser_controller = {
-        static LASER_CONTROLLER_INST: TrackedStaticCell<InterruptControllerMutex<hwa::controllers::LaserPwmController>> = TrackedStaticCell::new();
+        static LASER_CONTROLLER_INST: TrackedStaticCell<hwa::InterruptControllerMutex<hwa::controllers::LaserPwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
             LASER_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("LaserController",
-                                       ControllerMutex::new(
+                                       hwa::ControllerMutex::new(
                                            hwa::controllers::LaserPwmController::new(
                                                _pwm_devices.laser.power_pwm,
                                                _pwm_devices.laser.power_channel,
@@ -214,10 +214,10 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-hot-end")]
     let hotend_controller = {
-        static HOTEND_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotendController>> = TrackedStaticCell::new();
+        static HOTEND_CONTROLLER_INST: TrackedStaticCell<hwa::InterruptControllerMutex<hwa::controllers::HotendController>> = TrackedStaticCell::new();
         ControllerRef::new(
             HOTEND_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("HotEndController",
-                                        ControllerMutex::new(
+                                        hwa::ControllerMutex::new(
                                             hwa::controllers::HotendController::new(
                                                 _pwm_devices.hotend.temp_adc.clone(),
                                                 _pwm_devices.hotend.temp_pin,
@@ -234,10 +234,10 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-hot-bed")]
     let hotbed_controller = {
-        static HOTBED_CONTROLLER_INST: TrackedStaticCell<ControllerMutex<hwa::controllers::HotbedController>> = TrackedStaticCell::new();
+        static HOTBED_CONTROLLER_INST: TrackedStaticCell<hwa::InterruptControllerMutex<hwa::controllers::HotbedController>> = TrackedStaticCell::new();
         ControllerRef::new(
             HOTBED_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("HotbedController",
-                                        ControllerMutex::new(
+                                        hwa::ControllerMutex::new(
                                             hwa::controllers::HotbedController::new(
                                                 _pwm_devices.hotbed.temp_adc,
                                                 _pwm_devices.hotbed.temp_pin,
@@ -323,21 +323,21 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
 
     #[cfg(feature = "with-motion")]
     {
-        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(200), Some(200), Some(50), Some(200))).await;
+        motion_planer.set_max_speed(tgeo::TVector::from_coords(Some(100), Some(100), Some(50), Some(100))).await;
         motion_planer.set_max_accel(tgeo::TVector::from_coords(Some(3000), Some(3000), Some(100), Some(3000))).await;
-        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(6000), Some(6000), Some(300), Some(6000))).await;
-        motion_planer.set_default_travel_speed(200).await;
+        motion_planer.set_max_jerk(tgeo::TVector::from_coords(Some(6000), Some(6000), Some(200), Some(6000))).await;
+        motion_planer.set_default_travel_speed(100).await;
         // Homing unneeded
         motion_planer.set_last_planned_pos(&TVector::zero()).await;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "native")] {
                 motion_planer.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0)).await;
-                motion_planer.set_usteps(16, 16, 16, 16).await;
+                motion_planer.set_usteps(8, 8, 8, 8).await;
             }
             else {
                 motion_planer.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0)).await;
-                motion_planer.set_usteps(16, 16, 16, 16).await;
+                motion_planer.set_usteps(8, 8, 8, 8).await;
             }
         }
 

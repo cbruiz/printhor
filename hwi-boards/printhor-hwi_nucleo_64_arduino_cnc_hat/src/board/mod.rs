@@ -16,7 +16,7 @@ use embassy_stm32::usart::{DataBits, Parity, StopBits};
 use embassy_stm32::spi;
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext};
+use printhor_hwa_common::{TrackedStaticCell, MachineContext, InterruptControllerMutex};
 
 #[global_allocator]
 static HEAP: CortexMHeap = CortexMHeap::empty();
@@ -35,8 +35,8 @@ cfg_if::cfg_if! {
         // https://www.st.com/resource/en/datasheet/DM00214043.pdf
         pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
         /// Micro-segment sampling frequency in Hz
-        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
-        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 400;
+        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
 
     }
     else if #[cfg(feature="nucleo64-l476rg")] {
@@ -302,7 +302,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     let spi1_device = {
         let mut cfg = spi::Config::default();
         cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
-        static SPI_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
+        static SPI_INST: TrackedStaticCell<InterruptControllerMutex<device::Spi1>> = TrackedStaticCell::new();
         #[cfg(feature="nucleo64-l476rg")]
         let spi = ControllerRef::new(SPI_INST.init::<{crate::MAX_STATIC_MEMORY}>(
             "SPI",
@@ -313,7 +313,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             )
         ));
         #[cfg(feature="nucleo64-f410rb")]
-        let spi = ControllerRef::new(SPI_INST.init(
+        let spi = ControllerRef::new(SPI_INST.init::<MAX_STATIC_MEMORY>(
             "SPI",
             ControllerMutex::new(
                 device::Spi1::new(p.SPI2, p.PB13, p.PB15, p.PB14,
@@ -375,27 +375,60 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             power_channel: embassy_stm32::timer::Channel::Ch3,
         }
     };
-    #[cfg(all(feature = "with-probe", feature ="nucleo64-f410rb"))]
-        let probe_device = {
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
-        crate::device::ProbePeripherals {
-            power_pwm: ControllerRef::new(
-                PWM_INST.init("PwmServo",
-                              ControllerMutex::new(
-                                  device::PwmServo::new(
-                                      p.TIM11,
-                                      Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB9, embassy_stm32::gpio::OutputType::PushPull)),
-                                      None,
-                                      None,
-                                      None,
-                                      embassy_stm32::time::hz(50),
-                                      embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
-                                  )
-                              ),
-                )),
-            power_channel: embassy_stm32::timer::Channel::Ch1,
+    cfg_if::cfg_if! {
+        if #[cfg(feature ="nucleo64-f410rb")] {
+            cfg_if::cfg_if! {
+                if #[cfg(feature ="with-probe")] {
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature ="upstream-embassy")] {
+                            let probe_device = {
+                                static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+                                crate::device::ProbePeripherals {
+                                    power_pwm: ControllerRef::new(
+                                        PWM_INST.init::<MAX_STATIC_MEMORY>("PwmServo",
+                                                      ControllerMutex::new(
+                                                          device::PwmServo::new(
+                                                              p.TIM11,
+                                                              Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB9, embassy_stm32::gpio::OutputType::PushPull)),
+                                                              None,
+                                                              None,
+                                                              None,
+                                                              embassy_stm32::time::hz(50),
+                                                              embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                                                          )
+                                                      ),
+                                        )),
+                                    power_channel: embassy_stm32::timer::Channel::Ch1,
+                                }
+                            };
+                        }
+                        else {
+                            let probe_device = {
+                                static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+                                crate::device::ProbePeripherals {
+                                    power_pwm: ControllerRef::new(
+                                        PWM_INST.init("PwmServo",
+                                                      ControllerMutex::new(
+                                                          device::PwmServo::new(
+                                                              p.TIM11,
+                                                              Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB9, embassy_stm32::gpio::OutputType::PushPull)),
+                                                              None,
+                                                              None,
+                                                              None,
+                                                              embassy_stm32::time::hz(50),
+                                                              embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+                                                          )
+                                                      ),
+                                        )),
+                                    power_channel: embassy_stm32::timer::Channel::Ch1,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-    };
+    }
 
     #[cfg(feature = "with-hot-end")]
     static HOT_END_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
@@ -403,20 +436,30 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     #[cfg(feature = "with-hot-bed")]
     static HOT_BED_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
 
+    cfg_if::cfg_if! {
+        if #[cfg(feature ="nucleo64-f410rb")] {
+            cfg_if::cfg_if! {
+                if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature ="upstream-embassy")] {
+                            let adc = {
+                                let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1);
+                                adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::CYCLES15);
+                                static ADC_INST: TrackedStaticCell<InterruptControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
+                                ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
+                                    "HotendHotbedAdc",
+                                    ControllerMutex::new(adc_hotend_hotbed)
+                                ))
+                            };
+                        }
+                        else {
 
-    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-        let adc = {
-        let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
-        #[cfg(feature = "nucleo64-l476rg")]
-        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles12_5);
-        #[cfg(feature = "nucleo64-f410rb")]
-        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles15);
-        static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
-        ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
-            "HotendHotbedAdc",
-            ControllerMutex::new(adc_hotend_hotbed)
-        ))
-    };
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[cfg(all(feature ="nucleo64-l476rg", any(feature = "with-hot-end", feature = "with-hot-bed")))]
         let pwm_hotend_hotbed = {
@@ -437,24 +480,56 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         ))
     };
 
-    #[cfg(all(feature ="nucleo64-f410rb", any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1")))]
-        let pwm_hotend_hotbed_layer = {
-            let pwm = device::PwmHotendHotbedLayer::new(
-            p.TIM5,
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB12, embassy_stm32::gpio::OutputType::PushPull)),
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, embassy_stm32::gpio::OutputType::PushPull)),
-            None,
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PB11, embassy_stm32::gpio::OutputType::PushPull)),
-            embassy_stm32::time::hz(5_000),
-            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
-        );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotendHotbedLayer>> = TrackedStaticCell::new();
+    cfg_if::cfg_if! {
+        if #[cfg(feature ="nucleo64-f410rb")] {
+            cfg_if::cfg_if! {
+                if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1"))] {
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature ="upstream-embassy")] {
+                            let pwm_hotend_hotbed_layer = {
+                                let pwm = device::PwmHotendHotbedLayer::new(
+                                    p.TIM5,
+                                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB12, embassy_stm32::gpio::OutputType::PushPull)),
+                                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, embassy_stm32::gpio::OutputType::PushPull)),
+                                    None,
+                                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PB11, embassy_stm32::gpio::OutputType::PushPull)),
+                                    embassy_stm32::time::hz(5_000),
+                                    embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                                );
+                                static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmHotendHotbedLayer>> = TrackedStaticCell::new();
 
-        ControllerRef::new(PWM_INST.init(
-            "PwmHotendHotbedLayer",
-            ControllerMutex::new(pwm)
-        ))
-    };
+                                ControllerRef::new(PWM_INST.init::<MAX_STATIC_MEMORY>(
+                                    "PwmHotendHotbedLayer",
+                                    ControllerMutex::new(pwm)
+                                ))
+                            };
+                        }
+                        else {
+                            if #[cfg(feature ="upstream-embassy")] {
+                                let pwm_hotend_hotbed_layer = {
+                                    let pwm = device::PwmHotendHotbedLayer::new(
+                                        p.TIM5,
+                                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(p.PB12, embassy_stm32::gpio::OutputType::PushPull)),
+                                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, embassy_stm32::gpio::OutputType::PushPull)),
+                                        None,
+                                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PB11, embassy_stm32::gpio::OutputType::PushPull)),
+                                        embassy_stm32::time::hz(5_000),
+                                        embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+                                    );
+                                    static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotendHotbedLayer>> = TrackedStaticCell::new();
+
+                                    ControllerRef::new(PWM_INST.init(
+                                        "PwmHotendHotbedLayer",
+                                        ControllerMutex::new(pwm)
+                                    ))
+                                };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[cfg(all(feature = "nucleo64-l476rg", feature = "with-hot-end"))]
         let hotend_device = {
@@ -524,27 +599,38 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         }
     };
 
-    #[cfg(all(feature="nucleo64-f410rb", feature = "with-laser"))]
-        let laser_device = {
-            let pwm = device::PwmLaser::new(
-            p.TIM1,
-            None,
-            None,
-            None,
-            Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PA11, embassy_stm32::gpio::OutputType::PushPull)),
-            embassy_stm32::time::hz(5_000),
-            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
-        );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
+    cfg_if::cfg_if! {
+        if #[cfg(feature ="nucleo64-f410rb")] {
+            cfg_if::cfg_if! {
+                if #[cfg(feature ="with-laser")] {
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature ="upstream-embassy")] {
+                            let laser_device = {
+                                let pwm = device::PwmLaser::new(
+                                    p.TIM1,
+                                    None,
+                                    None,
+                                    None,
+                                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PA11, embassy_stm32::gpio::OutputType::PushPull)),
+                                    embassy_stm32::time::hz(5_000),
+                                    embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                                );
+                                static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
 
-        device::LaserPeripherals {
-            power_pwm: ControllerRef::new(PWM_INST.init(
-                "PwmLaser",
-                ControllerMutex::new(pwm)
-            )),
-            power_channel: embassy_stm32::timer::Channel::Ch4,
+                                device::LaserPeripherals {
+                                    power_pwm: ControllerRef::new(PWM_INST.init::<MAX_STATIC_MEMORY>(
+                                        "PwmLaser",
+                                        ControllerMutex::new(pwm)
+                                    )),
+                                    power_channel: embassy_stm32::timer::Channel::Ch4,
+                                }
+                            };
+                        }
+                    }
+                }
+            }
         }
-    };
+    }
 
     #[cfg(all(feature="nucleo64-l476rg", feature = "with-fan-layer"))]
         let fan_layer_device = {

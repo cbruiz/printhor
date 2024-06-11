@@ -76,8 +76,8 @@ pub mod hwi {
                 todo!()
             }
 
-            pub fn step_toggle(&mut self, channels: StepperChannel) {
-                todo!()
+            pub fn step_toggle(&mut self, _channels: StepperChannel) {
+
             }
 
             pub fn endstop_triggered(&mut self, channels: StepperChannel) -> bool {

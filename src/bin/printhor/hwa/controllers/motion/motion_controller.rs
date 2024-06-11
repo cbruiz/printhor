@@ -937,20 +937,26 @@ impl core::ops::Deref for MotionPlannerRef
 #[cfg(test)]
 pub mod test {
 
-    #[cfg(feature = "wip-tests")]
+
+    //#[cfg(feature = "wip-tests")]
     #[test]
     fn discrete_positioning_case_1() {
 
         use printhor_hwa_common::StepperChannel;
         use crate::hwa::controllers::motion_segment::{Segment, SegmentData, SegmentIterator};
-        use crate::{hwa, math};
+        use crate::math;
         use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
         use crate::control::motion_timing::StepPlanner;
         use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
         use crate::math::Real;
         use crate::tgeo::TVector;
 
-        // sid 56
+        const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
+        const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
+
+
+        const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
 
         let segment = Segment::new(
             SegmentData {
@@ -979,13 +985,12 @@ pub mod test {
             }
         );
 
-
         let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
         let units_per_mm = TVector::from_coords(Some(Real::from_f32(10.0)), Some(Real::from_f32(10.0)), None, None);
-        let usteps = TVector::from_coords(Some(Real::from_f32(16.0)), Some(Real::from_f32(16.0)), None, None);
-        let micro_segment_period_secs = Real::from_f32(0.020);
-        let sampling_time = Real::from_f32(0.000020);
-        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 20;
+        let usteps = TVector::from_coords(Some(Real::from_f32(8.0)), Some(Real::from_f32(8.0)), None, None);
+        let micro_segment_period_secs = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US.into(), 6);
+        let sampling_time = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US.into(), 6);
+
 
         let motion_profile = SCurveMotionProfile::compute(
             segment.segment_data.displacement_mm,
@@ -1009,17 +1014,17 @@ pub mod test {
 
         let mut prev_time = math::ZERO;
         let mut p0 = math::ZERO;
+        let mut real_advanced_steps: TVector<u32> = TVector::zero();
+
         loop {
-            if let Some((estimated_position, interval)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+            if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
 
                 let tprev = micro_segment_real_time_rel - prev_time;
                 let tmax = motion_profile.i7_end() - prev_time;
-                let dt = tmax.min(tprev);
 
-                hwa::trace!("at [{}] dt = {}", micro_segment_real_time_rel.rdp(4), dt.rdp(4));
                 let ds = estimated_position - p0;
                 p0 = estimated_position;
-                let current_period_width = if tprev < tmax {
+                let current_period_width_0 = if tprev < tmax {
                     tprev
                 }
                 else {
@@ -1031,73 +1036,332 @@ pub mod test {
                     }
                 };
 
-                hwa::trace!("  w = {}", current_period_width.rdp(6));
+                let current_period_width = current_period_width_0;
 
                 prev_time += current_period_width;
                 micro_segment_real_time_rel += current_period_width;
 
-                let w = (current_period_width * Real::from_f32(1000000.)).ceil();
+                let w = (current_period_width * Real::from_f32(1000000.)).round();
 
                 let has_more = microsegment_interpolator.advance_to(estimated_position, w);
 
-                hwa::trace!("\tat p = [+ {} | {}] [i {}]",
-                                    estimated_position, microsegment_interpolator.advanced_steps(),
-                                    interval,
-                                );
+                let mut step_planner = StepPlanner::from(
+                    microsegment_interpolator.state().clone(),
+                    StepperChannel::empty(),
+                    StepperChannel::empty(),
+                );
 
-
-                hwa::trace!("\tAdvanced mm: {}", microsegment_interpolator.advanced_mm());
-
-                if microsegment_interpolator.state().max_count() > 0 {
-                    let mut step_planner = StepPlanner::from(
-                        microsegment_interpolator.state().channels(),
-                        microsegment_interpolator.state().max_count(),
-                        StepperChannel::empty(),
-                        StepperChannel::empty(),
-                    );
-
-                    //step_planner.reset(STEPPER_PLANNER_CLOCK_PERIOD_US.into());
-                    step_planner.reset(microsegment_interpolator.width().into());
-
-                    let mut pulse_offset = math::ZERO;
-                    let mut tick_count = 0;
-                    let mut real_advanced_steps: TVector<u32> = TVector::zero();
-
-                    loop {
-                        match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US.into()) {
-                            //match step_planner.next(sampling_time) {
-                            None => {
-                                //hwa::info!("eof");
-                                break;
-                            }
-                            Some(_t) => {
-                                pulse_offset += sampling_time;
-
+                let mut tick_count = 0;
+                loop {
+                    match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US) {
+                        None => {
+                            break;
+                        }
+                        Some(_t) => {
+                            tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                            if !_t.is_empty() {
                                 real_advanced_steps.increment(_t.into(), 1);
-
-                                //data_points.add_real(ref_time - current_period_width + pulse_offset, total_disp_discrete);
-                                //else {
-                                //    hwa::info!("?");
-                                //}
-                                tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
-                                //if tick_count >= STEPPER_PLANNER_CLOCK_PERIOD_US {
-                                if tick_count >= microsegment_interpolator.width() {
-                                    break;
-                                }
+                            }
+                            // std::println!("t = {} : {} w = {}", tick_count, real_advanced_steps, width);
+                            if tick_count >= microsegment_interpolator.width() {
+                                break;
                             }
                         }
                     }
-                    let expected_advanced_steps = microsegment_interpolator.advanced_steps();
-                    assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
                 }
                 if !has_more {
                     break;
                 }
-
             } else {
                 break;
             }
         }
+        let expected_advanced_steps = microsegment_interpolator.advanced_steps();
+        assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
+
+    }
+
+    #[test]
+    fn discrete_positioning_case_2() {
+
+        use printhor_hwa_common::StepperChannel;
+        use crate::hwa::controllers::motion_segment::{Segment, SegmentData, SegmentIterator};
+        use crate::math;
+        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+        use crate::control::motion_timing::StepPlanner;
+        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::math::Real;
+        use crate::tgeo::TVector;
+
+        const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500;
+        const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 50_000;
+
+        const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
+
+        let segment = Segment::new(
+            SegmentData {
+                speed_enter_mms: Real::from_f32(400.0),
+                speed_exit_mms: Real::from_f32(400.0),
+                speed_target_mms: Real::from_f32(400.0),
+                displacement_mm: Real::from_f32(0.505982578),
+                speed_enter_constrained_mms: Real::from_f32(6.25),
+                speed_exit_constrained_mms: Real::from_f32(6.25),
+                proj_prev: Real::from_f32(0.999986052),
+                proj_next: Real::from_f32(0.999938488),
+                vdir: TVector::from_coords(Some(Real::from_f32(-0.901716948)),
+                                           Some(Real::from_f32(-0.432327151)),
+                                           None,
+                                           None),
+                dest_pos: TVector::from_coords(Some(Real::from_f32(79.9687576)),
+                                               Some(Real::from_f32(100.387497)),
+                                               None,
+                                               None),
+                tool_power: math::ZERO,
+                constraints: Constraints {
+                    v_max: Real::from_f32(400.0),
+                    a_max: Real::from_f32(3000.0),
+                    j_max: Real::from_f32(6000.0),
+                }
+            }
+        );
+
+        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let units_per_mm = TVector::from_coords(Some(Real::from_f32(10.0)), Some(Real::from_f32(10.0)), None, None);
+        let usteps = TVector::from_coords(Some(Real::from_f32(8.0)), Some(Real::from_f32(8.0)), None, None);
+        let micro_segment_period_secs = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US.into(), 6);
+        let sampling_time = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US.into(), 6);
+
+
+        let motion_profile = SCurveMotionProfile::compute(
+            segment.segment_data.displacement_mm,
+            segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
+            &segment.segment_data.constraints,
+            false
+        ).unwrap();
+
+        let units_per_mm = neutral_element + units_per_mm;
+        let steps_per_mm = units_per_mm * usteps;
+
+        let mut micro_segment_real_time_rel = micro_segment_period_secs;
+        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+
+        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
+            segment.segment_data.vdir.abs(),
+            segment.segment_data.displacement_mm,
+            steps_per_mm,
+        );
+
+
+        let mut prev_time = math::ZERO;
+        let mut p0 = math::ZERO;
+        let mut real_advanced_steps: TVector<u32> = TVector::zero();
+
+        loop {
+            if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+
+                let tprev = micro_segment_real_time_rel - prev_time;
+                let tmax = motion_profile.i7_end() - prev_time;
+
+                let ds = estimated_position - p0;
+                p0 = estimated_position;
+                let current_period_width_0 = if tprev < tmax {
+                    tprev
+                }
+                else {
+                    if segment.segment_data.speed_exit_mms > math::ZERO {
+                        (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
+                    }
+                    else {
+                        tmax
+                    }
+                };
+
+                let current_period_width = current_period_width_0;
+
+                prev_time += current_period_width;
+                micro_segment_real_time_rel += current_period_width;
+
+                let w = (current_period_width * Real::from_f32(1000000.)).round();
+
+                let has_more = microsegment_interpolator.advance_to(estimated_position, w);
+
+                let mut step_planner = StepPlanner::from(
+                    microsegment_interpolator.state().clone(),
+                    StepperChannel::empty(),
+                    StepperChannel::empty(),
+                );
+
+                let mut tick_count = 0;
+                loop {
+                    match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US) {
+                        None => {
+                            break;
+                        }
+                        Some(_t) => {
+                            tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                            if !_t.is_empty() {
+                                real_advanced_steps.increment(_t.into(), 1);
+                            }
+                            // std::println!("t = {} : {} w = {}", tick_count, real_advanced_steps, width);
+                            if tick_count >= microsegment_interpolator.width() {
+                                break;
+                            }
+
+                        }
+                    }
+                }
+                if !has_more {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let expected_advanced_steps = microsegment_interpolator.advanced_steps();
+        assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
+
+    }
+
+    #[test]
+    fn discrete_positioning_case_3() {
+
+        use printhor_hwa_common::StepperChannel;
+        use crate::hwa::controllers::motion_segment::{Segment, SegmentData, SegmentIterator};
+        use crate::math;
+        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+        use crate::control::motion_timing::StepPlanner;
+        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::math::Real;
+        use crate::tgeo::TVector;
+
+        const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500;
+        const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 200_000;
+
+        const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
+
+        let segment = Segment::new(
+            SegmentData {
+                speed_enter_mms: Real::from_f32(400.0),
+                speed_exit_mms: Real::from_f32(400.0),
+                speed_target_mms: Real::from_f32(400.0),
+                displacement_mm: Real::from_f32(0.505982578),
+                speed_enter_constrained_mms: Real::from_f32(6.25),
+                speed_exit_constrained_mms: Real::from_f32(6.25),
+                proj_prev: Real::from_f32(0.999986052),
+                proj_next: Real::from_f32(0.999938488),
+                vdir: TVector::from_coords(Some(Real::from_f32(-0.901716948)),
+                                           Some(Real::from_f32(-0.432327151)),
+                                           None,
+                                           None),
+                dest_pos: TVector::from_coords(Some(Real::from_f32(79.9687576)),
+                                               Some(Real::from_f32(100.387497)),
+                                               None,
+                                               None),
+                tool_power: math::ZERO,
+                constraints: Constraints {
+                    v_max: Real::from_f32(400.0),
+                    a_max: Real::from_f32(3000.0),
+                    j_max: Real::from_f32(6000.0),
+                }
+            }
+        );
+
+        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let units_per_mm = TVector::from_coords(Some(Real::from_f32(10.0)), Some(Real::from_f32(10.0)), None, None);
+        let usteps = TVector::from_coords(Some(Real::from_f32(8.0)), Some(Real::from_f32(8.0)), None, None);
+        let micro_segment_period_secs = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US.into(), 6);
+        let sampling_time = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US.into(), 6);
+
+
+        let motion_profile = SCurveMotionProfile::compute(
+            segment.segment_data.displacement_mm,
+            segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
+            &segment.segment_data.constraints,
+            false
+        ).unwrap();
+
+        let units_per_mm = neutral_element + units_per_mm;
+        let steps_per_mm = units_per_mm * usteps;
+
+        let mut micro_segment_real_time_rel = micro_segment_period_secs;
+        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+
+        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
+            segment.segment_data.vdir.abs(),
+            segment.segment_data.displacement_mm,
+            steps_per_mm,
+        );
+
+
+        let mut prev_time = math::ZERO;
+        let mut p0 = math::ZERO;
+        let mut real_advanced_steps: TVector<u32> = TVector::zero();
+
+        loop {
+            if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+
+                let tprev = micro_segment_real_time_rel - prev_time;
+                let tmax = motion_profile.i7_end() - prev_time;
+
+                let ds = estimated_position - p0;
+                p0 = estimated_position;
+                let current_period_width_0 = if tprev < tmax {
+                    tprev
+                }
+                else {
+                    if segment.segment_data.speed_exit_mms > math::ZERO {
+                        (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
+                    }
+                    else {
+                        tmax
+                    }
+                };
+
+                let current_period_width = current_period_width_0;
+
+                prev_time += current_period_width;
+                micro_segment_real_time_rel += current_period_width;
+
+                let w = (current_period_width * Real::from_f32(1000000.)).round();
+
+                let has_more = microsegment_interpolator.advance_to(estimated_position, w);
+
+                let mut step_planner = StepPlanner::from(
+                    microsegment_interpolator.state().clone(),
+                    StepperChannel::empty(),
+                    StepperChannel::empty(),
+                );
+
+                let mut tick_count = 0;
+                loop {
+                    match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US) {
+                        None => {
+                            break;
+                        }
+                        Some(_t) => {
+                            tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                            if !_t.is_empty() {
+                                real_advanced_steps.increment(_t.into(), 1);
+                            }
+                            // std::println!("t = {} : {} w = {}", tick_count, real_advanced_steps, width);
+                            if tick_count >= microsegment_interpolator.width() {
+                                break;
+                            }
+
+                        }
+                    }
+                }
+                if !has_more {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let expected_advanced_steps = microsegment_interpolator.advanced_steps();
+        assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
 
     }
 

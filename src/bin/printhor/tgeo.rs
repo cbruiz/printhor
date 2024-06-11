@@ -100,6 +100,18 @@ where T: ArithmeticOps
         }
     }
 
+    #[inline]
+    pub fn map_all<U, F>(&self, f: F) -> TVector<U>
+        where F: Fn(Option<T>) -> Option<U>, U: ArithmeticOps
+    {
+        TVector {
+            x: f(self.x),
+            y: f(self.y),
+            z: f(self.z),
+            e: f(self.e),
+        }
+    }
+
     #[allow(unused)]
     #[inline]
     pub fn apply_coords<F>(&self, mut f: F)
@@ -183,6 +195,59 @@ where T: ArithmeticOps
         if coord_idx.contains(CoordSel::Z) { self.z = self.z.and_then(|v| Some(v + val)) }
         if coord_idx.contains(CoordSel::E) { self.e = self.e.and_then(|v| Some(v + val)) }
         self
+    }
+
+    #[inline]
+    #[allow(unused)]
+    pub fn decrement_if_positive(&mut self, coord_idx: CoordSel) -> bool
+    where T: ArithmeticOps + core::ops::Sub<Output=T>
+    {
+        let mut changed = false;
+        if coord_idx.contains(CoordSel::X) {
+            self.x = self.x.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.x
+                }
+            )
+        }
+        else if coord_idx.contains(CoordSel::Y) {
+            self.y = self.y.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.y
+                }
+            )
+        }
+        else if coord_idx.contains(CoordSel::Z) {
+            self.z = self.z.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.z
+                }
+            )
+        }
+        else if coord_idx.contains(CoordSel::E) {
+            self.e = self.e.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.e
+                }
+            )
+        }
+        changed
     }
 
     #[inline]

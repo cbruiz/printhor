@@ -298,7 +298,7 @@ pub type Watchdog = embassy_stm32::wdg::IndependentWatchdog<'static,
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmServo>,
     pub power_channel: PwmChannel,
 }
 

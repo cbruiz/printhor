@@ -1,14 +1,15 @@
 use printhor_hwa_common::StepperChannel;
+use crate::tgeo::{CoordSel, TVector};
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {
-    next_tick: u64,
-    width: u64,
+    next_tick: u32,
+    width: u32,
     name: StepperChannel,
 }
 
 impl ChannelStatus {
-    pub const fn new(name: StepperChannel, width: u64) -> Self {
+    pub const fn new(name: StepperChannel, width: u32) -> Self {
         Self{
             next_tick: 0,
             width,
@@ -45,7 +46,7 @@ cfg_if::cfg_if! {
 #[derive(Clone, Copy)]
 pub struct MultiTimer {
     width: u32,
-    max_count: u32,
+    max_count: TVector<u32>,
     channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
 }
 
@@ -53,7 +54,7 @@ impl MultiTimer {
     pub const fn new() -> Self {
         Self {
             width: 0,
-            max_count: 0,
+            max_count: TVector::new(),
             channels: [
                 #[cfg(feature = "with-x-axis")]
                 None,
@@ -67,7 +68,7 @@ impl MultiTimer {
         }
     }
 
-    pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u64>) {
+    pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u32>) {
 
         #[cfg(feature = "with-x-axis")]
         if channel.contains(StepperChannel::X) {
@@ -115,12 +116,8 @@ impl MultiTimer {
         }
     }
 
-    pub fn set_max_count(&mut self, max_count: u32) {
-        self.max_count = max_count;
-    }
-
-    pub fn channels(&self) -> [Option<ChannelStatus>; MULTITIMER_CHANNELS] {
-        self.channels
+    pub fn set_max_count(&mut self, max_count: &TVector<u32>) {
+        self.max_count = *max_count;
     }
 
     pub fn set_width(&mut self, width: u32) {
@@ -129,10 +126,6 @@ impl MultiTimer {
 
     pub fn width(&self) -> u32 {
         self.width
-    }
-
-    pub fn max_count(&self) -> u32 {
-        self.max_count
     }
 }
 
@@ -148,12 +141,10 @@ impl MultiTimer {
 ///
 #[derive(Clone, Copy)]
 pub struct StepPlanner {
-    pub(crate) interval_width: u64,
-    ref_time: u64,
+    pub(crate) interval_width: u32,
+    ref_time: u32,
     channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
-    #[allow(unused)]
-    max_count: u32,
-    pulse_count: u32,
+    max_count: TVector<u32>,
     pub stepper_enable_flags: StepperChannel,
     pub stepper_dir_fwd_flags: StepperChannel,
 }
@@ -162,6 +153,7 @@ impl crate::control::motion_timing::StepPlanner {
     pub const fn new() -> Self {
         Self {
             interval_width: 0,
+            max_count: TVector::new(),
             ref_time: 0,
             channels: [
                 #[cfg(feature = "with-x-axis")]
@@ -173,46 +165,42 @@ impl crate::control::motion_timing::StepPlanner {
                 #[cfg(feature = "with-e-axis")]
                     None,
             ],
-            max_count: 0,
-            pulse_count: 0,
             stepper_enable_flags: StepperChannel::UNSET,
             stepper_dir_fwd_flags: StepperChannel::UNSET,
         }
     }
 
-    pub const fn from(channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
-                      max_count: u32,
+    pub fn from(multi_timer: MultiTimer,
                       stepper_enable_flags: StepperChannel,
                       stepper_dir_fwd_flags: StepperChannel,
 
     ) -> Self {
-        Self {
-            interval_width: 0,
+        let mut instance = Self {
+            interval_width: multi_timer.width,
+            max_count: multi_timer.max_count,
             ref_time: 0,
-            channels,
-            max_count,
-            pulse_count: 0,
+            channels: multi_timer.channels,
             stepper_enable_flags,
             stepper_dir_fwd_flags,
-        }
+        };
+        instance.reset();
+        instance
     }
 
-    pub fn reset(&mut self, interval_width: u64) {
+    fn reset(&mut self) {
         self.ref_time = 0;
-        self.pulse_count = 0;
         for channel in self.channels.iter_mut() {
             match channel.as_mut() {
                 None => {
                 }
                 Some(w) => {
-                    w.next_tick = (w.width + 1) >> 1
+                    w.next_tick = (w.width) >> 1
                 }
             }
         }
-        self.interval_width = interval_width;
     }
 
-    pub fn next(&mut self, step_width: u64) -> Option<StepperChannel> {
+    pub fn next(&mut self, step_width: u32) -> Option<StepperChannel> {
         self.ref_time += step_width;
         let mut triggered_channels = StepperChannel::empty();
         for channel in self.channels.iter_mut() {
@@ -222,12 +210,12 @@ impl crate::control::motion_timing::StepPlanner {
                         unreachable!("Feedrate exceeded: width: {} max: {}", _ch.width, step_width);
                     }
                     _ch.next_tick += _ch.width;
-                    triggered_channels.set(_ch.name, true);
+                    let coord: CoordSel = _ch.name.into();
+                    if self.max_count.decrement_if_positive(coord) {
+                        triggered_channels.set(_ch.name, true);
+                    }
                 }
             }
-        }
-        if triggered_channels.is_empty() {
-            self.pulse_count += 1;
         }
         return Some(triggered_channels);
     }
