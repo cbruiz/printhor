@@ -81,7 +81,6 @@ cooperative = [
     "printhor-hwi_skr_mini_e3?/cooperative",
 ]
 
-upstream-embassy = ["printhor-hwi_skr_mini_e3?/upstream-embassy", "printhor-hwi_mks_robin_nano?/upstream-embassy", "printhor-hwi_nucleo_64_arduino_cnc_hat?/upstream-embassy", "printhor-hwi_rp_2040?/upstream-embassy"]
 sdcard-uses-spi = []
 adc-is-async = []
 trinamic-uart-multi-channel = []
@@ -192,8 +191,7 @@ native = [
 #################
 
 mks_robin_nano = [
-    "nightly",
-    #"upstream-embassy",
+    #"nightly",
     "with-defmt", "printhor-hwi_mks_robin_nano/with-defmt",
     "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano/with-motion",
@@ -227,7 +225,6 @@ mks_robin_nano = [
 
 nucleo64-l476rg = [
     #"motion-async-task-exclusive",
-    #"upstream-embassy",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2
@@ -253,8 +250,7 @@ nucleo64-l476rg = [
 
 nucleo64-f410rb = [
     "cornering",
-    "nightly",
-    "upstream-embassy",
+    #"nightly",
     #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
     #"executor-interrupt",
     "cooperative",
@@ -296,8 +292,7 @@ nucleo_64_arduino_cnc_hat = [
 #################
 
 skr_mini_e3_v2 = [
-    "nightly",
-    "upstream-embassy",
+    #"nightly",
     #"executor-interrupt",
     "cooperative",
     #"verbose-timings",
@@ -329,8 +324,7 @@ skr_mini_e3_v2 = [
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v2",
 ]
 skr_mini_e3_v3 = [
-    "upstream-embassy",
-    "nightly",
+    #"nightly",
     "cornering",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
@@ -343,11 +337,11 @@ skr_mini_e3_v3 = [
     #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", # Broken
     "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
-    #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    #"with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
-    #"with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
+    "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
+    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
+    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    #"with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
+    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
     "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
 
     "enable_vrefint-with-delay",
@@ -372,8 +366,8 @@ skr_mini_e3 = [
 #################
 
 tst-rp2040 = [
-    "nightly", "with-defmt",
-    "upstream-embassy",
+    #"nightly",
+    "with-defmt",
     #"with-motion", "printhor-hwi_rp_2040/with-motion",
     #"with-ps-on", "printhor-hwi_rp_2040/with-ps-on",
     "with-serial-usb", "printhor-hwi_rp_2040/with-serial-usb",
@@ -516,7 +510,7 @@ panic = "abort"
 [patch.crates-io]
 
 async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
-#async-gcode = { path = "../async-gcode" }
+#async-gcode = { path = "patched-crates/async-gcode" }
 lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path = "printhor-hwa-common" }
@@ -526,17 +520,14 @@ printhor-hwi_mks_robin_nano = { path = "hwi-boards/printhor-hwi_mks_robin_nano" 
 printhor-hwi_nucleo_64_arduino_cnc_hat = { path = "hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat" }
 printhor-hwi_rp_2040 = {path = "hwi-boards/printhor-hwi_rp_2040"}
 
-#stm32-metapac = { git = "https://github.com/embassy-rs/stm32-data-generated", tag = "stm32-data-ab2bc2a739324793656ca1640e1caee2d88df72d" }
-
-# 7bf4710f3fd89879eca6ca24ffdbd75c859971be
-embassy-stm32 = { path = "patched-crates/embassy/embassy-stm32" }
-embassy-rp = { path = "patched-crates/embassy/embassy-rp" }
-embassy-executor = { path = "patched-crates/embassy/embassy-executor" }
-embassy-sync = { path = "patched-crates/embassy/embassy-sync" }
-embassy-time = { path = "patched-crates/embassy/embassy-time" }
-embassy-futures = { path = "patched-crates/embassy/embassy-futures" }
-embassy-embedded-hal = { path = "patched-crates/embassy/embassy-embedded-hal" }
-embassy-usb = { path = "patched-crates/embassy/embassy-usb" }
+embassy-stm32 = { path = "libs/embassy/embassy-stm32" }
+embassy-rp = { path = "libs/embassy/embassy-rp" }
+embassy-executor = { path = "libs/embassy/embassy-executor" }
+embassy-sync = { path = "libs/embassy/embassy-sync" }
+embassy-time = { path = "libs/embassy/embassy-time" }
+embassy-futures = { path = "libs/embassy/embassy-futures" }
+embassy-embedded-hal = { path = "libs/embassy/embassy-embedded-hal" }
+embassy-usb = { path = "libs/embassy/embassy-usb" }
 
 #[workspace.vars]
 # TBD

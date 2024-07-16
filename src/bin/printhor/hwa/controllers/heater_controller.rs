@@ -77,8 +77,7 @@ where
                 let mut bus  = self.adc.lock().await;
                 cfg_if::cfg_if! {
                     if #[cfg(feature="enable_vrefint-with-delay")] {
-                        let mut delay = embassy_time::Delay;
-                        let mut vref_int = bus.enable_vrefint(&mut delay);
+                        let vref_int = bus.enable_vrefint();
                     }
                     else {
                         let mut vref_int = bus.enable_vrefint();

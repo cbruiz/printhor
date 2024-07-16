@@ -34,7 +34,7 @@ impl Pwm for MockedPwm {
         );
         self.duty_map.insert(channel, clamped_duty);
     }
-    fn get_max_duty(&self) -> <Self as Pwm>::Duty { 16384u16  }
+    fn get_max_duty(&self) -> <Self as Pwm>::Duty { 16384u32  }
     fn get_duty(&self, channel: <Self as Pwm>::Channel) -> <Self as Pwm>::Duty {
         let duty_of_channel = *self.duty_map.get(&channel).unwrap_or(&0);
         log::trace!("get_duty(channel: {}) = {}", channel, duty_of_channel);
@@ -47,7 +47,7 @@ impl Pwm for MockedPwm {
     fn disable(&mut self, channel: <Self as Pwm>::Channel) {
         self.duty_map.insert(channel, 0);
     }
-    type Duty = u16;
+    type Duty = u32;
     type Time = u16;
     type Channel = u8;
 }

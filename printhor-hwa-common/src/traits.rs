@@ -1,5 +1,27 @@
 use crate::StepperChannel;
 
+/*
+pub trait BoardTrait: Sized {
+    type Controllers;
+    type SysDevices;
+    #[cfg(feature = "with-motion")]
+    type MotionDevices;
+    type IODevices;
+    type PwmDevices;
+
+    type Spawner;
+
+    type Periperals;
+
+    fn init_heap();
+    fn init();
+
+    async fn setup(spawner: Self::Spawner, peripherals: Self::Periperals) -> MachineContext<Self>;
+
+
+}
+ */
+
 pub trait MotionTrait {
     fn enable(&mut self, channels: crate::StepperChannel);
 

@@ -44,7 +44,7 @@ embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["un
 embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 
 embedded-graphics-core = {version = "0.3.3", optional = true }
-bitflags = { version = "2.4.2", default-features = false, features = ["bytemuck"] }
+bitflags = { version = "2.6.0", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }

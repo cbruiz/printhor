@@ -1,9 +1,9 @@
+#![allow(stable_features)]
+//#![allow(nonstandard_style)]
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
-#![allow(stable_features)]
-#![allow(nonstandard_style)]
 #![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
-#![cfg_attr(all(feature="nightly", feature="upstream-embassy"), feature(impl_trait_in_assoc_type))]
+#![cfg_attr(feature="nightly", feature(impl_trait_in_assoc_type))]
 
 extern crate alloc;
 extern crate core;
@@ -189,7 +189,7 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
         static FAN_EXTRA_1_CONTROLLER_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<hwa::controllers::FanExtra1PwmController>> = TrackedStaticCell::new();
         ControllerRef::new(
             FAN_EXTRA_1_CONTROLLER_INST.init::<{hwa::MAX_STATIC_MEMORY}>("FanExtra1Controller",
-                                      ControllerMutex::new(
+                                      hwa::ControllerMutex::new(
                                           hwa::controllers::FanExtra1PwmController::new(
                                               _pwm_devices.fan_extra_1.power_pwm,
                                               _pwm_devices.fan_extra_1.power_channel,

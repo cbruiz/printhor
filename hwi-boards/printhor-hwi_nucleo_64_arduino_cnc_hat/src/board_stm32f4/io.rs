@@ -164,8 +164,8 @@ pub mod usbserial {
 
 #[cfg(feature = "with-serial-port-1")]
 pub mod uart_port1 {
-    use crate::device::UartPort1RxDevice;
-    use crate::device::UartPort1RingBufferedRxDevice;
+    use crate::board::device::UartPort1RxDevice;
+    use crate::board::device::UartPort1RingBufferedRxDevice;
     use futures::Stream;
     use core::pin::Pin;
     use futures::task::Context;
@@ -206,7 +206,7 @@ pub mod uart_port1 {
                 }
                 else {
                     Self {
-                        receiver: receiver.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
+                        receiver: receiver.into_ring_buffered(BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
                         buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
                         bytes_read: 0,
                         current_byte_index: 0,

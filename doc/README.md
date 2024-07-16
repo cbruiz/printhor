@@ -18,6 +18,8 @@ The Work-in-Progress architecture design
 
 ## State machine
 
+
+
 ## Physics and mathematics
 
 There are two major steps in the kinematics:

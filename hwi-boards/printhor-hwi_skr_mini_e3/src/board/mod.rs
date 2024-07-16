@@ -51,7 +51,7 @@ cfg_if::cfg_if! {
         pub const ADC_VREF_DEFAULT_MV: u16 = 1200;
         cfg_if::cfg_if! {
             if #[cfg(feature="without-vref-int")] {
-                // As VrefInt is not present in this board, the estimation is 1489 as ADC value for 1200 mV
+                // As VrefInt is not present in this board_stm32l4, the estimation is 1489 as ADC value for 1200 mV
                 // So theoretically it will get 3300 mV for maximum ADC value (4095)
                 pub const ADC_VREF_DEFAULT_SAMPLE: u16 = 1489;
             }
@@ -898,7 +898,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                         embassy_stm32::time::hz(5_000),
                         CenterAlignedBothInterrupts,
                     );
-                    static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
+                    static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
                     ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                         "PwmFanFan0HotendHotbed",
                         ControllerMutex::new(pwm_fan0_fan1_hotend_hotbed)
@@ -942,7 +942,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 #[cfg(not(feature = "upstream-embassy"))]
                 use embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts;
 
-            static PWM_LASER_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
+            static PWM_LASER_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
             (
                 ControllerRef::new(PWM_LASER_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                     "LaserPwmController",
@@ -964,9 +964,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         let adc_hotend_hotbed = {
-            let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
-            adc_hotend_hotbed.set_sample_time(SampleTime::Cycles7_5);
-            static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
+            let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1);
+            adc_hotend_hotbed.set_sample_time(SampleTime::CYCLES7_5);
+            static ADC_INST: TrackedStaticCell<InterruptControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
             ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                 "HotendHotbedAdc",

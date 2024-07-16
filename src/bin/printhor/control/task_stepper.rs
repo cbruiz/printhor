@@ -268,8 +268,7 @@ pub async fn task_stepper(
                                 let t1 = embassy_time::Instant::now();
                                 TM.push(
                                     microsegment_interpolator.state().clone(),
-                                    stepper_enable_flags,
-                                    stepper_dir_fwd_flags,
+                                    stepper_enable_flags, stepper_dir_fwd_flags,
                                 ).await;
                                 cfg_if::cfg_if! {
                                     if #[cfg(feature="assert-motion")] {

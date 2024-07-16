@@ -86,7 +86,7 @@ cfg_if::cfg_if! {
             }
         }
 
-        // [Customization!!!] Use NeoPixel PWM as laser in this board
+        // [Customization!!!] Use NeoPixel PWM as laser in this board_stm32l4
         cfg_if::cfg_if! {
             if #[cfg(feature="with-laser")] {
                 pub type PwmLaser = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
@@ -206,7 +206,7 @@ cfg_if::cfg_if! {
             if #[cfg(any(feature="with-hot-end", feature="with-hot-end"))] {
                 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
                 pub use embassy_stm32::adc::Instance as AdcTrait;
-                pub use embassy_stm32::adc::AdcPin as AdcPinTrait;
+                pub use embassy_stm32::adc::AdcChannel as AdcPinTrait;
                 pub use embassy_stm32::adc::VrefInt as VrefInt;
                 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 
@@ -304,37 +304,37 @@ pub struct ProbePeripherals {
 
 #[cfg(feature = "with-hot-end")]
 pub struct HotendPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotend>,
     pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotend>,
+    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotend>,
     pub temp_pin: AdcHotendPin,
     pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotbed>,
+    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotbed>,
     pub temp_pin: AdcHotbedPin,
     pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-fan-extra-1")]
 pub struct FanExtra1Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanExtra1>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanExtra1>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLaser>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmLaser>,
     pub power_channel: PwmChannel,
 }
 
