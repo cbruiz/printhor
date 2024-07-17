@@ -1,9 +1,11 @@
-use printhor_hwa_common::StepperChannel;
 use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::control::GCode;
 use crate::hwa;
 use crate::math;
 use crate::machine::MACHINE_INFO;
+
+#[allow(unused)]
+use printhor_hwa_common::StepperChannel;
 
 
 #[cfg(feature = "with-probe")]

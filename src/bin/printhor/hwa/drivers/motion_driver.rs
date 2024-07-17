@@ -76,7 +76,7 @@ impl MotionDriver
         }
     }
 
-    #[cfg(all(feature = "native", feature = "plot-timings", feature = "no-real-time"))]
+    #[cfg(all(feature = "native", feature = "plot-timings"))]
     #[inline]
     pub fn update_clock(&mut self, real_time: embassy_time::Instant) {
         self.tmon.set_clock(real_time)

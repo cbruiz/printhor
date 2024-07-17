@@ -41,7 +41,7 @@ cfg_if::cfg_if! {
 }
 cfg_if::cfg_if! {
     if #[cfg(feature="with-spi")] {
-        pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
+        pub type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
     }
 }
 
@@ -80,33 +80,21 @@ pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
 pub type AdcHotbedPeripheral = AdcHotendHotbedPeripheral;
 pub type AdcHotend = AdcHotendHotbed;
 pub type AdcHotbed = AdcHotendHotbed;
-#[cfg(feature = "nucleo64-l476rg")]
-pub type AdcHotendPin = embassy_stm32::peripherals::PC2;
-#[cfg(feature = "nucleo64-f410rb")]
 pub type AdcHotendPin = embassy_stm32::peripherals::PB0;
-#[cfg(feature = "nucleo64-l476rg")]
-pub type AdcHotbedPin = embassy_stm32::peripherals::PC3;
-#[cfg(feature = "nucleo64-f410rb")]
 pub type AdcHotbedPin = embassy_stm32::peripherals::PB1;
 
 
 
-#[cfg(feature = "nucleo64-f410rb")]
 pub type PwmServo = SimplePwm<'static, embassy_stm32::peripherals::TIM11>;
 
-#[cfg(feature = "nucleo64-f410rb")]
 pub type PwmHotendHotbedLayer = SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
 
-#[cfg(feature = "nucleo64-f410rb")]
 pub type PwmFanLayer = PwmHotendHotbedLayer;
 
-#[cfg(feature = "nucleo64-f410rb")]
 pub type PwmHotend = PwmHotendHotbedLayer;
 
-#[cfg(feature = "nucleo64-f410rb")]
 pub type PwmHotbed = PwmHotendHotbedLayer;
 
-#[cfg(feature = "nucleo64-f410rb")]
 pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;

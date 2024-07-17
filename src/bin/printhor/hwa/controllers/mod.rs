@@ -1,6 +1,7 @@
 #[cfg(feature = "with-sdcard")]
 pub mod sdcard_controller;
 
+#[allow(unused)]
 use printhor_hwa_common::ControllerMutexType;
 #[cfg(feature = "with-sdcard")]
 pub use sdcard_controller::CardController;

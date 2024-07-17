@@ -29,7 +29,6 @@ use hwa::{Controllers, SysDevices, IODevices, MotionDevices, PwmDevices};
 use printhor_hwa_common::{EventStatus, EventFlags};
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutexType, InterruptControllerMutexType};
-use printhor_hwa_common::{InterruptControllerRef};
 use hwa::{GCodeProcessor};
 #[cfg(feature = "with-motion")]
 use hwa::controllers::{MotionPlanner, MotionPlannerRef, MotionConfig};
@@ -42,7 +41,9 @@ use crate::hwa::controllers::HotendPwmController;
 use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-printjob")]
 use crate::hwa::controllers::PrinterController;
+#[cfg(feature = "with-motion")]
 use crate::hwa::drivers::MotionDriver;
+#[allow(unused)]
 use crate::tgeo::TVector;
 
 //noinspection RsUnresolvedReference
@@ -255,14 +256,14 @@ async fn spawn_tasks(spawner: Spawner, event_bus: EventBusRef, _defer_channel: D
     #[cfg(feature = "with-motion")]
     let motion_planer = {
         static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> = TrackedStaticCell::new();
-        let motion_config: InterruptControllerRef<MotionConfig> = hwa::ControllerRef::new(
+        let motion_config: printhor_hwa_common::InterruptControllerRef<MotionConfig> = hwa::ControllerRef::new(
             MCS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionConfig",
             hwa::ControllerMutex::new(MotionConfig::new())
             )
         );
 
         static MDS: TrackedStaticCell<hwa::ControllerMutex<InterruptControllerMutexType, MotionDriver>> = TrackedStaticCell::new();
-        let motion_driver: InterruptControllerRef<MotionDriver> = hwa::ControllerRef::new(
+        let motion_driver: printhor_hwa_common::InterruptControllerRef<MotionDriver> = hwa::ControllerRef::new(
             MDS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionDriver",
                                                  hwa::ControllerMutex::new(MotionDriver::new(
                                                      hwa::drivers::MotionDriverParams{

@@ -1,44 +1,50 @@
 #![no_std]
 #![allow(stable_features)]
-#![cfg_attr(feature="nightly", feature(type_alias_impl_trait))]
 pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
 
 mod board_stm32f4;
-
-pub use board_stm32f4::device;
-pub use board_stm32f4::SysDevices;
-pub use board_stm32f4::IODevices;
-pub use board_stm32f4::Controllers;
-pub use board_stm32f4::MotionDevices;
-pub use board_stm32f4::PwmDevices;
-
-pub use board_stm32f4::init;
-pub use board_stm32f4::setup;
-pub use board_stm32f4::heap_current_size;
-pub use board_stm32f4::stack_reservation_current_size;
-pub use board_stm32f4::MACHINE_BOARD;
-pub use board_stm32f4::MACHINE_TYPE;
-pub use board_stm32f4::MACHINE_PROCESSOR;
-pub use board_stm32f4::HEAP_SIZE_BYTES;
-pub use board_stm32f4::MAX_STATIC_MEMORY;
-pub use board_stm32f4::VREF_SAMPLE;
+pub mod board {
+    pub use crate::board_stm32f4::SysDevices;
+    pub use crate::board_stm32f4::IODevices;
+    pub use crate::board_stm32f4::Controllers;
+    pub use crate::board_stm32f4::MotionDevices;
+    pub use crate::board_stm32f4::PwmDevices;
+    pub use crate::board_stm32f4::init;
+    pub use crate::board_stm32f4::setup;
+    pub use crate::board_stm32f4::heap_current_size;
+    pub use crate::board_stm32f4::stack_reservation_current_size;
+    pub use crate::board_stm32f4::MACHINE_BOARD;
+    pub use crate::board_stm32f4::MACHINE_TYPE;
+    pub use crate::board_stm32f4::MACHINE_PROCESSOR;
+    pub use crate::board_stm32f4::PROCESSOR_SYS_CK_MHZ;
+    pub use crate::board_stm32f4::HEAP_SIZE_BYTES;
+    pub use crate::board_stm32f4::MAX_STATIC_MEMORY;
+    pub use crate::board_stm32f4::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+    pub use crate::board_stm32f4::STEPPER_PLANNER_CLOCK_FREQUENCY;
+    pub use crate::board_stm32f4::io;
+    pub use crate::board_stm32f4::device;
+    pub use crate::board_stm32f4::comm;
+    pub use embassy_executor::Spawner;
+}
+pub use board::*;
+pub use crate::board_stm32f4::ADC_START_TIME_US;
+pub use crate::board_stm32f4::ADC_VREF_DEFAULT_MV;
 #[cfg(feature = "with-sdcard")]
 pub use board_stm32f4::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
-const USBSERIAL_BUFFER_SIZE: usize = 32;
+const USBSERIAL_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
-const UART_PORT1_BUFFER_SIZE: usize = 32;
+const UART_PORT1_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
         pub const SEGMENT_QUEUE_SIZE: u8 = 4;
     }
 }
-pub use board::ADC_START_TIME_US;
-pub use board::ADC_VREF_DEFAULT_MV;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
@@ -61,12 +67,49 @@ cfg_if::cfg_if! {
         }
     }
 }
-
 #[inline]
 pub fn init_logger() {
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion")] {
+        pub fn setup_timer() {
+            unsafe {
+                let p = cortex_m::Peripherals::steal();
+                let mut syst = p.SYST;
+                syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+                let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
+                defmt::info!("SYST reload set to {}", reload);
+                syst.set_reload(reload);
+                syst.enable_counter();
+                syst.enable_interrupt();
+            }
+        }
+
+        extern "Rust" {fn do_tick();}
+
+        use cortex_m_rt::exception;
+        #[exception]
+        fn SysTick() {
+            unsafe {
+                do_tick();
+            }
+        }
+    }
 }
 
 #[inline]
 pub fn sys_reset() {
     cortex_m::peripheral::SCB::sys_reset();
+}
+
+// Execute closure f in an interrupt-free context.
+// Required to safety lock a resource that can be also requested by an ISR.
+// Such ISR, hence, won't miss its interrupt and won't be too much delayed
+pub fn interrupt_free<F, R>(f: F) -> R
+where F: FnOnce() -> R,
+{
+    cortex_m::interrupt::free(|_| {
+        f()
+    })
 }

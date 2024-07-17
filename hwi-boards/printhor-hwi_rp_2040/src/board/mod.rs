@@ -10,7 +10,7 @@ use embassy_rp::config::Config;
 use embassy_rp::uart::{DataBits, Parity, StopBits};
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext};
+use printhor_hwa_common::{TrackedStaticCell, MachineContext, StandardControllerMutex};
 #[cfg(feature = "with-motion")]
 use device::{MotionDevice, MotionPins};
 
@@ -75,7 +75,7 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: ControllerRef<device::Watchdog>,
+    pub sys_watchdog: printhor_hwa_common::StandardControllerRef<device::Watchdog>,
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_tx: device::USBSerialTxControllerRef,
     #[cfg(feature = "with-serial-port-1")]
@@ -205,7 +205,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         let mut usb_serial_device = io::usbserial::USBSerialDevice::new(driver);
         usb_serial_device.spawn(_spawner);
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
-        static USB_INST: TrackedStaticCell<ControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
+        static USB_INST: TrackedStaticCell<StandardControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let serial_usb_tx = ControllerRef::new(
             USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", ControllerMutex::new(sender))
         );
@@ -229,7 +229,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
             p.UART0, p.PIN_0, p.PIN_1, cfg
         ).into_buffered(UartPort1Irqs, txb, rxb).split();
 
-        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
+        static UART_PORT1_INST: TrackedStaticCell<StandardControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
             UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port1_tx_device))
         );
@@ -309,7 +309,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         compile_error!("Not yet implemented")
     }
 
-    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-layer-fan"))]
+    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer"))]
     {
         compile_error!("Not yet implemented")
     }
@@ -348,7 +348,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
     };
 
     let watchdog = device::Watchdog::new(p.WATCHDOG);
-    static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
+    static WD: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(watchdog)));
 
     MachineContext {

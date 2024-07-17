@@ -10,7 +10,7 @@ pub mod usbserial {
 
     pub type USBSerialDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
     pub type USBSerialDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, USBDrv>;
-    pub type USBSerialTxControllerRef = crate::board_stm32l4::ControllerRef<USBSerialDeviceSender>;
+    pub type USBSerialTxControllerRef = printhor_hwa_common::InterruptControllerRef<USBSerialDeviceSender>;
 
     pub struct USBSerialDevice {
         pub builder: Option<embassy_usb::Builder<'static, USBDrv>>,
@@ -37,21 +37,18 @@ pub mod usbserial {
             config.device_sub_class = 0x02;
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
-            static DEVICE_DESCRIPTOR_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 256]> = crate::board_stm32l4::TrackedStaticCell::new();
-            let device_descriptor = DEVICE_DESCRIPTOR_ST.init("", [0; 256]);
             static CONFIG_DESCRIPTOR_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 256]> = crate::board_stm32l4::TrackedStaticCell::new();
-            let config_descriptor = CONFIG_DESCRIPTOR_ST.init("", [0; 256]);
+            let config_descriptor = CONFIG_DESCRIPTOR_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", [0; 256]);
             static BOS_DESCRIPTOR_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 256]> = crate::board_stm32l4::TrackedStaticCell::new();
-            let bos_descriptor = BOS_DESCRIPTOR_ST.init("", [0; 256]);
+            let bos_descriptor = BOS_DESCRIPTOR_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", [0; 256]);
             static CONTROL_BUF_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 64]> = crate::board_stm32l4::TrackedStaticCell::new();
-            let control_buf = CONTROL_BUF_ST.init("", [0; 64]);
+            let control_buf = CONTROL_BUF_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", [0; 64]);
 
             static STATE_ST: crate::board_stm32l4::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = crate::board_stm32l4::TrackedStaticCell::new();
-            let state = STATE_ST.init("", embassy_usb::class::cdc_acm::State::new());
+            let state = STATE_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", embassy_usb::class::cdc_acm::State::new());
             let mut builder = embassy_usb::Builder::new(
                 driver,
                 config,
-                device_descriptor,
                 config_descriptor,
                 bos_descriptor,
                 &mut [],

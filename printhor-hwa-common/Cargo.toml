@@ -26,6 +26,7 @@ with-serial-port-2 = []
 with-motion = []
 with-hot-end = []
 with-hot-bed = []
+with-display = [] # Broken
 
 with-x-axis = []
 with-y-axis = []

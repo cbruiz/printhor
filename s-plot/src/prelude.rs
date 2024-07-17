@@ -36,9 +36,9 @@ pub mod hwi {
     pub const HEAP_SIZE_BYTES: usize = 1024;
 
     /// Micro-segment sampling frequency in Hz
-    pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 64;
+    pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
     /// Micro-segment clock frequency in Hz
-    pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 64_000;
+    pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
     pub mod device {
         use printhor_hwa_common::StepperChannel;

@@ -23,16 +23,17 @@ bitflags! {
 }
 
 impl From<StepperChannel> for CoordSel {
-    fn from(value: StepperChannel) -> Self {
+    fn from(_value: StepperChannel) -> Self {
+        #[allow(unused_mut)]
         let mut coordsel = CoordSel::empty();
         #[cfg(feature = "with-x-axis")]
-        coordsel.set(CoordSel::X, value.contains(StepperChannel::X));
+        coordsel.set(CoordSel::X, _value.contains(StepperChannel::X));
         #[cfg(feature = "with-y-axis")]
-        coordsel.set(CoordSel::Y, value.contains(StepperChannel::Y));
+        coordsel.set(CoordSel::Y, _value.contains(StepperChannel::Y));
         #[cfg(feature = "with-z-axis")]
-        coordsel.set(CoordSel::Z, value.contains(StepperChannel::Z));
+        coordsel.set(CoordSel::Z, _value.contains(StepperChannel::Z));
         #[cfg(feature = "with-e-axis")]
-        coordsel.set(CoordSel::E, value.contains(StepperChannel::E));
+        coordsel.set(CoordSel::E, _value.contains(StepperChannel::E));
         coordsel
     }
 }

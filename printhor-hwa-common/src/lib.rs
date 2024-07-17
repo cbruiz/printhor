@@ -54,7 +54,7 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-ui")] {
+    if #[cfg(feature = "with-display")] {
         mod display;
         pub use display::DisplayScreenUI;
     }

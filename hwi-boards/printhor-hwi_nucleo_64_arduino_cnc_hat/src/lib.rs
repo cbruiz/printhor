@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(stable_features)]
 
 pub use defmt::{trace, debug, info, warn, error};
 pub use defmt;
@@ -7,24 +8,25 @@ cfg_if::cfg_if! {
     if #[cfg(feature="nucleo64-l476rg")] {
         mod board_stm32l4;
         pub mod board {
-            pub use board_stm32l4::device;
-            pub use board_stm32l4::SysDevices;
-            pub use board_stm32l4::IODevices;
-            pub use board_stm32l4::Controllers;
-            pub use board_stm32l4::MotionDevices;
-            pub use board_stm32l4::PwmDevices;
-            pub use board_stm32l4::init;
-            pub use board_stm32l4::setup;
-            pub use board_stm32l4::heap_current_size;
-            pub use board_stm32l4::stack_reservation_current_size;
-            pub use board_stm32l4::MACHINE_BOARD;
-            pub use board_stm32l4::MACHINE_TYPE;
-            pub use board_stm32l4::MACHINE_PROCESSOR;
-            pub use board_stm32l4::PROCESSOR_SYS_CK_MHZ;
-            pub use board_stm32l4::HEAP_SIZE_BYTES;
-            pub use board_stm32l4::MAX_STATIC_MEMORY;
-            pub use board_stm32l4::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
-            pub use board_stm32l4::STEPPER_PLANNER_CLOCK_FREQUENCY;
+            pub use crate::board_stm32l4::SysDevices;
+            pub use crate::board_stm32l4::IODevices;
+            pub use crate::board_stm32l4::Controllers;
+            pub use crate::board_stm32l4::MotionDevices;
+            pub use crate::board_stm32l4::PwmDevices;
+            pub use crate::board_stm32l4::init;
+            pub use crate::board_stm32l4::setup;
+            pub use crate::board_stm32l4::heap_current_size;
+            pub use crate::board_stm32l4::stack_reservation_current_size;
+            pub use crate::board_stm32l4::MACHINE_BOARD;
+            pub use crate::board_stm32l4::MACHINE_TYPE;
+            pub use crate::board_stm32l4::MACHINE_PROCESSOR;
+            pub use crate::board_stm32l4::PROCESSOR_SYS_CK_MHZ;
+            pub use crate::board_stm32l4::HEAP_SIZE_BYTES;
+            pub use crate::board_stm32l4::MAX_STATIC_MEMORY;
+            pub use crate::board_stm32l4::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+            pub use crate::board_stm32l4::STEPPER_PLANNER_CLOCK_FREQUENCY;
+            pub use crate::board_stm32l4::io;
+            pub use crate::board_stm32l4::device;
         }
         pub use board::*;
         pub use board_stm32l4::ADC_START_TIME_US;
@@ -37,12 +39,17 @@ cfg_if::cfg_if! {
         const UART_PORT1_BUFFER_SIZE: usize = 512;
         #[cfg(feature = "with-serial-port-1")]
         const UART_PORT1_BAUD_RATE: u32 = 115200;
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-motion")] {
+                /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
+                pub const SEGMENT_QUEUE_SIZE: u8 = 4;
+            }
+        }
     }
     else if #[cfg(feature="nucleo64-f410rb")] {
         mod board_stm32f4;
         pub mod board {
-            pub use crate::board_stm32f4::device;
-            pub use crate::board_stm32f4::io;
             pub use crate::board_stm32f4::SysDevices;
             pub use crate::board_stm32f4::IODevices;
             pub use crate::board_stm32f4::Controllers;
@@ -60,6 +67,8 @@ cfg_if::cfg_if! {
             pub use crate::board_stm32f4::MAX_STATIC_MEMORY;
             pub use crate::board_stm32f4::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
             pub use crate::board_stm32f4::STEPPER_PLANNER_CLOCK_FREQUENCY;
+            pub use crate::board_stm32f4::io;
+            pub use crate::board_stm32f4::device;
         }
         pub use board::*;
         pub use crate::board_stm32f4::ADC_START_TIME_US;

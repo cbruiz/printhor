@@ -42,6 +42,7 @@ with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
+with-display = [] # Broken
 #with-display = [
 #    "embedded-graphics-core", "embedded-graphics", "printhor-hwa-common/with-ui"
 #]
@@ -138,7 +139,6 @@ arch-std = []
 _arch = []
 
 # no-real-time is a technical development feature uses a non monotonic timming to facilitate debugging
-no-real-time = []
 #with-lvgl = [
 #    "with-display",
 #    "lvgl",
@@ -188,9 +188,12 @@ native = [
 
 mks_robin_nano = [
     #"nightly",
+    "cornering",
+    "cooperative",
     "with-defmt", "printhor-hwi_mks_robin_nano/with-defmt",
     "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
     "with-motion", "printhor-hwi_mks_robin_nano/with-motion",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
 
     "with-serial-usb", "printhor-hwi_mks_robin_nano/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
@@ -202,7 +205,7 @@ mks_robin_nano = [
     "with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end",
     "with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed",
     "with-fan-layer", "printhor-hwi_mks_robin_nano/with-fan-layer",
-    "with-laser", "printhor-hwi_mks_robin_nano/with-laser",
+    #"with-laser", "printhor-hwi_mks_robin_nano/with-laser",
     "with-ps-on", "printhor-hwi_mks_robin_nano/with-ps-on",
 
     "float-point-f32-impl",
@@ -220,19 +223,24 @@ mks_robin_nano = [
 #################
 
 nucleo64-l476rg = [
-    #"motion-async-task-exclusive",
+    "cornering",
+    #"nightly",
+    #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
+    #"executor-interrupt",
+    "cooperative",
+    "with-x-axis", "with-y-axis", "with-z-axis",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
-    "with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
-    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
-    "with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
+    #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
+    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
+    #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
     "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
-    #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
-    #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
+    "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
+    "with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
     "with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
-    "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
+    #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
     "with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
 
     "enable_vrefint-with-delay",
@@ -265,7 +273,7 @@ nucleo64-f410rb = [
     "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
     "with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
     "with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
-    "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
+    #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
     "with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
 
     "float-point-f32-impl",
@@ -289,25 +297,26 @@ nucleo_64_arduino_cnc_hat = [
 
 skr_mini_e3_v2 = [
     #"nightly",
+    "cornering",
     #"executor-interrupt",
     "cooperative",
-    #"verbose-timings",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
     #"printhor-hwi_skr_mini_e3/without-ringbuffer",
     "without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader",
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "printhor-hwi_skr_mini_e3/without-ringbuffer",
-    #"with-spi", "printhor-hwi_skr_mini_e3/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
+    "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
+    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
+    "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
     "with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
-    #"with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
+    "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    #"with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
-    #"with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
-    #"with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    #"with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
+    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
+    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
+    "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
+    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
     "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
     "without-vref-int",
     "adc-is-async",
@@ -322,6 +331,7 @@ skr_mini_e3_v2 = [
 skr_mini_e3_v3 = [
     #"nightly",
     "cornering",
+    #"executor-interrupt",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
     #"printhor-hwi_skr_mini_e3/without-ringbuffer",

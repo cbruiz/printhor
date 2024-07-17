@@ -3,7 +3,7 @@ pub mod device;
 pub mod io;
 
 use alloc_cortex_m::CortexMHeap;
-use embassy_executor::Spawner;
+pub use embassy_executor::Spawner;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull, OutputType};
 #[allow(unused)]
@@ -28,23 +28,23 @@ static HEAP: CortexMHeap = CortexMHeap::empty();
 
 pub const MACHINE_TYPE: &str = "SKR";
 
-        pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V3";
-        /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
-        pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
-        pub const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
+pub const MACHINE_BOARD: &str = "SKR_MINI_E3_V3";
+/// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
+pub const MACHINE_PROCESSOR: &str = "STM32G0B1RET6";
+pub const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
 
-        pub const MAX_STATIC_MEMORY: usize = 16386;
-        pub const HEAP_SIZE_BYTES: usize = 1024;
+pub const MAX_STATIC_MEMORY: usize = 16386;
+pub const HEAP_SIZE_BYTES: usize = 1024;
 
-        /// Micro-segment sampling frequency in Hz
-        pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
-        /// Micro-segment clock frequency in Hz
-        pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
+/// Micro-segment sampling frequency in Hz
+pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
+/// Micro-segment clock frequency in Hz
+pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
 
-        // https://www.st.com/resource/en/datasheet/dm00748675.pdf
-        pub const ADC_START_TIME_US: u16 = 12;
-        // https://www.st.com/resource/en/datasheet/dm00748675.pdf
-        pub const ADC_VREF_DEFAULT_MV: u16 = 1212;
+// https://www.st.com/resource/en/datasheet/dm00748675.pdf
+pub const ADC_START_TIME_US: u16 = 12;
+// https://www.st.com/resource/en/datasheet/dm00748675.pdf
+pub const ADC_VREF_DEFAULT_MV: u16 = 1212;
 
 
 #[cfg(feature = "with-sdcard")]
@@ -150,22 +150,22 @@ pub fn stack_reservation_current_size() -> u32 {
 }
 
 // Interrupt mappings
-      #[cfg(feature = "with-serial-usb")]
-        embassy_stm32::bind_interrupts!(struct UsbIrqs {
-            USB_UCPD1_2 => embassy_stm32::usb::InterruptHandler<embassy_stm32::peripherals::USB>;
-        });
-        #[cfg(feature = "with-serial-port-1")]
-        embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
-            USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
-        });
-        #[cfg(feature = "with-serial-port-2")]
-        embassy_stm32::bind_interrupts!(struct UartPort2Irqs {
-            USART2_LPUART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
-        });
-        #[cfg(feature = "with-trinamic")]
-        embassy_stm32::bind_interrupts!(struct TrinamicIrqs {
-            USART3_4_5_6_LPUART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART4>;
-        });
+#[cfg(feature = "with-serial-usb")]
+embassy_stm32::bind_interrupts!(struct UsbIrqs {
+    USB_UCPD1_2 => embassy_stm32::usb::InterruptHandler<embassy_stm32::peripherals::USB>;
+});
+#[cfg(feature = "with-serial-port-1")]
+embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
+    USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+});
+#[cfg(feature = "with-serial-port-2")]
+embassy_stm32::bind_interrupts!(struct UartPort2Irqs {
+    USART2_LPUART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+});
+#[cfg(feature = "with-trinamic")]
+embassy_stm32::bind_interrupts!(struct TrinamicIrqs {
+    USART3_4_5_6_LPUART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART4>;
+});
 
 #[inline]
 pub(crate) fn init_heap() -> () {
@@ -181,49 +181,54 @@ pub fn init() -> embassy_stm32::Peripherals {
     #[allow(unused_mut)]
     let mut config = embassy_stm32::Config::default();
 
+    cfg_if::cfg_if! {
+        if #[cfg(not(feature = "without-bootloader"))] {
 
-    #[allow(unused)]
-    use embassy_stm32::pac::*;
-    #[allow(unused)]
-    use embassy_stm32::rcc::*;
+            // Reset bootloader state
 
-    // SYSCFG: Dead battery pull-down resistors functionality should be enabled by default on startup
-    SYSCFG.cfgr1().modify(|w| {
-        w.set_ucpd1_strobe(true);
-        w.set_ucpd2_strobe(true);
-    });
+            #[allow(unused)]
+            use embassy_stm32::pac::*;
+            #[allow(unused)]
+            use embassy_stm32::rcc::*;
 
-    // RCC: Enable HSI and wait for it to be ready
-    RCC.cr().modify(|w| {
-        w.set_hsion(true)
-    });
-    while !RCC.cr().read().hsirdy() {}
+            // SYSCFG: Dead battery pull-down resistors functionality should be enabled by default on startup
+            SYSCFG.cfgr1().modify(|w| {
+                w.set_ucpd1_strobe(true);
+                w.set_ucpd2_strobe(true);
+            });
 
-    // CFGR: Write its default
-    RCC.cfgr().write(|_w| {
-    });
+            // RCC: Enable HSI and wait for it to be ready
+            RCC.cr().modify(|w| {
+                w.set_hsion(true)
+            });
+            while !RCC.cr().read().hsirdy() {}
 
-    // RCC: Enable HSI only. Wait for PLL to be unready
-    RCC.cr().write(|w| {
-        w.set_hsion(true)
-    });
-    while RCC.cr().read().pllrdy() {}
+            // CFGR: Write its default
+            RCC.cfgr().write(|_w| {
+            });
 
-    // Reset values from datasheet
-    RCC.pllcfgr().write_value(rcc::regs::Pllcfgr(0x00001000));
-    RCC.gpioenr().write_value(rcc::regs::Gpioenr(0x00001000));
-    RCC.ahbenr().write_value(rcc::regs::Ahbenr(0x000000100));
-    RCC.apbenr1().write_value(rcc::regs::Apbenr1(0x000000000));
-    RCC.apbenr2().write_value(rcc::regs::Apbenr2(0x000000000));
+            // RCC: Enable HSI only. Wait for PLL to be unready
+            RCC.cr().write(|w| {
+                w.set_hsion(true)
+            });
+            while RCC.cr().read().pllrdy() {}
 
-    #[cfg(not(feature = "without-bootloader"))]
-    unsafe {
-        defmt::info!("Setting VTOR...");
-        #[allow(unused_mut)]
-        let mut p = cortex_m::Peripherals::steal();
-        defmt::trace!("VTOR WAS AT: {} ", p.SCB.vtor.read());
-        p.SCB.vtor.write(0x2000);
-        defmt::trace!("VTOR SET TO: {} ", p.SCB.vtor.read());
+            // Reset values from datasheet
+            RCC.pllcfgr().write_value(rcc::regs::Pllcfgr(0x00001000));
+            RCC.gpioenr().write_value(rcc::regs::Gpioenr(0x00001000));
+            RCC.ahbenr().write_value(rcc::regs::Ahbenr(0x000000100));
+            RCC.apbenr1().write_value(rcc::regs::Apbenr1(0x000000000));
+            RCC.apbenr2().write_value(rcc::regs::Apbenr2(0x000000000));
+
+            unsafe {
+                defmt::info!("Setting VTOR...");
+                #[allow(unused_mut)]
+                let mut p = cortex_m::Peripherals::steal();
+                defmt::trace!("VTOR WAS AT: {} ", p.SCB.vtor.read());
+                p.SCB.vtor.write(0x2000);
+                defmt::trace!("VTOR SET TO: {} ", p.SCB.vtor.read());
+            }
+        }
     }
 
     cfg_if::cfg_if! {

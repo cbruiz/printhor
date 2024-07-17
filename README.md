@@ -163,7 +163,9 @@ cargo run
 ### Example output with the current plotting style approach:
 As Image:
 ![alt text](design/motion_plan.png "Motion Plan")
+
 As Vector:
+
 <object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
   <embed src="./design/motion_plan.pdf">
     <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
@@ -180,6 +182,7 @@ There are (currently) two plots:
 
 ### Example output with the deprecated plotting style:
 ![alt text](design/motion_plan_old.png "Motion Plan")
+
 This plot were self-explanatory, but deprecated in flavor of the previous one.
 We are keeping it because it is clear and useful for a high level understanding.
 

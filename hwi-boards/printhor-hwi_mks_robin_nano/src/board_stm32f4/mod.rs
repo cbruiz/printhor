@@ -10,21 +10,17 @@ use embassy_executor::Spawner;
 use embassy_stm32::Config;
 #[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature="with-trinamic"))]
 use embassy_stm32::{bind_interrupts};
-#[cfg(any(feature = "with-serial-port-1"))]
-use embassy_stm32::usart;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Level, Output, Speed, Pull};
 #[allow(unused)]
 use embassy_sync::mutex::Mutex;
 #[cfg(any(feature = "with-serial-port-1"))]
 use embassy_stm32::usart::{DataBits, Parity, StopBits};
-#[cfg(feature = "with-serial-usb")]
-use embassy_stm32::usb_otg;
 #[cfg(feature = "with-spi")]
 use embassy_stm32::spi;
 #[allow(unused)]
 use printhor_hwa_common::{ControllerMutex, ControllerRef, ControllerMutexType};
-use printhor_hwa_common::{TrackedStaticCell, MachineContext};
+use printhor_hwa_common::{TrackedStaticCell, MachineContext, StandardControllerRef};
 use embassy_stm32::rcc::*;
 
 #[cfg(feature = "with-motion")]
@@ -37,10 +33,10 @@ pub const MACHINE_TYPE: &str = "MKS";
 pub const MACHINE_BOARD: &str = "SKR_ROBIN_NANO_V3.1";
 /// ARM Cortex M4F @168MHZ, 192kB SRAM, 512kB Program
 pub const MACHINE_PROCESSOR: &str = "STM32F407VET6";
-#[allow(unused)]
-pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 168_000_000;
+pub const PROCESSOR_SYS_CK_MHZ: u32 = 168_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: usize = 4096;
+#[allow(unused)]
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
@@ -54,6 +50,9 @@ pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 9600;
 pub const ADC_START_TIME_US: u16 = 10;
 // https://www.st.com/resource/en/datasheet/stm32f405og.pdf
 pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
+pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 400;
+pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 40_000;
+
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-end")] {
@@ -88,7 +87,7 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: ControllerRef<device::Watchdog>,
+    pub sys_watchdog: StandardControllerRef<device::Watchdog>,
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_tx: device::USBSerialTxControllerRef,
     #[cfg(feature = "with-serial-port-1")]
@@ -145,11 +144,11 @@ pub fn stack_reservation_current_size() -> u32 {
 
 #[cfg(feature = "with-serial-usb")]
 bind_interrupts!(struct UsbIrqs {
-    OTG_FS => usb_otg::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
+    OTG_FS => embassy_stm32::usb::InterruptHandler<embassy_stm32::peripherals::USB_OTG_FS>;
 });
 #[cfg(feature = "with-serial-port-1")]
 bind_interrupts!(struct UartPort1Irqs {
-    USART1 => usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+    USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
 });
 
 #[inline]
@@ -190,40 +189,41 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         static EP_OUT_BUFFER_INST: TrackedStaticCell<[u8; 256]> =  TrackedStaticCell::new();
         let ep_out_buffer = EP_OUT_BUFFER_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBEPBuffer", [0u8; 256]);
         defmt::info!("Creating USB Driver");
-        let mut config = embassy_stm32::usb_otg::Config::default();
+        let mut config = embassy_stm32::usb::Config::default();
         config.vbus_detection = false;
 
         // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
-        let driver = usb_otg::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
+        let driver = embassy_stm32::usb::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
         let mut usb_serial_device = device::USBSerialDevice::new(driver);
         usb_serial_device.spawn(_spawner);
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
-        static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
+        static USB_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let serial_usb_tx = ControllerRef::new(
-            USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
+            USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", ControllerMutex::new(sender))
         );
         (serial_usb_tx, device::USBSerialDeviceInputStream::new(usb_serial_rx_device))
     };
 
     #[cfg(feature = "with-serial-port-1")]
     let (serial_port1_tx, serial_port1_rx_stream) = {
-        let mut cfg = usart::Config::default();
+        let mut cfg = embassy_stm32::usart::Config::default();
         cfg.baudrate = crate::UART_PORT1_BAUD_RATE;
         cfg.data_bits = DataBits::DataBits8;
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
         cfg.detect_previous_overrun = false;
 
-        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(p.USART1,
-                                                            p.PA10, p.PA9,
-                                                            UartPort1Irqs,
-                                                            p.DMA2_CH7, p.DMA2_CH5,
-                                                            cfg).expect("Ready").split();
+        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
+            p.USART1, p.PA10, p.PA9,
+            UartPort1Irqs, p.DMA2_CH7, p.DMA2_CH5, cfg
+        ).expect("Ready").split();
 
-        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
+        static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<ControllerMutexType, printhor_hwa_common::SerialAsyncWrapper<device::UartPort1TxDevice>>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
-            UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", Mutex::<ControllerMutexType, _>::new(uart_port1_tx_device))
+            UART_PORT1_INST.init::<{MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(
+                printhor_hwa_common::SerialAsyncWrapper::new(uart_port1_tx_device, crate::UART_PORT1_BAUD_RATE)
+            ))
         );
         (serial_port1_tx, device::UartPort1RxInputStream::new(uart_port1_rx_device))
     };
@@ -238,7 +238,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     let spi1_device = {
         let mut cfg = spi::Config::default();
         cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
-        static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi1>> = TrackedStaticCell::new();
+        static SPI1_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::Spi1>> = TrackedStaticCell::new();
         ControllerRef::new(SPI1_INST.init::<{crate::MAX_STATIC_MEMORY}>(
             "SPI1",
             ControllerMutex::new(
@@ -286,7 +286,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-probe")]
         let probe_device = {
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
         crate::device::ProbePeripherals {
             power_pwm: ControllerRef::new(
                 PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>("PwmServo",
@@ -298,7 +298,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                                       None,
                                       None,
                                       embassy_stm32::time::hz(50),
-                                      embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+                                      embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
                                   )
                               ),
                 )),
@@ -308,7 +308,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-fan-layer")]
         let fan_layer_device = {
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmFanLayer>> = TrackedStaticCell::new();
 
         let pwm_fan1 = embassy_stm32::timer::simple_pwm::SimplePwm::new(
             p.TIM3,
@@ -317,7 +317,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             None,
             Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PB1, embassy_stm32::gpio::OutputType::PushPull)),
             embassy_stm32::time::hz(5_000),
-            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+            embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
         );
         crate::device::FanLayerPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -336,9 +336,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
     let adc = {
-        let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1, &mut embassy_time::Delay);
-        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::Cycles28);
-        static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
+        let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1);
+        adc_hotend_hotbed.set_sample_time(embassy_stm32::adc::SampleTime::CYCLES15);
+        static ADC_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
         ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
             "HotendHotbedAdc",
             ControllerMutex::new(adc_hotend_hotbed)
@@ -355,9 +355,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             None,
             None,
             embassy_stm32::time::hz(5_000),
-            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+            embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
         );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotend>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmHotend>> = TrackedStaticCell::new();
 
         device::HotendPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -381,9 +381,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             None,
             None,
             embassy_stm32::time::hz(5_000),
-            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+            embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
         );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmHotbed>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmHotbed>> = TrackedStaticCell::new();
 
         device::HotbedPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -407,9 +407,9 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
             None,
             None,
             embassy_stm32::time::hz(5_000),
-            embassy_stm32::timer::CountingMode::CenterAlignedBothInterrupts,
+            embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
         );
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
+        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
 
         device::LaserPeripherals {
             power_pwm: ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -422,7 +422,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-ps-on")]
     let ps_on = {
-        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        static PS_ON: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
             PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(Output::new(p.PB2, Level::Low, Speed::Low)))
         )
@@ -431,7 +431,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     #[cfg(feature = "with-motion")]
     defmt::info!("motion_planner done");
 
-    static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
+    static WD: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 
     MachineContext {

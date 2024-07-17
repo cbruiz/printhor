@@ -1,5 +1,5 @@
 //! This specialization exists because there are several ways to communicate with stepper's Trinamic UART
-use embassy_stm32::gpio::{Pin, AnyPin, Flex, Pull, Speed};
+use embassy_stm32::gpio::{Pin, Flex, Pull, Speed};
 use printhor_hwa_common::soft_uart;
 use printhor_hwa_common::soft_uart::{AsyncRead, AsyncWrite, MultiChannel, SerialError, UartChannel};
 use crate::device;
@@ -24,7 +24,7 @@ impl Into<UartChannel> for AxisChannel {
     }
 }
 
-pub struct AnyPinWrapper(Flex<'static, AnyPin>);
+pub struct AnyPinWrapper(Flex<'static>);
 
 impl soft_uart::IOPin for AnyPinWrapper
 {
@@ -45,7 +45,7 @@ impl soft_uart::IOPin for AnyPinWrapper
     #[inline]
     fn set_low(&mut self) { self.0.set_low() }
     #[inline]
-    fn set_open_drain(&mut self) { self.0.set_as_input_output(Speed::VeryHigh, Pull::Up) }
+    fn set_open_drain(&mut self) { self.0.set_as_input_output(Speed::VeryHigh) }
 }
 
 pub struct SingleWireSoftwareUart {

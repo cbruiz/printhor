@@ -33,8 +33,7 @@ pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
 /// Micro-segment sampling frequency in Hz
 pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 400;
-pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
-
+pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 40_000;
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: usize = 4096;

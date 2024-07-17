@@ -2,7 +2,7 @@
 use crate::hwa;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
-use crate::InterruptControllerRef;
+use printhor_hwa_common::InterruptControllerRef;
 #[allow(unused)]
 pub trait ProbeTrait {
     async fn probe_pin_down(&mut self, sleep_us: u64);

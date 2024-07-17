@@ -22,6 +22,7 @@ nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-aren
 with-serial-usb = ["embassy-usb"]
 with-printjob = []
 with-serial-port-1 = ["embedded-io-async"]
+with-serial-port-2 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]
 with-hot-end = ["embedded-hal"]
 with-hot-bed = ["embedded-hal"]
@@ -65,7 +66,7 @@ embassy-time = { version = "*", features = ["defmt"] }
 embassy-futures = { version = "*", features = ["defmt"] }
 embassy-usb = { version = "*", features = [], optional = true }
 
-printhor-hwa-common = { version = "0", features = [] }
+printhor-hwa-common = { version = "*", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.17", default-features = false, features = [] }
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }

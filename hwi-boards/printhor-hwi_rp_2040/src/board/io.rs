@@ -9,7 +9,7 @@ pub mod usbserial {
 
     pub type USBSerialDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
     pub type USBSerialDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, USBDrv>;
-    pub type USBSerialTxControllerRef = crate::board::ControllerRef<USBSerialDeviceSender>;
+    pub type USBSerialTxControllerRef = printhor_hwa_common::StandardControllerRef<USBSerialDeviceSender>;
 
     pub struct USBSerialDevice {
         pub builder: Option<embassy_usb::Builder<'static, USBDrv>>,
