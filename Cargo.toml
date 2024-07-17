@@ -20,7 +20,7 @@ nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
-default = ["no-board"]
+default = []
 
 # Hardware device features
 without-bootloader = []
@@ -42,9 +42,9 @@ with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
-with-display = [
-    "embedded-graphics-core", "embedded-graphics", "printhor-hwa-common/with-ui"
-]
+#with-display = [
+#    "embedded-graphics-core", "embedded-graphics", "printhor-hwa-common/with-ui"
+#]
 with-ps-on = []
 cornering = []
 pulsed = []
@@ -139,21 +139,17 @@ _arch = []
 
 # no-real-time is a technical development feature uses a non monotonic timming to facilitate debugging
 no-real-time = []
-with-lvgl = [
-    "with-display",
-    "lvgl",
-    #"lvgl/logger",
-]
+#with-lvgl = [
+#    "with-display",
+#    "lvgl",
+#    #"lvgl/logger",
+#]
 plot-timings = []
 plot-motion-plan = ["gnuplot"]
 
 #################
 #### BOARDS #####
 #################
-
-no-board = [
-]
-
 
 native = [
     #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
@@ -337,7 +333,7 @@ skr_mini_e3_v3 = [
     #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", # Broken
     "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
     "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
-    "with-laser", "printhor-hwi_skr_mini_e3/with-laser",
+    #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
     "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
     "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
     "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
@@ -419,15 +415,14 @@ embassy-sync = { version = "0.6.0", features = [] }
 embassy-time = { version = "0.3.1", features = [] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-embedded-hal = { version = "0.1.0", features = [], optional = true }
-embassy-usb = { version = "0.2.0", features = [], optional = true }
-
-embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
+embassy-usb = { version = "*", features = [], optional = true }
+embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven", ] }
-embedded-graphics = { version = "0.7.1", optional = true}
+#embedded-graphics = { version = "0.8.1", optional = true}
 
-display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}
-ili9341 = {version = "0.5.0", default-features = false, optional = true}
+#display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}
+#ili9341 = {version = "0.5.0", default-features = false, optional = true}
 
 futures = { version = "0.3.17", default-features = false, features = [] }
 futures-util = { version = "0.3", default-features = false, features = [] }
@@ -448,24 +443,24 @@ embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
 
 # Common base
-printhor-hwa-common = { version = "0.0", default-features = false, features = [] }
+printhor-hwa-common = { version = "*", default-features = false, features = [] }
 
 # Boards
-printhor-hwi_native = { version = "0.0.4", optional = true }
-printhor-hwi_skr_mini_e3 = { version = "0.0.4", optional = true }
-printhor-hwi_mks_robin_nano = { version = "0.0.4", optional = true }
-printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "0.0.4", optional = true }
-printhor-hwi_rp_2040 = { version = "0.0.1", optional = true }
+printhor-hwi_native = { version = "*", optional = true }
+printhor-hwi_skr_mini_e3 = { version = "*", optional = true }
+printhor-hwi_mks_robin_nano = { version = "*", optional = true }
+printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "*", optional = true }
+printhor-hwi_rp_2040 = { version = "*", optional = true }
 
-gnuplot = {version = "0.0.39", default-features = false, features=[], optional = true}
+gnuplot = {version = "0.0.43", default-features = false, features=[], optional = true}
 # Display
-lvgl = { version = "0.5.2", default-features = false, features =[], optional = true }
-embedded-graphics-core = {version = "0.3.3", optional = true }
+#lvgl = { version = "0.5.2", default-features = false, features =[], optional = true }
+#embedded-graphics-core = {version = "0.4.0", optional = true }
 
 # machinery
 
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
-bitflags = { version = "2.4.2", default-features = false, features = [] }
+bitflags = { version = "2.6.0", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0", features = [] }
 const_env = { version = "0.1" }
@@ -511,7 +506,7 @@ panic = "abort"
 
 async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
 #async-gcode = { path = "patched-crates/async-gcode" }
-lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
+#lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path = "printhor-hwa-common" }
 printhor-hwi_native = { path = "hwi-boards/printhor-hwi_native" }

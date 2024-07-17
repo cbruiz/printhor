@@ -19,9 +19,6 @@ cfg_if::cfg_if! {
     else if #[cfg(feature="native")] {
         pub use printhor_hwi_native::*;
     }
-    else if #[cfg(feature="no-board")] {
-
-    }
     else {
         compile_error("You need to select a board")
     }

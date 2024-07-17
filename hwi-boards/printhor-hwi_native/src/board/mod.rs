@@ -45,7 +45,7 @@ pub const ADC_VREF_DEFAULT_SAMPLE: u16 = 2048;
 #[const_env::from_env("STEPPER_PLANNER_MICROSEGMENT_FREQUENCY")]
 pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
 #[const_env::from_env("STEPPER_PLANNER_CLOCK_FREQUENCY")]
-pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 128_000;
+pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-end")] {

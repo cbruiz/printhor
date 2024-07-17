@@ -4,27 +4,27 @@
 pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
 
-mod board;
+mod board_stm32f4;
 
-pub use board::device;
-pub use board::SysDevices;
-pub use board::IODevices;
-pub use board::Controllers;
-pub use board::MotionDevices;
-pub use board::PwmDevices;
+pub use board_stm32f4::device;
+pub use board_stm32f4::SysDevices;
+pub use board_stm32f4::IODevices;
+pub use board_stm32f4::Controllers;
+pub use board_stm32f4::MotionDevices;
+pub use board_stm32f4::PwmDevices;
 
-pub use board::init;
-pub use board::setup;
-pub use board::heap_current_size;
-pub use board::stack_reservation_current_size;
-pub use board::MACHINE_BOARD;
-pub use board::MACHINE_TYPE;
-pub use board::MACHINE_PROCESSOR;
-pub use board::HEAP_SIZE_BYTES;
-pub use board::MAX_STATIC_MEMORY;
-pub use board::VREF_SAMPLE;
+pub use board_stm32f4::init;
+pub use board_stm32f4::setup;
+pub use board_stm32f4::heap_current_size;
+pub use board_stm32f4::stack_reservation_current_size;
+pub use board_stm32f4::MACHINE_BOARD;
+pub use board_stm32f4::MACHINE_TYPE;
+pub use board_stm32f4::MACHINE_PROCESSOR;
+pub use board_stm32f4::HEAP_SIZE_BYTES;
+pub use board_stm32f4::MAX_STATIC_MEMORY;
+pub use board_stm32f4::VREF_SAMPLE;
 #[cfg(feature = "with-sdcard")]
-pub use board::SDCARD_PARTITION;
+pub use board_stm32f4::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
 const USBSERIAL_BUFFER_SIZE: usize = 32;
 #[cfg(feature = "with-serial-port-1")]

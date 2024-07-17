@@ -36,7 +36,7 @@ with-laser = ["embedded-hal"]
 with-neo = ["embedded-hal"]
 with-trinamic = []
 with-ps-on = []
-with-display = []
+#with-display = []
 without-bootloader = ["embassy-stm32/memory-x"]
 use-hsi = []
 

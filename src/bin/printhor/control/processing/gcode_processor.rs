@@ -281,7 +281,6 @@ impl GCodeProcessor {
             GCode::M79 => {
                 let _ = self.write(channel, "echo: Software reset\n").await;
                 self.flush(channel).await;
-                #[cfg(not(feature = "no-board"))]
                 hwa::sys_reset();
                 Ok(CodeExecutionSuccess::OK)
             }

@@ -45,10 +45,10 @@ verbose-timings = []
 sdcard-uses-spi = []
 without-vref-int = []
 
-with-display = [
-    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
-    "printhor-hwa-common/with-ui",
-]
+#with-display = [
+#    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
+#    "printhor-hwa-common/with-ui",
+#]
 
 [dependencies]
 
@@ -63,7 +63,7 @@ embedded-io = { version = "0.6.1", optional = true }
 
 async-std = { version = "1.12.0", optional = true}
 gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
-embedded-graphics-simulator = { version = "0.4.1", optional = true }
+#embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
 printhor-hwa-common = { version = "0.0"}
@@ -71,11 +71,11 @@ async-gcode = {version = "0", default-features = false, features=["parse-trailin
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ] }
 futures = { version = "0.3.30", default-features = false, features = [] }
-embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
+embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
 
 lvgl = { version="0", default-features = false, features =[], optional = true }
-embedded-graphics = { version = "0.7.1", optional = true}
-embedded-graphics-core = {version = "0.3.3", optional = true }
+#embedded-graphics = { version = "0.8.1", optional = true}
+#embedded-graphics-core = {version = "0.4.0", optional = true }
 nb = {version = "1.1.0", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
 thread-priority = { version = "0.15"}

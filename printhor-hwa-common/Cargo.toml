@@ -15,7 +15,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-with-ui = ["embedded-graphics-core"]
+#with-ui = ["embedded-graphics-core"]
 nightly = []
 executor-interrupt = []
 with-log = ["log"]
@@ -43,7 +43,7 @@ embedded-hal = { version = "1.0.0", default-features = false }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
 embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 
-embedded-graphics-core = {version = "0.3.3", optional = true }
+#embedded-graphics-core = {version = "0.4.0", optional = true }
 bitflags = { version = "2.6.0", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
