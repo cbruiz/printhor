@@ -1,15 +1,17 @@
 //! A computing geometry Q&D API to make facilitate vector operations and provide numerically stability (undefs, etc).
 //! It implies a cost, of course
+use core::ops::Mul;
 #[allow(unused)]
 use crate::hwa;
 #[cfg(not(feature = "native"))]
 use crate::alloc::string::ToString;
-use crate::math::Real;
+use crate::math::{Real};
 use num_traits::float::FloatCore;
 use bitflags::bitflags;
+use printhor_hwa_common::StepperChannel;
 
 bitflags! {
-    #[derive(PartialEq, Clone, Copy, Eq)]
+    #[derive(PartialEq, Clone, Copy, Eq, Debug)]
     pub struct CoordSel: u8 {
         const X = 0b00000001;
         const Y = 0b00000010;
@@ -17,6 +19,22 @@ bitflags! {
         const E = 0b00001000;
         const XYZ = Self::X.bits() | Self::Y.bits() | Self::Z.bits();
         const XYZE = Self::X.bits() | Self::Y.bits() | Self::Z.bits() | Self::E.bits();
+    }
+}
+
+impl From<StepperChannel> for CoordSel {
+    fn from(_value: StepperChannel) -> Self {
+        #[allow(unused_mut)]
+        let mut coordsel = CoordSel::empty();
+        #[cfg(feature = "with-x-axis")]
+        coordsel.set(CoordSel::X, _value.contains(StepperChannel::X));
+        #[cfg(feature = "with-y-axis")]
+        coordsel.set(CoordSel::Y, _value.contains(StepperChannel::Y));
+        #[cfg(feature = "with-z-axis")]
+        coordsel.set(CoordSel::Z, _value.contains(StepperChannel::Z));
+        #[cfg(feature = "with-e-axis")]
+        coordsel.set(CoordSel::E, _value.contains(StepperChannel::E));
+        coordsel
     }
 }
 
@@ -40,10 +58,12 @@ pub trait RealOps
     fn pow(&self, power: i32) -> Self;
     fn sqrt(&self) -> Option<Self> where Self: Sized;
     fn rdp(&self, digits: u32) -> Self;
+    fn ceil(&self) -> Self;
     fn floor(&self) -> Self;
+
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub struct TVector<T>
     where T: ArithmeticOps
 {
@@ -81,6 +101,18 @@ where T: ArithmeticOps
         }
     }
 
+    #[inline]
+    pub fn map_all<U, F>(&self, f: F) -> TVector<U>
+        where F: Fn(Option<T>) -> Option<U>, U: ArithmeticOps
+    {
+        TVector {
+            x: f(self.x),
+            y: f(self.y),
+            z: f(self.z),
+            e: f(self.e),
+        }
+    }
+
     #[allow(unused)]
     #[inline]
     pub fn apply_coords<F>(&self, mut f: F)
@@ -97,6 +129,29 @@ where T: ArithmeticOps
         }
         if let Some(v) = &self.e {
             f((CoordSel::E, v))
+        }
+    }
+
+    #[allow(unused)]
+    #[inline]
+    pub fn apply(&self, rhs: &TVector<T>) -> TVector<T> {
+        TVector {
+            x: match rhs.x {
+                None => self.x,
+                Some(lv) => Some(lv),
+            },
+            y: match rhs.y {
+                None => self.y,
+                Some(lv) => Some(lv),
+            },
+            z: match rhs.z {
+                None => self.z,
+                Some(lv) => Some(lv),
+            },
+            e: match rhs.e {
+                None => self.e,
+                Some(lv) => Some(lv),
+            },
         }
     }
 
@@ -141,6 +196,59 @@ where T: ArithmeticOps
         if coord_idx.contains(CoordSel::Z) { self.z = self.z.and_then(|v| Some(v + val)) }
         if coord_idx.contains(CoordSel::E) { self.e = self.e.and_then(|v| Some(v + val)) }
         self
+    }
+
+    #[inline]
+    #[allow(unused)]
+    pub fn decrement_if_positive(&mut self, coord_idx: CoordSel) -> bool
+    where T: ArithmeticOps + core::ops::Sub<Output=T>
+    {
+        let mut changed = false;
+        if coord_idx.contains(CoordSel::X) {
+            self.x = self.x.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.x
+                }
+            )
+        }
+        else if coord_idx.contains(CoordSel::Y) {
+            self.y = self.y.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.y
+                }
+            )
+        }
+        else if coord_idx.contains(CoordSel::Z) {
+            self.z = self.z.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.z
+                }
+            )
+        }
+        else if coord_idx.contains(CoordSel::E) {
+            self.e = self.e.and_then(|v|
+                if v.is_defined_positive() {
+                    changed = true;
+                    Some(v - T::one())
+                }
+                else {
+                    self.e
+                }
+            )
+        }
+        changed
     }
 
     #[inline]
@@ -234,7 +342,54 @@ where T: ArithmeticOps
 
     #[allow(unused)]
     #[inline]
-    pub fn max(&self) -> Option<T> {
+    pub fn clamp_min(&self, rhs: TVector<T>) -> TVector<T> {
+        TVector {
+            x: match self.x {
+                None => None,
+                Some(lv) => match rhs.x {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+            y: match self.y {
+                None => None,
+                Some(lv) => match rhs.y {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+            z: match self.z {
+                None => None,
+                Some(lv) => match rhs.z {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+            e: match self.e {
+                None => None,
+                Some(lv) => match rhs.e {
+                    None => Some(lv),
+                    Some(rv) => match lv < rv {
+                        true => Some(rv),
+                        false => Some(lv),
+                    }
+                }
+            },
+        }
+    }
+
+    #[allow(unused)]
+    #[inline]
+    pub fn vmax(&self) -> Option<T> {
         let mut m: Option<T> = None;
         if let Some(x) = self.x {
             m = Some(x);
@@ -274,7 +429,7 @@ where T: ArithmeticOps
 
     #[allow(unused)]
     #[inline]
-    pub fn min(&self) -> Option<T> {
+    pub fn vmin(&self) -> Option<T> {
         let mut m: Option<T> = None;
         if let Some(x) = self.x {
             m = Some(x);
@@ -424,32 +579,33 @@ where T: ArithmeticOps
         }
     }
 
-    pub fn map_nan(&self, value: T) -> Self {
+    pub fn map_nan(&self, value: &T) -> Self {
         Self {
-            x: self.x.map_or_else(|| Some(value), |cv| Some(cv)),
-            y: self.y.map_or_else(|| Some(value), |cv| Some(cv)),
-            z: self.z.map_or_else(|| Some(value), |cv| Some(cv)),
-            e: self.e.map_or_else(|| Some(value), |cv| Some(cv)),
+            x: self.x.map_or_else(|| Some(*value), |cv| Some(cv)),
+            y: self.y.map_or_else(|| Some(*value), |cv| Some(cv)),
+            z: self.z.map_or_else(|| Some(*value), |cv| Some(cv)),
+            e: self.e.map_or_else(|| Some(*value), |cv| Some(cv)),
         }
     }
 
-    pub fn map_val(&self, value: T) -> Self {
+    pub fn map_val(&self, value: &T) -> Self {
         Self {
-            x: self.x.and(Some(value)),
-            y: self.y.and(Some(value)),
-            z: self.z.and(Some(value)),
-            e: self.e.and(Some(value)),
+            x: self.x.and(Some(*value)),
+            y: self.y.and(Some(*value)),
+            z: self.z.and(Some(*value)),
+            e: self.e.and(Some(*value)),
         }
     }
 
     pub fn sum(&self) -> T
-        where T: core::ops::Add<T, Output=T>
+        where T: core::ops::AddAssign<T>
     {
-        let x = self.x.unwrap_or(T::zero());
-        let y = self.y.unwrap_or(T::zero());
-        let z = self.z.unwrap_or(T::zero());
-        let e = self.e.unwrap_or(T::zero());
-        x + y + z + e
+        let mut acc_sum = T::zero();
+        acc_sum.add_assign(self.x.unwrap_or(T::zero()));
+        acc_sum.add_assign(self.y.unwrap_or(T::zero()));
+        acc_sum.add_assign(self.z.unwrap_or(T::zero()));
+        acc_sum.add_assign(self.e.unwrap_or(T::zero()));
+        acc_sum
     }
 
     pub fn abs(&self) -> Self
@@ -465,7 +621,7 @@ where T: ArithmeticOps
 }
 
 impl<T> TVector<T>
-    where T: ArithmeticOps + RealOps,
+    where T: ArithmeticOps + RealOps + core::ops::AddAssign,
           TVector<T>: core::ops::Div<T, Output = TVector<T>>
           + core::ops::Div<TVector<T>, Output = TVector<T>>
 
@@ -490,16 +646,15 @@ impl<T> TVector<T>
     }
 
     pub fn norm2(&self) -> Option<T>
-    where T: RealOps
+    where T: RealOps + core::ops::AddAssign<T>
     {
-        self
-            .pow(2)
-            .sum()
-            .sqrt()
+        let n = self.mul(*self).sum();
+        let r = n.sqrt();
+        return r;
     }
 
     pub fn scalar_product(&self, rhs: TVector<T>) -> T
-        where T: RealOps, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
+        where T: RealOps + core::ops::AddAssign<T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
     {
         ((*self) * rhs).sum()
     }
@@ -507,7 +662,7 @@ impl<T> TVector<T>
     /// Computes the orthogonal projection of [other] over this
     /// proj(self, other) = \frac{self \cdot other}{|self|^(2)}
     pub fn orthogonal_projection(&self, other: TVector<T>) -> T
-    where T: RealOps + core::ops::Div<Output = T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
+    where T: RealOps + core::ops::AddAssign<T> + core::ops::Div<Output = T>, TVector<T>: core::ops::Mul<TVector<T>, Output=TVector<T>>
     {
         (*self).scalar_product(other) / (self.pow(2).sum().abs())
     }
@@ -539,7 +694,7 @@ impl<T> TVector<T>
             Some(norm) => match norm.is_zero() {
                 true => (Self::nan(), T::zero()),
                 false => {
-                    ((*self) / norm.clone(), norm)
+                    ((*self) / norm, norm)
                 }
             }
         }
@@ -564,6 +719,18 @@ impl<T> TVector<T>
             y: self.y.map_or_else(|| None, |v| Some(v.floor())),
             z: self.z.map_or_else(|| None, |v| Some(v.floor())),
             e: self.e.map_or_else(|| None, |v| Some(v.floor())),
+        }
+    }
+
+    #[allow(unused)]
+    pub fn ceil(&self) -> TVector<T>
+        where T: RealOps
+    {
+        Self {
+            x: self.x.map_or_else(|| None, |v| Some(v.ceil())),
+            y: self.y.map_or_else(|| None, |v| Some(v.ceil())),
+            z: self.z.map_or_else(|| None, |v| Some(v.ceil())),
+            e: self.e.map_or_else(|| None, |v| Some(v.ceil())),
         }
     }
 
@@ -971,6 +1138,11 @@ impl RealOps for f32 {
     fn floor(&self) -> Self {
         <f32 as FloatCore>::floor(*self)
     }
+
+    fn ceil(&self) -> Self {
+        <f32 as FloatCore>::ceil(*self)
+    }
+
 }
 
 
@@ -1014,6 +1186,10 @@ impl RealOps for Real {
         Real::round_dp(self, digits)
     }
 
+    fn ceil(&self) -> Self {
+        Real::ceil(self)
+    }
+
     fn floor(&self) -> Self {
         Real::floor(self)
     }
@@ -1024,7 +1200,7 @@ pub fn test() {
     let pos: TVector<i32> = TVector::new();
     let p1: TVector<i32> = TVector::one();
 
-    let p0 = pos.map_nan(0);
+    let p0 = pos.map_nan(&0);
 
     let r = p0 + p1;
     crate::hwa::info!("{}", r);

@@ -2,12 +2,11 @@
 
 use core::pin::Pin;
 use futures::task::{Context, Poll};
-use embedded_sdmmc::{Directory, DirEntry, File, Mode, TimeSource, Timestamp, Volume, VolumeIdx, VolumeManager};
+use embedded_sdmmc::{DirEntry, Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager};
 use futures::Stream;
-use printhor_hwa_common::TrackedStaticCell;
+use printhor_hwa_common::{StandardControllerMutex, TrackedStaticCell};
 use crate::hwa;
 use printhor_hwa_common::ControllerMutex;
-use futures::Future;
 
 const MAX_DIRS: usize = 3usize;
 const MAX_FILES: usize = 1usize;
@@ -40,8 +39,8 @@ pub type SDCardVolumeManager = VolumeManager<SDCardBlockDevice, DummyTimeSource,
 /// Helper adaption for embedded_sdmmc::VolumeManager to manage open count and resolve paths
 pub struct SDCard {
     mgr: SDCardVolumeManager,
-    vol: Option<Volume>,
-    pub(crate) opened_dir_slots: heapless::Vec<Option<Directory>, MAX_DIRS>,
+    vol: Option<RawVolume>,
+    pub(crate) opened_dir_slots: heapless::Vec<Option<RawDirectory>, MAX_DIRS>,
     pub(crate) opened_dir_refcount: heapless::Vec<u8, MAX_DIRS>,
     /// Full paths as of now...
     pub(crate) opened_dir_names: heapless::Vec<Option<alloc::string::String>, MAX_DIRS>,
@@ -67,7 +66,7 @@ impl SDCard {
     pub(crate) fn open_root_dir(&mut self) -> Result<DirectoryRef, SDCardError> {
         match self.vol.as_ref() {
             Some(vol) => {
-                match self.mgr.open_root_dir(vol) {
+                match self.mgr.open_root_dir(*vol) {
                     Ok(directory) => {
                         let mut idx = 0u8;
                         for refcount in &self.opened_dir_refcount {
@@ -83,7 +82,7 @@ impl SDCard {
                             Ok(DirectoryRef{idx})
                         }
                         else {
-                            self.mgr.close_dir(vol, directory);
+                            self.mgr.close_dir(directory);
                             Err(SDCardError::MaxOpenDirs)
                         }
                     }
@@ -125,7 +124,7 @@ impl SDCard {
                 match &self.opened_dir_slots[parent_idx] {
                     Some(parent_dir) => {
                         hwa::debug!("Found parent at idx {}", parent_idx);
-                        match self.mgr.open_dir(vol, parent_dir, name) {
+                        match self.mgr.open_dir(*parent_dir, name) {
 
                             Ok(directory) => {
                                 hwa::debug!("Looking for a place...");
@@ -144,7 +143,7 @@ impl SDCard {
                                     Ok(DirectoryRef{idx})
                                 }
                                 else {
-                                    self.mgr.close_dir(vol, directory);
+                                    self.mgr.close_dir(directory);
                                     Err(SDCardError::MaxOpenDirs)
                                 }
                             }
@@ -193,7 +192,7 @@ impl SDCard {
                     if self.opened_dir_refcount[idx] == 0 {
                         hwa::debug!("Refcount of {} went to 0", idx);
                         if let Some(dir) = self.opened_dir_slots[idx].take() {
-                            self.mgr.close_dir(vol, dir);
+                            self.mgr.close_dir(dir);
                             let _ = self.opened_dir_names[idx].take();
                         }
                     }
@@ -213,7 +212,7 @@ impl SDCard {
                 if self.opened_dir_refcount[idx] > 0 {
                     match &self.opened_dir_slots[idx] {
                         Some(parent_dir) => {
-                            match self.mgr.find_directory_entry(vol, parent_dir, entry_name) {
+                            match self.mgr.find_directory_entry(*parent_dir, entry_name) {
                                 Ok(dir_entry) => {
                                     Ok(dir_entry.attributes.is_directory())
                                 }
@@ -222,7 +221,7 @@ impl SDCard {
                                         embedded_sdmmc::Error::NoSuchVolume => {
                                             Err(SDCardError::NoSuchVolume)
                                         }
-                                        embedded_sdmmc::Error::FileNotFound => {
+                                        embedded_sdmmc::Error::NotFound => {
                                             Err(SDCardError::NotFound)
                                         }
                                         _ => {
@@ -262,7 +261,7 @@ impl SDCard {
                 else {
                     match &self.opened_dir_slots[dir.idx as usize] {
                         Some(dir) => {
-                            self.mgr.iterate_dir(vol, dir, func).map_err( |e|
+                            self.mgr.iterate_dir(*dir, func).map_err( |e|
                                 match e {
                                     _ => SDCardError::InternalError
                                 }
@@ -281,14 +280,14 @@ impl SDCard {
         }
     }
 
-    pub(crate) async fn open_file(&mut self, parent_dir_ref: &DirectoryRef, file_name: &str) -> Result<File, SDCardError> {
+    pub(crate) async fn open_file(&mut self, parent_dir_ref: &DirectoryRef, file_name: &str) -> Result<RawFile, SDCardError> {
         match self.vol.as_mut() {
             Some(vol) => {
                 let idx = parent_dir_ref.idx as usize;
                 if self.opened_dir_refcount[idx] > 0 {
                     match &self.opened_dir_slots[idx] {
                         Some(parent_dir) => {
-                            match self.mgr.open_file_in_dir(vol, parent_dir, file_name, Mode::ReadOnly) {
+                            match self.mgr.open_file_in_dir(*parent_dir, file_name, Mode::ReadOnly) {
                                 Ok(file) => {
                                     Ok(file)
                                 }
@@ -315,10 +314,10 @@ impl SDCard {
         }
     }
 
-    pub(crate) async fn close_file(&mut self, file: File) -> Result<(), SDCardError> {
+    pub(crate) async fn close_file(&mut self, file: RawFile) -> Result<(), SDCardError> {
         match self.vol.as_ref() {
             Some(vol) => {
-                match self.mgr.close_file(vol, file) {
+                match self.mgr.close_file(file) {
                     Ok(()) => Ok(()),
                     Err(_e) => {
                         panic!("hodor")
@@ -332,10 +331,10 @@ impl SDCard {
         }
     }
 
-    pub(crate) async fn read(&mut self, file: &mut File, buffer: &mut [u8]) -> Result<usize, SDCardError> {
+    pub(crate) async fn read(&mut self, file: &mut RawFile, buffer: &mut [u8]) -> Result<usize, SDCardError> {
         match self.vol.as_ref() {
             Some(vol) => {
-                Ok(self.mgr.read(vol, file, buffer).map_err(|e| match e {
+                Ok(self.mgr.read(*file, buffer).map_err(|e| match e {
                     _ => {
                         SDCardError::InternalError
                     }
@@ -366,17 +365,17 @@ impl TimeSource for DummyTimeSource {
 }
 
 pub struct CardController {
-    instance: &'static ControllerMutex<SDCard>,
+    instance: &'static StandardControllerMutex<SDCard>,
 }
 
 #[allow(unused)]
 impl CardController {
     pub async fn new(device: SDCardBlockDevice) -> Self {
-        static CARD_CTRL_SHARED_STATE: TrackedStaticCell<ControllerMutex<SDCard>> = TrackedStaticCell::new();
-        let mut card = SDCardVolumeManager::new_with_limits(device, DummyTimeSource{});
+        static CARD_CTRL_SHARED_STATE: TrackedStaticCell<StandardControllerMutex<SDCard>> = TrackedStaticCell::new();
+        let mut card = SDCardVolumeManager::new_with_limits(device, DummyTimeSource{}, /* u32 */0);
         #[cfg(feature = "sdcard-uses-spi")]
         card.device().retain().await;
-        let vol = card.get_volume(VolumeIdx(hwa::SDCARD_PARTITION));
+        let vol = card.open_raw_volume(VolumeIdx(hwa::SDCARD_PARTITION));
         #[cfg(feature = "sdcard-uses-spi")]
         card.device().release().await;
         let mut opened_dir_slots = heapless::Vec::new();
@@ -456,7 +455,7 @@ impl CardController {
             SDCardError::MaxOpenDirs
         })?;
         hwa::debug!("Opened root dir");
-        let mut file: Option<File> = None;
+        let mut file: Option<RawFile> = None;
         for next_entry in file_path.trim_start_matches('/').split('/') {
             match file.take() { // If already got a file but willing to deep into tree.. consume the file and fail
                 Some(file) => {
@@ -514,7 +513,7 @@ impl CardController {
     }
 
     #[inline]
-    pub(crate) async fn read(&mut self, file: &mut File, buffer: &mut [u8]) -> Result<usize, SDCardError> {
+    pub(crate) async fn read(&mut self, file: &mut RawFile, buffer: &mut [u8]) -> Result<usize, SDCardError> {
         let mut card = self.instance.lock().await;
         card.retain().await;
         let result = card.read(file, buffer).await;
@@ -523,7 +522,7 @@ impl CardController {
     }
 
     #[inline]
-    pub(crate) async fn close_file(&mut self, file: File) -> Result<(), SDCardError> {
+    pub(crate) async fn close_file(&mut self, file: RawFile) -> Result<(), SDCardError> {
         let mut card = self.instance.lock().await;
         card.retain().await;
         let result = card.close_file(file).await;
@@ -558,13 +557,13 @@ pub struct SDDirEntry {
 }
 
 pub struct CardAsyncDirIterator {
-    instance: &'static ControllerMutex<SDCard>,
+    instance: &'static StandardControllerMutex<SDCard>,
     path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     current_index: usize,
 }
 
 impl CardAsyncDirIterator {
-    pub fn new(instance: &'static ControllerMutex<SDCard>, path: heapless::Vec<DirectoryRef, MAX_DIRS>) -> Self {
+    pub fn new(instance: &'static StandardControllerMutex<SDCard>, path: heapless::Vec<DirectoryRef, MAX_DIRS>) -> Self {
 
         Self {
             instance,
@@ -645,7 +644,7 @@ const BSIZE: usize = 32;
 pub struct SDCardStream
 {
     card_controller: CardController,
-    file: Option<File>,
+    file: Option<RawFile>,
     path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     buffer: [u8; BSIZE],
     bytes_read: u8,
@@ -654,7 +653,7 @@ pub struct SDCardStream
 
 impl SDCardStream
 {
-    pub(self) fn new(card_controller: CardController, path: heapless::Vec<DirectoryRef, MAX_DIRS>, file: File) -> Self {
+    pub(self) fn new(card_controller: CardController, path: heapless::Vec<DirectoryRef, MAX_DIRS>, file: RawFile) -> Self {
         Self {
             card_controller,
             file: Some(file),
@@ -665,6 +664,8 @@ impl SDCardStream
         }
     }
 }
+
+use futures_util::Future;
 
 impl Stream for SDCardStream {
     type Item = Result<u8, async_gcode::Error>;

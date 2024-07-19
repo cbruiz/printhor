@@ -3,7 +3,7 @@ cfg_if::cfg_if! {
         pub type UartPort1Device = crate::board::mocked_peripherals::MockedUart;
         pub type UartPort1Tx = crate::board::mocked_peripherals::MockedUartTx;
         pub type UartPort1Rx = crate::board::mocked_peripherals::MockedUartRx;
-        pub type UartPort1TxControllerRef = crate::board::ControllerRef<UartPort1Tx>;
+        pub type UartPort1TxControllerRef = crate::board::StandardControllerRef<UartPort1Tx>;
         pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
     }
 }
@@ -62,7 +62,7 @@ pub type TMCUartCh4Pin = crate::board::MockedIOPin;
 #[cfg(feature = "with-ps-on")]
 pub type PsOnPin = crate::board::mocked_peripherals::MockedIOPin;
 #[cfg(feature = "with-ps-on")]
-pub type PsOnRef = printhor_hwa_common::ControllerRef<PsOnPin>;
+pub type PsOnRef = printhor_hwa_common::StandardControllerRef<PsOnPin>;
 
 #[cfg(feature = "with-spi")]
 pub type Spi = crate::board::mocked_peripherals::MockedSpi;
@@ -98,7 +98,7 @@ pub use crate::board::mocked_peripherals::PwmChannel;
 pub type SDCardBlockDevice = crate::board::mocked_peripherals::MockledSDCardBlockDevice;
 
 #[cfg(feature = "with-sdcard")]
-pub type SDCardBlockDeviceRef = crate::board::ControllerRef<SDCardBlockDevice>;
+pub type SDCardBlockDeviceRef = crate::board::StandardControllerRef<SDCardBlockDevice>;
 
 #[cfg(feature = "with-hot-end")]
 pub type AdcHotendPeripheral = u8;
@@ -189,6 +189,44 @@ impl MotionPins {
         self.z_enable_pin.set_low();
         self.e_enable_pin.set_low();
     }
+
+    pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    {
+
+    }
+
+    pub fn enable(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    {
+
+    }
+
+    pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    {
+
+    }
+
+    pub fn step_toggle(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    {
+
+    }
+
+
+    pub fn step_high(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    {
+
+    }
+
+    pub fn step_low(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    {
+
+    }
+
+
+    pub fn endstop_triggered(&mut self, _channels: printhor_hwa_common::StepperChannel) -> bool
+    {
+        false
+    }
+
 }
 
 
@@ -210,7 +248,7 @@ pub struct CardDevice {
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmServo>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmServo>,
     pub power_channel: PwmChannel,
 }
 
@@ -225,27 +263,27 @@ pub struct HotendPeripherals {
 
 #[cfg(feature = "with-hot-bed")]
 pub struct HotbedPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotbed>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotbed>,
     pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
+    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotendHotbed>,
     pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanLayer>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanLayer>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-fan-extra-1")]
 pub struct FanExtra1Peripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmFanExtra1>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanExtra1>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmLaser>,
+    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmLaser>,
     pub power_channel: PwmChannel,
 }

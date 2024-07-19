@@ -78,7 +78,7 @@
 //!  </dd>
 //! </dl>
 use crate::hwa;
-use hwa::{ControllerRef, DeferAction, EventBusRef};
+use hwa::{DeferAction, EventBusRef};
 use hwa::{EventStatus, EventFlags};
 use embassy_time::{Duration, Ticker};
 use crate::hwa::controllers::HeaterController;
@@ -122,7 +122,7 @@ impl HeaterStateMachine {
     }
 
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
-        &mut self, ctrl: &ControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
+        &mut self, ctrl: &hwa::InterruptControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
         event_bus: &EventBusRef,
         temperature_flag: EventFlags,
         action: DeferAction,
@@ -130,7 +130,7 @@ impl HeaterStateMachine {
         where
             AdcPeri: hwa::device::AdcTrait + 'static,
             AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
-            PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
+            PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
             <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
             crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
     {

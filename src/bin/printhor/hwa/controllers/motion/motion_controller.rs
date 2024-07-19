@@ -1,20 +1,21 @@
 //! This feature is being stabilized
-use crate::hwa;
-use embassy_sync::mutex::Mutex;
-use printhor_hwa_common::{CommChannel, ControllerRef, DeferAction, DeferChannelRef, EventBusRef, EventFlags, EventStatus};
+use crate::{hwa, math};
+use embassy_sync::mutex::{Mutex, MutexGuard};
+use printhor_hwa_common::{CommChannel, ControllerMutexType, DeferAction, DeferChannelRef, EventBusRef, EventFlags, EventStatus};
 use printhor_hwa_common::DeferEvent;
 use crate::control::GCode;
 use crate::control::{CodeExecutionSuccess, CodeExecutionFailure};
-use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
-use crate::math::{ONE_HUNDRED, Real, ZERO};
+use crate::control::motion_planning::{Constraints};
+use crate::math::*;
 use crate::sync::config::Config;
 use crate::tgeo::TVector;
 use crate::tgeo::CoordSel;
 
 use crate::hwa::controllers::motion::motion_segment::{Segment, SegmentData};
+use crate::hwa::drivers::motion_driver::MotionDriverRef;
 
 pub enum ScheduledMove {
-    Move(SegmentData, SCurveMotionProfile),
+    Move(SegmentData),
     Homing,
     Dwell,
 }
@@ -22,12 +23,17 @@ pub enum ScheduledMove {
 /////
 #[allow(unused)]
 pub struct MotionConfig {
-    pub max_accel: TVector<u16>,
-    pub max_speed: TVector<u16>,
+    pub max_accel: TVector<u32>,
+    pub max_speed: TVector<u32>,
     pub max_jerk: TVector<u32>,
+
     pub default_travel_speed: u16,
-    pub mm_per_unit: TVector<Real>,
+
+    // Units per millimeters NOT considering micro-stepping
+    pub units_per_mm: TVector<Real>,
+
     pub machine_bounds: TVector<Real>,
+    // Micro-stepping
     pub usteps: [u16; 4],
     flow_rate: u8,
     speed_rate: u8,
@@ -39,7 +45,7 @@ impl MotionConfig {
             max_accel: TVector::new(),
             max_speed: TVector::new(),
             max_jerk: TVector::new(),
-            mm_per_unit: TVector::new(),
+            units_per_mm: TVector::new(),
             machine_bounds: TVector::new(),
             usteps: [0; 4],
             default_travel_speed: 1,
@@ -47,13 +53,21 @@ impl MotionConfig {
             speed_rate: 100,
         }
     }
+
+    pub fn get_usteps_as_vector(&self) -> TVector<Real> {
+        TVector::from_coords(
+            Some(Real::new(self.usteps[0].into(), 0)),
+            Some(Real::new(self.usteps[1].into(), 0)),
+            Some(Real::new(self.usteps[2].into(), 0)),
+            Some(Real::new(self.usteps[3].into(), 0)),
+        )
+    }
 }
 
-pub type MotionConfigRef = ControllerRef<MotionConfig>;
+pub type MotionConfigRef = printhor_hwa_common::InterruptControllerRef<MotionConfig>;
 
 pub struct MotionStatus {
-    #[allow(unused)]
-    pub(crate) current_pos_steps: Option<TVector<u32>>,
+    pub(crate) last_real_pos: Option<TVector<Real>>,
     pub(crate) last_planned_pos: Option<TVector<Real>>,
     pub(crate) absolute_positioning: bool,
     #[cfg(feature="with-laser")]
@@ -64,7 +78,7 @@ pub struct MotionStatus {
 impl MotionStatus {
     pub const fn new() -> Self {
         Self {
-            current_pos_steps: None,
+            last_real_pos: None,
             last_planned_pos: None,
             absolute_positioning: true,
             #[cfg(feature="with-laser")]
@@ -74,46 +88,48 @@ impl MotionStatus {
 }
 
 
-#[allow(unused)]
-pub struct MotionPlanner {
-    pub event_bus: EventBusRef,
+pub struct MotionPlanner
+{
+    //pub event_bus: EventBusRef,
     // The channel to send deferred events
     pub defer_channel: printhor_hwa_common::DeferChannelRef,
 
-    pub(self) ringbuffer: Mutex<hwa::ControllerMutexType, RingBuffer>,
-    pub(self) move_planned: Config<hwa::ControllerMutexType, bool>,
-    pub(self) available: Config<hwa::ControllerMutexType, bool>,
-    pub(self) motion_config: MotionConfigRef,
+    ringbuffer: Mutex<hwa::ControllerMutexType, RingBuffer>,
+    move_planned: Config<hwa::ControllerMutexType, bool>,
+    available: Config<hwa::ControllerMutexType, bool>,
+    motion_config: MotionConfigRef,
     motion_st: Mutex<hwa::ControllerMutexType, MotionStatus>,
-    pub motion_driver: Mutex<hwa::ControllerMutexType, hwa::drivers::MotionDriver>,
+    pub motion_driver: MotionDriverRef,
 }
 
 #[allow(unused)]
-impl MotionPlanner {
-    pub const fn new(event_bus: EventBusRef,
+impl MotionPlanner
+{
+    pub const fn new(
                      defer_channel: DeferChannelRef,
                      motion_config: MotionConfigRef,
-                     motion_driver: hwa::drivers::MotionDriver,
+                     motion_driver: MotionDriverRef,
     ) -> Self {
         Self {
-            event_bus,
+            //event_bus,
             defer_channel,
             motion_config,
             ringbuffer: Mutex::new(RingBuffer::new()),
             move_planned: Config::new(),
             available: Config::new(),
             motion_st: Mutex::new(MotionStatus::new()),
-            motion_driver: Mutex::new(motion_driver),
+            motion_driver,
         }
     }
 
-    pub async fn start(&self) {
+    pub async fn start(&self, event_bus: &EventBusRef) {
         self.move_planned.reset();
         self.available.signal(true);
-        self.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
+        event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
     }
 
-    pub async fn get_current_segment_data(&self) -> Option<(Segment, CommChannel)> {
+    // Dequeues actual velocity plan
+    pub async fn get_current_segment_data(&self, event_bus: &EventBusRef) -> Option<(Segment, CommChannel)> {
         loop {
             let _ = self.move_planned.wait().await;
             let mut do_dwell = false;
@@ -124,7 +140,7 @@ impl MotionPlanner {
                     PlanEntry::Empty => {
                         self.move_planned.reset();
                     },
-                    PlanEntry::Dwell(channel, _) => {
+                    PlanEntry::Dwell(channel, _deferred) => {
                         rb.data[head] = PlanEntry::Executing(MovType::Dwell(channel), true);
                         do_dwell = true;
                     },
@@ -133,8 +149,8 @@ impl MotionPlanner {
                         rb.data[head] = PlanEntry::Executing(MovType::Move(action, channel), deferred);
                         return Some((planned_data, channel));
                     },
-                    PlanEntry::Homing(channel, _) => {
-                        self.event_bus.publish_event(EventStatus::containing(EventFlags::HOMMING)).await;
+                    PlanEntry::Homing(channel, _deferred) => {
+                        event_bus.publish_event(EventStatus::containing(EventFlags::HOMMING)).await;
                         rb.data[head] = PlanEntry::Executing(MovType::Homing(channel), true);
                         return None;
                     },
@@ -145,18 +161,18 @@ impl MotionPlanner {
                 }
             }
             if do_dwell {
-                self.consume_current_segment_data().await;
+                self.consume_current_segment_data(&event_bus).await;
             }
         }
     }
 
-    pub async fn consume_current_segment_data(&self) -> u8 {
+    pub async fn consume_current_segment_data(&self, event_bus: &EventBusRef) -> u8 {
         let mut rb = self.ringbuffer.lock().await;
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
         match &rb.data[head as usize] {
             PlanEntry::Executing(MovType::Homing(channel), _) => {
-                self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING)).await;
+                event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING)).await;
                 self.defer_channel.send(DeferEvent::Completed(DeferAction::Homing, *channel)).await;
             }
             PlanEntry::Executing(MovType::Dwell(channel), _) => {
@@ -179,14 +195,13 @@ impl MotionPlanner {
         rb.used -= 1;
         hwa::debug!("- used={}, h={} ", rb.used, head);
         if rb.used == 0 {
-            self.event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
+            event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)).await;
         }
         self.available.signal(true);
         rb.used
     }
 
-    pub async fn schedule_raw_move(&self, channel: CommChannel, action: DeferAction, move_type: ScheduledMove, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
-        // FIXME: Better to set subscription to defer channel from here to avoid msg loss
+    pub async fn schedule_raw_move(&self, channel: CommChannel, action: DeferAction, move_type: ScheduledMove, blocking: bool, event_bus: &EventBusRef) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
         hwa::debug!("schedule_raw_move() BEGIN");
         loop {
             self.available.wait().await;
@@ -197,13 +212,102 @@ impl MotionPlanner {
                 if rb.used < (hwa::SEGMENT_QUEUE_SIZE as u8) {
                     let used = rb.used;
                     let head = rb.head;
-                    let mut could_replan = false;
 
-                    let (next_planned_entry, event) = match &move_type {
-                        ScheduledMove::Move(segment_data, motion_profile) => {
-                            could_replan = true;
-                            self.update_last_planned_pos(&segment_data.dest_pos).await;
-                            (PlanEntry::PlannedMove(Segment::new(*segment_data, *motion_profile), action, channel, is_defer), EventStatus::new())
+                    #[cfg(feature = "cornering")]
+                    let mut do_adjust = false;
+
+                    let curr_insert_index = rb.index_from_tail(0).unwrap();
+
+                    let (mut curr_planned_entry, event) = match move_type {
+                        ScheduledMove::Move(curr_segment_data) => {
+
+                            let mut curr_segment = Segment::new(curr_segment_data);
+                            // TODO:
+                            // 1) Find a better way to approximate
+                            // 2) Move outside ringbuffer lock
+                            // solving sqrt(((abs(x-v_0))/jmax)) > q_1  for x
+                            // x < v_0 - jmax q_1^2
+                            // x > jmax * q_1^2 + v_0
+
+                            let mut curr_vmax = curr_segment.segment_data.speed_target_mms;
+                            #[cfg(feature = "cornering")]
+                            {
+                                let q_1 = curr_segment.segment_data.displacement_mm;
+                                let v_0 = curr_segment.segment_data.speed_enter_mms;
+                                let t_jmax = curr_segment.segment_data.constraints.a_max / curr_segment.segment_data.constraints.j_max;
+
+                                loop {
+                                    let t_jstar = Real::vmin(
+                                        (((curr_vmax - v_0).abs()) / curr_segment.segment_data.constraints.j_max).sqrt(),
+                                        Some(t_jmax),
+                                    ).unwrap_or(ZERO);
+
+                                    let q_lim = if t_jstar < t_jmax {
+                                        t_jstar * (v_0 + curr_vmax)
+                                    }
+                                    else {
+                                        ((v_0 + curr_vmax) / TWO) * (t_jstar + ((curr_vmax - v_0).abs() / curr_segment.segment_data.constraints.a_max))
+                                    };
+
+                                    if q_1 >= q_lim {
+                                        break;
+                                    }
+                                    else {
+                                        curr_vmax *= Real::from_f32(0.5);
+                                    }
+                                }
+                            }
+
+                            let curr_boundary = curr_vmax.min(curr_segment.segment_data.constraints.v_max);
+                            let mut v_marginal_gain = curr_boundary -  curr_segment.segment_data.speed_exit_mms;
+                            let mut v_slope_gain = math::ZERO;
+                            hwa::debug!("\t- constraint = {} bound = {}", curr_vmax, curr_boundary);
+                            hwa::debug!("\t= v_margin: {}", v_marginal_gain);
+                            curr_segment.segment_data.speed_enter_constrained_mms = v_marginal_gain;
+                            curr_segment.segment_data.speed_exit_constrained_mms = v_marginal_gain;
+
+                            hwa::debug!("s: vi = [{} < {}] - vtarget = {} - vo = [{} < {}] / d = {}",
+                                curr_segment.segment_data.speed_enter_mms,
+                                curr_segment.segment_data.speed_enter_constrained_mms,
+                                curr_segment.segment_data.speed_target_mms,
+                                curr_segment.segment_data.speed_exit_constrained_mms,
+                                curr_segment.segment_data.speed_exit_mms, curr_segment.segment_data.displacement_mm);
+
+                            let mut num_segments_before = 0;
+                            let mut max_gain = v_marginal_gain;
+                            hwa::debug!("\t= max_gain: {}", max_gain);
+
+                            if let Ok(prev_index) = rb.index_from_tail(1) {
+                                match &mut rb.data[prev_index as usize] {
+                                    PlanEntry::PlannedMove(prev_segment, _, _, _) => {
+                                        let proj: Real = prev_segment.segment_data.vdir.orthogonal_projection(curr_segment.segment_data.vdir);
+                                        if proj.is_defined_positive() {
+                                            hwa::debug!("RingBuffer [{}, {}] chained: ({}) proj ({}) = ({})", prev_index, curr_insert_index,
+                                                prev_segment.segment_data.vdir, curr_segment.segment_data.vdir, proj
+                                            );
+                                            let v_exit_module = prev_segment.segment_data.speed_target_mms.min(curr_segment.segment_data.speed_target_mms) * proj;
+
+                                            hwa::debug!("\ts : vi = [{} < {}] - vtarget = {} - vo = [{} < {}]:",
+                                                prev_segment.segment_data.speed_enter_mms, prev_segment.segment_data.speed_enter_constrained_mms,
+                                                prev_segment.segment_data.speed_target_mms,
+                                                prev_segment.segment_data.speed_exit_mms, prev_segment.segment_data.speed_exit_constrained_mms,
+                                            );
+                                            hwa::debug!("\t\tproj = {}", proj);
+                                            cfg_if::cfg_if! {
+                                                if #[cfg(feature = "cornering")] {
+                                                    do_adjust = true;
+                                                }
+                                            }
+                                            prev_segment.segment_data.proj_next = proj;
+                                            curr_segment.segment_data.proj_prev = proj;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+
+                            self.update_last_planned_pos(&curr_segment.segment_data.dest_pos).await;
+                            (PlanEntry::PlannedMove(curr_segment, action, channel, is_defer), EventStatus::new())
                         }
                         ScheduledMove::Homing => {
                             is_defer = true;
@@ -215,64 +319,16 @@ impl MotionPlanner {
                         }
                     };
 
-                    let next_insert_index = rb.index_from_tail(0);
+                    hwa::debug!("Mov queued @{} ({} / {})", curr_insert_index, rb.used + 1, hwa::SEGMENT_QUEUE_SIZE);
 
-                    hwa::debug!("Mov queued @{} ({} / {})", next_insert_index, rb.used + 1, hwa::SEGMENT_QUEUE_SIZE);
-                    if could_replan && used > 0 {
-                        let last_inserted_index = rb.index_from_tail(1);
-                        hwa::debug!(" - check_replan {} -> {}", last_inserted_index, next_insert_index);
-                        match &rb.data[last_inserted_index as usize] {
-                            PlanEntry::Executing(_, _) | PlanEntry::Homing(_, _) | PlanEntry::Empty => {
-                                hwa::debug!(" -- not chained");
-                                rb.data[next_insert_index as usize] = next_planned_entry;
-                            }
-                            PlanEntry::PlannedMove(last_planned_segment, last_planned_segment_action, last_planned_segment_channel, last_planned_segment_deferred) => {
-                                match next_planned_entry {
-                                    PlanEntry::PlannedMove(mut next_planned_segment, next_planned_segment_action, next_planned_segment_channel, next_planned_segment_deferred) => {
-                                        let vd1 = last_planned_segment.segment_data.vdir;
-                                        let vm1 = last_planned_segment.motion_profile.v_lim;
-                                        let vd2 = next_planned_segment.segment_data.vdir;
-                                        let vm2 = next_planned_segment.motion_profile.v_lim;
-                                        let proj = vd1.orthogonal_projection(vd2);
-                                        let x = proj.is_positive();
-
-                                        if proj.is_defined_positive() {
-                                            hwa::debug!("RingBuffer [{}, {}] chained: ({}) proj ({}) = ({}) ", last_inserted_index, next_insert_index, vd1, vd2, proj);
-                                            let v_exit_module = last_planned_segment.motion_profile.v_lim.min(next_planned_segment.motion_profile.v_lim).min(last_planned_segment.motion_profile.constraints.v_max).min(next_planned_segment.motion_profile.constraints.v_max);
-                                            let v = (last_planned_segment.segment_data.vdir * v_exit_module).norm2().unwrap_or(Real::zero());
-                                            rb.data[last_inserted_index as usize] = PlanEntry::PlannedMove(
-                                                last_planned_segment.recalculate(last_planned_segment.segment_data.speed_enter_mms, v, true),
-                                                *last_planned_segment_action, *last_planned_segment_channel, *last_planned_segment_deferred,
-                                            );
-                                            rb.data[next_insert_index as usize] = PlanEntry::PlannedMove(
-                                                next_planned_segment.recalculate(v, Real::zero(), true),
-                                                next_planned_segment_action, next_planned_segment_channel, next_planned_segment_deferred,
-                                            );
-                                        }
-                                        else {
-                                            hwa::debug!("RingBuffer [{}, {}] not chained: ({}) proj ({}) = ({})",  last_inserted_index, next_insert_index, vd1, vd2, proj);
-                                            rb.data[next_insert_index as usize] = next_planned_entry;
-                                        }
-
-                                    }
-                                    _ => {
-                                        rb.data[next_insert_index as usize] = next_planned_entry;
-                                    }
-                                }
-
-                            }
-                            _ => {
-                                unreachable!("Could not happen");
-                            }
-                        }
-
-                    }
-                    else {
-                        rb.data[next_insert_index as usize] = next_planned_entry;
-                    }
-
+                    rb.data[curr_insert_index as usize] = curr_planned_entry;
                     rb.used += 1;
-                    self.event_bus.publish_event(EventStatus::not_containing(EventFlags::MOV_QUEUE_EMPTY)).await;
+                    #[cfg(feature = "cornering")]
+                    if do_adjust {
+                        let r = perform_cornering(rb);
+                    }
+
+                    event_bus.publish_event(EventStatus::not_containing(EventFlags::MOV_QUEUE_EMPTY)).await;
                     self.move_planned.signal(true);
                     if is_defer {
                         // Shall wait for one de-allocation in order to enqueue more
@@ -304,6 +360,10 @@ impl MotionPlanner {
         self.motion_config.clone()
     }
 
+    pub fn motion_driver(&self) -> MotionDriverRef {
+        self.motion_driver.clone()
+    }
+
     pub async fn set_absolute_positioning(&self, absolute_is_set: bool) {
         let mut st = self.motion_st.lock().await;
         st.absolute_positioning = absolute_is_set;
@@ -319,14 +379,16 @@ impl MotionPlanner {
         self.motion_st.lock().await.last_planned_pos.clone()
     }
     pub async fn set_last_planned_pos(&self, pos: &TVector<Real>) {
-        self.motion_st.lock().await.last_planned_pos.replace(pos.map_nan(Real::zero()));
+        let mut mg = self.motion_st.lock().await;
+        let p = mg.last_planned_pos.unwrap_or(TVector::zero());
+        mg.last_planned_pos.replace(p.apply(pos));
     }
 
-    pub async fn get_last_planned_step_pos(&self) -> Option<TVector<u32>> {
-        self.motion_st.lock().await.current_pos_steps.clone()
+    pub async fn get_last_planned_real_pos(&self) -> Option<TVector<Real>> {
+        self.motion_st.lock().await.last_real_pos.clone()
     }
-    pub async fn set_last_planned_step_pos(&self, pos: &TVector<u32>) {
-        self.motion_st.lock().await.current_pos_steps.replace(pos.map_nan(0));
+    pub async fn set_last_planned_real_pos(&self, pos: &TVector<Real>) {
+        self.motion_st.lock().await.last_real_pos.replace(pos.map_nan(&crate::math::ZERO));
     }
 
     /***
@@ -363,7 +425,7 @@ impl MotionPlanner {
     }
 
     pub async fn set_steps_per_mm(&self, x_spm: Real, y_spm: Real, z_spm: Real, e_spm: Real) {
-        self.motion_config.lock().await.mm_per_unit = TVector::from_coords(
+        self.motion_config.lock().await.units_per_mm = TVector::from_coords(
             Some(x_spm),
             Some(y_spm),
             Some(z_spm),
@@ -372,7 +434,7 @@ impl MotionPlanner {
     }
 
     pub async fn get_steps_per_mm_as_vector(&self) -> TVector<Real> {
-        self.motion_config.lock().await.mm_per_unit
+        self.motion_config.lock().await.units_per_mm
     }
 
     pub async fn set_usteps(&self, x_usteps: u8, y_usteps: u8, z_usteps: u8, e_usteps: u8) {
@@ -391,34 +453,28 @@ impl MotionPlanner {
     }
 
     pub async fn get_usteps_as_vector(&self) -> TVector<Real> {
-        let mcfg = self.motion_config.lock().await;
-        TVector::from_coords(
-            Some(Real::new(mcfg.usteps[0].into(), 0)),
-            Some(Real::new(mcfg.usteps[1].into(), 0)),
-            Some(Real::new(mcfg.usteps[2].into(), 0)),
-            Some(Real::new(mcfg.usteps[3].into(), 0)),
-        )
+        self.motion_config.lock().await.get_usteps_as_vector()
     }
 
     pub async fn get_default_travel_speed_as_real(&self) -> Real {
         Real::new(self.motion_config.lock().await.default_travel_speed as i64, 0)
     }
 
-    pub async fn get_max_accel(&self) -> TVector<u16> {
+    pub async fn get_max_accel(&self) -> TVector<u32> {
         self.motion_config.lock().await.max_accel
     }
 
-    pub async fn get_max_speed(&self) -> TVector<u16> {
+    pub async fn get_max_speed(&self) -> TVector<u32> {
         self.motion_config.lock().await.max_speed
     }
-    pub async fn set_max_speed(&self, speed: TVector<u16>) {
+    pub async fn set_max_speed(&self, speed: TVector<u32>) {
         self.motion_config.lock().await.max_speed.assign(CoordSel::all(), &speed);
     }
     pub async fn get_max_speed_as_vreal(&self) -> TVector<Real> {
         self.motion_config.lock().await.max_speed.map_coords(|c| Some(Real::new(c as i64, 0)))
     }
 
-    pub async fn set_max_accel(&self, accel: TVector<u16>) {
+    pub async fn set_max_accel(&self, accel: TVector<u32>) {
         self.motion_config.lock().await.max_accel.assign(CoordSel::all(), &accel);
     }
 
@@ -430,24 +486,24 @@ impl MotionPlanner {
         self.motion_config.lock().await.max_jerk.assign(CoordSel::all(), &jerk);
     }
 
-    pub async fn plan(&self, channel: CommChannel, gc: &GCode, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure>{
+    pub async fn plan(&self, channel: CommChannel, gc: &GCode, blocking: bool, event_bus: &EventBusRef) -> Result<CodeExecutionSuccess, CodeExecutionFailure>{
         match gc {
             GCode::G0(t) => {
                 Ok(self.schedule_move(channel, DeferAction::RapidMove, TVector{
                     x: t.x, y: t.y, z: t.z, e: None,
-                }, t.f, blocking).await?)
+                }, t.f, blocking, event_bus).await?)
             }
             GCode::G1(t) => {
                 Ok(self.schedule_move(channel, DeferAction::LinearMove, TVector{
                     x: t.x, y: t.y, z: t.z, e: t.e
-                }, t.f, blocking).await?)
+                }, t.f, blocking, event_bus).await?)
             }
             GCode::G4 => {
-                Ok(self.schedule_raw_move(channel, DeferAction::Dwell, ScheduledMove::Dwell, blocking).await?)
+                Ok(self.schedule_raw_move(channel, DeferAction::Dwell, ScheduledMove::Dwell, blocking, event_bus).await?)
             }
             GCode::G28(_x) => {
-                self.event_bus.publish_event(EventStatus::containing(EventFlags::HOMMING)).await;
-                Ok(self.schedule_raw_move(channel, DeferAction::Homing, ScheduledMove::Homing, blocking).await?)
+                event_bus.publish_event(EventStatus::containing(EventFlags::HOMMING)).await;
+                Ok(self.schedule_raw_move(channel, DeferAction::Homing, ScheduledMove::Homing, blocking, event_bus).await?)
             }
             GCode::G29 => {
                 Ok(CodeExecutionSuccess::OK)
@@ -464,12 +520,18 @@ impl MotionPlanner {
         }
     }
 
-    async fn schedule_move(&self, channel: CommChannel, action: DeferAction, p1: TVector<Real>, requested_motion_speed: Option<Real>, blocking: bool) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
+    async fn schedule_move(&self, channel: CommChannel, action: DeferAction, p1_t: TVector<Real>, requested_motion_speed: Option<Real>, blocking: bool, event_bus: &EventBusRef) -> Result<CodeExecutionSuccess, CodeExecutionFailure> {
 
         let t0 = embassy_time::Instant::now();
 
         let p0 = self.get_last_planned_pos().await.ok_or(CodeExecutionFailure::HomingRequired)?;
-        let p1 = if self.is_absolute_positioning().await { p1 } else { p0 + p1 };
+        let _pdest = if self.is_absolute_positioning().await { p1_t } else { p0 + p1_t };
+
+        let steps_per_unit = self.get_steps_per_mm_as_vector().await * self.get_usteps_as_vector().await;
+        let rounded_pos: TVector<Real> = ((_pdest - p0) * steps_per_unit).ceil() / steps_per_unit;
+
+        let p1 = p0 + rounded_pos;
+        hwa::debug!("p1 [{}] -> [{}]", p1_t, p1);
 
         let cfg = self.motion_cfg();
         let cfg_g = cfg.lock().await;
@@ -483,12 +545,11 @@ impl MotionPlanner {
         //----
         drop(cfg_g);
 
-        let t1 = embassy_time::Instant::now();
-
         // Compute distance and decompose as unit vector and module.
         // When dist is zero, value is map to None (NaN).
         // In case o E dimension, flow rate factor is applied
-        let (vdir, module_target_distance) = (p1 - p0)
+        let ds = (p1 - p0);
+        let (vdir, module_target_distance) = ds
             .map_coord(CoordSel::all(), |coord_value, coord_idx| {
                 match coord_idx {
                     CoordSel::X | CoordSel::Y | CoordSel::Z => {
@@ -512,91 +573,60 @@ impl MotionPlanner {
         // Compute per-axis distance
         let disp_vector: TVector<Real> = vdir.abs() * speed_module;
         // Clamp per-axis target speed to the physical restrictions
-        let clamped_speed = (vdir.map_val(Real::one()) * speed_module).clamp(max_speed);
-        // Compute max time
-        let max_time = (disp_vector / clamped_speed).max().unwrap_or(ZERO);
+        let clamped_speed = disp_vector.clamp(max_speed);
+
         // Finally, per-axis relative speed
-        let speed_vector = (disp_vector / max_time) * speed_rate;
+        let speed_vector = clamped_speed * speed_rate;
 
         let module_target_speed = speed_vector.norm2().unwrap_or(ZERO);
         let module_target_accel = (vdir.abs() * max_accel).norm2().unwrap_or(ZERO);
         let module_target_jerk = (vdir.abs() * max_jerk).norm2().unwrap_or(ZERO);
 
-        let t2 = embassy_time::Instant::now();
-
-        let move_result = if module_target_distance.is_zero() {
-            // TODO: set current speed!
+        let move_result = if module_target_distance.is_negligible() {
             Ok(CodeExecutionSuccess::OK)
         }
-        else {
-            let profile = match !module_target_speed.is_zero() && !module_target_accel.is_zero() && !module_target_jerk.is_zero() {
-                true => {
-                    let _constraints = Constraints {
-                        v_max: module_target_speed,
-                        a_max: module_target_accel,
-                        j_max: module_target_jerk,
-                    };
-                    let profile = SCurveMotionProfile::compute(module_target_distance.clone(), ZERO, ZERO, &_constraints, true)?;
-                    Some(profile)
+        else if !module_target_speed.is_zero() && !module_target_accel.is_zero() && !module_target_jerk.is_zero() {
+            let segment_data = SegmentData {
+                speed_enter_mms: Real::zero(),
+                speed_exit_mms: Real::zero(),
+                speed_target_mms: module_target_speed,
+                displacement_mm: module_target_distance,
+                speed_enter_constrained_mms: Real::zero(),
+                speed_exit_constrained_mms: Real::zero(),
+                proj_prev: Real::zero(),
+                //speed_max_gain_mms: Real::zero(),
+                vdir,
+                dest_pos: p1,
+                tool_power: Real::zero(),
+                constraints: Constraints {
+                    v_max: module_target_speed,
+                    a_max: module_target_accel,
+                    j_max: module_target_jerk,
                 },
-                false => {
-                    hwa::error!("p0: {}", p0.rdp(4));
-                    hwa::error!("p1: {}", p1.rdp(4));
-                    hwa::error!("dist: {} mm", module_target_distance.rdp(4));
-                    hwa::error!("vdir: {} mm/s", vdir.rdp(4));
-                    hwa::error!("speed_vector: {} mm/s", speed_vector.rdp(4));
-                    hwa::error!("clamped_speed: {} mm/s", clamped_speed.rdp(4));
-
-                    None
-                }
+                proj_next: Real::zero(),
             };
-            //
-            let t3 = embassy_time::Instant::now();
-            hwa::debug!("P0 ({}) mm", p0);
-            hwa::debug!("P1 ({}) mm", p1);
-            hwa::debug!("MOTION PLAN: dist: {} mm, speed_max: {} mm/s, accel_max: {} mm/s^2, jerk_max: {} mm/s^3",
-                module_target_distance.rdp(4),
-                module_target_speed.rdp(4),
-                module_target_accel.rdp(4),
-                module_target_jerk.rdp(4)
-            );
-            match profile {
-                Some(profile) => {
-                    let segment_data = SegmentData {
-                        speed_enter_mms: Real::zero(),
-                        speed_exit_mms: Real::zero(),
-                        displacement_mm: module_target_distance,
-                        vdir,
-                        dest_pos: p1,
-                        tool_power: Real::zero(),
-                    };
-                    let r = self.schedule_raw_move(
-                        channel,
-                        action,
-                        ScheduledMove::Move(segment_data, profile),
-                        blocking
-                    ).await?;
 
-                    hwa::debug!("speed: {} -> {} ", requested_motion_speed.unwrap_or(Real::zero()).rdp(4), module_target_speed.rdp(4));
-                    hwa::debug!("speed_vector: {}", speed_vector.rdp(4));
-                    hwa::debug!("clamped_speed: {}", clamped_speed.rdp(4));
-                    hwa::debug!("speed_rates: {}", speed_rate.rdp(4));
+            let r = self.schedule_raw_move(
+                channel,
+                action,
+                ScheduledMove::Move(segment_data),
+                blocking,
+                event_bus,
+            ).await?;
 
-                    #[cfg(feature = "std")]
-                    hwa::debug!("profile: {} {} {} {} {}", profile.t_j1.rdp(4), profile.t_a.rdp(4), profile.t_v.rdp(4), profile.t_d.rdp(4), profile.t_j2.rdp(4));
+            hwa::debug!("speed: {} -> {} ", requested_motion_speed.unwrap_or(Real::zero()).rdp(4), module_target_speed.rdp(4));
+            hwa::debug!("speed_vector: {}", speed_vector.rdp(4));
+            hwa::debug!("clamped_speed: {}", clamped_speed.rdp(4));
+            hwa::debug!("speed_rates: {}", speed_rate.rdp(4));
+            hwa::debug!("speed_module: {}", module_target_speed.rdp(4));
 
-                    hwa::debug!("Conf retr in: {} us", (t1-t0).as_micros());
-                    hwa::debug!("Move prepared in: {} us", (t2-t1).as_micros());
-                    hwa::debug!("Move profiled in: {} us", (t3-t2).as_micros());
-                    return Ok(r);
-                }
-                None => {
-                    hwa::warn!("Incomplete move");
-                }
-            }
+            #[cfg(feature = "std")]
+            hwa::debug!("profile: {} {} {} {} {}", profile.t_j1.rdp(4), profile.t_a.rdp(4), profile.t_v.rdp(4), profile.t_d.rdp(4), profile.t_j2.rdp(4));
 
-            hwa::debug!("----");
-
+            return Ok(r);
+        }
+        else {
+            hwa::warn!("Incomplete move");
             Ok(CodeExecutionSuccess::OK)
         };
         match move_result {
@@ -612,15 +642,21 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn do_homing(&self) -> Result<(), ()>{
-        let r = self.motion_driver.lock().await.homing_action(&self.motion_config).await;
-        if r.is_err() {
-            hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
-            //self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
-        }
-        self.set_last_planned_pos(&TVector::zero()).await;
-        self.event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING)).await;
-        r
+    pub async fn do_homing(&self, event_bus: &EventBusRef) -> Result<(), ()>{
+        match self.motion_driver.lock().await.homing_action(&self.motion_config).await {
+            Ok(_pos) => {
+                self.set_last_planned_pos(&_pos).await;
+            }
+            Err(_pos) => {
+                hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
+                self.set_last_planned_pos(&_pos).await;
+                //self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
+                // return Err(())
+            }
+
+        };
+        event_bus.publish_event(EventStatus::not_containing(EventFlags::HOMMING)).await;
+        Ok(())
     }
 
     #[cfg(all(feature = "native", feature = "plot-timings"))]
@@ -637,6 +673,105 @@ impl MotionPlanner {
     pub async fn mark_microsegment(&self) {
         self.motion_driver.lock().await.mark_microsegment();
     }
+}
+
+#[cfg(feature = "cornering")]
+fn perform_cornering(mut rb: MutexGuard<ControllerMutexType, RingBuffer>) -> Result<(),()>{
+    let mut left_offset = 2;
+    let mut left_watermark = math::ZERO;
+    let mut right_watermark = math::ZERO;
+    // Assuming queued items are computed left to right:
+    // First, locate the top left segment. That one with null projection
+    // Also, set
+    for index in 2..rb.used {
+        match rb.planned_segment_from_tail(index) {
+            Ok(prev_segment_candidate) => {
+                if prev_segment_candidate.segment_data.proj_next.is_defined_positive() {
+                    left_offset = index;
+                    left_watermark = prev_segment_candidate.segment_data.speed_enter_mms;
+                }
+                else {
+                    break;
+                }
+            }
+            Err(_) => break
+        }
+    }
+
+    #[allow(unused)]
+    let from_offset = left_offset;
+    #[allow(unused)]
+    let to_offset = 1;
+
+    hwa::debug!("Cornering algorithm START");
+    let mut right_offset = 1;
+
+    // Perform cornering optimization in a single pass with a flood fill algorithm
+    loop {
+        if right_offset > left_offset {
+            break;
+        } else if left_offset == right_offset {
+            let mid_segment = rb.mut_planned_segment_from_tail(left_offset)?;
+
+            mid_segment.segment_data.speed_enter_mms = left_watermark;
+            mid_segment.segment_data.speed_exit_mms = right_watermark;
+            break;
+        } else {
+            let (left_segment, right_segment) = match rb.entries_from_tail(left_offset, right_offset) {
+                (Some(PlanEntry::PlannedMove(_s, _, _, _)), Some(PlanEntry::PlannedMove(_t, _, _, _))) => { (_s, _t) }
+                _ => panic!("")
+            };
+
+            hwa::trace!("\tleft [{}] right[{}]", left_offset, right_offset);
+
+            let left_max_inc = (left_segment.segment_data.proj_next * left_segment.segment_data.speed_target_mms)
+                .min(left_segment.segment_data.speed_exit_constrained_mms);
+
+            let right_max_inc = (right_segment.segment_data.proj_prev * right_segment.segment_data.speed_target_mms)
+                .min(right_segment.segment_data.speed_enter_constrained_mms);
+
+            let water_left = ((left_watermark + left_max_inc)).min(left_segment.segment_data.speed_target_mms);
+            let water_right = ((right_watermark + right_max_inc)).min(right_segment.segment_data.speed_target_mms);
+
+
+
+            if water_left <= water_right { // Flood at right
+                hwa::trace!("flood to right  [{} {}]", water_left, water_right);
+                left_segment.segment_data.speed_enter_mms = left_watermark;
+                left_segment.segment_data.speed_exit_mms = water_left;
+                right_segment.segment_data.speed_enter_mms = water_left;
+                right_segment.segment_data.speed_exit_mms = right_watermark;
+                left_watermark = water_left;
+                left_offset -= 1;
+            }
+            else { // Flood at left
+                hwa::trace!("flood to left [{} {}]", water_left, water_right);
+                left_segment.segment_data.speed_enter_mms = left_watermark;
+                left_segment.segment_data.speed_exit_mms = water_right;
+                right_segment.segment_data.speed_enter_mms = water_right;
+                right_segment.segment_data.speed_exit_mms = right_watermark;
+                right_watermark = water_right;
+                right_offset += 1;
+            }
+        }
+    }
+    #[cfg(feature = "native")]
+    display_content(&rb, from_offset, to_offset)?;
+    hwa::debug!("Cornering algorithm END");
+    Ok(())
+}
+
+#[cfg(feature = "native")]
+#[allow(unused)]
+pub fn display_content(rb: &MutexGuard<ControllerMutexType, RingBuffer>, left_offset: u8, right_offset: u8) -> Result<(),()>{
+    let mut stb = Vec::new();
+    for i in 0 .. left_offset - right_offset + 1 {
+        let s = rb.planned_segment_from_tail(left_offset - i).unwrap();
+        stb.push(format!("{}[{},{}]", s.id, s.segment_data.speed_enter_mms, s.segment_data.speed_exit_mms))
+    }
+
+    hwa::debug!(": {}", stb.join(" "));
+    Ok(())
 }
 
 
@@ -660,13 +795,83 @@ impl RingBuffer {
     /// Example:
     /// * index_from_tail(0) returns the index of tail position
     /// * index_from_tail(1) returns the index of last inserted element
-    pub fn index_from_tail(&self, offset: u8) -> u8 {
+    pub fn index_from_tail(&self, offset: u8) -> Result<u8,()> {
+        if offset > self.used {
+            Err(())
+        }
+        else {
+            let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
+            let len = self.data.len() as u16;
+            match absolute_offset < len {
+                true => Ok(absolute_offset as u8),
+                false => Ok((absolute_offset - len) as u8),
+            }
+        }
+    }
+
+    #[allow(unused)]
+    pub fn entry_from_tail(&self, offset: u8) -> Option<&PlanEntry> {
         let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
         let len =  self.data.len() as u16;
-        match absolute_offset < len {
+
+        let index = match absolute_offset < len {
             true => absolute_offset as u8,
             false => (absolute_offset - len) as u8,
+        };
+        self.data.get(index as usize)
+    }
+    #[allow(unused)]
+    pub fn mut_entry_from_tail(&mut self, offset: u8) -> Option<&mut PlanEntry> {
+        let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
+        let len =  self.data.len() as u16;
+
+        let index = match absolute_offset < len {
+            true => absolute_offset as u8,
+            false => (absolute_offset - len) as u8,
+        };
+        self.data.get_mut(index as usize)
+    }
+    #[allow(unused)]
+    pub fn mut_planned_segment_from_tail(&mut self, offset: u8) -> Result<&mut Segment, ()> {
+        match self.mut_entry_from_tail(offset) {
+            Some(PlanEntry::PlannedMove(_s, _, _, _)) => { Ok(_s) }
+            _ => Err(())
         }
+    }
+
+    #[allow(unused)]
+    pub fn planned_segment_from_tail(&self, offset: u8) -> Result<&Segment, ()> {
+        match self.entry_from_tail(offset) {
+            Some(PlanEntry::PlannedMove(_s, _, _, _)) => { Ok(_s) }
+            _ => Err(())
+        }
+    }
+
+    #[allow(unused)]
+    pub fn entries_from_tail(&mut self, offset1: u8, offset2: u8) -> (Option<&mut PlanEntry>, Option<&mut PlanEntry>) {
+        let len =  self.data.len();
+        let absolute_offset1 = self.head as usize + self.used as usize - offset1 as usize;
+        let index1 = match absolute_offset1 < len {
+            true => absolute_offset1 as usize,
+            false => (absolute_offset1 - len) as usize,
+        };
+        let absolute_offset2 = self.head as usize + self.used as usize - offset2 as usize;
+        let index2 = match absolute_offset2 < len {
+            true => absolute_offset2 as usize,
+            false => (absolute_offset2 - len) as usize,
+        };
+        if index1 == index2 {
+            (self.data.get_mut(index1), None)
+        }
+        else if index1 < index2 {
+            let (l, r) = self.data.split_at_mut(index2);
+            (l.get_mut(index1), r.get_mut(0))
+        }
+        else {
+            let (l, r) = self.data.split_at_mut(index1);
+            (r.get_mut(0), l.get_mut(index2))
+        }
+
     }
 }
 
@@ -707,7 +912,8 @@ pub struct MotionPlannerRef {
     inner: &'static MotionPlanner
 }
 
-impl MotionPlannerRef {
+impl MotionPlannerRef
+{
     pub const fn new(inner: &'static MotionPlanner) -> Self {
         Self {
             inner
@@ -716,12 +922,447 @@ impl MotionPlannerRef {
 }
 
 //#[cfg(feature = "native")]
-unsafe impl Send for MotionPlannerRef {}
+//unsafe impl<MotionPinout> Send for MotionPlannerRef<MotionPinout> {}
 
-impl core::ops::Deref for MotionPlannerRef {
+impl core::ops::Deref for MotionPlannerRef
+{
     type Target = MotionPlanner;
 
     fn deref(&self) -> &Self::Target {
         self.inner
     }
+}
+
+
+#[cfg(test)]
+pub mod test {
+
+
+    //#[cfg(feature = "wip-tests")]
+    #[test]
+    fn discrete_positioning_case_1() {
+
+        use printhor_hwa_common::StepperChannel;
+        use crate::hwa::controllers::motion_segment::{Segment, SegmentData, SegmentIterator};
+        use crate::math;
+        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+        use crate::control::motion_timing::StepPlanner;
+        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::math::Real;
+        use crate::tgeo::TVector;
+
+        const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
+        const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000;
+
+
+        const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
+
+        let segment = Segment::new(
+            SegmentData {
+                speed_enter_mms: Real::from_f32(200.0),
+                speed_exit_mms: Real::from_f32(200.0),
+                speed_target_mms: Real::from_f32(200.0),
+                displacement_mm: Real::from_f32(0.505982578),
+                speed_enter_constrained_mms: Real::from_f32(6.25),
+                speed_exit_constrained_mms: Real::from_f32(6.25),
+                proj_prev: Real::from_f32(0.999986052),
+                proj_next: Real::from_f32(0.999938488),
+                vdir: TVector::from_coords(Some(Real::from_f32(-0.901716948)),
+                                           Some(Real::from_f32(-0.432327151)),
+                                           None,
+                                           None),
+                dest_pos: TVector::from_coords(Some(Real::from_f32(79.9687576)),
+                                               Some(Real::from_f32(100.387497)),
+                                               None,
+                                               None),
+                tool_power: math::ZERO,
+                constraints: Constraints {
+                    v_max: Real::from_f32(200.0),
+                    a_max: Real::from_f32(3000.0),
+                    j_max: Real::from_f32(6000.0),
+                }
+            }
+        );
+
+        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let units_per_mm = TVector::from_coords(Some(Real::from_f32(10.0)), Some(Real::from_f32(10.0)), None, None);
+        let usteps = TVector::from_coords(Some(Real::from_f32(8.0)), Some(Real::from_f32(8.0)), None, None);
+        let micro_segment_period_secs = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US.into(), 6);
+        let sampling_time = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US.into(), 6);
+
+
+        let motion_profile = SCurveMotionProfile::compute(
+            segment.segment_data.displacement_mm,
+            segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
+            &segment.segment_data.constraints,
+            false
+        ).unwrap();
+
+        let units_per_mm = neutral_element + units_per_mm;
+        let steps_per_mm = units_per_mm * usteps;
+
+        let mut micro_segment_real_time_rel = micro_segment_period_secs;
+        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+
+        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
+            segment.segment_data.vdir.abs(),
+            segment.segment_data.displacement_mm,
+            steps_per_mm,
+        );
+
+
+        let mut prev_time = math::ZERO;
+        let mut p0 = math::ZERO;
+        let mut real_advanced_steps: TVector<u32> = TVector::zero();
+
+        loop {
+            if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+
+                let tprev = micro_segment_real_time_rel - prev_time;
+                let tmax = motion_profile.i7_end() - prev_time;
+
+                let ds = estimated_position - p0;
+                p0 = estimated_position;
+                let current_period_width_0 = if tprev < tmax {
+                    tprev
+                }
+                else {
+                    if segment.segment_data.speed_exit_mms > math::ZERO {
+                        (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
+                    }
+                    else {
+                        tmax
+                    }
+                };
+
+                let current_period_width = current_period_width_0;
+
+                prev_time += current_period_width;
+                micro_segment_real_time_rel += current_period_width;
+
+                let w = (current_period_width * Real::from_f32(1000000.)).round();
+
+                let has_more = microsegment_interpolator.advance_to(estimated_position, w);
+
+                let mut step_planner = StepPlanner::from(
+                    microsegment_interpolator.state().clone(),
+                    StepperChannel::empty(),
+                    StepperChannel::empty(),
+                );
+
+                let mut tick_count = 0;
+                loop {
+                    match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US) {
+                        None => {
+                            break;
+                        }
+                        Some(_t) => {
+                            tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                            if !_t.is_empty() {
+                                real_advanced_steps.increment(_t.into(), 1);
+                            }
+                            // std::println!("t = {} : {} w = {}", tick_count, real_advanced_steps, width);
+                            if tick_count >= microsegment_interpolator.width() {
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !has_more {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let expected_advanced_steps = microsegment_interpolator.advanced_steps();
+        assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
+
+    }
+
+    #[test]
+    fn discrete_positioning_case_2() {
+
+        use printhor_hwa_common::StepperChannel;
+        use crate::hwa::controllers::motion_segment::{Segment, SegmentData, SegmentIterator};
+        use crate::math;
+        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+        use crate::control::motion_timing::StepPlanner;
+        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::math::Real;
+        use crate::tgeo::TVector;
+
+        const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500;
+        const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 50_000;
+
+        const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
+
+        let segment = Segment::new(
+            SegmentData {
+                speed_enter_mms: Real::from_f32(400.0),
+                speed_exit_mms: Real::from_f32(400.0),
+                speed_target_mms: Real::from_f32(400.0),
+                displacement_mm: Real::from_f32(0.505982578),
+                speed_enter_constrained_mms: Real::from_f32(6.25),
+                speed_exit_constrained_mms: Real::from_f32(6.25),
+                proj_prev: Real::from_f32(0.999986052),
+                proj_next: Real::from_f32(0.999938488),
+                vdir: TVector::from_coords(Some(Real::from_f32(-0.901716948)),
+                                           Some(Real::from_f32(-0.432327151)),
+                                           None,
+                                           None),
+                dest_pos: TVector::from_coords(Some(Real::from_f32(79.9687576)),
+                                               Some(Real::from_f32(100.387497)),
+                                               None,
+                                               None),
+                tool_power: math::ZERO,
+                constraints: Constraints {
+                    v_max: Real::from_f32(400.0),
+                    a_max: Real::from_f32(3000.0),
+                    j_max: Real::from_f32(6000.0),
+                }
+            }
+        );
+
+        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let units_per_mm = TVector::from_coords(Some(Real::from_f32(10.0)), Some(Real::from_f32(10.0)), None, None);
+        let usteps = TVector::from_coords(Some(Real::from_f32(8.0)), Some(Real::from_f32(8.0)), None, None);
+        let micro_segment_period_secs = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US.into(), 6);
+        let sampling_time = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US.into(), 6);
+
+
+        let motion_profile = SCurveMotionProfile::compute(
+            segment.segment_data.displacement_mm,
+            segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
+            &segment.segment_data.constraints,
+            false
+        ).unwrap();
+
+        let units_per_mm = neutral_element + units_per_mm;
+        let steps_per_mm = units_per_mm * usteps;
+
+        let mut micro_segment_real_time_rel = micro_segment_period_secs;
+        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+
+        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
+            segment.segment_data.vdir.abs(),
+            segment.segment_data.displacement_mm,
+            steps_per_mm,
+        );
+
+
+        let mut prev_time = math::ZERO;
+        let mut p0 = math::ZERO;
+        let mut real_advanced_steps: TVector<u32> = TVector::zero();
+
+        loop {
+            if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+
+                let tprev = micro_segment_real_time_rel - prev_time;
+                let tmax = motion_profile.i7_end() - prev_time;
+
+                let ds = estimated_position - p0;
+                p0 = estimated_position;
+                let current_period_width_0 = if tprev < tmax {
+                    tprev
+                }
+                else {
+                    if segment.segment_data.speed_exit_mms > math::ZERO {
+                        (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
+                    }
+                    else {
+                        tmax
+                    }
+                };
+
+                let current_period_width = current_period_width_0;
+
+                prev_time += current_period_width;
+                micro_segment_real_time_rel += current_period_width;
+
+                let w = (current_period_width * Real::from_f32(1000000.)).round();
+
+                let has_more = microsegment_interpolator.advance_to(estimated_position, w);
+
+                let mut step_planner = StepPlanner::from(
+                    microsegment_interpolator.state().clone(),
+                    StepperChannel::empty(),
+                    StepperChannel::empty(),
+                );
+
+                let mut tick_count = 0;
+                loop {
+                    match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US) {
+                        None => {
+                            break;
+                        }
+                        Some(_t) => {
+                            tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                            if !_t.is_empty() {
+                                real_advanced_steps.increment(_t.into(), 1);
+                            }
+                            // std::println!("t = {} : {} w = {}", tick_count, real_advanced_steps, width);
+                            if tick_count >= microsegment_interpolator.width() {
+                                break;
+                            }
+
+                        }
+                    }
+                }
+                if !has_more {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let expected_advanced_steps = microsegment_interpolator.advanced_steps();
+        assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
+
+    }
+
+    #[test]
+    fn discrete_positioning_case_3() {
+
+        use printhor_hwa_common::StepperChannel;
+        use crate::hwa::controllers::motion_segment::{Segment, SegmentData, SegmentIterator};
+        use crate::math;
+        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+        use crate::control::motion_timing::StepPlanner;
+        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::math::Real;
+        use crate::tgeo::TVector;
+
+        const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500;
+        const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 200_000;
+
+        const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+        const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
+
+        let segment = Segment::new(
+            SegmentData {
+                speed_enter_mms: Real::from_f32(400.0),
+                speed_exit_mms: Real::from_f32(400.0),
+                speed_target_mms: Real::from_f32(400.0),
+                displacement_mm: Real::from_f32(0.505982578),
+                speed_enter_constrained_mms: Real::from_f32(6.25),
+                speed_exit_constrained_mms: Real::from_f32(6.25),
+                proj_prev: Real::from_f32(0.999986052),
+                proj_next: Real::from_f32(0.999938488),
+                vdir: TVector::from_coords(Some(Real::from_f32(-0.901716948)),
+                                           Some(Real::from_f32(-0.432327151)),
+                                           None,
+                                           None),
+                dest_pos: TVector::from_coords(Some(Real::from_f32(79.9687576)),
+                                               Some(Real::from_f32(100.387497)),
+                                               None,
+                                               None),
+                tool_power: math::ZERO,
+                constraints: Constraints {
+                    v_max: Real::from_f32(400.0),
+                    a_max: Real::from_f32(3000.0),
+                    j_max: Real::from_f32(6000.0),
+                }
+            }
+        );
+
+        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let units_per_mm = TVector::from_coords(Some(Real::from_f32(10.0)), Some(Real::from_f32(10.0)), None, None);
+        let usteps = TVector::from_coords(Some(Real::from_f32(8.0)), Some(Real::from_f32(8.0)), None, None);
+        let micro_segment_period_secs = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US.into(), 6);
+        let sampling_time = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US.into(), 6);
+
+
+        let motion_profile = SCurveMotionProfile::compute(
+            segment.segment_data.displacement_mm,
+            segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
+            &segment.segment_data.constraints,
+            false
+        ).unwrap();
+
+        let units_per_mm = neutral_element + units_per_mm;
+        let steps_per_mm = units_per_mm * usteps;
+
+        let mut micro_segment_real_time_rel = micro_segment_period_secs;
+        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+
+        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
+            segment.segment_data.vdir.abs(),
+            segment.segment_data.displacement_mm,
+            steps_per_mm,
+        );
+
+
+        let mut prev_time = math::ZERO;
+        let mut p0 = math::ZERO;
+        let mut real_advanced_steps: TVector<u32> = TVector::zero();
+
+        loop {
+            if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+
+                let tprev = micro_segment_real_time_rel - prev_time;
+                let tmax = motion_profile.i7_end() - prev_time;
+
+                let ds = estimated_position - p0;
+                p0 = estimated_position;
+                let current_period_width_0 = if tprev < tmax {
+                    tprev
+                }
+                else {
+                    if segment.segment_data.speed_exit_mms > math::ZERO {
+                        (ds / segment.segment_data.speed_exit_mms).max(sampling_time)
+                    }
+                    else {
+                        tmax
+                    }
+                };
+
+                let current_period_width = current_period_width_0;
+
+                prev_time += current_period_width;
+                micro_segment_real_time_rel += current_period_width;
+
+                let w = (current_period_width * Real::from_f32(1000000.)).round();
+
+                let has_more = microsegment_interpolator.advance_to(estimated_position, w);
+
+                let mut step_planner = StepPlanner::from(
+                    microsegment_interpolator.state().clone(),
+                    StepperChannel::empty(),
+                    StepperChannel::empty(),
+                );
+
+                let mut tick_count = 0;
+                loop {
+                    match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US) {
+                        None => {
+                            break;
+                        }
+                        Some(_t) => {
+                            tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
+                            if !_t.is_empty() {
+                                real_advanced_steps.increment(_t.into(), 1);
+                            }
+                            // std::println!("t = {} : {} w = {}", tick_count, real_advanced_steps, width);
+                            if tick_count >= microsegment_interpolator.width() {
+                                break;
+                            }
+
+                        }
+                    }
+                }
+                if !has_more {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let expected_advanced_steps = microsegment_interpolator.advanced_steps();
+        assert!(expected_advanced_steps == real_advanced_steps, "Advanced steps matching. Expected: {} Got {}", expected_advanced_steps, real_advanced_steps)
+
+    }
+
 }

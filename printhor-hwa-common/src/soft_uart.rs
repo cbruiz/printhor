@@ -78,6 +78,7 @@ impl<RXTX> HalfDuplexSerial<RXTX>
 {
     pub fn new(mut rxtx: RXTX, baud_rate: u32) -> Self {
 
+        #[cfg(feature = "with-log")]
         crate::debug!("HalfDuplexSerial init at {} baud rate", baud_rate);
         rxtx.set_output();
         //rxtx.set_open_drain();
@@ -97,6 +98,7 @@ impl<RXTX> HalfDuplexSerial<RXTX>
     }
 
     pub async fn set_write_mode(&mut self) {
+        #[cfg(feature = "with-log")]
         crate::info!("set write mode()");
         self.rxtx.set_output();
         self.rxtx.set_high();
@@ -117,10 +119,12 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
 
         let mut data_out = byte;
 
+        #[cfg(feature = "with-log")]
         crate::info!(">: {:08b}", byte);
 
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
+        #[cfg(feature = "with-log")]
         crate::trace!("TX: Start bit");
         ticker.next().await;
         for _bit in 0..8 {

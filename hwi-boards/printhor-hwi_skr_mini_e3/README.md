@@ -1,4 +1,4 @@
-![Minimum Rust: 1.75](https://img.shields.io/badge/Minimum%20Rust%20Version-1.75-green.svg)
+![Minimum Rust: 1.79](https://img.shields.io/badge/Minimum%20Rust%20Version-1.79-green.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
@@ -9,7 +9,7 @@
 
 # Overview
 
-This boards are quite functional:
+This two boards are quite functional:
 * https://biqu.equipment/collections/control-board/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-for-ender-3
 * https://biqu.equipment/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-integrated-tmc2209-uart-for-ender-4
 
@@ -17,6 +17,12 @@ This boards are quite functional:
 
 The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
 
+For SKR Minit E3 V2.0:
+```
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v2 --target thumbv7m-none-eabi --bin printhor -- -O binary firmware.bin
+```
+
+For SKR Minit E3 V3.0:
 ```
 DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```

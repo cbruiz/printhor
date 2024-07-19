@@ -1,59 +1,117 @@
 // Math module
-#[path = "../../src/bin/printhor/math/mod.rs"]
-mod core_math;
-pub mod math {
-    pub use super::core_math::*;
-}
-pub use math::Real;
 
-// TGeo Module
+#[path = "../../src/bin/printhor/control/mod.rs"]
+pub mod control;
+
 #[path = "../../src/bin/printhor/tgeo.rs"]
-mod core_tgeo;
-pub mod tgeo {
-    pub use super::core_tgeo::*;
-}
+pub mod tgeo;
+
+#[path = "../../src/bin/printhor/math/mod.rs"]
+pub mod math;
+
+#[path = "../../src/bin/printhor/hwa/mod.rs"]
+pub mod hwa;
 
 #[path = "../../src/bin/printhor/helpers/mod.rs"]
-mod helpers;
+pub mod helpers;
+
+#[path = "../../src/bin/printhor/sync/mod.rs"]
+pub mod sync;
+
 #[path = "../../src/bin/printhor/machine.rs"]
-mod machine;
-#[path = "../../src/bin/printhor/control/motion_planning/mod.rs"]
-mod core_motion_planing;
+pub mod machine;
 
-#[path = "../../src/bin/printhor/hwa/controllers/motion/motion_segment.rs"]
-mod core_motion_segment;
+#[path = "../../src/bin/printhor/hwi/mod.rs"]
+pub mod core_hwi;
 
-pub mod control {
+pub mod hwi {
+    pub use super::core_hwi::*;
+    pub const MACHINE_BOARD: &str = "native";
+    pub const MACHINE_PROCESSOR: &str = "native";
+    pub const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
 
-    pub use super::core_control_base::*;
+    pub const SEGMENT_QUEUE_SIZE: u8 = 20;
 
-    pub mod motion_planning {
-        pub use crate::prelude::core_motion_planing::Constraints;
-        pub use crate::prelude::core_motion_planing::Boundaries;
-        pub use crate::prelude::core_motion_planing::SCurveMotionProfile;
-        pub use crate::prelude::core_motion_planing::Cache;
-        pub use crate::prelude::core_motion_planing::PlanProfile;
-        pub use crate::prelude::core_motion_planing::MotionProfile;
-    }
-}
+    pub const MAX_STATIC_MEMORY: usize = 16386;
+    pub const HEAP_SIZE_BYTES: usize = 1024;
 
-#[path = "../../src/bin/printhor/control/base.rs"]
-mod core_control_base;
+    /// Micro-segment sampling frequency in Hz
+    pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
+    /// Micro-segment clock frequency in Hz
+    pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
-pub mod hwa {
-    pub use log::*;
-    pub use printhor_hwa_common::*;
+    pub mod device {
+        use printhor_hwa_common::StepperChannel;
+        use crate::prelude::tgeo::CoordSel;
 
-    pub const MACHINE_TYPE: &str = "Simulator/debugger";
-    pub const MACHINE_BOARD: &str = "PC";
-    pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
+        #[derive(Clone)]
+        pub struct MotionPins {
 
-    pub mod controllers {
-        pub mod motion {
-            pub use crate::prelude::core_motion_planing::*;
-            pub use crate::prelude::core_motion_segment::*;
+        }
+
+        impl MotionPins {
+
+            pub fn new() -> Self {
+                Self {
+
+                }
+            }
+            pub fn enable(&mut self, channels: StepperChannel) {
+                todo!()
+            }
+
+            pub fn disable(&mut self, channels: StepperChannel) {
+                todo!()
+            }
+
+            pub fn set_forward_direction(&mut self, channels: StepperChannel) {
+                todo!()
+            }
+
+            pub fn step_high(&mut self, channels: StepperChannel) {
+                todo!()
+            }
+
+            pub fn step_low(&mut self, channels: StepperChannel) {
+                todo!()
+            }
+
+            pub fn step_toggle(&mut self, _channels: StepperChannel) {
+
+            }
+
+            pub fn endstop_triggered(&mut self, channels: StepperChannel) -> bool {
+                let mut triggered = false;
+                #[cfg(feature = "with-x-axis")]
+                if channels.contains(StepperChannel::X) {
+                    //triggered |= self.pins.x_endstop_pin.is_high();
+                }
+                #[cfg(feature = "with-y-axis")]
+                if channels.contains(StepperChannel::Y) {
+                    //triggered |= self.pins.y_endstop_pin.is_high();
+                }
+                #[cfg(feature = "with-z-axis")]
+                if channels.contains(StepperChannel::Z) {
+                    //triggered |= self.pins.z_endstop_pin.is_high();
+                }
+                #[cfg(feature = "with-e-axis")]
+                if channels.contains(StepperChannel::E) {
+                    //triggered |= self.pins.e_endstop_pin.is_high();
+                }
+                triggered
+            }
+        }
+
+        pub struct MotionDevice
+        {
+            pub motion_pins: MotionPins,
+        }
+
+        pub struct Watchdog {
+
         }
     }
+
 }
 
-pub use std::alloc;
+

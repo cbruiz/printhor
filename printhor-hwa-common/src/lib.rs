@@ -1,16 +1,19 @@
 //! Common Hardware Abstraction types and traits
+#![allow(async_fn_in_trait)]
 #![no_std]
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-log")] {
         pub use log::*;
     }
     else if #[cfg(feature = "with-defmt")] {
-        pub use defmt::*;
+        pub use defmt::{info, debug, trace, warn, error};
     }
 }
 
+pub type InterruptControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
 cfg_if::cfg_if! {
-    if #[cfg(feature = "threaded")] {
+    if #[cfg(feature = "executor-interrupt")] {
         pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
     }
@@ -36,6 +39,11 @@ pub use context::*;
 
 pub use tracked_static_cell::COUNTER;
 
+mod asynch;
+pub use asynch::*;
+use bitflags::bitflags;
+
+
 use strum::EnumCount;
 
 cfg_if::cfg_if! {
@@ -46,13 +54,14 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-ui")] {
+    if #[cfg(feature = "with-display")] {
         mod display;
         pub use display::DisplayScreenUI;
     }
 }
 
 pub mod soft_uart;
+pub mod traits;
 
 /// Represents a logical channel where the request(s) come from
 #[derive(strum::EnumCount, Clone, Copy, Debug)]
@@ -143,4 +152,20 @@ pub struct NoDevice;
 impl NoDevice {
     #[allow(unused)]
     pub const fn new() -> Self { Self {} }
+}
+
+
+bitflags! {
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub struct StepperChannel: u8 {
+        #[cfg(feature = "with-x-axis")]
+        const X    = 0b00000001;
+        #[cfg(feature = "with-y-axis")]
+        const Y    = 0b00000010;
+        #[cfg(feature = "with-z-axis")]
+        const Z    = 0b00000100;
+        #[cfg(feature = "with-e-axis")]
+        const E    = 0b00001000;
+        const UNSET  = 0b10000000;
+    }
 }

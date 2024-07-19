@@ -16,10 +16,11 @@ cfg_if::cfg_if!{
 pub mod mocked_peripherals;
 
 use embassy_executor::Spawner;
-use printhor_hwa_common::{ControllerMutex, ControllerRef, TrackedStaticCell, MachineContext};
+use printhor_hwa_common::{ControllerMutex, ControllerRef, TrackedStaticCell, MachineContext, StandardControllerRef};
 
 #[allow(unused)]
 use crate::board::mocked_peripherals::MockedIOPin;
+use crate::task_stepper_ticker;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
 pub const MACHINE_BOARD: &str = "PC";
@@ -40,6 +41,11 @@ pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1650;
 #[allow(unused)]
 pub const ADC_VREF_DEFAULT_SAMPLE: u16 = 2048;
+
+#[const_env::from_env("STEPPER_PLANNER_MICROSEGMENT_FREQUENCY")]
+pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200;
+#[const_env::from_env("STEPPER_PLANNER_CLOCK_FREQUENCY")]
+pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-end")] {
@@ -74,7 +80,7 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: ControllerRef<device::Watchdog>,
+    pub sys_watchdog: StandardControllerRef<device::Watchdog>,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_tx: device::UartPort1TxControllerRef,
     #[cfg(feature = "with-serial-port-2")]
@@ -82,7 +88,7 @@ pub struct Controllers {
 }
 
 pub struct SysDevices {
-    #[cfg(all(feature = "with-motion", feature="threaded"))]
+    #[cfg(all(feature = "with-motion", feature="executor-interrupt"))]
     pub task_stepper_core: printhor_hwa_common::NoDevice,
     #[cfg(feature = "with-ps-on")]
     pub ps_on: device::PsOnRef,
@@ -142,12 +148,16 @@ pub fn init() -> HWIPeripherals {
 
 pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
+    let _ = _spawner.spawn(task_stepper_ticker());
+
     let _pin_state = mocked_peripherals::init_pin_state();
 
     cfg_if::cfg_if!{
         if #[cfg(all(feature = "with-serial-port-1"))] {
+            use printhor_hwa_common::StandardControllerMutex;
+
             let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
-            static UART_PORT1_INS: TrackedStaticCell<ControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
+            static UART_PORT1_INS: TrackedStaticCell<StandardControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
             let serial_port1_tx = ControllerRef::new(
                 UART_PORT1_INS.init::<{self::MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
             );
@@ -258,10 +268,10 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     #[cfg(any(feature = "with-probe", feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
     let pwm_any = {
         let pwm_any = mocked_peripherals::MockedPwm::new(20, _pin_state);
-        static PWM_INST: TrackedStaticCell<ControllerMutex<device::PwmAny>> = TrackedStaticCell::new();
-        ControllerRef::new(PWM_INST.init::<{self::MAX_STATIC_MEMORY}>(
+        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmAny>> = TrackedStaticCell::new();
+        printhor_hwa_common::InterruptControllerRef::new(PWM_INST.init::<{self::MAX_STATIC_MEMORY}>(
             "PwmAny",
-            ControllerMutex::new(pwm_any)
+            printhor_hwa_common::InterruptControllerMutex::new(pwm_any)
         ))
     };
 
@@ -281,13 +291,13 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
 
     #[cfg(feature = "with-ps-on")]
     let ps_on = {
-        static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
+        static PS_ON: TrackedStaticCell<StandardControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
             PS_ON.init::<{self::MAX_STATIC_MEMORY}>("", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
         )
     };
 
-    static WD: TrackedStaticCell<ControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
+    static WD: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{self::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
 
     MachineContext {
@@ -299,7 +309,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             serial_port2_tx,
         },
         sys_devices: SysDevices {
-            #[cfg(all(feature = "with-motion", feature="threaded"))]
+            #[cfg(all(feature = "with-motion", feature="executor-interrupt"))]
             task_stepper_core: printhor_hwa_common::NoDevice::new(),
             #[cfg(feature = "with-ps-on")]
             ps_on

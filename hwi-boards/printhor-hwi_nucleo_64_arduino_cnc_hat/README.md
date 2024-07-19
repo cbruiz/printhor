@@ -1,4 +1,4 @@
-![Minimum Rust: 1.75](https://img.shields.io/badge/Minimum%20Rust%20Version-1.75-green.svg)
+![Minimum Rust: 1.79](https://img.shields.io/badge/Minimum%20Rust%20Version-1.79-green.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
@@ -25,13 +25,13 @@ cargo install flip-link
 ```
 
 ```shell
-DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-f410rb"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-f410rb --target thumbv7em-none-eabihf --bin printhor
+DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board_stm32l4="nucleo64-f410rb"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-f410rb --target thumbv7em-none-eabihf --bin printhor
 ```
 
 ### nucleo-l476rg
-This one is a bit slower but much more RAM and flash. Enough even though with non very optimized firmware and may features
+This one is a bit slower but much more RAM and flash. Enough even though with not very optimized firmware and many features
 
 ```shell
-DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board="nucleo64-l476rg"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-l476rg --target thumbv7em-none-eabihf --bin printhor
+DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board_stm32l4="nucleo64-l476rg"' cargo run --release --no-default-features --features nucleo_64_arduino_cnc_hat,nucleo64-l476rg --target thumbv7em-none-eabihf --bin printhor
 ```
 

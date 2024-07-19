@@ -1,4 +1,4 @@
-![Minimum Rust: 1.75](https://img.shields.io/badge/Minimum%20Rust%20Version-1.75-green.svg)
+![Minimum Rust: 1.79](https://img.shields.io/badge/Minimum%20Rust%20Version-1.79-green.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
@@ -71,6 +71,8 @@ A Discord server has been created for informal discussions. Otherwise, Github Is
 ```shell
 git clone https://github.com/cbruiz/printhor
 cd printhor
+git checkout feature/motion_accuracy_and_state_5
+git submodule update --init --recursive
 ```
 
 # Build
@@ -84,7 +86,7 @@ The minimal toolset required to build and run is:
 
 ## Prerequisites: Rust and toolchain
 
-This crate requires **Rust >= 1.75**.
+This crate requires **Rust >= 1.79**.
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
@@ -139,27 +141,50 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 
 ## Supported boards and specific instructions
 
-| Board                                                                                             | Status           |
-|---------------------------------------------------------------------------------------------------|------------------|
-| [SKR Mini E3 V2.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Initial          |
-| [SKR Mini E3 V3.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Almost Funtional |
-| [MKS Robin Nano v3.1](hwi-boards/printhor-hwi_mks_robin_nano/README.md)                           | Almost Funtional |
-| [Nucleo-f410rb + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Funtional |
-| [Nucleo-l476rg + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Funtional |
-| [Raspberry PI 2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                    | Draft            |
+| Board                                                                                             | Status            |
+|---------------------------------------------------------------------------------------------------|-------------------|
+| [SKR Mini E3 V2.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Initial           |
+| [SKR Mini E3 V3.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Almost Functional |
+| [MKS Robin Nano v3.1](hwi-boards/printhor-hwi_mks_robin_nano/README.md)                           | Almost Functional |
+| [Nucleo-f410rb + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
+| [Nucleo-l476rg + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
+| [Raspberry PI 2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                    | Draft             |
 
 
 ## Extra utilery
 
-A simple stand-alone std binary to experiment with motion plan (kind of playground):
+A simple stand-alone std binary to experiment with motion plan and see what it does (kind of playground):
 
 ```shell
 cd s-plot
 cargo run
 ```
-Example output:
 
+### Example output with the current plotting style approach:
+As Image:
 ![alt text](design/motion_plan.png "Motion Plan")
+
+As Vector:
+
+<object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
+  <embed src="./design/motion_plan.pdf">
+    <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
+  </embed>
+</object>
+
+There are (currently) two plots:
+* Position:
+  * A continuous blue curve for the analytic __ideal__ position estimation.
+  * A stepped gray curve for the __real__ (discrete) position. 
+* Velocity:
+  * A continuos green curve for the online derivation of __ideal__ position datapoints.
+  * A slopped gray polyline for the online derivation of __real__ (discrete) position datapoints in the sampling interval.
+
+### Example output with the deprecated plotting style:
+![alt text](design/motion_plan_old.png "Motion Plan")
+
+This plot were self-explanatory, but deprecated in flavor of the previous one.
+We are keeping it because it is clear and useful for a high level understanding.
 
 # TODO
 * Code productivization. Mostly based on https://dl.acm.org/doi/pdf/10.1145/3519941.3535075 and https://jamesmunns.com/blog/fmt-unreasonably-expensive/:

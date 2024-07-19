@@ -31,18 +31,27 @@ with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
 with-fan-layer = ["embedded-hal"]
+with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
+with-neo = ["embedded-hal"]
 with-trinamic = []
 with-ps-on = []
+with-display = [] # Broken
 without-bootloader = ["embassy-stm32/memory-x"]
+use-hsi = []
+
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
 
 nightly = []
-threaded = ["embassy-executor/executor-interrupt"]
+cooperative = ["embassy-executor/integrated-timers"]
+executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue", "embassy-time/generic-queue-128"]
 verbose-timings = []
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
-upstream-embassy = []
 without-vref-int = []
 without-ringbuffer = []
 
@@ -51,21 +60,22 @@ defmt = {version = "0.3", default-features = false }
 
 printhor-hwa-common = { version = "0.0"}
 
-embassy-stm32 = { version = "0.1.0", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
-embassy-executor = { version = "0.5.0", default-features = false, features = ["defmt", "integrated-timers", "executor-thread", "arch-cortex-m"] }
-embassy-sync = { version = "0.5.0", features = ["defmt"] }
-embassy-time = { version = "0.3.0", features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-futures = { version = "0.1.1", features = [] }
-embassy-usb = { version = "0.1.0", features = [], optional = true }
+embassy-stm32 = { version = "*", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
+embassy-executor = { version = "*", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
+embassy-sync = { version = "*", features = ["defmt"] }
+embassy-time = { version = "*", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-futures = { version = "*", features = [] }
+embassy-usb = { version = "*", features = [], optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = { version = "0.7.0", default-features = false, features = [] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
 
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.30", default-features = false, features = [] }
+futures = { version = "0.3.17", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }

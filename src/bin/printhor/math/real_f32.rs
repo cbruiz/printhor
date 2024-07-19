@@ -11,13 +11,18 @@ cfg_if::cfg_if! {
         use micromath::F32Ext;
 
         #[derive(Copy, Clone, Default, Debug)]
-        pub struct Real(f32);
+        pub struct Real(pub f32);
+        pub type RealImpl = f32;
 
         #[allow(dead_code)]
         impl Real {
             #[inline]
             pub fn new(num: i64, scale: u32) -> Self {
                 Self::from_lit(num, scale)
+            }
+            #[inline]
+            pub const fn from_inner(num: f32) -> Self {
+                Self(num)
             }
             #[inline]
             pub fn from_lit(num: i64, scale: u32) -> Self {
@@ -40,6 +45,12 @@ cfg_if::cfg_if! {
             pub fn powi(self, x: i32) -> Self {
                 Self(FloatCore::powi(self.0, x))
             }
+
+            #[inline]
+            pub fn recip(self) -> Self {
+                Self(FloatCore::recip(self.0))
+            }
+
             #[inline]
             pub const fn zero() -> Self {
                 Self(0.0f32)
@@ -47,6 +58,15 @@ cfg_if::cfg_if! {
             #[inline]
             pub fn is_zero(&self) -> bool {
                 f32::is_zero(&self.0)
+            }
+
+            pub fn epsilon() -> Self {
+                Real(<f32 as FloatCore>::epsilon())
+            }
+
+            #[inline]
+            pub fn is_negligible(&self) -> bool {
+                FloatCore::abs(self.0) < <f32 as FloatCore>::epsilon()
             }
 
             #[inline]
@@ -104,29 +124,39 @@ cfg_if::cfg_if! {
                 self.0.to_i64().unwrap()
             }
 
-            #[inline]
             pub fn sqrt(self) -> Option<Self> {
-                let num = self.0;
+                let num = self.inner();
                 // The famous inverse square root approximation of Id software
-                //let _r1 = 1.0f32 / Self::quake_isqrt(num);
+                let _r = 1.0f32 / Self::quake_isqrt(num);
+
                 // Micromath crate, based on https://bits.stephan-brumme.com/squareRoot.html
-                //let _r2 = micromath::F32(num).sqrt().0;
+                //let _r = micromath::F32(num).sqrt().0;
                 // ARM intrinsics, https://developer.arm.com/architectures/instruction-sets/intrinsics/vrsqrtes_f32
                 //let _r3 = unsafe { Inv::inv(core::arch::aarch64::vrsqrtes_f32(num)) };
-                let _r4 = 0.1f32 / Self::quake_isqrt(100.0f32 * num);
-                if _r4.is_nan() {
+
+                //let _r = 0.1f32 / Self::quake_isqrt(100.0f32 * num);
+
+                if _r.is_nan() {
                     None
                 }
                 else {
-                    Some(Self(_r4))
+                    Some(Self(_r))
                 }
+
+
             }
 
             fn quake_isqrt(number: f32) -> f32 {
-                let mut i: i32 = number.to_bits() as i32;
-                i = 0x5F375A86_i32.wrapping_sub(i >> 1);
-                let y = f32::from_bits(i as u32);
-                y * (1.5 - (number * 0.5 * y * y))
+
+                let xhalf = number * 0.5f32;
+                let mut y = f32::from_bits(0x5F375A86_i32.wrapping_sub(number.to_bits() as i32 >> 1) as u32);
+                y = y * (1.5f32 - xhalf * y * y);
+                //log::info!("sqrt({}) = {} [i1]", number, y);
+                y = y * (1.5f32 - xhalf * y * y);
+                //log::info!("sqrt({}) = {} [i2]", number, y);
+                y = y * (1.5f32 - xhalf * y * y);
+                //log::info!("sqrt({}) = {} [i3]", number, 1.0f32 / y);
+                y
             }
 
             fn iterative_sqrt(_number: f32) -> f32 {
@@ -178,7 +208,7 @@ cfg_if::cfg_if! {
                 if s.is_zero() {Real::one()} else {Real(s)}
             }
 
-            pub fn min(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);
@@ -193,7 +223,7 @@ cfg_if::cfg_if! {
                 m
             }
 
-            pub fn max(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmax(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);

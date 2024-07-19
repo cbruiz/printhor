@@ -39,31 +39,31 @@ pub async fn task_control(
         crate::initialization_error()
     }
     loop {
-
         match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode()).await {
             // Timeout
             Err(_) => {
-                hwa::debug!("task_control: Timeout");
+                hwa::info!("task_control: Timeout");
             }
             Ok((Err(GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
-                processor.write(channel, "Error; (ParserError)\n").await;
+                processor.write(channel, "error; (ParserError)\n").await;
             }
             Ok((Err(GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)), channel)) => {
                 hwa::error!("GCode {} (NotImplemented)", _gcode_name.as_str());
-                let s = alloc::format!("Error; {} (NotImplemented)\n", _gcode_name);
+                let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                 processor.write(channel, &s).await;
             }
             Ok((Err(GCodeLineParserError::FatalError), channel)) => {
                 hwa::error!("[{:?}] GCode N/A (Internal error)", channel);
-                let s = "Error; Internal error\n";
+                let s = "error; Internal error\n";
                 processor.write(channel, s).await;
             }
             Ok((Ok(None), _channel)) => {
-                hwa::warn!("{:?} Got EOF", _channel);
+                hwa::info!("{:?} Got EOF", _channel);
                 //embassy_time::Timer::after_secs(1).await; // Avoid respawn too fast
             }
             Ok((Ok(Some(gc)), channel)) => {
+                hwa::info!("{:?} Got {:?}", channel, gc);
                 match gc {
                     GCode::NOP => {
                         // Should not happen
@@ -162,24 +162,41 @@ pub async fn task_control(
                     _ => {
                         match processor.execute(channel, &gc, false).await {
                             Ok(CodeExecutionSuccess::OK) => {
-                                hwa::debug!("Control sending OK");
-                                let s = alloc::format!("ok; {}\n", gc.as_ref());
-                                processor.write(channel, s.as_str()).await;
+                                hwa::info!("Control sending OK");
+                                cfg_if::cfg_if! {
+                                    if #[cfg(feature="trace-commands")] {
+                                        let s = alloc::format!("ok; {}\n", gc.as_ref());
+                                        processor.write(channel, s.as_str()).await;
+                                    }
+                                    else {
+                                        processor.write(channel, "ok\n").await;
+                                    }
+                                }
+
                             }
                             Ok(CodeExecutionSuccess::QUEUED) => {
-                                hwa::debug!("Control sending OK (Q)");
-                                let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
-                                processor.write(channel, s.as_str()).await;
+                                hwa::info!("Control sending OK (Q) BEGIN");
+                                cfg_if::cfg_if! {
+                                    if #[cfg(feature="trace-commands")] {
+                                        let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
+                                        processor.write(channel, s.as_str()).await;
+                                    }
+                                    else {
+                                        processor.write(channel, "ok\n").await;
+                                    }
+                                }
+                                hwa::info!("Control sending OK (Q) END");
+
                             }
                             Ok(CodeExecutionSuccess::DEFERRED(_)) => {
-                                hwa::debug!("Control not sending (deferred)");
+                                hwa::info!("Control not sending (deferred)");
                             }
                             Ok(CodeExecutionSuccess::CONSUMED) => {
-                                hwa::debug!("Control not sending (implicitly consumed)");
+                                hwa::info!("Control not sending (implicitly consumed)");
                             }
                             Err(_e) => {
-                                hwa::debug!("Control sending ERR");
-                                let s = alloc::format!("Error; {} ({:?})\n", gc.as_ref(), _e);
+                                hwa::info!("Control sending ERR");
+                                let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
                                 processor.write(channel, s.as_str()).await;
                             }
                         }

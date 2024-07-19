@@ -18,6 +18,7 @@ homepage = "https://github.com/cbruiz/printhor"
 with-log = ["printhor-hwa-common/with-log"]
 with-serial-port-1 = ["async-std"]
 with-serial-port-2 = []
+with-serial-port-usb = []
 with-printjob = []
 with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
 with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
@@ -30,23 +31,30 @@ with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
 with-ps-on = []
+with-spi = []
+
+
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
 
 nightly = ["embassy-executor/nightly"]
-threaded = []
+executor-interrupt = []
 verbose-timings = []
 sdcard-uses-spi = []
 without-vref-int = []
 
-with-display = [
-    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
-    "printhor-hwa-common/with-ui",
-]
+#with-display = [
+#    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
+#    "printhor-hwa-common/with-ui",
+#]
 
 [dependencies]
 
 embassy-executor = { version = "0.5.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-24576", "integrated-timers"] }
-embassy-sync = { version = "0.5.0", features = ["std"] }
-embassy-time = { version = "0.3.0", features = ["std"] }
+embassy-sync = { version = "0", features = ["std"] }
+embassy-time = { version = "0", features = ["std"] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-embedded-hal = { version = "0.1.0", features = [] }
 
@@ -55,7 +63,7 @@ embedded-io = { version = "0.6.1", optional = true }
 
 async-std = { version = "1.12.0", optional = true}
 gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
-embedded-graphics-simulator = { version = "0.4.1", optional = true }
+#embedded-graphics-simulator = { version = "0.4.1", optional = true }
 log = { version = "0.4.20" }
 env_logger = { version = "0.10.1" }
 printhor-hwa-common = { version = "0.0"}
@@ -63,11 +71,11 @@ async-gcode = {version = "0", default-features = false, features=["parse-trailin
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ] }
 futures = { version = "0.3.30", default-features = false, features = [] }
-embedded-sdmmc = { version = "0.5.0", default-features = false, optional = true }
+embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
 
 lvgl = { version="0", default-features = false, features =[], optional = true }
-embedded-graphics = { version = "0.7.1", optional = true}
-embedded-graphics-core = {version = "0.3.3", optional = true }
+#embedded-graphics = { version = "0.8.1", optional = true}
+#embedded-graphics-core = {version = "0.4.0", optional = true }
 nb = {version = "1.1.0", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
 thread-priority = { version = "0.15"}

@@ -14,8 +14,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-#default = ["nucleo64-l476rg"]
-upstream-embassy = []
+#default = ["nucleo64-f410rb"]
 # Board kind
 nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
 nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
@@ -23,6 +22,7 @@ nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-aren
 with-serial-usb = ["embassy-usb"]
 with-printjob = []
 with-serial-port-1 = ["embedded-io-async"]
+with-serial-port-2 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]
 with-hot-end = ["embedded-hal"]
 with-hot-bed = ["embedded-hal"]
@@ -31,31 +31,42 @@ with-probe = ["embedded-hal"]
 with-endstops = []
 with-sdcard = []
 with-fan-layer = ["embedded-hal"]
+with-fan-extra-1 = []
 with-laser = ["embedded-hal"]
 with-defmt = ["printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = []
 with-ps-on = []
+without-ringbuffer = []
+
+with-x-axis = []
+with-y-axis = []
+with-z-axis = []
+with-e-axis = []
+
+debug-signals = []
 
 nightly = []
-threaded = ["embassy-executor/executor-interrupt"]
+executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue-128"]
+cooperative = ["embassy-executor/integrated-timers"]
 verbose-timings = []
 sdcard-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
 
 [dependencies]
-defmt = {version = "0.3", default-features = false}
+defmt = { version = "0.3", default-features = false }
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
+cortex-m-rt = { version = "0.7.0", default-features = false }
+alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
 
-embassy-stm32 = { version = "0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0", default-features = false, features = ["executor-thread", "arch-cortex-m", "integrated-timers"] }
-embassy-sync = { version = "0", features = ["defmt"] }
-embassy-time = { version = "0", features = ["defmt"] }
-embassy-futures = { version = "0", features = ["defmt"] }
-embassy-usb = { version = "0", features = [], optional = true }
+embassy-stm32 = { version = "*", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m"] }
+embassy-sync = { version = "*", features = ["defmt"] }
+embassy-time = { version = "*", features = ["defmt"] }
+embassy-futures = { version = "*", features = ["defmt"] }
+embassy-usb = { version = "*", features = [], optional = true }
 
-printhor-hwa-common = { version = "0.0", features = [] }
+printhor-hwa-common = { version = "*", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.17", default-features = false, features = [] }
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
@@ -64,6 +75,3 @@ embedded-io-async = { version = "0.6.1", default-features = false, optional = tr
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }
-
-[patch.crates-io]
-embassy-usb = { git = "https://github.com/cbruiz/embassy.git", branch="main" }

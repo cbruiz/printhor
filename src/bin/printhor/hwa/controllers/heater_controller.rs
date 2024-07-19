@@ -1,23 +1,23 @@
 //! Mostly functional
 use crate::hwa;
-use printhor_hwa_common::{CommChannel, ControllerRef, DeferAction, DeferChannelRef};
+use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
 use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
 use crate::hwa::controllers::pwm_controller::PwmController;
 #[allow(unused)]
 use crate::tgeo::ArithmeticOps;
 
-type AdcControllerRef<AdcPeri> = ControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
+type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
 
 pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
     where
         AdcPeri: crate::hwa::device::AdcTrait + 'static,
         AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
-        PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
+        PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
         <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
 
 {
     /// Shared Analog-Digital Converter controller to measure temperature
-    adc: ControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>,
+    adc: hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>,
     adc_pin: AdcPin,
     /// Precomputed ratio of volts per ADC unit
     v_ratio: f32,
@@ -43,7 +43,7 @@ impl<AdcPeri, AdcPin, PwmHwaDevice> HeaterController<AdcPeri, AdcPin, PwmHwaDevi
 where
     AdcPeri: crate::hwa::device::AdcTrait + 'static,
     AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal_02::Pwm<Duty=u16> + 'static,
+    PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
     crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
 {
@@ -77,8 +77,7 @@ where
                 let mut bus  = self.adc.lock().await;
                 cfg_if::cfg_if! {
                     if #[cfg(feature="enable_vrefint-with-delay")] {
-                        let mut delay = embassy_time::Delay;
-                        let mut vref_int = bus.enable_vrefint(&mut delay);
+                        let mut vref_int = bus.enable_vrefint();
                     }
                     else {
                         let mut vref_int = bus.enable_vrefint();
@@ -86,7 +85,7 @@ where
                     }
                 }
                 let vref_default = f32::from(hwa::ADC_VREF_DEFAULT_MV);
-                let vref_sample = f32::from(bus.read(&mut vref_int));
+                let vref_sample = f32::from(bus.blocking_read(&mut vref_int));
             }
         }
         self.v_ratio = vref_default / (vref_sample * 1000.0f32);
@@ -102,7 +101,7 @@ where
                 let value = bus.read(&mut self.adc_pin).await;
             }
             else {
-                let value = bus.read(&mut self.adc_pin);
+                let value = bus.blocking_read(&mut self.adc_pin);
             }
         }
         (self.current_temp, self.current_resistance) = self.convert_to_celcius(value.into());

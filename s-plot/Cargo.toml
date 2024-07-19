@@ -14,9 +14,20 @@ status = "experimental"
 
 [features]
 
-default = ["native", "printhor-hwa-common/with-log"]
+default = ["native",
+    "cornering",
+    "assert-motion",
+    "printhor-hwa-common/with-log", "with-motion", "printhor-hwa-common/with-motion"
+]
 # Hardware device features
 without-bootloader = []
+cornering = []
+assert-motion = []
+with-motion = []
+with-x-axis = [ "printhor-hwa-common/with-x-axis", "printhor-hwi_native/with-x-axis"]
+with-y-axis = [ "printhor-hwa-common/with-y-axis", "printhor-hwi_native/with-y-axis"]
+with-z-axis = [ "printhor-hwa-common/with-z-axis", "printhor-hwi_native/with-z-axis"]
+with-e-axis = [ "printhor-hwa-common/with-e-axis", "printhor-hwi_native/with-e-axis"]
 numerical-robusticity-check = []
 timing-stats = []
 
@@ -26,9 +37,11 @@ fixed-point-128-impl = []
 plot-motion-plan = []
 
 native = [
+    "printhor-hwi_native/with-log",
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
     "plot-motion-plan",
 ]
 
@@ -42,29 +55,31 @@ native = [
 futures = { version = "0.3.30", default-features = false, features = [] }
 futures-util = { version = "0.3.30", default-features = false, features = [] }
 strum = { version = "0.26.1", default-features = false, features = ["derive"] }
-rust_decimal = { version = "1.33.1", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { version = "1.33.1" }
-num-traits = {version = "0.2.17", default-features = false, features = [] }
+rust_decimal = { version = "1.35.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { version = "1.35.0" }
+num-traits = {version = "0.2.19", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = []}
 
 # Common base
-printhor-hwa-common = { version = "0.0", default-features = false, features = [] }
+printhor-hwa-common = { version = "*", default-features = false, features = [] }
 
 # Boards
-#printhor-hwi_native = { version = "0.0.4", optional = true }
+printhor-hwi_native = { version = "*", optional = true }
 
-log = { version = "0.4.21", default-features = false, features = [] }
+log = { version = "0.4.22", default-features = false, features = [] }
 env_logger = { version = "0.11.3", default-features = false, features = [] }
-gnuplot = {version = "0.0.39", default-features = false, features=[]}
+gnuplot = {version = "0.0.43", default-features = false, features=[]}
 
-embassy-futures = { version = "0.1.1", features = [] }
-embassy-sync = { version = "0.5.0", features = [] }
-embassy-time = { version = "0.3.0", features = ["mock-driver"] }
+embassy-futures = { version = "*", features = [] }
+embassy-sync = { version = "*", features = [] }
+embassy-time = { version = "*", features = [] }
 critical-section = { version = "1.1.2", features = ["std"] }
+embassy-executor = { version = "*", features = ["arch-std"] }
+async-gcode = {version = "0.3", features = ["optional-value", "parse-checksum", "parse-comments"]}
 
 # machinery
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
-bitflags = { version = "2.4.1", default-features = false, features = [] }
+bitflags = { version = "2.6.0", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0", features = [] }
 const_env = { version = "0.1" }
@@ -108,7 +123,11 @@ panic = "abort"
 [patch.crates-io]
 
 printhor-hwa-common = { path = "../printhor-hwa-common" }
-#printhor-hwi_native = { path = "../hwi-boards/printhor-hwi_native" }
-
+printhor-hwi_native = { path = "../hwi-boards/printhor-hwi_native" }
+embassy-executor = { path = "../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../libs/embassy/embassy-sync" }
+embassy-time = { path = "../libs/embassy/embassy-time" }
+embassy-futures = { path = "../libs/embassy/embassy-futures" }
+embassy-embedded-hal = { path = "../libs/embassy/embassy-embedded-hal" }
 #[workspace.vars]
 # TBD

@@ -8,13 +8,17 @@
 
 # Architecture
 
-TBD
+The Work-in-Progress architecture design
+
+![alt text](../design/printhor_motion_high_level_architecture.png "High Level Architecture (motion only as of now)")
 
 ## Event bus
 
 ## Deferred commands
 
 ## State machine
+
+
 
 ## Physics and mathematics
 

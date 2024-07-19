@@ -71,6 +71,18 @@ impl MockedIOPin {
         }
     }
 
+    pub fn toggle(&mut self) {
+        let state = self.is_high();
+        loop {
+            match self.global_state.try_lock() {
+                Ok(mut g) => return g.set(self.id, !state),
+                Err(_e) => {
+                    //panic!("Error setting low: {:?}", _e)
+                }
+            }
+        }
+    }
+
     pub fn is_set_high(&mut self) -> bool {
         self.is_high()
     }

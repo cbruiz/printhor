@@ -4,18 +4,28 @@ use crate::hwa;
 use crate::math;
 use crate::machine::MACHINE_INFO;
 
+#[allow(unused)]
+use printhor_hwa_common::StepperChannel;
+
+
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
-use alloc::format;
 #[allow(unused)]
 use hwa::{CommChannel, EventBusRef, EventFlags, EventStatus, DeferEvent, DeferAction};
 use math::Real;
 use strum::VariantNames;
+
 #[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
-#[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
-#[allow(unused)]
-use embedded_io_async::Write;
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
+    {
+        #[allow(unused)]
+        use embedded_io_async::Write;
+        #[allow(unused)]
+        use printhor_hwa_common::AsyncWrapper;
+    }
+}
 
 pub struct GCodeProcessorParams {
     pub event_bus: EventBusRef,
@@ -59,6 +69,7 @@ pub struct GCodeProcessor {
     #[cfg(feature = "with-ps-on")]
     pub ps_on: hwa::controllers::PsOnRef,
     #[cfg(feature = "with-probe")]
+    #[allow(unused)]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hot-end")]
     pub hotend: hwa::controllers::HotendControllerRef,
@@ -67,6 +78,7 @@ pub struct GCodeProcessor {
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
     #[cfg(feature = "with-fan-extra-1")]
+    #[allow(unused)]
     pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
     #[cfg(feature = "with-laser")]
     pub laser: hwa::controllers::LaserPwmControllerRef,
@@ -102,7 +114,11 @@ impl GCodeProcessor {
         }
     }
 
-    pub(crate) async fn write(&self, channel: CommChannel, _msg: &str) {
+    pub async fn write_ok(&self, channel: CommChannel) {
+        self.write(channel, "ok\n").await;
+    }
+
+    pub async fn write(&self, channel: CommChannel, _msg: &str) {
         match channel {
             #[cfg(feature = "with-serial-usb")]
             CommChannel::SerialUsb => {
@@ -110,39 +126,43 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
-                let _ = self.serial_port1_tx.lock().await.write(_msg.as_bytes()).await;
+
+                let mut mg = self.serial_port1_tx.lock().await;
+                let _ = mg.wrapped_write(_msg.as_bytes()).await;
+                mg.wrapped_flush().await;
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
-                let _ = self.serial_port2_tx.lock().await.write(_msg.as_bytes()).await;
+                let mut mg = self.serial_port2_tx.lock().await;
+                let _ = mg.wrapped_write(_msg.as_bytes()).await;
+                mg.wrapped_flush().await;
+
             }
             CommChannel::Internal => {}
         }
     }
 
     #[allow(unused)]
-    pub(crate) async fn flush(&self, channel: CommChannel) {
+    pub async fn flush(&self, channel: CommChannel) {
         match channel {
             #[cfg(feature = "with-serial-usb")]
             CommChannel::SerialUsb => {
-                let _ = self.serial_usb_tx.lock().await.write_packet(b"").await;
+                //let _ = self.serial_usb_tx.lock().await.write_packet(b"").await;
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
-                let _ = self.serial_port1_tx.lock().await.blocking_flush();
+                use printhor_hwa_common::AsyncWrapper;
+                let mut mg = self.serial_port1_tx.lock().await;
+                mg.wrapped_flush().await;
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
-                let _ = self.serial_port2_tx.lock().await.blocking_flush();
+                use printhor_hwa_common::AsyncWrapper;
+                let mut mg = self.serial_port2_tx.lock().await;
+                mg.wrapped_flush().await;
             }
             CommChannel::Internal => {}
         }
-    }
-
-    #[allow(unused)]
-    pub(crate) async fn writeln(&self, channel: CommChannel, msg: &str) {
-        let _ = self.write(channel, msg).await;
-        let _ = self.write(channel, "\n").await;
     }
 
     /***
@@ -165,8 +185,7 @@ impl GCodeProcessor {
             }
             GCode::G => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
-                    let _ = self.write(channel, "echo: ").await;
-                    let _ = self.writeln(channel, x).await;
+                    let _ = self.write(channel, alloc::format!("echo: {}\n", x).as_str()).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -175,7 +194,7 @@ impl GCodeProcessor {
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
                 }
-                Ok(self.motion_planner.plan(channel, &gc, blocking).await?)
+                Ok(self.motion_planner.plan(channel, &gc, blocking, &self.event_bus).await?)
             }
             #[cfg(feature = "with-motion")]
             GCode::G4 => {
@@ -185,7 +204,7 @@ impl GCodeProcessor {
                         .send(DeferEvent::AwaitRequested(DeferAction::Dwell, channel))
                         .await;
                 }
-                Ok(self.motion_planner.plan(channel, &gc, blocking).await?)
+                Ok(self.motion_planner.plan(channel, &gc, blocking, &self.event_bus).await?)
             }
             GCode::G10 => Ok(CodeExecutionSuccess::OK),
             GCode::G17 => Ok(CodeExecutionSuccess::OK),
@@ -198,7 +217,7 @@ impl GCodeProcessor {
                         return Err(CodeExecutionFailure::PowerRequired)
                     }
                     hwa::debug!("Planing homing");
-                    let result = self.motion_planner.plan(channel, &gc, blocking).await;
+                    let result = self.motion_planner.plan(channel, &gc, blocking, &self.event_bus).await;
                     hwa::debug!("Homing planned");
                     result
                 }
@@ -245,16 +264,16 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
-            GCode::G92 => {
-                // FIXME
-                self.motion_planner.set_last_planned_pos(&TVector::zero()).await;
+            GCode::G92(_pos) => {
+                self.motion_planner.set_last_planned_pos(&TVector{
+                    x: _pos.x, y: _pos.y, z: _pos.z, e: _pos.e,
+                }).await;
                 Ok(CodeExecutionSuccess::OK)
             },
             GCode::G94 => Ok(CodeExecutionSuccess::OK),
             GCode::M => {
                 for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
-                    let _ = self.write(channel,"echo: ").await;
-                    let _ = self.writeln(channel, x).await;
+                    let _ = self.write(channel, alloc::format!("echo: {}\n", x).as_str()).await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -274,9 +293,11 @@ impl GCodeProcessor {
                         embassy_time::Timer::after_secs(1).await;
                     }
                 }
-
-                #[cfg(feature = "with-trinamic")]
-                let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-trinamic")] {
+                        let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
+                    }
+                }
                 self.event_bus.publish_event(EventStatus::containing(EventFlags::ATX_ON)).await;
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -294,7 +315,7 @@ impl GCodeProcessor {
                 let stack_current = hwa::mem::stack_reservation_current_size();
                 let stack_max = hwa::mem::stack_reservation_max_size();
 
-                let z1 = format!(
+                let z1 = alloc::format!(
                     "echo: {}/{} {}% of heap usage\n",
                     heap_current,
                     heap_max,
@@ -302,7 +323,7 @@ impl GCodeProcessor {
                 );
                 self.write(channel, z1.as_str()).await;
 
-                let z2 = format!(
+                let z2 = alloc::format!(
                     "echo: {}/{} {}% of stack reservation\n",
                     stack_current,
                     stack_max,
@@ -328,7 +349,7 @@ impl GCodeProcessor {
                     #[cfg(feature = "with-hot-end")]
                     {
                         let mut h = self.hotend.lock().await;
-                        format!(
+                        alloc::format!(
                             " T:{} /{} T@:{} TZ:{}",
                             h.get_current_temp(),
                             h.get_target_temp(),
@@ -343,7 +364,7 @@ impl GCodeProcessor {
                     #[cfg(feature = "with-hot-bed")]
                     {
                         let mut h = self.hotbed.lock().await;
-                        format!(
+                        alloc::format!(
                             " B:{} /{} B@:{} BZ:{}",
                             h.get_current_temp(),
                             h.get_target_temp(),
@@ -354,7 +375,7 @@ impl GCodeProcessor {
                     #[cfg(not(feature = "with-hot-bed"))]
                     alloc::string::String::new()
                 };
-                let report = format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
+                let report = alloc::format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
@@ -402,15 +423,15 @@ impl GCodeProcessor {
                 let _pos = self.motion_planner.get_last_planned_pos().await
                     .unwrap_or(TVector::zero())
                     .rdp(6);
-                let _spos = self.motion_planner.get_last_planned_step_pos().await.unwrap_or(TVector::zero());
-                let z = format!("X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
+                let _spos = self.motion_planner.get_last_planned_real_pos().await.unwrap_or(TVector::zero());
+                let z = alloc::format!("X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
                                 _pos.x.unwrap_or(crate::math::ZERO),
                                 _pos.y.unwrap_or(crate::math::ZERO),
                                 _pos.z.unwrap_or(crate::math::ZERO),
                                 _pos.e.unwrap_or(crate::math::ZERO),
-                                _spos.x.unwrap_or(0),
-                                _spos.y.unwrap_or(0),
-                                _spos.z.unwrap_or(0),
+                                _spos.x.unwrap_or(crate::math::ZERO),
+                                _spos.y.unwrap_or(crate::math::ZERO),
+                                _spos.z.unwrap_or(crate::math::ZERO),
                 );
                 let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
@@ -432,7 +453,7 @@ impl GCodeProcessor {
                 let _ = self.write(channel, MACHINE_INFO.machine_uuid).await;
                 let _ = self.write(channel," EXTRUDER_COUNT: ").await;
                 let _ = self
-                    .write(channel, format!("{}\n", MACHINE_INFO.extruder_count).as_str())
+                    .write(channel, alloc::format!("{}\n", MACHINE_INFO.extruder_count).as_str())
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
@@ -443,19 +464,19 @@ impl GCodeProcessor {
             #[cfg(feature = "with-motion")]
             GCode::M119 => {
                 let mut d = self.motion_planner.motion_driver.lock().await;
-                let z = format!(
+                let z = alloc::format!(
                     "M119 X {} Y {} Z {}\n",
-                    if d.pins.x_endstop_pin.is_high() {
+                    if d.endstop_triggered(StepperChannel::X) {
                         "1"
                     } else {
                         "0"
                     },
-                    if d.pins.y_endstop_pin.is_high() {
+                    if d.endstop_triggered(StepperChannel::Y) {
                         "1"
                     } else {
                         "0"
                     },
-                    if d.pins.z_endstop_pin.is_high() {
+                    if d.endstop_triggered(StepperChannel::Z) {
                         "1"
                     } else {
                         "0"
@@ -517,7 +538,7 @@ impl GCodeProcessor {
                 if success {
                     let _ = self.write(channel, "ok; M502\n").await;
                 } else {
-                    let _ = self.write(channel, "Error; M502 (internal error)\n").await;
+                    let _ = self.write(channel, "error; M502 (internal error)\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }

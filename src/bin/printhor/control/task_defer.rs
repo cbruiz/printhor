@@ -2,9 +2,8 @@
 //! This module provides a task that notifies to the U(S)ART the acceptation or the completion of the
 //! GCodes that aren't processed immediately, so processor can accept more
 //! Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
-use crate::hwa;
 use embassy_time::Duration;
-use hwa::{CommChannel, DeferEvent, DeferAction};
+use crate::hwa::{CommChannel, DeferEvent, DeferAction};
 
 #[derive(Clone, Copy, Default)]
 struct SubscriptionCountings {
@@ -68,26 +67,34 @@ impl Subscriptions {
 }
 
 #[embassy_executor::task(pool_size=1)]
-pub async fn task_defer(processor: hwa::GCodeProcessor) -> ! {
-    hwa::debug!("task_defer started");
+pub async fn task_defer(processor: crate::hwa::GCodeProcessor) -> ! {
+    crate::hwa::debug!("task_defer started");
 
     let mut subscriptions = Subscriptions::new();
 
     loop {
         match embassy_time::with_timeout(Duration::from_secs(10), processor.motion_planner.defer_channel.receive()).await {
             Err(_) => {
-                hwa::trace!("task_defer timeout");
+                crate::hwa::trace!("task_defer timeout");
             }
 
             Ok(DeferEvent::AwaitRequested(action, channel)) => {
-                hwa::debug!("AwaitRequested {:?}", action);
+                crate::hwa::debug!("AwaitRequested {:?}", action);
                 let _ = subscriptions.update(action, channel, 1);
             }
             Ok(DeferEvent::Completed(action, channel)) => {
-                hwa::debug!("AwaitCompleted {:?}", action);
+                crate::hwa::debug!("AwaitCompleted {:?}", action);
                 if subscriptions.update(action, channel, -1) {
-                    let msg = alloc::format!("ok; {:?} completed @{:?}\n", action, channel);
-                    processor.write(channel, msg.as_str()).await;
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature="trace-commands")] {
+                            let msg = alloc::format!("ok; {:?} completed @{:?}\n", action, channel);
+                            processor.write(channel, msg.as_str()).await;
+                        }
+                        else {
+                            processor.write_ok(channel).await;
+                        }
+                    }
+
                 }
             }
         }

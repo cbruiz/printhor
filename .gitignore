@@ -22,3 +22,6 @@ data/*.puml
 .vscode
 patched-crates
 
+/s-plot/plot.pdf
+/design/*.drawio
+/hwi-boards/*/*.bin
