@@ -196,22 +196,20 @@ pub fn init() -> embassy_stm32::Peripherals {
             #[allow(unused)]
             use embassy_stm32::rcc::*;
 
-            /* TODO!
-
-            // SYSCFG: Dead battery pull-down resistors functionality should be enabled by default on startup
-            SYSCFG.cfgr1().modify(|w| {
-                w.set_ucpd1_strobe(true);
-                w.set_ucpd2_strobe(true);
-            });
-
             // RCC: Enable HSI and wait for it to be ready
             RCC.cr().modify(|w| {
                 w.set_hsion(true)
             });
             while !RCC.cr().read().hsirdy() {}
 
-            // CFGR: Write its default
-            RCC.cfgr().write(|_w| {
+            // RCC: Reset CFGR to defaults
+            RCC.cfgr().modify(|w| {
+                w.set_sw(rcc::vals::Sw::HSI);
+                w.set_hpre(rcc::vals::Hpre::DIV1);
+                w.set_ppre1(rcc::vals::Ppre::DIV1);
+                w.set_ppre2(rcc::vals::Ppre::DIV1);
+                w.set_adcpre(rcc::vals::Adcpre::DIV2);
+                w.set_mcosel(rcc::vals::Mcosel::DISABLE);
             });
 
             // RCC: Enable HSI only. Wait for PLL to be unready
@@ -221,12 +219,10 @@ pub fn init() -> embassy_stm32::Peripherals {
             while RCC.cr().read().pllrdy() {}
 
             // Reset values from datasheet
-            RCC.pllcfgr().write_value(rcc::regs::Pllcfgr(0x00001000));
-            RCC.gpioenr().write_value(rcc::regs::Gpioenr(0x00001000));
-            RCC.ahbenr().write_value(rcc::regs::Ahbenr(0x000000100));
-            RCC.apbenr1().write_value(rcc::regs::Apbenr1(0x000000000));
-            RCC.apbenr2().write_value(rcc::regs::Apbenr2(0x000000000));
-            */
+            //RCC.cir().write_value(rcc::regs::Cir(0x000000000));
+            RCC.ahbenr().write_value(rcc::regs::Ahbenr(0x000000014));
+            RCC.apb2enr().write_value(rcc::regs::Apb2enr(0x00000000));
+            RCC.apb1enr().write_value(rcc::regs::Apb1enr(0x00000000));
 
             unsafe {
                 defmt::info!("Setting VTOR...");

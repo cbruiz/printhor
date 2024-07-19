@@ -36,11 +36,12 @@ with-z-axis = []
 with-e-axis = []
 
 nightly = []
-executor-interrupt = ["embassy-executor/executor-interrupt"]
+executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue-128"]
+cooperative = ["embassy-executor/integrated-timers"]
 verbose-timings = []
 upstream-embassy = []
 sdcard-uses-spi = []
-
+without-bootloader = []
 
 
 [dependencies]
@@ -50,7 +51,7 @@ cortex-m-rt = { version = "0.7.0", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-stm32 = { version = "*", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m", "integrated-timers"] }
+embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m", "integrated-timers", "task-arena-size-16384"] }
 embassy-sync = { version = "*", features = [] }
 embassy-time = { version = "*", features = ["tick-hz-2_000_000"] }
 embassy-futures = { version = "*", features = [] }

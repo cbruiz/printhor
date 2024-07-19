@@ -32,7 +32,6 @@ EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 ###########################
 
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
-#runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset"
 runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset --log-format {L}{s}"
 rustflags = [ "-C", "linker=flip-link" ]
 
@@ -40,16 +39,22 @@ rustflags = [ "-C", "linker=flip-link" ]
 runner = "probe-rs run --chip STM32L476RGTx --disable-progressbars"
 
 [target.'cfg(all(any(board="skr_mini_e3_v2"), target_arch="arm", target_os="none"))']
-#runner = "probe-run --chip STM32F103RC"
+runner = "probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s} --base-address 08007000 --connect-under-reset"
+
+[target.'cfg(all(any(board="skr_mini_e3_v2-no-bootloader"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s}"
 
 [target.'cfg(all(any(board="skr_mini_e3_v3"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --base-address 08002000"
-#runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s}"
-#runner = "probe-run --chip STM32G0B1RETx"
+runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s} --base-address 08002000"
+
+[target.'cfg(all(any(board="skr_mini_e3_v3-no-bootloader"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s}"
 
 [target.'cfg(all(any(board="mks_robin_nano"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32F407VETx --disable-progressbars"
+runner = "probe-rs run --chip STM32F407VETx --disable-progressbars --log-format {L}{s} --base-address 08007000 --connect-under-reset"
+
+[target.'cfg(all(any(board="mks_robin_nano-no-bootloader"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32F407VETx --disable-progressbars --log-format {L}{s}"
 
 [target.'cfg(all(any(board="rp2040"), target_arch="arm", target_os="none"))']
 #runner = "probe-rs run --chip RP2040"

@@ -162,6 +162,62 @@ pub(crate) fn init_heap() -> () {
 pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
     crate::info!("Initializing...");
+
+
+    cfg_if::cfg_if! {
+        if #[cfg(not(feature = "without-bootloader"))] {
+
+            // Reset bootloader state
+
+            // RCC: Enable HSI and wait for it to be ready
+            embassy_stm32::pac::RCC.cr().modify(|w| {
+                w.set_hsion(true)
+            });
+            while !embassy_stm32::pac::RCC.cr().read().hsirdy() {}
+
+            // RCC: Reset CFGR to defaults
+            embassy_stm32::pac::RCC.cfgr().modify(|w| {
+                w.set_sw(embassy_stm32::pac::rcc::vals::Sw::HSI);
+                w.set_sws(embassy_stm32::pac::rcc::vals::Sw::HSI);
+                w.set_hpre(embassy_stm32::pac::rcc::vals::Hpre::DIV1);
+                w.set_ppre1(embassy_stm32::pac::rcc::vals::Ppre::DIV1);
+                w.set_ppre2(embassy_stm32::pac::rcc::vals::Ppre::DIV1);
+                w.set_mco1en(false);
+                w.set_mco2en(false);
+            });
+
+            // RCC: Enable HSI only. Wait for PLL to be unready
+            embassy_stm32::pac::RCC.cr().write(|w| {
+                w.set_hsion(true)
+            });
+            while embassy_stm32::pac::RCC.cr().read().pllrdy() {}
+
+            // Reset values from datasheet
+            embassy_stm32::pac::RCC.pllcfgr().write_value(embassy_stm32::pac::rcc::regs::Pllcfgr(0x24003010));
+            embassy_stm32::pac::RCC.cir().write_value(embassy_stm32::pac::rcc::regs::Cir(0x000000000));
+            embassy_stm32::pac::RCC.ahb1enr().write_value(embassy_stm32::pac::rcc::regs::Ahb1enr(0x00100000));
+            embassy_stm32::pac::RCC.ahb2enr().write_value(embassy_stm32::pac::rcc::regs::Ahb2enr(0x000000000));
+            embassy_stm32::pac::RCC.ahb3enr().write_value(embassy_stm32::pac::rcc::regs::Ahb3enr(0x000000000));
+            embassy_stm32::pac::RCC.apb1enr().write_value(embassy_stm32::pac::rcc::regs::Apb1enr(0x00000000));
+            embassy_stm32::pac::RCC.apb2enr().write_value(embassy_stm32::pac::rcc::regs::Apb2enr(0x00000000));
+            embassy_stm32::pac::RCC.ahb1lpenr().write_value(embassy_stm32::pac::rcc::regs::Ahb1lpenr(0x7E6791FF));
+            embassy_stm32::pac::RCC.ahb2lpenr().write_value(embassy_stm32::pac::rcc::regs::Ahb2lpenr(0x000000F1));
+            embassy_stm32::pac::RCC.ahb3lpenr().write_value(embassy_stm32::pac::rcc::regs::Ahb3lpenr(0x00000001));
+            embassy_stm32::pac::RCC.apb1lpenr().write_value(embassy_stm32::pac::rcc::regs::Apb1lpenr(0x36FEC9FF));
+            embassy_stm32::pac::RCC.apb2lpenr().write_value(embassy_stm32::pac::rcc::regs::Apb2lpenr(0x00075F33));
+            embassy_stm32::pac::RCC.plli2scfgr().write_value(embassy_stm32::pac::rcc::regs::Plli2scfgr(0x20003000));
+
+            unsafe {
+                defmt::info!("Setting VTOR...");
+                #[allow(unused_mut)]
+                let mut p = cortex_m::Peripherals::steal();
+                defmt::trace!("VTOR WAS AT: {} ", p.SCB.vtor.read());
+                p.SCB.vtor.write(0x7000);
+                defmt::trace!("VTOR SET TO: {} ", p.SCB.vtor.read());
+            }
+        }
+    }
+
     let mut config = Config::default();
     config.rcc.hse = Some(Hse {
         freq: embassy_stm32::time::Hertz(8_000_000),
