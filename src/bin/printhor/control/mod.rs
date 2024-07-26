@@ -5,7 +5,7 @@ use strum::{AsRefStr, VariantNames};
 #[cfg(feature = "with-motion")]
 pub mod motion_planning;
 #[cfg(feature = "with-motion")]
-pub(crate) mod motion_timing;
+pub mod motion_timing;
 
 mod processing;
 pub use processing::*;
@@ -281,7 +281,7 @@ pub enum GCode {
     M929 // Logging
 }
 
-#[cfg(feature = "defmt")]
+#[cfg(feature = "with-defmt")]
 impl crate::hwa::defmt::Format for GCode {
     fn format(&self, fmt: crate::hwa::defmt::Formatter) {
         let gcode_name: &str = self.as_ref();

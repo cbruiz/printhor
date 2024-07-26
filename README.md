@@ -71,7 +71,6 @@ A Discord server has been created for informal discussions. Otherwise, Github Is
 ```shell
 git clone https://github.com/cbruiz/printhor
 cd printhor
-git checkout feature/motion_accuracy_and_state_5
 git submodule update --init --recursive
 ```
 

@@ -28,7 +28,7 @@ use crate::hwa;
 use printhor_hwa_common::{DeferAction, DeferEvent};
 #[allow(unused)]
 use printhor_hwa_common::{EventStatus, EventFlags};
-use hwa::controllers::motion_segment::SegmentIterator;
+use hwa::controllers::motion::SegmentIterator;
 use crate::control::motion_planning::SCurveMotionProfile;
 use crate::math;
 
@@ -51,6 +51,8 @@ pub async fn task_stepper(
     motion_planner: hwa::controllers::MotionPlannerRef, _watchdog: hwa::WatchdogRef,
 ) -> ! {
     let mut steppers_off = true;
+
+    let mut real_steppper_pos: TVector<i32> = TVector::zero();
 
     let micro_segment_period_secs: Real = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6);
     let sampling_time: Real = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6);
@@ -141,7 +143,6 @@ pub async fn task_stepper(
                 {
                     Ok(motion_profile) => {
 
-
                         cfg_if::cfg_if!{
                             if #[cfg(feature="assert-motion")] {
                                 let mut steps_to_advance: TVector<u32> = TVector::zero();
@@ -228,13 +229,13 @@ pub async fn task_stepper(
 
                             if let Some((estimated_position, _)) = microsegment_iterator.next(micro_segment_real_time_rel) {
 
+                                let ds = estimated_position - p0;
                                 let tprev = micro_segment_real_time_rel - prev_time;
                                 let tmax = motion_profile.i7_end() - prev_time;
                                 let dt = tmax.min(tprev);
 
-                                hwa::trace!("at [{}] dt = {}", micro_segment_real_time_rel.rdp(4), dt.rdp(4));
+                                hwa::trace!("at [{}] dt = {} ds = {} v = {}", micro_segment_real_time_rel.rdp(4), dt.rdp(4), ds.rdp(4), (ds/dt).rdp(4));
 
-                                let ds = estimated_position - p0;
                                 p0 = estimated_position;
                                 let current_period_width_0 = if tprev < tmax {
                                     tprev
@@ -260,7 +261,7 @@ pub async fn task_stepper(
 
                                 cfg_if::cfg_if! {
                                     if #[cfg(feature="assert-motion")] {
-                                        steps_to_advance +=  microsegment_interpolator.delta;
+                                        steps_to_advance += microsegment_interpolator.delta;
                                     }
                                 }
 
@@ -290,7 +291,8 @@ pub async fn task_stepper(
                             // Microsegment end
                         }
                         hwa::debug!("\t\t+Advanced: {}", microsegment_interpolator.advanced_mm());
-                        hwa::info!("segment advanced: {}", microsegment_interpolator.advanced_steps());
+                        hwa::debug!(" + segment advanced: {}", microsegment_interpolator.advanced_steps());
+
 
                         ////
                         //// MICRO-SEGMENTS INTERP END
@@ -305,6 +307,35 @@ pub async fn task_stepper(
                             }
                         }
 
+                        {
+                            let adv_steps = microsegment_interpolator.advanced_steps();
+                            if let Some(c) = segment.segment_data.vdir.x {
+                                if c.is_defined_positive() {
+                                    real_steppper_pos.set_coord(CoordSel::X, Some(real_steppper_pos.x.unwrap() + adv_steps.x.unwrap().to_i32().unwrap()));
+                                }
+                                else {
+                                    real_steppper_pos.set_coord(CoordSel::X, Some(real_steppper_pos.x.unwrap() - adv_steps.x.unwrap().to_i32().unwrap()));
+                                }
+                            }
+                            if let Some(c) = segment.segment_data.vdir.y {
+                                if c.is_defined_positive() {
+                                    real_steppper_pos.set_coord(CoordSel::Y, Some(real_steppper_pos.y.unwrap() + adv_steps.y.unwrap().to_i32().unwrap()));
+                                }
+                                else {
+                                    real_steppper_pos.set_coord(CoordSel::Y, Some(real_steppper_pos.y.unwrap() - adv_steps.y.unwrap().to_i32().unwrap()));
+                                }
+                            }
+                            if let Some(c) = segment.segment_data.vdir.z {
+                                if c.is_defined_positive() {
+                                    real_steppper_pos.set_coord(CoordSel::Z, Some(real_steppper_pos.z.unwrap() + adv_steps.z.unwrap().to_i32().unwrap()));
+                                }
+                                else {
+                                    real_steppper_pos.set_coord(CoordSel::Z, Some(real_steppper_pos.z.unwrap() - adv_steps.z.unwrap().to_i32().unwrap()));
+                                }
+                            }
+                        }
+
+                        hwa::info!(" + POS: {}", real_steppper_pos);
                         let _moves_left = motion_planner.consume_current_segment_data(&event_bus).await;
                         motion_planner.defer_channel.send(DeferEvent::Completed(DeferAction::LinearMove, channel)).await;
                         event_bus.publish_event(EventStatus::not_containing(EventFlags::MOVING)).await;
@@ -360,6 +391,7 @@ pub async fn task_stepper(
                     }
                 }
                 motion_planner.consume_current_segment_data(&event_bus).await;
+                real_steppper_pos.set_coord(CoordSel::all(), Some(0));
                 hwa::debug!("Homing done");
             }
         }
@@ -468,7 +500,6 @@ impl LinearMicrosegmentStepInterpolator {
         self.multi_timer.set_channel_ticks( StepperChannel::E, tick_period_by_axis.e);
         //can_advance_more
         true
-
     }
 
     pub fn state(&self) -> &MultiTimer { &self.multi_timer }
@@ -515,6 +546,7 @@ pub mod test {
 
 
 use critical_section::{Mutex as CsMutex};
+use num_traits::ToPrimitive;
 use crate::hwa::drivers::motion_driver::MotionDriverRef;
 
 const TIMER_QUEUE_SIZE: usize = 4;

@@ -42,7 +42,7 @@ pub async fn task_control(
         match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode()).await {
             // Timeout
             Err(_) => {
-                hwa::info!("task_control: Timeout");
+                hwa::debug!("task_control: Timeout");
             }
             Ok((Err(GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);

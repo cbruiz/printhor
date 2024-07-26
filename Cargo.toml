@@ -110,9 +110,8 @@ integration-test = [
     #"plot-timings",
     "debug-skip-homing",
     #"numerical-robusticity-check",
-    "verbose-timings",
+    #"verbose-timings",
     "assert-motion",
-    #"no-real-time",
     "native",
 ]
 integration-test-m100 = []
@@ -127,6 +126,7 @@ integration-test-laser-engrave = []
 integration-test-benchy = []
 integration-test-pen = []
 integration-test-move-boundaries = []
+integration-test-move-boundaries-1 = []
 integration-test-trinamic = []
 
 fixed-point-128-impl = []
@@ -422,9 +422,9 @@ alloc-cortex-m = { version = "0.4.4", optional = true}
 critical-section = {version = "1.1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.5.0", default-features = false, features = [], optional = true }
+embassy-executor = { version = "0.6.0", default-features = false, features = [], optional = true }
 embassy-sync = { version = "0.6.0", features = [] }
-embassy-time = { version = "0.3.1", features = [] }
+embassy-time = { version = "*", features = [] }
 embassy-futures = { version = "0.1.1", features = [] }
 embassy-embedded-hal = { version = "0.1.0", features = [], optional = true }
 embassy-usb = { version = "*", features = [], optional = true }

@@ -24,12 +24,42 @@ without-bootloader = []
 cornering = []
 assert-motion = []
 with-motion = []
+with-serial-usb = []
+with-serial-port-1 = []
+with-serial-port-2 = []
+with-fan-layer = []
+with-fan-extra-1 = []
+with-trinamic = []
+with-laser = []
 with-x-axis = [ "printhor-hwa-common/with-x-axis", "printhor-hwi_native/with-x-axis"]
 with-y-axis = [ "printhor-hwa-common/with-y-axis", "printhor-hwi_native/with-y-axis"]
 with-z-axis = [ "printhor-hwa-common/with-z-axis", "printhor-hwi_native/with-z-axis"]
 with-e-axis = [ "printhor-hwa-common/with-e-axis", "printhor-hwi_native/with-e-axis"]
+with-hot-end = []
+with-hot-bed = []
+with-probe = []
+with-ps-on = []
+with-defmt = []
+grbl-compat = []
+with-sdcard = []
+trace-commands = []
+verbose-timings = []
+with-printjob = []
+integration-test = []
 numerical-robusticity-check = []
 timing-stats = []
+debug-skip-homming = []
+debug-signals = []
+pulsed = []
+sdcard-uses-spi = []
+debug-skip-homing = []
+with-display = []
+plot-timings = []
+with-spi = []
+skr_mini_e3 = []
+mks_robin_nano = []
+nucleo_64_arduino_cnc_hat = []
+tst-rp2040 = []
 
 float-point-f32-impl = []
 float-point-f64-impl = []
@@ -61,20 +91,20 @@ num-traits = {version = "0.2.19", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = []}
 
 # Common base
-printhor-hwa-common = { version = "*", default-features = false, features = [] }
+printhor-hwa-common = { version = "0.0.4", default-features = false, features = [] }
 
 # Boards
-printhor-hwi_native = { version = "*", optional = true }
+printhor-hwi_native = { version = "0.0.4" }
 
 log = { version = "0.4.22", default-features = false, features = [] }
 env_logger = { version = "0.11.3", default-features = false, features = [] }
 gnuplot = {version = "0.0.43", default-features = false, features=[]}
 
-embassy-futures = { version = "*", features = [] }
-embassy-sync = { version = "*", features = [] }
-embassy-time = { version = "*", features = [] }
+embassy-futures = { version = "0.1.1", features = [] }
+embassy-sync = { version = "0.6.0", features = [] }
+embassy-time = { version = "0.3.2", features = [] }
 critical-section = { version = "1.1.2", features = ["std"] }
-embassy-executor = { version = "*", features = ["arch-std"] }
+embassy-executor = { version = "0.6.0", features = [] }
 async-gcode = {version = "0.3", features = ["optional-value", "parse-checksum", "parse-comments"]}
 
 # machinery
@@ -128,6 +158,6 @@ embassy-executor = { path = "../libs/embassy/embassy-executor" }
 embassy-sync = { path = "../libs/embassy/embassy-sync" }
 embassy-time = { path = "../libs/embassy/embassy-time" }
 embassy-futures = { path = "../libs/embassy/embassy-futures" }
-embassy-embedded-hal = { path = "../libs/embassy/embassy-embedded-hal" }
+#embassy-embedded-hal = { path = "../libs/embassy/embassy-embedded-hal" }
 #[workspace.vars]
 # TBD

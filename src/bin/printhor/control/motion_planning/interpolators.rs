@@ -1,6 +1,7 @@
 use core::ops::Div;
 use core::ops::Neg;
 use crate::math::{HALF, ONE, PI, Real, TWO};
+#[allow(unused)]
 pub trait Interpolator {
 
     fn interpolate(&self, tp: &Real) -> Real;

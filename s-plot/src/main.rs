@@ -13,9 +13,7 @@ use prelude::*;
 
 use crate::tgeo::{TVector, CoordSel};
 use crate::control::motion_planning::*;
-use crate::hwa::controllers::motion::MotionPlanner;
-use crate::hwa::controllers::motion_segment::*;
-use crate::hwa::controllers::MotionConfig;
+use crate::hwa::controllers::motion;
 use crate::hwa::device::MotionDevice;
 use crate::hwa::drivers::{MotionDriver, MotionDriverParams};
 use crate::math::{RealInclusiveRange, TWO, ZERO};
@@ -24,8 +22,8 @@ use crate::prelude::control::{GCode, XYZ};
 use crate::prelude::control::motion_timing::StepPlanner;
 use crate::prelude::control::task_stepper::{LinearMicrosegmentStepInterpolator, SoftTimer, SoftTimerDriver};
 
-const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 200; // hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
-const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 20_000; // hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
+const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500; // hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000; // hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
 
 const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
 const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / STEPPER_PLANNER_CLOCK_FREQUENCY;
@@ -129,19 +127,24 @@ impl DataPoints {
         self.t0 = time;
         self.acc_time = Real::zero();
         self.acc_disp = Real::zero();
-
+        let last_spd_discrete = if self.last_spd_discrete.is_zero() {math::ZERO} else {self.last_spd_discrete};
+        //self.time_discrete_deriv.push(time.to_f64());
+        //self.spd_discrete.push(last_spd_discrete.to_f64());
     }
 
     pub fn real_end(&mut self, time: Real, s_id: u32) {
         let dt = self.acc_time;
         let spd = if dt.is_zero() {math::ZERO} else {self.acc_disp / dt};
-        self.time_discrete_deriv.push(((time + self.t0) / TWO).to_f64());
+        self.time_discrete_deriv.push((time - self.acc_time).to_f64());
+        self.spd_discrete.push(spd.to_f64());
+        self.time_discrete_deriv.push(time.to_f64());
         self.spd_discrete.push(spd.to_f64());
         self.last_spd_discrete = spd;
         hwa::trace!("S[{}] Time: {} dt: {}, spd: {}", s_id, time.rdp(4), dt.rdp(4), spd.rdp(2));
     }
 
     pub fn add_real(&mut self, time: Real, pos_discrete: Real, _s_id: u32) {
+
         self.time_discrete.push(time.to_f64());
 
         self.acc_time += time - self.last_time_discrete.unwrap_or(math::ZERO);
@@ -173,9 +176,9 @@ async fn main(spawner: embassy_executor::Spawner)
     let event_bus: EventBusRef = printhor_hwa_common::init_event_bus::<{hwa::MAX_STATIC_MEMORY}>();
     let defer_channel: DeferChannelRef = printhor_hwa_common::init_defer_channel::<{hwa::MAX_STATIC_MEMORY}>();
     let motion_config = {
-        static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> = TrackedStaticCell::new();
+        static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<motion::MotionConfig>> = TrackedStaticCell::new();
         hwa::ControllerRef::new(
-            MCS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionConfig", hwa::InterruptControllerMutex::new(MotionConfig::new()))
+            MCS.init::<{hwa::MAX_STATIC_MEMORY}>("MotionConfig", hwa::InterruptControllerMutex::new(hwa::controllers::motion::MotionConfig::new()))
         )
     };
     let motion_driver = {
@@ -188,11 +191,11 @@ async fn main(spawner: embassy_executor::Spawner)
     };
     let soft_timer = SoftTimer::new();
     soft_timer.setup(motion_driver.clone());
-    let mut motion_planner = MotionPlanner::new(defer_channel, motion_config, motion_driver);
+    let mut motion_planner = motion::MotionPlanner::new(defer_channel, motion_config, motion_driver);
 
-    const V_MAX:u32 = 200;
-    const A_MAX:u32 = 400;
-    const J_MAX:u32 = 800;
+    const V_MAX:u32 = 500;
+    const A_MAX:u32 = 10000;
+    const J_MAX:u32 = 20000;
 
     let constraints = Constraints{
         v_max: Real::from_lit(V_MAX.into(), 0),
@@ -206,50 +209,48 @@ async fn main(spawner: embassy_executor::Spawner)
     motion_planner.set_max_accel(TVector::from_coords(Some(A_MAX), Some(A_MAX), Some(A_MAX), Some(A_MAX))).await;
     motion_planner.set_max_jerk(TVector::from_coords(Some(J_MAX), Some(J_MAX), Some(J_MAX), Some(J_MAX))).await;
     motion_planner.set_steps_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(10, 0)).await;
-    motion_planner.set_usteps(8, 8, 8, 8).await;
+    motion_planner.set_usteps(16, 16, 16, 16).await;
 
     motion_planner.start(&event_bus).await;
 
+    {
+        let units_per_mm = motion_planner.get_steps_per_mm_as_vector().await;
+        let mm_per_unit = units_per_mm * motion_planner.get_usteps_as_vector().await;
+        let mm_per_step = TVector::one() / mm_per_unit;
+        hwa::info!("* mm_per_step: [{}] (== min speed mm/s)", mm_per_step);
+        hwa::info!("* sampling_time: {} s", sampling_time);
+        hwa::info!("* max speed: [{}] mm/s", TVector::one() / sampling_time * mm_per_step);
 
+    }
 
-
-    /*
-    let s1 = SCurveMotionProfile::compute(
-        Real::from_f32(1.0f32),
-        Real::from_f32(0.0f32),
-        Real::from_f32(0.0f32),
-        &constraints, true,
-    );
-     */
 
     // Starting motion logic
 
     //hwa::info!("Set origin to [0, 0, 0]");
     motion_planner.set_last_planned_pos(&TVector::zero()).await;
 
-
     //hwa::info!("Segment from [0, 0, 0] to [0, 100, 0] at 200 mm/s");
     let _r00 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(1), x: None, y: Some(Real::from_f32(100.0f32)), z: None, f:Some(Real::from_f32(200.0f32)),
+            ln: Some(1), x: None, y: Some(Real::from_f32(100.0f32)), z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
 
     let _r01 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(1), x: None, y: Some(Real::from_f32(0.0f32)), z: None, f:Some(Real::from_f32(200.0f32)),
+            ln: Some(1), x: None, y: Some(Real::from_f32(0.0f32)), z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
 
-
     // Enqueue 5 consecutive moves
     //hwa::info!("Segment from [0, 0, 0] to [1, 0, 0] at 200 mm/s");
+
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(1), x: Some(Real::from_f32(1.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+            ln: Some(1), x: Some(Real::from_f32(1.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
 
@@ -257,7 +258,7 @@ async fn main(spawner: embassy_executor::Spawner)
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(2), x: Some(Real::from_f32(2.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+            ln: Some(2), x: Some(Real::from_f32(2.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
 
@@ -265,21 +266,21 @@ async fn main(spawner: embassy_executor::Spawner)
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(3), x: Some(Real::from_f32(3.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+            ln: Some(3), x: Some(Real::from_f32(3.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
 
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(4), x: Some(Real::from_f32(4.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+            ln: Some(4), x: Some(Real::from_f32(4.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
 
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
         &GCode::G0(XYZ{
-            ln: Some(5), x: Some(Real::from_f32(5.0f32)), y: None, z: None, f:Some(Real::from_f32(100.0f32)),
+            ln: Some(5), x: Some(Real::from_f32(5.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
         }), false, &event_bus,
     ).await;
     //hwa::info!("pos = {}", motion_planner.get_last_planned_pos().await.unwrap());
@@ -291,7 +292,7 @@ async fn main(spawner: embassy_executor::Spawner)
         match motion_planner.get_current_segment_data(&event_bus).await {
             Some((segment, _)) => {
                 s_id += 1;
-                hwa::info!("Dequeuing move at t_ref={}", ref_time);
+                hwa::debug!("Dequeuing move at t_ref={}", ref_time);
                 data_points.seg_start(ref_time, total_disp, segment.segment_data.speed_enter_mms);
                 let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
 
@@ -309,7 +310,7 @@ async fn main(spawner: embassy_executor::Spawner)
                         let mm_per_step = TVector::one() / mm_per_unit;
 
                         let mut micro_segment_real_time_rel = micro_segment_period_secs;
-                        let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
+                        let mut microsegment_iterator = motion::SegmentIterator::new(&motion_profile, math::ZERO);
 
                         let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
                             segment.segment_data.vdir.abs(),
@@ -323,9 +324,11 @@ async fn main(spawner: embassy_executor::Spawner)
                         let mut us_id = 0;
                         let mut prev_time = math::ZERO;
                         let mut p0 = math::ZERO;
+                        // loop over the segment to interpolate micro-segments
                         loop {
                             us_id += 1;
                             if let Some((estimated_position, interval)) = microsegment_iterator.next(micro_segment_real_time_rel) {
+                                // Got a micro-segment
 
                                 let tprev = (micro_segment_real_time_rel - prev_time);
                                 let tmax = motion_profile.i7_end() - prev_time;
@@ -356,111 +359,80 @@ async fn main(spawner: embassy_executor::Spawner)
                                 prev_time += current_period_width;
                                 micro_segment_real_time_rel += current_period_width;
 
-                                let w = (current_period_width * Real::from_f32(1000000.)).round();
+                                let w = (current_period_width * math::ONE_MILLION).round();
 
+                                // Interpolate the micro-segment as regular pulse train along axes -> StepPlan
                                 let has_more = microsegment_interpolator.advance_to(estimated_position, w);
 
-                                hwa::info!("\tat t = {} [+{}]: p = {} [+ {} | {}] [i {}]",
+                                hwa::trace!("\tat t = {} [+{}]: p = {} [+ {} | {}] [i {}] v = {}",
                                     ref_time.rdp(4), current_period_width.rdp(4), (total_disp + estimated_position).rdp(6), estimated_position.rdp(6), microsegment_interpolator.advanced_steps(),
-                                    interval,
+                                    interval, ((ds/w) * math::ONE_MILLION).rdp(6)
                                 );
 
                                 data_points.add_ideal(ref_time, total_disp + estimated_position);
                                 max_pos_reached = estimated_position;
 
-                                /*
-                                hwa::info!("\t\tv = {} = {} / {} =  ds / dt",
-                                    ds,
-                                    current_period_width,
-                                    ds / current_period_width,
-                                );
-                                */
-
                                 hwa::trace!("\tAdvanced mm: {}", microsegment_interpolator.advanced_mm());
 
+                                let mut step_planner = StepPlanner::from(
+                                    microsegment_interpolator.state().clone(),
+                                    StepperChannel::empty(),
+                                    StepperChannel::empty(),
+                                );
 
-                                if true { //microsegment_interpolator.state().max_count() > 0 {
-                                    let mut step_planner = StepPlanner::from(
-                                        microsegment_interpolator.state().clone(),
-                                        StepperChannel::empty(),
-                                        StepperChannel::empty(),
-                                    );
+                                let mut pulse_offset = math::ZERO;
+                                let mut tick_count = 0;
 
-                                    let mut pulse_offset = math::ZERO;
-                                    let mut tick_count = 0;
+                                // Queue the StepPlan
+                                soft_timer.push(microsegment_interpolator.state().clone(), StepperChannel::empty(), StepperChannel::empty()).await;
 
-                                    soft_timer.push(microsegment_interpolator.state().clone(), StepperChannel::empty(), StepperChannel::empty()).await;
+                                let mut stop = false;
 
-                                    let mut stop = false;
+                                // Directly perform the consumption of the queued StepPlan
+                                // In real hardware, this is done by a dedicated handler invoked by ISR
+                                loop {
 
-                                    loop {
+                                    data_points.add_real(ref_time, total_disp_discrete, s_id);
 
-                                        data_points.add_real(ref_time, total_disp_discrete, s_id);
+                                    critical_section::with(|cs| {
+                                        let _t1 = embassy_time::Instant::now();
+                                        let mut counter: core::cell::RefMut<SoftTimerDriver> = soft_timer.0.borrow_ref_mut(cs);
+                                        counter.on_interrupt();
+                                        let _te1 = _t1.elapsed();
+                                        hwa::trace!("on_int took {}", _te1.as_micros());
 
-                                        critical_section::with(|cs| {
-                                            let _t1 = embassy_time::Instant::now();
-                                            let mut counter: core::cell::RefMut<SoftTimerDriver> = soft_timer.0.borrow_ref_mut(cs);
-                                            counter.on_interrupt();
-                                            let _te1 = _t1.elapsed();
-                                            hwa::trace!("on_int took {}", _te1.as_micros());
+                                        let x = TVector::from_coords(
+                                            Some(Real::from_lit(counter.pulses[0] as i64, 0)),
+                                            Some(Real::from_lit(counter.pulses[1] as i64, 0)),
+                                            Some(Real::from_lit(counter.pulses[2] as i64, 0)),
+                                            Some(Real::from_lit(counter.pulses[3] as i64, 0))
+                                        ) / mm_per_unit;
+                                        let norm = x.norm2().unwrap();
 
-                                            let x = TVector::from_coords(
-                                                Some(Real::from_lit(counter.pulses[0] as i64, 0)),
-                                                Some(Real::from_lit(counter.pulses[1] as i64, 0)),
-                                                Some(Real::from_lit(counter.pulses[2] as i64, 0)),
-                                                Some(Real::from_lit(counter.pulses[3] as i64, 0))
-                                            ) / mm_per_unit;
-                                            let norm = x.norm2().unwrap();
+                                        data_points.add_real(ref_time, total_disp_discrete + norm, s_id);
 
-                                            data_points.add_real(ref_time, total_disp_discrete + norm, s_id);
-
-                                            if counter.state == crate::control::task_stepper::State::Idle {
-                                                total_disp_discrete += norm;
-                                                stop = true;
-                                            }
-
-                                        });
-                                        pulse_offset += sampling_time;
-                                        if stop {
-                                            break;
+                                        if counter.state == crate::control::task_stepper::State::Idle {
+                                            total_disp_discrete += norm;
+                                            stop = true;
                                         }
+
+                                    });
+                                    pulse_offset += sampling_time;
+                                    if stop {
+                                        break;
                                     }
-
-                                    soft_timer.flush().await;
-
-
-                                    /*
-                                    loop {
-                                        match step_planner.next(STEPPER_PLANNER_CLOCK_PERIOD_US.into()) {
-                                            None => {
-                                                //hwa::info!("eof");
-                                                break;
-                                            }
-                                            Some(_t) => {
-                                                pulse_offset += sampling_time;
-
-                                                if !_t.is_empty() {
-                                                    total_disp_discrete += mm_per_step.sum();
-                                                }
-                                                data_points.add_real(ref_time - current_period_width + pulse_offset, total_disp_discrete, s_id);
-
-                                                tick_count += STEPPER_PLANNER_CLOCK_PERIOD_US;
-                                                if tick_count >= microsegment_interpolator.width() {
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                     */
                                 }
+                                soft_timer.flush().await;
+
                                 data_points.real_end(ref_time, s_id);
 
                                 if !has_more {
-                                    break;
+                                    // FIXME: Not sure if this is a good idea
+                                    //break;
                                 }
 
                             } else {
+                                // No more micro-segments left: We advanced completely
                                 break;
                             }
                         }
@@ -482,7 +454,7 @@ async fn main(spawner: embassy_executor::Spawner)
         }
     }
 
-    hwa::info!("Displ: {} mm, {} disc mm", total_disp, total_disp_discrete);
+    hwa::info!("Displ: {} mm, {} disc mm", total_disp.rdp(6), total_disp_discrete.rdp(6));
 
     {
         use gnuplot::{AxesCommon, Figure};
@@ -512,7 +484,7 @@ async fn main(spawner: embassy_executor::Spawner)
                     "{} Double S-Curve velocity profile\n[{} segments, {} mm displacement, {} hz interp, {} hz sampling]",
                     MATH_PRECISION,
                     s_id,
-                    total_disp,
+                    total_disp.rdp(6),
                     STEPPER_PLANNER_MICROSEGMENT_FREQUENCY,
                     STEPPER_PLANNER_CLOCK_FREQUENCY,
                 ).as_str()

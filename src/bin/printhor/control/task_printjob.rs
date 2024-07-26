@@ -73,7 +73,7 @@ pub async fn task_printjob(
                     current_line += 1;
                     match gcode_pull(&mut print_job_parser).await {
                         Ok(Some(gcode)) => {
-                            hwa::debug!("Line {}: Executing {}", current_line, gcode);
+                            hwa::info!("Line {}: Executing {}", current_line, gcode);
                             match processor.execute(CommChannel::Internal, &gcode, true).await {
                                 Ok(CodeExecutionSuccess::OK) => {
                                     hwa::debug!("Line {}: OK {} (I)", current_line, gcode);

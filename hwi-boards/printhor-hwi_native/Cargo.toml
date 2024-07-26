@@ -33,6 +33,8 @@ with-trinamic = ["tmc2209"]
 with-ps-on = []
 with-spi = []
 
+with-display = []
+
 
 with-x-axis = []
 with-y-axis = []
@@ -52,11 +54,11 @@ without-vref-int = []
 
 [dependencies]
 
-embassy-executor = { version = "0.5.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-24576", "integrated-timers"] }
-embassy-sync = { version = "0", features = ["std"] }
-embassy-time = { version = "0", features = ["std"] }
-embassy-futures = { version = "0.1.1", features = [] }
-embassy-embedded-hal = { version = "0.1.0", features = [] }
+embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384", "integrated-timers"] }
+embassy-sync = { version = "*", features = ["std"] }
+embassy-time = { version = "*", features = ["std"] }
+embassy-futures = { version = "*", features = [] }
+embassy-embedded-hal = { version = "*", features = [] }
 
 embedded-io-async = { version = "0.6.0", optional = true }
 embedded-io = { version = "0.6.1", optional = true }

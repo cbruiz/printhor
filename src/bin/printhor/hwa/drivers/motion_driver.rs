@@ -10,7 +10,8 @@ use crate::tgeo::{ArithmeticOps, CoordSel, TVector};
 use super::timing_monitor::*;
 use core::ops::Neg;
 
-use printhor_hwa_common::{InterruptControllerRef, StepperChannel};
+use hwa::{InterruptControllerRef, StepperChannel};
+use hwa::controllers::motion;
 
 pub type MotionDriverRef = InterruptControllerRef<MotionDriver>;
 
@@ -163,7 +164,7 @@ impl MotionDriver
         self.set_forward_direction(dir_fwd);
     }
 
-    pub async fn homing_action(&mut self, motion_config_ref: &hwa::controllers::MotionConfigRef) -> Result<TVector<Real>, TVector<Real>>{
+    pub async fn homing_action(&mut self, motion_config_ref: &motion::MotionConfigRef) -> Result<TVector<Real>, TVector<Real>>{
         hwa::info!("Homing");
 
         let mut homming_position = TVector::zero();

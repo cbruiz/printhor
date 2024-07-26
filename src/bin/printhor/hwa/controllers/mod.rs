@@ -13,6 +13,7 @@ pub use printer_controller::*;
 
 #[cfg(feature = "with-motion")]
 pub mod motion;
+
 #[cfg(feature = "with-trinamic")]
 mod trinamic_controller;
 #[cfg(feature = "with-probe")]
