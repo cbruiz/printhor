@@ -1,20 +1,19 @@
 //! Mostly functional
 use crate::hwa;
-use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
-use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
 use crate::hwa::controllers::pwm_controller::PwmController;
 #[allow(unused)]
 use crate::tgeo::ArithmeticOps;
+use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
+use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
 
 type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
 
 pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
-    where
-        AdcPeri: crate::hwa::device::AdcTrait + 'static,
-        AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
-        PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
-        <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy
-
+where
+    AdcPeri: crate::hwa::device::AdcTrait + 'static,
+    AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
+    PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
+    <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
 {
     /// Shared Analog-Digital Converter controller to measure temperature
     adc: hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>,
@@ -43,14 +42,16 @@ impl<AdcPeri, AdcPin, PwmHwaDevice> HeaterController<AdcPeri, AdcPin, PwmHwaDevi
 where
     AdcPeri: crate::hwa::device::AdcTrait + 'static,
     AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
+    PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
-    crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
+    crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>,
 {
-    pub fn new(adc: AdcControllerRef<AdcPeri>, adc_pin: AdcPin,
-               pwm: PwmController<PwmHwaDevice>,
-               defer_channel: DeferChannelRef,
-               thermistor_properties: &'static hwa::ThermistorProperties,
+    pub fn new(
+        adc: AdcControllerRef<AdcPeri>,
+        adc_pin: AdcPin,
+        pwm: PwmController<PwmHwaDevice>,
+        defer_channel: DeferChannelRef,
+        thermistor_properties: &'static hwa::ThermistorProperties,
     ) -> Self {
         Self {
             adc,
@@ -89,13 +90,18 @@ where
             }
         }
         self.v_ratio = vref_default / (vref_sample * 1000.0f32);
-        hwa::info!("ADC Initialized: refint_default = {}, vref_sample = {} | v_ratio = {} volts/adc_unit", vref_default, vref_sample, self.v_ratio);
+        hwa::info!(
+            "ADC Initialized: refint_default = {}, vref_sample = {} | v_ratio = {} volts/adc_unit",
+            vref_default,
+            vref_sample,
+            self.v_ratio
+        );
     }
 
     // Read temperature in celsius degrees
     #[inline]
     pub async fn read_temp(&mut self) -> f32 {
-        let mut bus  = self.adc.lock().await;
+        let mut bus = self.adc.lock().await;
         cfg_if::cfg_if! {
             if #[cfg(feature="adc-is-async")] {
                 let value = bus.read(&mut self.adc_pin).await;
@@ -115,23 +121,27 @@ where
 
     /// Returns if true when command is deferred (needs to delay ACK to reach the temperature).
     /// Automatically triggers a defer event
-    pub async fn set_target_temp(&mut self, channel: CommChannel, action: DeferAction, requested_temp: f32) -> bool {
-
+    pub async fn set_target_temp(
+        &mut self,
+        channel: CommChannel,
+        action: DeferAction,
+        requested_temp: f32,
+    ) -> bool {
         if requested_temp > 0.0f32 {
             let tdiff = requested_temp - self.target_temp;
             self.target_temp = requested_temp;
             self.on();
             if tdiff.abs() > 0.1f32 * self.target_temp {
                 self.commander_channel = channel;
-                self.defer_channel.send(AwaitRequested(action, channel)).await;
+                self.defer_channel
+                    .send(AwaitRequested(action, channel))
+                    .await;
                 true
-            }
-            else {
+            } else {
                 self.commander_channel = CommChannel::Internal;
                 false
             }
-        }
-        else {
+        } else {
             self.target_temp = 0.0f32;
             self.commander_channel = CommChannel::Internal;
             self.off().await;
@@ -147,26 +157,26 @@ where
             let tdiff = self.current_temp - self.target_temp;
             if tdiff.abs() > 0.1f32 * self.target_temp {
                 self.commander_channel = channel;
-                self.defer_channel.send(AwaitRequested(action, channel)).await;
+                self.defer_channel
+                    .send(AwaitRequested(action, channel))
+                    .await;
                 true
-            }
-            else {
+            } else {
                 self.commander_channel = CommChannel::Internal;
                 false
             }
-        }
-        else {
+        } else {
             false
         }
     }
 
-    // Updates the latest measured temperature in celsius degrees
+    // Updates the latest measured temperature in Celsius degrees
     #[inline]
     pub fn set_current_temp(&mut self, current_temp: f32) {
         self.current_temp = current_temp;
     }
 
-    // Gets the latest measured temperature in celsius degrees
+    // Gets the latest measured temperature in Celsius degrees
     #[inline]
     pub fn get_current_temp(&mut self) -> f32 {
         self.current_temp
@@ -199,9 +209,18 @@ where
     /// * Even though it's not strictly necessary, the measured resistance, which is really useful to debug and review
     fn convert_to_celcius(&self, sample: u16) -> (f32, f32) {
         let sample_v = f32::from(sample) * self.v_ratio;
-        let measured_resistance: f32 = (sample_v * self.thermistor_properties.r_pullup) / (( 4095.0f32 * self.v_ratio) - sample_v);
-        hwa::debug!("sample: {} : v: {} Volt measured_resistance: {} Ohm", sample, sample_v, measured_resistance);
-        let log_mr_by_r_nominal: f32 = micromath::F32::from(measured_resistance / self.thermistor_properties.r_nominal).ln().into();
+        let measured_resistance: f32 = (sample_v * self.thermistor_properties.r_pullup)
+            / ((4095.0f32 * self.v_ratio) - sample_v);
+        hwa::debug!(
+            "sample: {} : v: {} Volt measured_resistance: {} Ohm",
+            sample,
+            sample_v,
+            measured_resistance
+        );
+        let log_mr_by_r_nominal: f32 =
+            micromath::F32::from(measured_resistance / self.thermistor_properties.r_nominal)
+                .ln()
+                .into();
         (
             (1.0 / (log_mr_by_r_nominal / self.thermistor_properties.beta + 1.0 / 298.15)) - 273.15,
             measured_resistance,
@@ -210,7 +229,9 @@ where
 
     // Sends and consume the deferred action
     pub async fn flush_notification(&mut self, action: DeferAction) {
-        self.defer_channel.send(Completed(action, self.commander_channel)).await;
+        self.defer_channel
+            .send(Completed(action, self.commander_channel))
+            .await;
         self.commander_channel = CommChannel::Internal;
     }
 

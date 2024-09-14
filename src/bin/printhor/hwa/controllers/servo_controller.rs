@@ -18,14 +18,15 @@ pub struct ServoController {
 }
 
 impl ServoController {
-
-    pub fn new(servo: InterruptControllerRef<hwa::device::PwmServo>, channel: hwa::device::PwmChannel) -> Self {
-        Self {servo, channel}
+    pub fn new(
+        servo: InterruptControllerRef<hwa::device::PwmServo>,
+        channel: hwa::device::PwmChannel,
+    ) -> Self {
+        Self { servo, channel }
     }
 
     pub async fn set_angle(&mut self, angle: u16, sleep_us: u64) {
-
-        let max_duty = self.servo.lock().await.get_max_duty() as u32;
+        let max_duty = self.servo.lock().await.get_max_duty();
         // 100% duty period width (uS)
         const PERIOD: u32 = 20_000;
         // minimum pulse width (uS)
@@ -36,13 +37,21 @@ impl ServoController {
         let duty_us = MIN_PULSE_WIDTH + US_BY_DEG * (angle as u32);
         let duty_cnt = ((duty_us * max_duty) / PERIOD) as u16;
 
-        hwa::debug!("Set probe angle: {} : duty: {} uS | {} max_duty: {}", angle, duty_us, duty_cnt, max_duty);
+        hwa::debug!(
+            "Set probe angle: {} : duty: {} uS | {} max_duty: {}",
+            angle,
+            duty_us,
+            duty_cnt,
+            max_duty
+        );
         self.servo.lock().await.disable(self.channel);
-        self.servo.lock().await.set_duty(self.channel, duty_cnt.into());
+        self.servo
+            .lock()
+            .await
+            .set_duty(self.channel, duty_cnt.into());
         self.servo.lock().await.enable(self.channel);
         embassy_time::Timer::after_micros(sleep_us).await;
     }
-
 }
 
 impl ProbeTrait for ServoController {
@@ -73,4 +82,3 @@ impl ProbeTrait for ServoController {
         self.set_angle(60, sleep_us).await;
     }
 }
-

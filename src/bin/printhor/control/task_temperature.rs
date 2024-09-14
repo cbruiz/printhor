@@ -78,10 +78,10 @@
 //!  </dd>
 //! </dl>
 use crate::hwa;
-use hwa::{DeferAction, EventBusRef};
-use hwa::{EventStatus, EventFlags};
-use embassy_time::{Duration, Ticker};
 use crate::hwa::controllers::HeaterController;
+use embassy_time::{Duration, Ticker};
+use hwa::{DeferAction, EventBusRef};
+use hwa::{EventFlags, EventStatus};
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
@@ -105,7 +105,6 @@ struct HeaterStateMachine {
 
 impl HeaterStateMachine {
     fn new() -> Self {
-
         let mut pid: pid::Pid<f32> = pid::Pid::new(0.0f32, 100.0f32);
         pid.p(5.0f32, 100.0f32);
         pid.i(0.01f32, 100.0f32);
@@ -122,17 +121,17 @@ impl HeaterStateMachine {
     }
 
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
-        &mut self, ctrl: &hwa::InterruptControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
+        &mut self,
+        ctrl: &hwa::InterruptControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
         event_bus: &EventBusRef,
         temperature_flag: EventFlags,
         action: DeferAction,
-    )
-        where
-            AdcPeri: hwa::device::AdcTrait + 'static,
-            AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
-            PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
-            <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
-            crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>
+    ) where
+        AdcPeri: hwa::device::AdcTrait + 'static,
+        AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
+        PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
+        <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
+        crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>,
     {
         let mut m = ctrl.lock().await;
 
@@ -158,14 +157,20 @@ impl HeaterStateMachine {
                 let power = if delta > 0.0f32 {
                     if delta < 100.0f32 {
                         delta / 100.0f32
-                    }
-                    else {
+                    } else {
                         1.0f32
                     }
                 } else {
                     0.0f32
                 };
-                hwa::debug!("TEMP {} -> {}, {} P={} [{}]", self.last_temp, self.current_temp, delta, power, target_temp);
+                hwa::debug!(
+                    "TEMP {} -> {}, {} P={} [{}]",
+                    self.last_temp,
+                    self.current_temp,
+                    delta,
+                    power,
+                    target_temp
+                );
 
                 m.set_power((power * 100.0f32).to_u8().unwrap_or(0)).await;
 
@@ -191,43 +196,45 @@ impl HeaterStateMachine {
                     {
                         self.t0 = embassy_time::Instant::now();
                     }
-                    event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
+                    event_bus
+                        .publish_event(EventStatus::not_containing(temperature_flag))
+                        .await;
                 }
                 State::Maintaining => {
                     #[cfg(feature = "native")]
                     hwa::debug!("Temperature reached. Firing {:?}.", temperature_flag);
                     m.flush_notification(action).await;
-                    event_bus.publish_event(EventStatus::containing(temperature_flag)).await;
+                    event_bus
+                        .publish_event(EventStatus::containing(temperature_flag))
+                        .await;
                 }
                 State::Targeting => {
                     #[cfg(feature = "native")]
                     {
                         self.t0 = embassy_time::Instant::now();
                     }
-                    event_bus.publish_event(EventStatus::not_containing(temperature_flag)).await;
+                    event_bus
+                        .publish_event(EventStatus::not_containing(temperature_flag))
+                        .await;
                 }
             }
             self.state = new_state;
-        }
-        else if m.is_awaited() {
+        } else if m.is_awaited() {
             match new_state {
                 State::Maintaining => {
                     m.flush_notification(action).await;
                 }
                 _ => {}
             }
-
         }
     }
 }
 
-#[embassy_executor::task(pool_size=1)]
+#[embassy_executor::task(pool_size = 1)]
 pub async fn task_temperature(
     event_bus: EventBusRef,
-    #[cfg(feature = "with-hot-end")]
-    hotend_controller: hwa::controllers::HotendControllerRef,
-    #[cfg(feature = "with-hot-bed")]
-    hotbed_controller: hwa::controllers::HotbedControllerRef,
+    #[cfg(feature = "with-hot-end")] hotend_controller: hwa::controllers::HotendControllerRef,
+    #[cfg(feature = "with-hot-bed")] hotbed_controller: hwa::controllers::HotbedControllerRef,
 ) -> ! {
     hwa::debug!("temperature_task started");
 
@@ -241,8 +248,22 @@ pub async fn task_temperature(
     loop {
         ticker.next().await;
         #[cfg(feature = "with-hot-end")]
-        hotend_sm.update(&hotend_controller, &event_bus, EventFlags::HOTEND_TEMP_OK, DeferAction::HotendTemperature).await;
+        hotend_sm
+            .update(
+                &hotend_controller,
+                &event_bus,
+                EventFlags::HOTEND_TEMP_OK,
+                DeferAction::HotEndTemperature,
+            )
+            .await;
         #[cfg(feature = "with-hot-bed")]
-        hotbed_sm.update(&hotbed_controller, &event_bus, EventFlags::HOTBED_TEMP_OK, DeferAction::HotbedTemperature).await;
+        hotbed_sm
+            .update(
+                &hotbed_controller,
+                &event_bus,
+                EventFlags::HOTBED_TEMP_OK,
+                DeferAction::HotbedTemperature,
+            )
+            .await;
     }
 }

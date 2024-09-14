@@ -5,7 +5,6 @@ pub type MotionConfigMutexType = printhor_hwa_common::InterruptControllerMutexTy
 
 pub type MotionConfigRef = printhor_hwa_common::ControllerRef<MotionConfigMutexType, MotionConfig>;
 
-
 pub struct MotionConfig {
     pub max_accel: TVector<u32>,
     pub max_speed: TVector<u32>,

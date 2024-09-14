@@ -22,4 +22,3 @@ cfg_if::cfg_if! {
         pub const PI: Real = Real::from_f64(f64::consts::PI);
     }
 }
-

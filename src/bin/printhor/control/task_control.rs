@@ -1,7 +1,7 @@
-use crate::hwa;
-use hwa::{EventBusSubscriber, EventStatus, EventFlags};
-use crate::control::{GCode, GCodeLineParserError, GCodeMultiplexedInputStream};
 use crate::control::CodeExecutionSuccess;
+use crate::control::{GCode, GCodeLineParserError, GCodeMultiplexedInputStream};
+use crate::hwa;
+use hwa::{EventBusSubscriber, EventFlags, EventStatus};
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-printjob")] {
         use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
@@ -25,21 +25,27 @@ pub struct ControlTaskControllers {
     pub card_controller: hwa::controllers::CardController,
 }
 
-#[embassy_executor::task(pool_size=1)]
+#[embassy_executor::task(pool_size = 1)]
 pub async fn task_control(
     _processor: hwa::GCodeProcessor,
     mut _d: GCodeMultiplexedInputStream,
-    mut _c : ControlTaskControllers,
+    mut _c: ControlTaskControllers,
 ) {
-    let mut s: EventBusSubscriber<'static> = hwa::task_allocations::init_control_subscriber(_processor.event_bus.clone()).await;
+    let mut s: EventBusSubscriber<'static> =
+        hwa::task_allocations::init_control_subscriber(_processor.event_bus.clone()).await;
 
     let mut processor = _processor;
 
-    if s.ft_wait_for(EventStatus::containing(EventFlags::SYS_READY)).await.is_err() {
+    if s.ft_wait_for(EventStatus::containing(EventFlags::SYS_READY))
+        .await
+        .is_err()
+    {
         crate::initialization_error()
     }
     loop {
-        match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode()).await {
+        match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode())
+            .await
+        {
             // Timeout
             Err(_) => {
                 hwa::debug!("task_control: Timeout");
@@ -71,7 +77,7 @@ pub async fn task_control(
                     #[cfg(feature = "grbl-compat")]
                     GCode::STATUS => {
                         // TODO provide GRBL compatibility status
-                        processor.write("<Idle|MPos:0.000,0.000,0.000|Pn:XP|FS:0,0|WCO:0.000,0.000,0.000>\n").await;
+                        processor.write(channel, "<Idle|MPos:0.000,0.000,0.000|Pn:XP|FS:0,0|WCO:0.000,0.000,0.000>\n").await;
                     }
                     #[cfg(feature = "with-sdcard")]
                     GCode::M20(path) => {
@@ -85,13 +91,14 @@ pub async fn task_control(
                                             //crate::debug!("got a result");
                                             match result {
                                                 Some(entry) => {
-                                                    let s = alloc::format!("echo: F\"{}\" {} {} ; M20 \n",
-                                                                           entry.name,
-                                                                           match entry.entry_type {
-                                                                               SDEntryType::FILE => "A",
-                                                                               SDEntryType::DIRECTORY => "D",
-                                                                           },
-                                                                           entry.size
+                                                    let s = alloc::format!(
+                                                        "echo: F\"{}\" {} {} ; M20 \n",
+                                                        entry.name,
+                                                        match entry.entry_type {
+                                                            SDEntryType::FILE => "A",
+                                                            SDEntryType::DIRECTORY => "D",
+                                                        },
+                                                        entry.size
                                                     );
                                                     processor.write(channel, s.as_str()).await;
                                                     //crate::debug!("sent to uart");
@@ -101,31 +108,36 @@ pub async fn task_control(
                                                     break;
                                                 }
                                             }
-                                        },
+                                        }
                                         Err(_e) => {
-                                            let s = alloc::format!("Error; M20; Error listing: {:?}\n", _e);
+                                            let s = alloc::format!(
+                                                "Error; M20; Error listing: {:?}\n",
+                                                _e
+                                            );
                                             processor.write(channel, s.as_str()).await;
                                         }
                                     }
                                 }
                                 it.close().await;
                                 processor.write(channel, "ok; M20\n").await;
-                            },
+                            }
                             Err(_e) => {
                                 let s = alloc::format!("Error; M20 (Unable to list: {:?})\n", _e);
                                 processor.write(channel, s.as_str()).await;
                             }
                         }
-                    },
+                    }
                     #[cfg(feature = "with-printjob")]
                     GCode::M23(f) => {
-                        match _c.printer_controller.set(
-                            PrinterControllerEvent::SetFile(
-                                f.map_or(alloc::string::String::from("default"),
-                                         |s| { alloc::string::String::from(s.as_str()) }
-                                ),
-                            )
-                        ).await {
+                        match _c
+                            .printer_controller
+                            .set(PrinterControllerEvent::SetFile(
+                                f.map_or(alloc::string::String::from("default"), |s| {
+                                    alloc::string::String::from(s.as_str())
+                                }),
+                            ))
+                            .await
+                        {
                             Ok(_f) => {
                                 hwa::info!("ok; M23");
                             }
@@ -134,10 +146,14 @@ pub async fn task_control(
                                 processor.write(channel, s.as_str()).await;
                             }
                         }
-                    },
+                    }
                     #[cfg(feature = "with-printjob")]
                     GCode::M24 => {
-                        match _c.printer_controller.set(PrinterControllerEvent::Resume).await {
+                        match _c
+                            .printer_controller
+                            .set(PrinterControllerEvent::Resume)
+                            .await
+                        {
                             Ok(_f) => {
                                 hwa::info!("ok; M24");
                             }
@@ -146,10 +162,14 @@ pub async fn task_control(
                                 processor.write(channel, s.as_str()).await;
                             }
                         }
-                    },
+                    }
                     #[cfg(feature = "with-printjob")]
                     GCode::M25 => {
-                        match _c.printer_controller.set(PrinterControllerEvent::Pause).await {
+                        match _c
+                            .printer_controller
+                            .set(PrinterControllerEvent::Pause)
+                            .await
+                        {
                             Ok(_f) => {
                                 hwa::info!("ok. M25");
                             }
@@ -158,49 +178,45 @@ pub async fn task_control(
                                 processor.write(channel, s.as_str()).await;
                             }
                         }
-                    },
-                    _ => {
-                        match processor.execute(channel, &gc, false).await {
-                            Ok(CodeExecutionSuccess::OK) => {
-                                hwa::info!("Control sending OK");
-                                cfg_if::cfg_if! {
-                                    if #[cfg(feature="trace-commands")] {
-                                        let s = alloc::format!("ok; {}\n", gc.as_ref());
-                                        processor.write(channel, s.as_str()).await;
-                                    }
-                                    else {
-                                        processor.write(channel, "ok\n").await;
-                                    }
+                    }
+                    _ => match processor.execute(channel, &gc, false).await {
+                        Ok(CodeExecutionSuccess::OK) => {
+                            hwa::info!("Control sending OK");
+                            cfg_if::cfg_if! {
+                                if #[cfg(feature="trace-commands")] {
+                                    let s = alloc::format!("ok; {}\n", gc.as_ref());
+                                    processor.write(channel, s.as_str()).await;
                                 }
-
-                            }
-                            Ok(CodeExecutionSuccess::QUEUED) => {
-                                hwa::info!("Control sending OK (Q) BEGIN");
-                                cfg_if::cfg_if! {
-                                    if #[cfg(feature="trace-commands")] {
-                                        let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
-                                        processor.write(channel, s.as_str()).await;
-                                    }
-                                    else {
-                                        processor.write(channel, "ok\n").await;
-                                    }
+                                else {
+                                    processor.write(channel, "ok\n").await;
                                 }
-                                hwa::info!("Control sending OK (Q) END");
-
-                            }
-                            Ok(CodeExecutionSuccess::DEFERRED(_)) => {
-                                hwa::info!("Control not sending (deferred)");
-                            }
-                            Ok(CodeExecutionSuccess::CONSUMED) => {
-                                hwa::info!("Control not sending (implicitly consumed)");
-                            }
-                            Err(_e) => {
-                                hwa::info!("Control sending ERR");
-                                let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
-                                processor.write(channel, s.as_str()).await;
                             }
                         }
-                    }
+                        Ok(CodeExecutionSuccess::QUEUED) => {
+                            hwa::info!("Control sending OK (Q) BEGIN");
+                            cfg_if::cfg_if! {
+                                if #[cfg(feature="trace-commands")] {
+                                    let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
+                                    processor.write(channel, s.as_str()).await;
+                                }
+                                else {
+                                    processor.write(channel, "ok\n").await;
+                                }
+                            }
+                            hwa::info!("Control sending OK (Q) END");
+                        }
+                        Ok(CodeExecutionSuccess::DEFERRED(_)) => {
+                            hwa::info!("Control not sending (deferred)");
+                        }
+                        Ok(CodeExecutionSuccess::CONSUMED) => {
+                            hwa::info!("Control not sending (implicitly consumed)");
+                        }
+                        Err(_e) => {
+                            hwa::info!("Control sending ERR");
+                            let s = alloc::format!("error; {} ({:?})\n", gc.as_ref(), _e);
+                            processor.write(channel, s.as_str()).await;
+                        }
+                    },
                 }
             }
         }

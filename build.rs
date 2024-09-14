@@ -2,7 +2,6 @@
 use std::io::Write;
 
 fn main() {
-
     cfg_if::cfg_if! {
         if #[cfg(feature="native")] {
 

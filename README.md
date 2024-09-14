@@ -63,7 +63,7 @@ Assuming the following maturity convention:
 
 # Help wanted
 If you are interested in this project and want to collaborate, you are welcome.
-A Discord server has been created for informal discussions. Otherwise, Github Issues and Pull Requests are preferred.  
+A Discord server has been created for informal discussions. Otherwise, GitHub Issues and Pull Requests are preferred.  
 [![Discord Banner 4](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=banner4)](https://discord.gg/VSag6T4KS6)
 
 # Checkout
@@ -168,7 +168,6 @@ As Vector:
 <object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
   <embed src="./design/motion_plan.pdf">
     <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
-  </embed>
 </object>
 
 There are (currently) two plots:

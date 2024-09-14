@@ -2,8 +2,8 @@
 //! This module provides a task that notifies to the U(S)ART the acceptation or the completion of the
 //! GCodes that aren't processed immediately, so processor can accept more
 //! Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
+use crate::hwa::{CommChannel, DeferAction, DeferEvent};
 use embassy_time::Duration;
-use crate::hwa::{CommChannel, DeferEvent, DeferAction};
 
 #[derive(Clone, Copy, Default)]
 struct SubscriptionCountings {
@@ -18,62 +18,54 @@ struct SubscriptionCountings {
 }
 
 struct Subscriptions {
-    channel_counts:  [SubscriptionCountings; CommChannel::count() - 1],
+    channel_counts: [SubscriptionCountings; CommChannel::count() - 1],
 }
 
 impl Subscriptions {
     fn new() -> Self {
         Self {
-            channel_counts: [SubscriptionCountings::default(); CommChannel::count() - 1]
+            channel_counts: [SubscriptionCountings::default(); CommChannel::count() - 1],
         }
     }
 
     fn update(&mut self, action: DeferAction, channel: CommChannel, increment: i8) -> bool {
         if let Some(counts) = self.channel_counts.get_mut(CommChannel::index_of(channel)) {
             let counter = match action {
-                DeferAction::Homing => {
-                    &mut counts.num_homes
-                }
-                DeferAction::RapidMove => {
-                    &mut counts.num_rapid
-                }
-                DeferAction::LinearMove => {
-                    &mut counts.num_linear
-                }
-                DeferAction::Dwell => {
-                    &mut counts.num_dwell
-                }
+                DeferAction::Homing => &mut counts.num_homes,
+                DeferAction::RapidMove => &mut counts.num_rapid,
+                DeferAction::LinearMove => &mut counts.num_linear,
+                DeferAction::Dwell => &mut counts.num_dwell,
                 #[cfg(feature = "with-hot-end")]
-                DeferAction::HotendTemperature => {
-                    &mut counts.num_hotend
-                }
+                DeferAction::HotEndTemperature => &mut counts.num_hotend,
                 #[cfg(feature = "with-hot-bed")]
-                DeferAction::HotbedTemperature => {
-                    &mut counts.num_hotbed
-                }
+                DeferAction::HotbedTemperature => &mut counts.num_hotbed,
             };
             let new_value = *counter as i8 + increment;
-            if new_value < 0 {
+            return if new_value < 0 {
                 *counter = 0;
-                return false;
-            }
-            else {
+                false
+            } else {
                 *counter = new_value as u8;
-                return true;
+                true
             }
         }
         false
     }
 }
 
-#[embassy_executor::task(pool_size=1)]
+#[embassy_executor::task(pool_size = 1)]
 pub async fn task_defer(processor: crate::hwa::GCodeProcessor) -> ! {
     crate::hwa::debug!("task_defer started");
 
     let mut subscriptions = Subscriptions::new();
 
     loop {
-        match embassy_time::with_timeout(Duration::from_secs(10), processor.motion_planner.defer_channel.receive()).await {
+        match embassy_time::with_timeout(
+            Duration::from_secs(10),
+            processor.motion_planner.defer_channel.receive(),
+        )
+        .await
+        {
             Err(_) => {
                 crate::hwa::trace!("task_defer timeout");
             }
@@ -94,7 +86,6 @@ pub async fn task_defer(processor: crate::hwa::GCodeProcessor) -> ! {
                             processor.write_ok(channel).await;
                         }
                     }
-
                 }
             }
         }

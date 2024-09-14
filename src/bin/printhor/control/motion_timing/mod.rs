@@ -1,5 +1,5 @@
-use printhor_hwa_common::StepperChannel;
 use crate::tgeo::{CoordSel, TVector};
+use printhor_hwa_common::StepperChannel;
 
 #[derive(Clone, Copy)]
 pub struct ChannelStatus {
@@ -10,7 +10,7 @@ pub struct ChannelStatus {
 
 impl ChannelStatus {
     pub const fn new(name: StepperChannel, width: u32) -> Self {
-        Self{
+        Self {
             next_tick: 0,
             width,
             name,
@@ -36,7 +36,7 @@ cfg_if::cfg_if! {
 /// A utility to feed forward a uniformly distributed pulse train at different rates by channel
 ///
 /// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
-/// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](MultiTimer::new())
+/// another (time) width is added. Iterator ends when it reaches its maximal width [`interval_width`](MultiTimer::new())
 ///
 /// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
 /// - Each pulse period (pulse width) is: **`t=T/x`**.
@@ -69,7 +69,6 @@ impl MultiTimer {
     }
 
     pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u32>) {
-
         #[cfg(feature = "with-x-axis")]
         if channel.contains(StepperChannel::X) {
             match ticks {
@@ -132,7 +131,7 @@ impl MultiTimer {
 /// A utility to feed forward a uniformly distributed pulse train at different rates by channel
 ///
 /// Basically, it works like a set of reloading timers. When a (time) width is reached in a channel,
-/// another (time) width is added. Iterator ends when it reach it's maximal width [`interval_width`](crate::control::motion_timing::MultiTimer::new())
+/// another (time) width is added. Iterator ends when it reaches its maximal width [`interval_width`](crate::control::motion_timing::MultiTimer::new())
 ///
 /// In order for the pulses to be equidistant within the same rate; assuming **`x`** as number of pulses and **`T`** the period to uniform distribute them:
 /// - Each pulse period (pulse width) is: **`t=T/x`**.
@@ -163,17 +162,17 @@ impl crate::control::motion_timing::StepPlanner {
                 #[cfg(feature = "with-z-axis")]
                 None,
                 #[cfg(feature = "with-e-axis")]
-                    None,
+                None,
             ],
             stepper_enable_flags: StepperChannel::UNSET,
             stepper_dir_fwd_flags: StepperChannel::UNSET,
         }
     }
 
-    pub fn from(multi_timer: MultiTimer,
-                      stepper_enable_flags: StepperChannel,
-                      stepper_dir_fwd_flags: StepperChannel,
-
+    pub fn from(
+        multi_timer: MultiTimer,
+        stepper_enable_flags: StepperChannel,
+        stepper_dir_fwd_flags: StepperChannel,
     ) -> Self {
         let mut instance = Self {
             interval_width: multi_timer.width,
@@ -191,11 +190,8 @@ impl crate::control::motion_timing::StepPlanner {
         self.ref_time = 0;
         for channel in self.channels.iter_mut() {
             match channel.as_mut() {
-                None => {
-                }
-                Some(w) => {
-                    w.next_tick = (w.width) >> 1
-                }
+                None => {}
+                Some(w) => w.next_tick = (w.width) >> 1,
             }
         }
     }
@@ -205,9 +201,12 @@ impl crate::control::motion_timing::StepPlanner {
         let mut triggered_channels = StepperChannel::empty();
         for channel in self.channels.iter_mut() {
             if let Some(_ch) = channel.as_mut() {
-                if _ch.next_tick <= self.ref_time  {
+                if _ch.next_tick <= self.ref_time {
                     if _ch.width < step_width {
-                        unreachable!("Feedrate exceeded: width: {} max: {}", _ch.width, step_width);
+                        unreachable!(
+                            "Feedrate exceeded: width: {} max: {}",
+                            _ch.width, step_width
+                        );
                     }
                     _ch.next_tick += _ch.width;
                     let coord: CoordSel = _ch.name.into();

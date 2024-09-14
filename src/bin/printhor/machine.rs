@@ -2,16 +2,14 @@
 use crate::hwa;
 
 /// The Machine metadata info structure
-pub struct MachineInfo
-{
-
-    pub firmware_name: & 'static str,
-    pub firmware_version: & 'static str,
-    pub firmware_url: & 'static str,
-    pub machine_type: & 'static str,
-    pub machine_board: & 'static str,
-    pub machine_processor: & 'static str,
-    pub machine_uuid: & 'static str,
+pub struct MachineInfo {
+    pub firmware_name: &'static str,
+    pub firmware_version: &'static str,
+    pub firmware_url: &'static str,
+    pub machine_type: &'static str,
+    pub machine_board: &'static str,
+    pub machine_processor: &'static str,
+    pub machine_uuid: &'static str,
     pub extruder_count: u8,
 }
 

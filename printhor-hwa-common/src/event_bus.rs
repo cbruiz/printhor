@@ -5,9 +5,9 @@ use core::ops::{BitAnd, BitOr, BitXor};
 use crate::{TrackedStaticCell, ControllerMutex, ControllerRef, InterruptControllerMutexType};
 use bitflags::bitflags;
 
-pub type PubSubType = embassy_sync::pubsub::PubSubChannel<crate::InterruptControllerMutexType, EventFlags, 1, 6, 1>;
-pub type PublisherType = embassy_sync::pubsub::Publisher<'static, crate::InterruptControllerMutexType, EventFlags, 1, 6, 1>;
-pub type SubscriberType<'a> = embassy_sync::pubsub::Subscriber<'a, crate::InterruptControllerMutexType, EventFlags, 1, 6, 1>;
+pub type PubSubType = embassy_sync::pubsub::PubSubChannel<InterruptControllerMutexType, EventFlags, 1, 6, 1>;
+pub type PublisherType = embassy_sync::pubsub::Publisher<'static, InterruptControllerMutexType, EventFlags, 1, 6, 1>;
+pub type SubscriberType<'a> = embassy_sync::pubsub::Subscriber<'a, InterruptControllerMutexType, EventFlags, 1, 6, 1>;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq)]
@@ -61,7 +61,7 @@ impl EventBus {
 }
 
 pub struct EventBusRef {
-    instance: ControllerRef<crate::InterruptControllerMutexType, EventBus>,
+    instance: ControllerRef<InterruptControllerMutexType, EventBus>,
 }
 
 pub struct EventBusSubscriber<'a> {

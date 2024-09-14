@@ -22,4 +22,3 @@ cfg_if::cfg_if! {
         pub const PI: Real = Real::from_fixed(rust_decimal::Decimal::PI);
     }
 }
-

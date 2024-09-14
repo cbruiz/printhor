@@ -1,37 +1,36 @@
-/// Based on https://github.com/yuri91/ili9341-rs
-
-use crate::{hwa, info};
 #[cfg(feature = "with-lvgl")]
-use lvgl::core::{Lvgl, Display, Screen};
-use embedded_graphics_core::pixelcolor::{Rgb565, RgbColor};
-use core::mem::MaybeUninit;
-use core::iter::once;
+use crate::display::ui;
+#[cfg(feature = "with-lvgl")]
+use crate::display::ui::MotionScreen;
+use crate::hwa::EventBusRef;
+use crate::hwi;
+use crate::hwi::device::SPIDevice;
+use crate::hwi::{ControllerMutexType, IODevices, SpiControllerRef};
+use crate::machine::MACHINE_INFO;
+/// Based on https://github.com/yuri91/ili9341-rs
+use crate::{hwa, info};
 use core::cell::RefCell;
 use core::cell::RefMut;
+use core::iter::once;
+use core::mem::MaybeUninit;
 use core::slice::Iter;
 use embassy_futures::block_on;
 use embassy_sync::mutex::MutexGuard;
 use embassy_time::{Duration, Timer};
 use embedded_graphics_core::draw_target::DrawTarget;
-use embedded_graphics_core::Pixel;
 use embedded_graphics_core::geometry::Size;
-use embedded_graphics_core::primitives::{PointsIter, Rectangle};
 use embedded_graphics_core::geometry::{Dimensions, OriginDimensions, Point};
 use embedded_graphics_core::pixelcolor::raw::{RawU16, ToBytes};
+use embedded_graphics_core::pixelcolor::{Rgb565, RgbColor};
 use embedded_graphics_core::prelude::RawData;
-use crate::hwi;
-use crate::machine::MACHINE_INFO;
+use embedded_graphics_core::primitives::{PointsIter, Rectangle};
+use embedded_graphics_core::Pixel;
 #[cfg(feature = "with-lvgl")]
-use crate::display::ui;
-#[cfg(feature = "with-lvgl")]
-use crate::display::ui::MotionScreen;
+use lvgl::core::ObjExt;
 #[cfg(feature = "with-lvgl")]
 use lvgl::core::Ticks;
 #[cfg(feature = "with-lvgl")]
-use lvgl::core::ObjExt;
-use crate::hwa::EventBusRef;
-use crate::hwi::{ControllerMutexType, IODevices, SpiControllerRef};
-use crate::hwi::device::SPIDevice;
+use lvgl::core::{Display, Lvgl, Screen};
 
 const WIDTH: u32 = 240;
 const HEIGHT: u32 = 320;
@@ -41,9 +40,9 @@ const LVGL_BUFFER_LEN: usize = (240 * 320) / 10;
 pub type PixelColor = Rgb565;
 
 type DisplayDevice = crate::hwa::display::DisplayDevice;
+use crate::hwi::nucleo_f410rb::device::InterfaceType;
 use display_interface_parallel_gpio::{DataFormat, WriteOnlyDataCommand};
 use ili9341::{DisplaySize240x320, Ili9341, Orientation};
-use crate::hwi::nucleo_f410rb::device::InterfaceType;
 
 pub struct TFTDisplay {
     #[cfg(feature = "with-lvgl")]
@@ -60,14 +59,16 @@ pub struct TFTDisplay {
 
 impl TFTDisplay {
     pub async fn new(display_dev: DisplayDevice, event_bus: EventBusRef) -> Self {
-
         #[cfg(feature = "with-lvgl")]
         let mut lvgl = Lvgl::new();
         #[cfg(feature = "with-lvgl")]
         lvgl.register_logger(|s| info!("LVGL: {}", s));
 
         #[cfg(feature = "with-lvgl")]
-        info!("BUFF prec size:{}", core::mem::size_of::<PixelColor>() * LVGL_BUFFER_LEN);
+        info!(
+            "BUFF prec size:{}",
+            core::mem::size_of::<PixelColor>() * LVGL_BUFFER_LEN
+        );
 
         // Display init with its draw buffer
         #[cfg(feature = "with-lvgl")]
@@ -83,9 +84,7 @@ impl TFTDisplay {
         let mut lvgl_display = Display::new(&lvgl, raw_display, unsafe { &mut DRAW_BUFFER });
 
         #[cfg(feature = "with-lvgl")]
-        let mut main_ui = ui::new_screen(&lvgl_display, |screen| {
-            ui::MotionScreen::new(screen)
-        });
+        let mut main_ui = ui::new_screen(&lvgl_display, |screen| ui::MotionScreen::new(screen));
         #[cfg(feature = "with-lvgl")]
         lvgl_display.load_screen(&mut main_ui);
         //lvgl.run_tasks();
@@ -128,7 +127,6 @@ pub struct RawDisplay {
 
 impl RawDisplay {
     pub async fn new(device: DisplayDevice, event_bus: EventBusRef) -> Self {
-
         info!("Creating ILI dev");
         let mut delay = embassy_time::Delay;
         let mut cs = device.cs;
@@ -139,7 +137,8 @@ impl RawDisplay {
             &mut delay,
             Orientation::PortraitFlipped,
             DisplaySize240x320,
-        ).unwrap();
+        )
+        .unwrap();
         cs.set_high();
 
         Self {
@@ -245,17 +244,16 @@ impl RawDisplay {
     /// The iterator is useful to avoid wasting memory by holding a buffer for
     /// the whole screen when it is not necessary.
     #[inline]
-    pub fn draw_raw_iter<I: IntoIterator<Item = u16>>(
-        &self,
-        src: Point,
-        dst: Point,
-        data: I,
-    ) {
-
-        info!("draw_raw_iter called [{}, {}] [{}, {}]", src.x, src.y, dst.x, dst.y);
+    pub fn draw_raw_iter<I: IntoIterator<Item = u16>>(&self, src: Point, dst: Point, data: I) {
+        info!(
+            "draw_raw_iter called [{}, {}] [{}, {}]",
+            src.x, src.y, dst.x, dst.y
+        );
         let mut device = self.device.borrow_mut();
         self.cs.borrow_mut().set_low();
-        device.draw_raw_iter(src.x as u16, src.y as u16, dst.x as u16, dst.y as u16, data).unwrap();
+        device
+            .draw_raw_iter(src.x as u16, src.y as u16, dst.x as u16, dst.y as u16, data)
+            .unwrap();
         self.cs.borrow_mut().set_high();
     }
 }
@@ -273,8 +271,8 @@ impl DrawTarget for RawDisplay {
 
     #[inline]
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-        where
-            I: IntoIterator<Item = Pixel<Self::Color>>,
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
     {
         info!("draw_iter called");
 
@@ -285,13 +283,15 @@ impl DrawTarget for RawDisplay {
         for Pixel(point, color) in pixels {
             if bbox.contains(point) {
                 info!("draw_px");
-                device.draw_raw_iter(
-                    point.x as u16,
-                    point.y as u16,
-                    (point.x) as u16,
-                    (point.y) as u16,
-                    once(RawU16::from(color).into_inner()),
-                ).unwrap();
+                device
+                    .draw_raw_iter(
+                        point.x as u16,
+                        point.y as u16,
+                        point.x as u16,
+                        point.y as u16,
+                        once(RawU16::from(color).into_inner()),
+                    )
+                    .unwrap();
                 /*
                 Self::set_window(&mut device, point.clone(), point);
                 Self::command(&mut device, Command::MemoryWrite, &[]);
@@ -306,8 +306,8 @@ impl DrawTarget for RawDisplay {
 
     #[inline]
     fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I) -> Result<(), Self::Error>
-        where
-            I: IntoIterator<Item = Self::Color>,
+    where
+        I: IntoIterator<Item = Self::Color>,
     {
         info!("fill_contiguous called");
         let drawable_area = area.intersection(&self.bounding_box());
@@ -331,8 +331,6 @@ impl DrawTarget for RawDisplay {
         Ok(())
     }
 }
-
-
 
 #[allow(unused)]
 #[derive(Clone, Copy)]
@@ -363,4 +361,3 @@ enum Mode {
     Portrait = 0x40 | 0x08,
     Landscape = 0x20 | 0x08,
 }
-

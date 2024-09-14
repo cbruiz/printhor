@@ -1,9 +1,12 @@
 use crate::info;
 use lvgl::core::{Display, ObjExt, Screen};
-use lvgl::widgets::*;
 use lvgl::cstr_core::CStr;
+use lvgl::widgets::*;
 
-pub fn new_screen<D,C>(display: &Display<D>, init_f: impl FnOnce(&mut Screen::<C>) -> C) -> Screen::<C> {
+pub fn new_screen<D, C>(
+    display: &Display<D>,
+    init_f: impl FnOnce(&mut Screen<C>) -> C,
+) -> Screen<C> {
     let mut screen = Screen::<C>::new(display);
     let context = init_f(&mut screen);
     screen.context().replace(context);
@@ -16,12 +19,10 @@ pub struct MotionScreen {
 }
 
 impl MotionScreen {
-    pub fn new(
-        screen: &mut Screen::<Self>,
-    ) -> Self {
-        use lvgl::widgets::*;
-        use lvgl::style::*;
+    pub fn new(screen: &mut Screen<Self>) -> Self {
         use lvgl::core::*;
+        use lvgl::style::*;
+        use lvgl::widgets::*;
 
         let spacing = 12;
 
@@ -31,19 +32,22 @@ impl MotionScreen {
         dummy_label.set_recolor(true);
 
         let mut btn_y_plus = Btn::new(screen);
-        Label::new(&mut btn_y_plus).set_text(&CStr::from_bytes_with_nul("\u{F077}\0".as_bytes()).unwrap());
+        Label::new(&mut btn_y_plus)
+            .set_text(&CStr::from_bytes_with_nul("\u{F077}\0".as_bytes()).unwrap());
         btn_y_plus.align_to(screen, Align::TopLeft, spacing, spacing);
         btn_y_plus.add_flag(Flag::CHECKABLE);
         btn_y_plus.on_event(Event::Clicked, |_context| {});
 
         let mut btn_x_minus = Btn::new(screen);
-        Label::new(&mut btn_x_minus).set_text(&CStr::from_bytes_with_nul("\u{F053}\0".as_bytes()).unwrap());
+        Label::new(&mut btn_x_minus)
+            .set_text(&CStr::from_bytes_with_nul("\u{F053}\0".as_bytes()).unwrap());
         btn_x_minus.align_to(&btn_y_plus, Align::OutBottomMid, 0, spacing);
         btn_x_minus.add_flag(Flag::CHECKABLE);
         btn_x_minus.on_event(Event::Clicked, |_context| {});
 
         let mut btn_home = Btn::new(screen);
-        Label::new(&mut btn_home).set_text(&CStr::from_bytes_with_nul("\u{F015}\0".as_bytes()).unwrap());
+        Label::new(&mut btn_home)
+            .set_text(&CStr::from_bytes_with_nul("\u{F015}\0".as_bytes()).unwrap());
         btn_home.align_to(&btn_x_minus, Align::OutRightMid, spacing, 0);
         btn_home.add_flag(Flag::CHECKABLE);
         btn_home.on_event(Event::Clicked, |_context| {});
@@ -51,13 +55,15 @@ impl MotionScreen {
         btn_y_plus.align_to(&btn_home, Align::OutTopMid, 0, -spacing);
 
         let mut btn_x_plus = Btn::new(screen);
-        Label::new(&mut btn_x_plus).set_text(&CStr::from_bytes_with_nul("\u{F054}\0".as_bytes()).unwrap());
+        Label::new(&mut btn_x_plus)
+            .set_text(&CStr::from_bytes_with_nul("\u{F054}\0".as_bytes()).unwrap());
         btn_x_plus.align_to(&btn_home, Align::OutRightMid, spacing, 0);
         btn_x_plus.add_flag(Flag::CHECKABLE);
         btn_x_plus.on_event(Event::Clicked, |_context| {});
 
         let mut btn_y_minus = Btn::new(screen);
-        Label::new(&mut btn_y_minus).set_text(&CStr::from_bytes_with_nul("\u{f078}\0".as_bytes()).unwrap());
+        Label::new(&mut btn_y_minus)
+            .set_text(&CStr::from_bytes_with_nul("\u{f078}\0".as_bytes()).unwrap());
         btn_y_minus.align_to(&btn_home, Align::OutBottomMid, 0, spacing);
         btn_y_minus.add_flag(Flag::CHECKABLE);
         btn_y_minus.on_event(Event::Clicked, |_context| {});
@@ -76,12 +82,11 @@ impl MotionScreen {
 
         info!("D; Screen initiallized");
 
-        Self {
-            dummy_label,
-        }
+        Self { dummy_label }
     }
     #[allow(unused)]
     pub async fn refresh(&mut self) {
-        self.dummy_label.set_text(&CStr::from_bytes_with_nul(b"TEST\0").unwrap());
+        self.dummy_label
+            .set_text(&CStr::from_bytes_with_nul(b"TEST\0").unwrap());
     }
 }

@@ -112,11 +112,10 @@ impl SingleWireSoftwareUart {
                     read_idx += 1;
                 },
                 Err(SerialError::Timeout) => {
-                    if read_idx > 0 {
-                        return Ok(read_idx)
-                    }
-                    else {
-                        return Err(SerialError::Timeout)
+                    return if read_idx > 0 {
+                        Ok(read_idx)
+                    } else {
+                        Err(SerialError::Timeout)
                     }
                 },
                 _e => {

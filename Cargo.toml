@@ -138,7 +138,7 @@ std = []
 arch-std = []
 _arch = []
 
-# no-real-time is a technical development feature uses a non monotonic timming to facilitate debugging
+# no-real-time is a technical development feature uses a non-monotonic timming to facilitate debugging
 #with-lvgl = [
 #    "with-display",
 #    "lvgl",

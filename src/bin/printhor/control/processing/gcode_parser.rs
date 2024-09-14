@@ -1,9 +1,9 @@
-use crate::hwa;
-use crate::control::{GCode, N, S, XYZ, XYZEFS, XYZE};
+use crate::control::{GCode, N, S, XYZ, XYZE, XYZEFS};
 use crate::helpers;
+use crate::hwa;
 use futures::Stream;
 
-#[cfg_attr(not(feature="with-defmt"), derive(Debug))]
+#[cfg_attr(not(feature = "with-defmt"), derive(Debug))]
 pub enum GCodeLineParserError {
     ParseError(u32),
     GCodeNotImplemented(u32, alloc::string::String),
@@ -19,19 +19,24 @@ impl defmt::Format for GCodeLineParserError {
                 defmt::write!(fmt, "ParseError(line={})", ln);
             }
             GCodeLineParserError::GCodeNotImplemented(ln, string) => {
-                defmt::write!(fmt, "GCodeNotImplemented(line={}, gcode={})", ln, string.as_str());
+                defmt::write!(
+                    fmt,
+                    "GCodeNotImplemented(line={}, gcode={})",
+                    ln,
+                    string.as_str()
+                );
             }
             GCodeLineParserError::FatalError => {
                 defmt::write!(fmt, "FatalError");
             }
         }
-
     }
 }
 
 // dyn trait could reduce code size a lot with the penalty of the indirection
 pub struct GCodeLineParser<STREAM>
-    where STREAM: Stream<Item = Result<u8, async_gcode::Error>> + Unpin
+where
+    STREAM: Stream<Item = Result<u8, async_gcode::Error>> + Unpin,
 {
     raw_parser: async_gcode::Parser<STREAM, async_gcode::Error>,
     current_line: u32,
@@ -39,7 +44,8 @@ pub struct GCodeLineParser<STREAM>
 
 #[allow(unused)]
 impl<STREAM> GCodeLineParser<STREAM>
-    where STREAM: Stream<Item = Result<u8, async_gcode::Error>> + Unpin
+where
+    STREAM: Stream<Item = Result<u8, async_gcode::Error>> + Unpin,
 {
     pub fn new(stream: STREAM) -> Self {
         Self {
@@ -54,7 +60,6 @@ impl<STREAM> GCodeLineParser<STREAM>
     }
 
     pub async fn next_gcode(&mut self) -> Result<Option<GCode>, GCodeLineParserError> {
-
         let mut current_gcode_value = None;
         let mut current_line_number = None;
         let mut skip_gcode = false;
@@ -90,35 +95,28 @@ impl<STREAM> GCodeLineParser<STREAM>
                                 async_gcode::GCode::Word(ch, fv) => {
                                     if !skip_gcode {
                                         let frx = match fv {
-                                            async_gcode::RealValue::Literal(async_gcode::Literal::RealNumber(f)) => {
-                                                Some((f.integer_part(), f.scale()))
-                                            },
-                                            _ => {
-                                                None
-                                            },
+                                            async_gcode::RealValue::Literal(
+                                                async_gcode::Literal::RealNumber(f),
+                                            ) => Some((f.integer_part(), f.scale())),
+                                            _ => None,
                                         };
                                         match &mut current_gcode_value {
                                             None => {
-                                                raw_gcode_spec.replace((ch.to_ascii_uppercase(), frx));
+                                                raw_gcode_spec
+                                                    .replace((ch.to_ascii_uppercase(), frx));
                                                 hwa::debug!("GC: {} {:?}", ch, frx);
 
                                                 current_gcode_value = match (ch, frx) {
                                                     #[cfg(feature = "grbl-compat")]
-                                                    ('$', None) => {
-                                                        Some(GCode::GRBLCMD)
-                                                    },
-                                                    ('g', None) => {
-                                                        Some(GCode::G)
-                                                    },
-                                                    ('g', Some((0, 0))) => {
-                                                        Some(GCode::G0(XYZ {
-                                                            ln: current_line_number.clone(),
-                                                            f: None,
-                                                            x: None,
-                                                            y: None,
-                                                            z: None,
-                                                        }))
-                                                    }
+                                                    ('$', None) => Some(GCode::GRBLCMD),
+                                                    ('g', None) => Some(GCode::G),
+                                                    ('g', Some((0, 0))) => Some(GCode::G0(XYZ {
+                                                        ln: current_line_number.clone(),
+                                                        f: None,
+                                                        x: None,
+                                                        y: None,
+                                                        z: None,
+                                                    })),
                                                     ('g', Some((1, 0))) => {
                                                         Some(GCode::G1(XYZEFS {
                                                             ln: current_line_number.clone(),
@@ -130,18 +128,10 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             z: None,
                                                         }))
                                                     }
-                                                    ('g', Some((4, 0))) => {
-                                                        Some(GCode::G4)
-                                                    }
-                                                    ('g', Some((10, 0))) => {
-                                                        Some(GCode::G10)
-                                                    }
-                                                    ('g', Some((17, 0))) => {
-                                                        Some(GCode::G17)
-                                                    }
-                                                    ('g', Some((21, 0))) => {
-                                                        Some(GCode::G21)
-                                                    }
+                                                    ('g', Some((4, 0))) => Some(GCode::G4),
+                                                    ('g', Some((10, 0))) => Some(GCode::G10),
+                                                    ('g', Some((17, 0))) => Some(GCode::G17),
+                                                    ('g', Some((21, 0))) => Some(GCode::G21),
                                                     ('g', Some((28, 0))) => {
                                                         Some(GCode::G28(XYZE {
                                                             ln: current_line_number.clone(),
@@ -151,24 +141,12 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             e: None,
                                                         }))
                                                     }
-                                                    ('g', Some((29, 0))) => {
-                                                        Some(GCode::G29)
-                                                    }
-                                                    ('g', Some((31, 0))) => {
-                                                        Some(GCode::G31)
-                                                    }
-                                                    ('g', Some((32, 0))) => {
-                                                        Some(GCode::G32)
-                                                    }
-                                                    ('g', Some((80, 0))) => {
-                                                        Some(GCode::G80)
-                                                    }
-                                                    ('g', Some((90, 0))) => {
-                                                        Some(GCode::G90)
-                                                    }
-                                                    ('g', Some((91, 0))) => {
-                                                        Some(GCode::G91)
-                                                    }
+                                                    ('g', Some((29, 0))) => Some(GCode::G29),
+                                                    ('g', Some((31, 0))) => Some(GCode::G31),
+                                                    ('g', Some((32, 0))) => Some(GCode::G32),
+                                                    ('g', Some((80, 0))) => Some(GCode::G80),
+                                                    ('g', Some((90, 0))) => Some(GCode::G90),
+                                                    ('g', Some((91, 0))) => Some(GCode::G91),
                                                     ('g', Some((92, 0))) => {
                                                         Some(GCode::G92(XYZE {
                                                             ln: current_line_number.clone(),
@@ -178,250 +156,169 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                             e: None,
                                                         }))
                                                     }
-                                                    ('g', Some((94, 0))) => {
-                                                        Some(GCode::G94)
-                                                    }
-                                                    ('g', Some((291, 1))) => {
-                                                        Some(GCode::G29_1)
-                                                    }
-                                                    ('g', Some((292, 1))) => {
-                                                        Some(GCode::G29_2)
-                                                    }
-                                                    ('m', None) => {
-                                                        Some(GCode::M)
-                                                    }
-                                                    ('m', Some((3, 0))) => {
-                                                        Some(GCode::M3)
-                                                    }
-                                                    ('m', Some((5, 0))) => {
-                                                        Some(GCode::M5)
-                                                    }
-                                                    ('m', Some((20, 0))) => {
-                                                        Some(GCode::M20(None))
-                                                    }
-                                                    ('m', Some((23, 0))) => {
-                                                        Some(GCode::M23(None))
-                                                    }
-                                                    ('m', Some((24, 0))) => {
-                                                        Some(GCode::M24)
-                                                    }
-                                                    ('m', Some((25, 0))) => {
-                                                        Some(GCode::M25)
-                                                    }
-                                                    ('m', Some((73, 0))) => {
-                                                        Some(GCode::M73)
-                                                    }
-                                                    ('m', Some((79, 0))) => {
-                                                        Some(GCode::M79)
-                                                    }
-                                                    ('m', Some((80, 0))) => {
-                                                        Some(GCode::M80)
-                                                    }
-                                                    ('m', Some((81, 0))) => {
-                                                        Some(GCode::M81)
-                                                    }
-                                                    ('m', Some((83, 0))) => {
-                                                        Some(GCode::M83)
-                                                    }
-                                                    ('m', Some((84, 0))) => {
-                                                        Some(GCode::M84)
-                                                    }
-                                                    ('m', Some((100, 0))) => {
-                                                        Some(GCode::M100)
-                                                    }
+                                                    ('g', Some((94, 0))) => Some(GCode::G94),
+                                                    ('g', Some((291, 1))) => Some(GCode::G29_1),
+                                                    ('g', Some((292, 1))) => Some(GCode::G29_2),
+                                                    ('m', None) => Some(GCode::M),
+                                                    ('m', Some((3, 0))) => Some(GCode::M3),
+                                                    ('m', Some((5, 0))) => Some(GCode::M5),
+                                                    ('m', Some((20, 0))) => Some(GCode::M20(None)),
+                                                    ('m', Some((23, 0))) => Some(GCode::M23(None)),
+                                                    ('m', Some((24, 0))) => Some(GCode::M24),
+                                                    ('m', Some((25, 0))) => Some(GCode::M25),
+                                                    ('m', Some((73, 0))) => Some(GCode::M73),
+                                                    ('m', Some((79, 0))) => Some(GCode::M79),
+                                                    ('m', Some((80, 0))) => Some(GCode::M80),
+                                                    ('m', Some((81, 0))) => Some(GCode::M81),
+                                                    ('m', Some((83, 0))) => Some(GCode::M83),
+                                                    ('m', Some((84, 0))) => Some(GCode::M84),
+                                                    ('m', Some((100, 0))) => Some(GCode::M100),
                                                     ('m', Some((104, 0))) => {
-                                                        Some(GCode::M104(S{ln: None, s: None}))
+                                                        Some(GCode::M104(S { ln: None, s: None }))
                                                     }
-                                                    ('m', Some((105, 0))) => {
-                                                        Some(GCode::M105)
-                                                    }
-                                                    ('m', Some((106, 0))) => {
-                                                        Some(GCode::M106)
-                                                    }
-                                                    ('m', Some((107, 0))) => {
-                                                        Some(GCode::M107)
-                                                    }
-                                                    ('m', Some((109, 0))) => {
-                                                        Some(GCode::M109(
-                                                            S {
-                                                                ln: current_line_number.clone(),
-                                                                s: None
-                                                            })
-                                                        )
-                                                    }
+                                                    ('m', Some((105, 0))) => Some(GCode::M105),
+                                                    ('m', Some((106, 0))) => Some(GCode::M106),
+                                                    ('m', Some((107, 0))) => Some(GCode::M107),
+                                                    ('m', Some((109, 0))) => Some(GCode::M109(S {
+                                                        ln: current_line_number.clone(),
+                                                        s: None,
+                                                    })),
                                                     ('m', Some((110, 0))) => {
-                                                        Some(GCode::M110(N{ln: None, n: None}))
+                                                        Some(GCode::M110(N { ln: None, n: None }))
                                                     }
-                                                    ('m', Some((114, 0))) => {
-                                                        Some(GCode::M114)
-                                                    }
-                                                    ('m', Some((115, 0))) => {
-                                                        Some(GCode::M115)
-                                                    }
-                                                    ('m', Some((117, 0))) => {
-                                                        Some(GCode::M117)
-                                                    }
-                                                    ('m', Some((119, 0))) => {
-                                                        Some(GCode::M119)
-                                                    }
+                                                    ('m', Some((114, 0))) => Some(GCode::M114),
+                                                    ('m', Some((115, 0))) => Some(GCode::M115),
+                                                    ('m', Some((117, 0))) => Some(GCode::M117),
+                                                    ('m', Some((119, 0))) => Some(GCode::M119),
                                                     ('m', Some((140, 0))) => {
-                                                        Some(GCode::M140(S{ln: None, s: None}))
+                                                        Some(GCode::M140(S { ln: None, s: None }))
                                                     }
-                                                    ('m', Some((190, 0))) => {
-                                                        Some(GCode::M190)
-                                                    }
-                                                    ('m', Some((201, 0))) => {
-                                                        Some(GCode::M201)
-                                                    }
-                                                    ('m', Some((203, 0))) => {
-                                                        Some(GCode::M203)
-                                                    }
-                                                    ('m', Some((204, 0))) => {
-                                                        Some(GCode::M204)
-                                                    }
-                                                    ('m', Some((205, 0))) => {
-                                                        Some(GCode::M205)
-                                                    }
-                                                    ('m', Some((206, 0))) => {
-                                                        Some(GCode::M206)
-                                                    }
+                                                    ('m', Some((190, 0))) => Some(GCode::M190),
+                                                    ('m', Some((201, 0))) => Some(GCode::M201),
+                                                    ('m', Some((203, 0))) => Some(GCode::M203),
+                                                    ('m', Some((204, 0))) => Some(GCode::M204),
+                                                    ('m', Some((205, 0))) => Some(GCode::M205),
+                                                    ('m', Some((206, 0))) => Some(GCode::M206),
                                                     ('m', Some((220, 0))) => {
-                                                        Some(GCode::M220(S{ ln: None, s: None }))
+                                                        Some(GCode::M220(S { ln: None, s: None }))
                                                     }
                                                     ('m', Some((221, 0))) => {
-                                                        Some(GCode::M221(S{ ln: None, s: None }))
+                                                        Some(GCode::M221(S { ln: None, s: None }))
                                                     }
-                                                    ('m', Some((502, 0))) => {
-                                                        Some(GCode::M502)
-                                                    }
-                                                    ('m', Some((8621, 1))) => {
-                                                        Some(GCode::M862_1)
-                                                    }
-                                                    ('m', Some((8623, 1))) => {
-                                                        Some(GCode::M862_3)
-                                                    }
-                                                    ('m', Some((900, 0))) => {
-                                                        Some(GCode::M900)
-                                                    }
-                                                    ('m', Some((907, 0))) => {
-                                                        Some(GCode::M907)
-                                                    }
+                                                    ('m', Some((502, 0))) => Some(GCode::M502),
+                                                    ('m', Some((8621, 1))) => Some(GCode::M862_1),
+                                                    ('m', Some((8623, 1))) => Some(GCode::M862_3),
+                                                    ('m', Some((900, 0))) => Some(GCode::M900),
+                                                    ('m', Some((907, 0))) => Some(GCode::M907),
                                                     _ => {
                                                         skip_gcode = true;
                                                         None
                                                     }
                                                 };
                                             }
-                                            Some(current_gcode) => {
-                                                match current_gcode {
-                                                    #[cfg(feature = "grbl-compat")]
-                                                    GCode::STATUS => {
-                                                        match (ch, frx) {
-                                                            ('I', Some(val)) => {
-                                                                hwa::warn!("TODO!!");
-                                                            },
-                                                            _ => {}
-                                                        }
-                                                    }
-                                                    GCode::G0(coord) => {
-                                                        match (ch, frx) {
-                                                            ('x', Some(val)) => {
-                                                                coord.x.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('y', Some(val)) => {
-                                                                coord.y.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('z', Some(val)) => {
-                                                                coord.z.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('f', Some(val)) => {
-                                                                coord.f.replace(helpers::to_fixed(val));
-                                                            },
-                                                            _ => {}
-                                                        }
-                                                    }
-
-                                                    GCode::G1(coord) => {
-                                                        match (ch, frx) {
-                                                            ('x', Some(val)) => {
-                                                                coord.x.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('y', Some(val)) => {
-                                                                coord.y.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('z', Some(val)) => {
-                                                                coord.z.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('e', Some(val)) => {
-                                                                coord.e.replace(helpers::to_fixed(val));
-                                                            }
-                                                            _ => {}
-                                                        }
-                                                    }
-                                                    GCode::G28(coord) => {
-                                                        match (ch, frx) {
-                                                            ('x', Some(val)) => {
-                                                                coord.x.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('y', Some(val)) => {
-                                                                coord.y.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('z', Some(val)) => {
-                                                                coord.z.replace(helpers::to_fixed(val));
-                                                            },
-                                                            _ => {}
-                                                        }
-                                                    }
-                                                    GCode::G92(coord) => {
-                                                        match (ch, frx) {
-                                                            ('x', Some(val)) => {
-                                                                coord.x.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('y', Some(val)) => {
-                                                                coord.y.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('z', Some(val)) => {
-                                                                coord.z.replace(helpers::to_fixed(val));
-                                                            },
-                                                            ('e', Some(val)) => {
-                                                                coord.e.replace(helpers::to_fixed(val));
-                                                            },
-                                                            _ => {}
-                                                        }
-                                                    }
-                                                    GCode::M20(path) => {
-                                                        if ch == 'f' {
-                                                            if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
-                                                                path.replace(mstr);
-                                                            }
-                                                        }
-                                                    }
-                                                    GCode::M23(file) => {
-                                                        if ch == 'f' {
-                                                            if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
-                                                                file.replace(mstr);
-                                                            }
-                                                        }
-                                                    }
-                                                    GCode::M104(coord) | GCode::M109(coord) | GCode::M140(coord)  | GCode::M220(coord) => {
-                                                        match (ch, frx) {
-                                                            ('s', Some(val)) => {
-                                                                coord.s.replace(helpers::to_fixed(val));
-                                                            },
-                                                            _ => {}
-                                                        }
-                                                    }
-                                                    GCode::M110(coord)  => {
-                                                        match (ch, frx) {
-                                                            ('n', Some(val)) => {
-                                                                coord.n.replace(helpers::to_fixed(val));
-                                                            },
-                                                            _ => {}
-                                                        }
+                                            Some(current_gcode) => match current_gcode {
+                                                #[cfg(feature = "grbl-compat")]
+                                                GCode::STATUS => match (ch, frx) {
+                                                    ('I', Some(val)) => {
+                                                        hwa::warn!("TODO!!");
                                                     }
                                                     _ => {}
+                                                },
+                                                GCode::G0(coord) => match (ch, frx) {
+                                                    ('x', Some(val)) => {
+                                                        coord.x.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('y', Some(val)) => {
+                                                        coord.y.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('z', Some(val)) => {
+                                                        coord.z.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('f', Some(val)) => {
+                                                        coord.f.replace(helpers::to_fixed(val));
+                                                    }
+                                                    _ => {}
+                                                },
+
+                                                GCode::G1(coord) => match (ch, frx) {
+                                                    ('x', Some(val)) => {
+                                                        coord.x.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('y', Some(val)) => {
+                                                        coord.y.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('z', Some(val)) => {
+                                                        coord.z.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('e', Some(val)) => {
+                                                        coord.e.replace(helpers::to_fixed(val));
+                                                    }
+                                                    _ => {}
+                                                },
+                                                GCode::G28(coord) => match (ch, frx) {
+                                                    ('x', Some(val)) => {
+                                                        coord.x.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('y', Some(val)) => {
+                                                        coord.y.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('z', Some(val)) => {
+                                                        coord.z.replace(helpers::to_fixed(val));
+                                                    }
+                                                    _ => {}
+                                                },
+                                                GCode::G92(coord) => match (ch, frx) {
+                                                    ('x', Some(val)) => {
+                                                        coord.x.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('y', Some(val)) => {
+                                                        coord.y.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('z', Some(val)) => {
+                                                        coord.z.replace(helpers::to_fixed(val));
+                                                    }
+                                                    ('e', Some(val)) => {
+                                                        coord.e.replace(helpers::to_fixed(val));
+                                                    }
+                                                    _ => {}
+                                                },
+                                                GCode::M20(path) => {
+                                                    if ch == 'f' {
+                                                        if let async_gcode::RealValue::Literal(
+                                                            async_gcode::Literal::String(mstr),
+                                                        ) = fv
+                                                        {
+                                                            path.replace(mstr);
+                                                        }
+                                                    }
                                                 }
-                                            }
+                                                GCode::M23(file) => {
+                                                    if ch == 'f' {
+                                                        if let async_gcode::RealValue::Literal(
+                                                            async_gcode::Literal::String(mstr),
+                                                        ) = fv
+                                                        {
+                                                            file.replace(mstr);
+                                                        }
+                                                    }
+                                                }
+                                                GCode::M104(coord)
+                                                | GCode::M109(coord)
+                                                | GCode::M140(coord)
+                                                | GCode::M220(coord) => match (ch, frx) {
+                                                    ('s', Some(val)) => {
+                                                        coord.s.replace(helpers::to_fixed(val));
+                                                    }
+                                                    _ => {}
+                                                },
+                                                GCode::M110(coord) => match (ch, frx) {
+                                                    ('n', Some(val)) => {
+                                                        coord.n.replace(helpers::to_fixed(val));
+                                                    }
+                                                    _ => {}
+                                                },
+                                                _ => {}
+                                            },
                                         }
                                     } else {
                                         //crate::debug!("I'm skipping words")
@@ -436,24 +333,37 @@ impl<STREAM> GCodeLineParser<STREAM>
                                                 Some(rgs) => {
                                                     // Nice to report all this kind of things, but avoidable to save code size
                                                     let num_part = match rgs.1 {
-                                                        None => {alloc::string::String::new()}
+                                                        None => alloc::string::String::new(),
                                                         Some(frv) => {
                                                             let dv = 10i32.pow(frv.1.into());
                                                             let p1 = frv.0.abs() / dv;
                                                             let p2 = frv.0.abs() - (p1 * dv);
-                                                            alloc::format!("{}{}.{}", if frv.0 < 0 {"-"} else {""}, p1, p2)
+                                                            alloc::format!(
+                                                                "{}{}.{}",
+                                                                if frv.0 < 0 { "-" } else { "" },
+                                                                p1,
+                                                                p2
+                                                            )
                                                         }
                                                     };
                                                     let s = alloc::format!("{}{}", rgs.0, num_part);
-                                                    return Err(GCodeLineParserError::GCodeNotImplemented(self.current_line, s));
+                                                    return Err(
+                                                        GCodeLineParserError::GCodeNotImplemented(
+                                                            self.current_line,
+                                                            s,
+                                                        ),
+                                                    );
                                                 }
                                             }
-                                        },
+                                        }
                                         Some(cgv) => return Ok(Some(cgv)),
                                     }
                                 }
                                 _ => {
-                                    return Err(GCodeLineParserError::GCodeNotImplemented(self.current_line, alloc::string::String::from("N/A")))
+                                    return Err(GCodeLineParserError::GCodeNotImplemented(
+                                        self.current_line,
+                                        alloc::string::String::from("N/A"),
+                                    ))
                                 }
                             }
                         }
@@ -474,7 +384,7 @@ impl<STREAM> GCodeLineParser<STREAM>
                                     hwa::error!("Parse error");
                                 }
                             }
-                            return Err(GCodeLineParserError::ParseError(self.current_line))
+                            return Err(GCodeLineParserError::ParseError(self.current_line));
                         }
                     }
                 }
@@ -483,8 +393,7 @@ impl<STREAM> GCodeLineParser<STREAM>
     }
 
     #[allow(unused)]
-    pub async fn close(&mut self) {
-    }
+    pub async fn close(&mut self) {}
 }
 
 /// This trait is just a hack to give backward compatibility with unpatched async-gcode 0.3.0

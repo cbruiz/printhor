@@ -1,9 +1,8 @@
+use crate::math::{Real, HALF, ONE, PI, TWO};
 use core::ops::Div;
 use core::ops::Neg;
-use crate::math::{HALF, ONE, PI, Real, TWO};
 #[allow(unused)]
 pub trait Interpolator {
-
     fn interpolate(&self, tp: &Real) -> Real;
 }
 
@@ -52,14 +51,14 @@ impl Interpolator for LinearInterpolator {
 impl Interpolator for CosineInterpolator {
     #[inline]
     fn interpolate(&self, tp: &Real) -> Real {
-        self.bias + (self.heigth * (HALF - ((*tp - self.x0).div(self.width) * PI).cos().div(TWO) ))
+        self.bias + (self.heigth * (HALF - ((*tp - self.x0).div(self.width) * PI).cos().div(TWO)))
     }
 }
 
 impl Interpolator for ExpInterpolator {
     #[inline]
     fn interpolate(&self, tp: &Real) -> Real {
-        let v = (Real::from_f32(12.0) * (*tp- self.x0)/self.width) - Real::from_f32(6.0);
-        self.bias + self.heigth * (ONE / (ONE + (v.neg()).exp()))
+        let v = (Real::from_f32(12.0) * (*tp - self.x0) / self.width) - Real::from_f32(6.0);
+        self.bias + self.heigth * (ONE / (ONE + v.neg().exp()))
     }
 }

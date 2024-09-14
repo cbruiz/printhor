@@ -1,8 +1,8 @@
-use std::fs::File;
-use std::io::Write;
+use crate::hwa;
 use bitflags::bitflags;
 use embassy_time::Instant;
-use crate::hwa;
+use std::fs::File;
+use std::io::Write;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq)]
@@ -23,7 +23,6 @@ bitflags! {
         const INIT     = PinState::X_ENA.bits() | PinState::Y_ENA.bits() | PinState::Z_ENA.bits() | PinState::E_ENA.bits();
     }
 }
-
 
 /// A monitor structure to debug signal timings
 pub(crate) struct TimingsMonitor {
@@ -58,7 +57,7 @@ impl TimingsMonitor {
         self.timings.clear();
     }
 
-    #[cfg(all(feature = "native", feature="no-real-time"))]
+    #[cfg(all(feature = "native", feature = "no-real-time"))]
     pub(crate) fn set_clock(&mut self, real_time: Instant) {
         self.real_time = real_time;
     }
@@ -107,7 +106,9 @@ scale 2500 as 40 pixels
 "###;
         const POS: &'static str = r###"@enduml"###;
         file.write(PRE.as_bytes()).unwrap();
-        file.write(format!(r###"@{}
+        file.write(
+            format!(
+                r###"@{}
 US is uSeg
 XE is 1
 YE is 1
@@ -121,7 +122,12 @@ XS is 0
 YS is 0
 ZS is 0
 ES is 0
-"###, 0).as_bytes()).unwrap();
+"###,
+                0
+            )
+            .as_bytes(),
+        )
+        .unwrap();
 
         let mut state = PinState::INIT;
         let iter = self.timings.iter();
@@ -130,28 +136,87 @@ ES is 0
             file.write(format!("@{}\n", t.0).as_bytes()).unwrap();
             write_state(&mut file, &mut state, &t.1, PinState::X_ENA, "XE", "0", "1");
             write_state(&mut file, &mut state, &t.1, PinState::X_DIR, "XD", "0", "1");
-            write_state(&mut file, &mut state, &t.1, PinState::X_STEP, "XS", "0", "1");
+            write_state(
+                &mut file,
+                &mut state,
+                &t.1,
+                PinState::X_STEP,
+                "XS",
+                "0",
+                "1",
+            );
             write_state(&mut file, &mut state, &t.1, PinState::Y_ENA, "YE", "0", "1");
             write_state(&mut file, &mut state, &t.1, PinState::Y_DIR, "YD", "0", "1");
-            write_state(&mut file, &mut state, &t.1, PinState::Y_STEP, "YS", "0", "1");
+            write_state(
+                &mut file,
+                &mut state,
+                &t.1,
+                PinState::Y_STEP,
+                "YS",
+                "0",
+                "1",
+            );
             write_state(&mut file, &mut state, &t.1, PinState::Z_ENA, "ZE", "0", "1");
             write_state(&mut file, &mut state, &t.1, PinState::Z_DIR, "ZD", "0", "1");
-            write_state(&mut file, &mut state, &t.1, PinState::Z_STEP, "ZS", "0", "1");
+            write_state(
+                &mut file,
+                &mut state,
+                &t.1,
+                PinState::Z_STEP,
+                "ZS",
+                "0",
+                "1",
+            );
             write_state(&mut file, &mut state, &t.1, PinState::E_ENA, "EE", "0", "1");
             write_state(&mut file, &mut state, &t.1, PinState::E_DIR, "ED", "0", "1");
-            write_state(&mut file, &mut state, &t.1, PinState::E_STEP, "ES", "0", "1");
-            write_state(&mut file, &mut state, &t.1, PinState::USCLK, "US", "uSeg", "uSeg");
+            write_state(
+                &mut file,
+                &mut state,
+                &t.1,
+                PinState::E_STEP,
+                "ES",
+                "0",
+                "1",
+            );
+            write_state(
+                &mut file,
+                &mut state,
+                &t.1,
+                PinState::USCLK,
+                "US",
+                "uSeg",
+                "uSeg",
+            );
         }
         file.write(POS.as_bytes()).unwrap();
         file.sync_all().unwrap();
     }
-
 }
 
-fn write_state(file: &mut File, state: &mut PinState, new_state: &PinState, pin: PinState, pin_name: &str, pin_low_value: &str, pin_high_value: &str) {
+fn write_state(
+    file: &mut File,
+    state: &mut PinState,
+    new_state: &PinState,
+    pin: PinState,
+    pin_name: &str,
+    pin_low_value: &str,
+    pin_high_value: &str,
+) {
     let pin_set = new_state.contains(pin);
     if pin_set != state.contains(pin) {
         state.toggle(pin);
-        file.write(format!("{} is {}\n", pin_name, if pin_set {pin_high_value} else {pin_low_value}).as_bytes()).unwrap();
+        file.write(
+            format!(
+                "{} is {}\n",
+                pin_name,
+                if pin_set {
+                    pin_high_value
+                } else {
+                    pin_low_value
+                }
+            )
+            .as_bytes(),
+        )
+        .unwrap();
     }
 }

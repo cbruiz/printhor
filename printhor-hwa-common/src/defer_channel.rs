@@ -13,7 +13,7 @@ pub enum DeferAction {
     #[cfg(feature = "with-motion")]
     Dwell,
     #[cfg(feature = "with-hot-end")]
-    HotendTemperature,
+    HotEndTemperature,
     #[cfg(feature = "with-hot-bed")]
     HotbedTemperature,
 }

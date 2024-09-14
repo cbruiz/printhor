@@ -1,6 +1,6 @@
 cfg_if::cfg_if! {
     if #[cfg(feature="float-point-f32-impl")] {
-        use core::f32;
+        //use core::f32;
         use crate::math::Real;
         pub const ZERO: Real = Real::from_f32(0.0);
         pub const HALF: Real = Real::from_f32(0.5);
@@ -20,7 +20,6 @@ cfg_if::cfg_if! {
         #[allow(unused)]
         pub const ONE_MILLION: Real = Real::from_f32(1000000.0);
         #[allow(unused)]
-        pub const PI: Real = Real::from_f32(f32::consts::PI);
+        pub const PI: Real = Real::from_f32(core::f32::consts::PI);
     }
 }
-

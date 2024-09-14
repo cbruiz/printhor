@@ -126,7 +126,7 @@ cfg_if::cfg_if! {
 
             pub fn sqrt(self) -> Option<Self> {
                 let num = self.inner();
-                // The famous inverse square root approximation of Id software
+                // The famous inverse square root approximation of 'ID Software'
                 let _r = 1.0f32 / Self::quake_isqrt(num);
 
                 // Micromath crate, based on https://bits.stephan-brumme.com/squareRoot.html
@@ -165,7 +165,7 @@ cfg_if::cfg_if! {
                 https://github.com/SolraBizna/ieee-apsqrt/blob/main/src/lib.rs
                 https://github.com/ARM-software/CMSIS_4/blob/master/CMSIS/DSP_Lib/Source/FastMathFunctions/arm_sqrt_q31.c
                 https://forum.mikroe.com/viewtopic.php?t=65263
-                http://www.ganssle.com/approx-2.htm
+                https://www.ganssle.com/approx-2.htm
                 https://www.reddit.com/r/rust/comments/1722v9d/help_with_sqrt_hardware_implementation_on_arm/
                 uint32 isqrt3(uint32 n)
                 {

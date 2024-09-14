@@ -1,8 +1,8 @@
 //! TODO: This feature is still in incubation
-use printhor_hwa_common::TrackedStaticCell;
-use printhor_hwa_common::EventBusRef;
 use crate::hwa;
 use crate::sync::config::Config;
+use printhor_hwa_common::EventBusRef;
+use printhor_hwa_common::TrackedStaticCell;
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
@@ -21,7 +21,7 @@ pub enum PrinterControllerStatus {
     Ready,
     /// There is a job work in progress
     Printing,
-    /// There is a job work in progress but it's paused
+    /// There is a job work in progress but is paused
     Paused,
 }
 
@@ -36,7 +36,8 @@ pub enum PrinterControllerError {
     NoEffect,
 }
 
-pub type PrinterControllerSignalType = embassy_sync::signal::Signal<hwa::ControllerMutexType, PrinterControllerEvent>;
+pub type PrinterControllerSignalType =
+    embassy_sync::signal::Signal<hwa::ControllerMutexType, PrinterControllerEvent>;
 
 pub struct PrinterController {
     channel: &'static PrinterControllerSignalType,
@@ -46,13 +47,20 @@ pub struct PrinterController {
 
 impl PrinterController {
     pub fn new(event_bus: EventBusRef) -> PrinterController {
-        static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> = TrackedStaticCell::new();
-        static STATUS_INST: TrackedStaticCell<Config<hwa::ControllerMutexType, PrinterControllerStatus>> = TrackedStaticCell::new();
+        static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> =
+            TrackedStaticCell::new();
+        static STATUS_INST: TrackedStaticCell<
+            Config<hwa::ControllerMutexType, PrinterControllerStatus>,
+        > = TrackedStaticCell::new();
 
-        let channel = SIGNAL_CHANNEL_INST.init::<{hwa::MAX_STATIC_MEMORY}>("PrinterController::channel", PrinterControllerSignalType::new());
+        let channel = SIGNAL_CHANNEL_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
+            "PrinterController::channel",
+            PrinterControllerSignalType::new(),
+        );
         let status_cfg = Config::new();
         status_cfg.signal(PrinterControllerStatus::Ready);
-        let status = STATUS_INST.init::<{hwa::MAX_STATIC_MEMORY}>("PrinterController::state", status_cfg);
+        let status =
+            STATUS_INST.init::<{ hwa::MAX_STATIC_MEMORY }>("PrinterController::state", status_cfg);
         PrinterController {
             channel,
             event_bus,
@@ -70,7 +78,10 @@ impl PrinterController {
         }
     }
 
-    pub async fn set(&mut self, event: PrinterControllerEvent) -> Result<(), PrinterControllerError> {
+    pub async fn set(
+        &mut self,
+        event: PrinterControllerEvent,
+    ) -> Result<(), PrinterControllerError> {
         match &event {
             PrinterControllerEvent::SetFile(_) => {
                 hwa::debug!(">> SetFile");
@@ -80,15 +91,12 @@ impl PrinterController {
                         self.status.signal(PrinterControllerStatus::Paused);
                         self.channel.signal(event);
                         Ok(())
-                    },
+                    }
                     PrinterControllerStatus::Printing => {
                         Err(PrinterControllerError::AlreadyPrinting)
-                    },
-                    PrinterControllerStatus::Paused => {
-                        Err(PrinterControllerError::NoEffect)
-                    },
+                    }
+                    PrinterControllerStatus::Paused => Err(PrinterControllerError::NoEffect),
                 }
-
             }
             PrinterControllerEvent::Resume => {
                 hwa::debug!(">> Resume");
@@ -98,16 +106,14 @@ impl PrinterController {
                         self.status.signal(PrinterControllerStatus::Printing);
                         self.channel.signal(event);
                         Ok(())
-                    },
-                    PrinterControllerStatus::Printing => {
-                        Err(PrinterControllerError::NoEffect)
-                    },
+                    }
+                    PrinterControllerStatus::Printing => Err(PrinterControllerError::NoEffect),
                     PrinterControllerStatus::Paused => {
                         hwa::debug!("Paused -> Printing");
                         self.status.signal(PrinterControllerStatus::Printing);
                         self.channel.signal(event);
                         Ok(())
-                    },
+                    }
                 }
             }
             PrinterControllerEvent::Pause => {
@@ -116,16 +122,14 @@ impl PrinterController {
                     PrinterControllerStatus::Ready => {
                         hwa::debug!("NotPrinting!!");
                         Err(PrinterControllerError::NotPrinting)
-                    },
+                    }
                     PrinterControllerStatus::Printing => {
                         hwa::debug!("Printing -> Paused");
                         self.status.signal(PrinterControllerStatus::Paused);
                         self.channel.signal(event);
                         Ok(())
-                    },
-                    PrinterControllerStatus::Paused => {
-                        Err(PrinterControllerError::NoEffect)
-                    },
+                    }
+                    PrinterControllerStatus::Paused => Err(PrinterControllerError::NoEffect),
                 }
             }
             PrinterControllerEvent::Abort => {
@@ -134,19 +138,19 @@ impl PrinterController {
                     PrinterControllerStatus::Ready => {
                         hwa::debug!("NoEffect");
                         Err(PrinterControllerError::NoEffect)
-                    },
+                    }
                     PrinterControllerStatus::Printing => {
                         hwa::debug!("Printing -> Ready");
                         self.status.signal(PrinterControllerStatus::Ready);
                         self.channel.signal(event);
                         Ok(())
-                    },
+                    }
                     PrinterControllerStatus::Paused => {
                         hwa::debug!("Paused -> Ready");
                         self.status.signal(PrinterControllerStatus::Ready);
                         self.channel.signal(event);
                         Ok(())
-                    },
+                    }
                 }
             }
         }

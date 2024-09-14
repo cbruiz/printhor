@@ -66,7 +66,7 @@ The thermistor itself should be easy to determine from manufacturer specs/datash
   
   * HOT_END_THERM_BETA and HOT_BED_THERM_BETA.
   
-    The &#946; value of hot-end NTC thermistor, that can be gotten frm manufacturer as well. By default: 3950.0
+    The &#946; value of hot-end NTC thermistor, that can be gotten frm manufacturer as well. By default, 3950.0
 
 If few words, if the <b>resistance</b> measured by M114 is correct and NTC nominal resistance and beta parameters are also correct, it should be fine.
 

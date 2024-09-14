@@ -3,7 +3,8 @@ use static_cell::StaticCell;
 pub struct TrackedStaticCell<T>(StaticCell<T>);
 
 impl<T> TrackedStaticCell<T> {
-    /// Unfortunately as new() is and must be const, there is not way to track mem of not explicitely initialized cells
+    /// Unfortunately as new() is and must be const, there is no way to track mem
+    /// of not explicitly initialized cells
     pub const fn new() -> Self {
         Self {
             0: StaticCell::new(),
