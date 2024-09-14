@@ -6,20 +6,40 @@ use crate::control::CodeExecutionFailure;
 use crate::math::*;
 use crate::{hwa, math};
 
+/// The `MotionProfile` trait provides methods for evaluating motion profiles.
 pub trait MotionProfile {
+    /// Returns the end time of the motion profile.
     fn end_time(&self) -> Real;
+
+    /// Returns the end position of the motion profile.
     fn end_pos(&self) -> Real;
 
+    /// Evaluates the position at a given time `t` within the motion profile.
+    ///
+    /// # Parameters
+    ///
+    /// - `t`: The time at which to evaluate the position.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a tuple with:
+    /// - The evaluated position as `Real`.
+    /// - A status as `u8` (implementation-specific).
     fn eval_position(&self, t: Real) -> Option<(Real, u8)>;
 }
 
 #[derive(Clone, Copy, Default)]
 pub struct Constraints {
-    /// Max velocity
+    /// The maximum velocity (v_max).
+    /// This defines the upper limit of speed that can be achieved.
     pub v_max: Real,
-    /// Maximum acceleration
+
+    /// The maximum acceleration (a_max).
+    /// This represents the highest rate of change of velocity that is permissible.
     pub a_max: Real,
-    /// Maxium jerk
+
+    /// The maximum jerk (j_max).
+    /// This is the maximum rate of change of acceleration.
     pub j_max: Real,
 }
 
@@ -36,37 +56,105 @@ impl core::fmt::Display for Constraints {
     }
 }
 
+/// Struct representing the time parameters for different phases of the S-curve motion profile.
 pub struct Times {
+    /// Time spent in the first jerk phase.
     pub t_j1: Real,
+
+    /// Time spent in the acceleration phase.
     pub t_a: Real,
+
+    /// Time spent at constant velocity.
     pub t_v: Real,
+
+    /// Time spent in the deceleration phase.
     pub t_d: Real,
+
+    /// Time spent in the second jerk phase.
     pub t_j2: Real,
 }
 
+/// Struct representing the S-curve motion profile with various parameters.
 #[derive(Clone, Copy, Default)]
 pub struct SCurveMotionProfile {
+    /// Time spent in the first jerk phase.
     pub t_j1: Real,
+
+    /// Time spent in the acceleration phase.
     pub t_a: Real,
+
+    /// Time spent at constant velocity.
     pub t_v: Real,
+
+    /// Time spent in the deceleration phase.
     pub t_d: Real,
+
+    /// Time spent in the second jerk phase.
     pub t_j2: Real,
 
+    /// Initial velocity.
     pub v_0: Real,
+
+    /// Final velocity.
     pub v_1: Real,
+
+    /// Maximum jerk.
     pub j_max: Real,
+
+    /// Acceleration limit during the acceleration phase.
     pub a_lim_a: Real,
+
+    /// Deceleration limit during the deceleration phase.
     pub a_lim_d: Real,
+
+    /// Velocity limit.
     pub v_lim: Real,
+
+    /// Displacement or position to be achieved.
     pub q1: Real,
 
+    /// Constraints applied to the motion profile.
     pub constraints: Constraints,
 
+    /// Cached values for optimization and repeated calculations.
     pub cache: Cache,
 }
 
 #[allow(unused)]
 impl SCurveMotionProfile {
+    /// Compute the S-curve motion profile.
+    ///
+    /// # Arguments
+    ///
+    /// * `q_1` - Displacement or position to be achieved.
+    /// * `v_0` - Initial velocity.
+    /// * `v_1` - Final velocity.
+    /// * `constraints` - Constraints applied to the motion profile.
+    /// * `error_correction` - Flag to enable error correction.
+    ///
+    /// # Returns
+    ///
+    /// `Result<SCurveMotionProfile, CodeExecutionFailure>` - The computed S-curve motion profile or an error.
+    ///
+    /// # Description
+    ///
+    /// This method computes the S-curve motion profile considering the initial and final velocities,
+    /// the displacement to be achieved, and the provided constraints. The method ensures that the
+    /// computed trajectory respects the given constraints and returns a result containing the motion
+    /// profile or an error if the motion cannot be achieved with the specified constraints.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let constraints = Constraints { 
+    ///     v_max: Real::from_f32(10.0),
+    ///     a_max: Real::from_f32(2.0),
+    ///     j_max: Real::from_f32(1.0),
+    /// };
+    /// let profile = SCurveMotionProfile::compute(Real::from_f32(20.0), Real::from_f32(0.0), Real::from_f32(5.0), &constraints, false)?;
+    /// println!("{}", profile);
+    /// ```
+    ///
     pub fn compute(
         q_1: Real,
         v_0: Real,
@@ -1050,7 +1138,7 @@ impl core::fmt::Display for SCurveMotionProfile {
 pub mod test {
     //Example 3.9
 
-    use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
+    use crate::control::motion::{Constraints, SCurveMotionProfile};
     use crate::control::CodeExecutionFailure;
     use crate::math::Real;
     use num_traits::ToPrimitive;

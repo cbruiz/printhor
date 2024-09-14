@@ -1,7 +1,6 @@
 #![allow(stable_features)]
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
-
 extern crate alloc;
 extern crate core;
 pub(crate) mod control;
@@ -49,6 +48,7 @@ use printhor_hwa_common::ControllerRef;
 use printhor_hwa_common::{ControllerMutexType, InterruptControllerMutexType};
 #[allow(unused)]
 use printhor_hwa_common::{EventFlags, EventStatus};
+
 
 //noinspection RsUnresolvedReference
 /// Entry point

@@ -12,15 +12,18 @@ use rust_decimal_macros::dec;
 use prelude::*;
 
 use crate::tgeo::{TVector, CoordSel};
-use crate::control::motion_planning::*;
+use crate::control::motion::*;
 use crate::hwa::controllers::motion;
 use crate::hwa::device::MotionDevice;
 use crate::hwa::drivers::{MotionDriver, MotionDriverParams};
 use crate::math::{RealInclusiveRange, TWO, ZERO};
 use crate::hwa::CommChannel;
 use crate::prelude::control::{GCode, XYZ};
-use crate::prelude::control::motion_timing::StepPlanner;
-use crate::prelude::control::task_stepper::{LinearMicrosegmentStepInterpolator, SoftTimer, SoftTimerDriver};
+use crate::hwa::controllers::SoftTimer;
+use crate::hwa::controllers::LinearMicrosegmentStepInterpolator;
+use crate::hwa::controllers::StepPlanner;
+use crate::hwa::controllers::SoftTimerDriver;
+use crate::hwa::controllers::State;
 
 const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500; // hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
 const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000; // hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
@@ -411,7 +414,7 @@ async fn main(spawner: embassy_executor::Spawner)
 
                                         data_points.add_real(ref_time, total_disp_discrete + norm, s_id);
 
-                                        if counter.state == crate::control::task_stepper::State::Idle {
+                                        if counter.state == State::Idle {
                                             total_disp_discrete += norm;
                                             stop = true;
                                         }

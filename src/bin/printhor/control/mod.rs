@@ -3,9 +3,7 @@ use crate::math::Real;
 use strum::Display;
 use strum::{AsRefStr, VariantNames};
 #[cfg(feature = "with-motion")]
-pub mod motion_planning;
-#[cfg(feature = "with-motion")]
-pub mod motion_timing;
+pub mod motion;
 
 mod processing;
 pub use processing::*;

@@ -1,23 +1,30 @@
-//! This feature is being stabilized
-use crate::control;
-use crate::hwa;
-use crate::math;
+use embassy_sync::mutex::{Mutex, MutexGuard};
+use crate::{control, hwa, math};
+use crate::hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use crate::hwa::controllers::motion::motion_ring_buffer::RingBuffer;
+use crate::hwa::drivers::motion_driver::MotionDriverRef;
 use crate::math::Real;
 use crate::sync::config::Config;
-use crate::tgeo::CoordSel;
-use crate::tgeo::TVector;
-use embassy_sync::mutex::{Mutex, MutexGuard};
+use crate::tgeo::{CoordSel, TVector};
 
-use crate::hwa::controllers::motion;
-use crate::hwa::drivers::motion_driver::MotionDriverRef;
-
-pub enum ScheduledMove {
-    Move(motion::SegmentData),
-    Homing,
-    Dwell,
+#[derive(Clone)]
+pub struct MotionPlannerRef {
+    inner: &'static MotionPlanner,
 }
 
-/////
+impl MotionPlannerRef {
+    pub const fn new(inner: &'static MotionPlanner) -> Self {
+        Self { inner }
+    }
+}
+
+impl core::ops::Deref for MotionPlannerRef {
+    type Target = MotionPlanner;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner
+    }
+}
 
 pub struct MotionPlanner {
     //pub event_bus: EventBusRef,
@@ -212,15 +219,15 @@ impl MotionPlanner {
                                             .sqrt(),
                                         Some(t_jmax),
                                     )
-                                    .unwrap_or(math::ZERO);
+                                        .unwrap_or(math::ZERO);
 
                                     let q_lim = if t_jstar < t_jmax {
                                         t_jstar * (v_0 + curr_vmax)
                                     } else {
                                         ((v_0 + curr_vmax) / math::TWO)
                                             * (t_jstar
-                                                + ((curr_vmax - v_0).abs()
-                                                    / curr_segment.segment_data.constraints.a_max))
+                                            + ((curr_vmax - v_0).abs()
+                                            / curr_segment.segment_data.constraints.a_max))
                                     };
 
                                     if q_1 >= q_lim {
@@ -682,7 +689,7 @@ impl MotionPlanner {
                 vdir,
                 dest_pos: p1,
                 tool_power: Real::zero(),
-                constraints: control::motion_planning::Constraints {
+                constraints: control::motion::Constraints {
                     v_max: module_target_speed,
                     a_max: module_target_accel,
                     j_max: module_target_jerk,
@@ -889,171 +896,14 @@ pub fn display_content(
     Ok(())
 }
 
-#[allow(unused)]
-pub struct RingBuffer {
-    pub(self) data: [PlanEntry; hwa::SEGMENT_QUEUE_SIZE as usize],
-    pub(self) head: u8,
-    pub(self) used: u8,
-}
-
-impl RingBuffer {
-    pub const fn new() -> Self {
-        Self {
-            data: [PlanEntry::Empty; hwa::SEGMENT_QUEUE_SIZE as usize],
-            head: 0,
-            used: 0,
-        }
-    }
-
-    /// A proper helper to get the index of relative offset starting from tail in reverse order.
-    /// Example:
-    /// * index_from_tail(0) returns the index of tail position
-    /// * index_from_tail(1) returns the index of last inserted element
-    pub fn index_from_tail(&self, offset: u8) -> Result<u8, ()> {
-        if offset > self.used {
-            Err(())
-        } else {
-            let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
-            let len = self.data.len() as u16;
-            match absolute_offset < len {
-                true => Ok(absolute_offset as u8),
-                false => Ok((absolute_offset - len) as u8),
-            }
-        }
-    }
-
-    #[allow(unused)]
-    pub fn entry_from_tail(&self, offset: u8) -> Option<&PlanEntry> {
-        let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
-        let len = self.data.len() as u16;
-
-        let index = match absolute_offset < len {
-            true => absolute_offset as u8,
-            false => (absolute_offset - len) as u8,
-        };
-        self.data.get(index as usize)
-    }
-    #[allow(unused)]
-    pub fn mut_entry_from_tail(&mut self, offset: u8) -> Option<&mut PlanEntry> {
-        let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
-        let len = self.data.len() as u16;
-
-        let index = match absolute_offset < len {
-            true => absolute_offset as u8,
-            false => (absolute_offset - len) as u8,
-        };
-        self.data.get_mut(index as usize)
-    }
-    #[allow(unused)]
-    pub fn mut_planned_segment_from_tail(
-        &mut self,
-        offset: u8,
-    ) -> Result<&mut motion::Segment, ()> {
-        match self.mut_entry_from_tail(offset) {
-            Some(PlanEntry::PlannedMove(_s, _, _, _)) => Ok(_s),
-            _ => Err(()),
-        }
-    }
-
-    #[allow(unused)]
-    pub fn planned_segment_from_tail(&self, offset: u8) -> Result<&motion::Segment, ()> {
-        match self.entry_from_tail(offset) {
-            Some(PlanEntry::PlannedMove(_s, _, _, _)) => Ok(_s),
-            _ => Err(()),
-        }
-    }
-
-    #[allow(unused)]
-    pub fn entries_from_tail(
-        &mut self,
-        offset1: u8,
-        offset2: u8,
-    ) -> (Option<&mut PlanEntry>, Option<&mut PlanEntry>) {
-        let len = self.data.len();
-        let absolute_offset1 = self.head as usize + self.used as usize - offset1 as usize;
-        let index1 = match absolute_offset1 < len {
-            true => absolute_offset1,
-            false => (absolute_offset1 - len),
-        };
-        let absolute_offset2 = self.head as usize + self.used as usize - offset2 as usize;
-        let index2 = match absolute_offset2 < len {
-            true => absolute_offset2,
-            false => (absolute_offset2 - len),
-        };
-        if index1 == index2 {
-            (self.data.get_mut(index1), None)
-        } else if index1 < index2 {
-            let (l, r) = self.data.split_at_mut(index2);
-            (l.get_mut(index1), r.get_mut(0))
-        } else {
-            let (l, r) = self.data.split_at_mut(index1);
-            (r.get_mut(0), l.get_mut(index2))
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum MovType {
-    Move(hwa::DeferAction, hwa::CommChannel),
-    Homing(hwa::CommChannel),
-    Dwell(hwa::CommChannel),
-}
-
-#[derive(Clone, Copy)]
-pub enum PlanEntry {
-    Empty,
-    /// A planned move tuple
-    /// {_1: Segment} The motion segment
-    /// {_2: CommChannel} The input channel requesting the move
-    /// {_3: bool} Indicates if motion is deferred or not
-    PlannedMove(motion::Segment, hwa::DeferAction, hwa::CommChannel, bool),
-    /// A homing action request
-    /// {_1: CommChannel} The input channel requesting the move
-    /// {_2: bool} Indicates if motion is deferred or not
-    Homing(hwa::CommChannel, bool),
-    /// A Dwell action request
-    /// {_1: CommChannel} The input channel requesting the move
-    /// {_2: bool} Indicates if motion is deferred or not
-    Dwell(hwa::CommChannel, bool),
-    Executing(MovType, bool),
-}
-
-impl Default for PlanEntry {
-    fn default() -> Self {
-        PlanEntry::Empty
-    }
-}
-
-#[derive(Clone)]
-pub struct MotionPlannerRef {
-    inner: &'static MotionPlanner,
-}
-
-impl MotionPlannerRef {
-    pub const fn new(inner: &'static MotionPlanner) -> Self {
-        Self { inner }
-    }
-}
-
-impl core::ops::Deref for MotionPlannerRef {
-    type Target = MotionPlanner;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner
-    }
-}
-
 #[cfg(test)]
 pub mod test {
-    #[allow(unused)]
-    use cortex_m::register::control;
+    use crate::hwa::controllers::{LinearMicrosegmentStepInterpolator, StepPlanner};
 
     //#[cfg(feature = "wip-tests")]
     #[test]
     fn discrete_positioning_case_1() {
-        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
-        use crate::control::motion_timing::StepPlanner;
-        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::control::motion::{Constraints, SCurveMotionProfile};
         use crate::hwa::controllers::motion::{Segment, SegmentData, SegmentIterator};
         use crate::math;
         use crate::math::Real;
@@ -1120,7 +970,7 @@ pub mod test {
             &segment.segment_data.constraints,
             false,
         )
-        .unwrap();
+            .unwrap();
 
         let units_per_mm = neutral_element + units_per_mm;
         let steps_per_mm = units_per_mm * usteps;
@@ -1208,9 +1058,7 @@ pub mod test {
 
     #[test]
     fn discrete_positioning_case_2() {
-        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
-        use crate::control::motion_timing::StepPlanner;
-        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::control::motion::{Constraints, SCurveMotionProfile};
         use crate::hwa::controllers::motion::motion_segment::{
             Segment, SegmentData, SegmentIterator,
         };
@@ -1279,7 +1127,7 @@ pub mod test {
             &segment.segment_data.constraints,
             false,
         )
-        .unwrap();
+            .unwrap();
 
         let units_per_mm = neutral_element + units_per_mm;
         let steps_per_mm = units_per_mm * usteps;
@@ -1367,9 +1215,7 @@ pub mod test {
 
     #[test]
     fn discrete_positioning_case_3() {
-        use crate::control::motion_planning::{Constraints, SCurveMotionProfile};
-        use crate::control::motion_timing::StepPlanner;
-        use crate::control::task_stepper::LinearMicrosegmentStepInterpolator;
+        use crate::control::motion::{Constraints, SCurveMotionProfile};
         use crate::hwa::controllers::motion::{Segment, SegmentData, SegmentIterator};
         use crate::math;
         use crate::math::Real;
@@ -1436,7 +1282,7 @@ pub mod test {
             &segment.segment_data.constraints,
             false,
         )
-        .unwrap();
+            .unwrap();
 
         let units_per_mm = neutral_element + units_per_mm;
         let steps_per_mm = units_per_mm * usteps;
