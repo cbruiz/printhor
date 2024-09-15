@@ -18,7 +18,7 @@ pub type MotionDriverRef = InterruptControllerRef<MotionDriver>;
 #[cfg(feature = "with-motion")]
 pub struct MotionDriverParams {
     pub motion_device: hwi::device::MotionDevice,
-    // Motion config is only used to submit a copy to trinamic controller
+    /// Motion config is only used here to submit a copy to trinamic controller
     #[cfg(feature = "with-trinamic")]
     pub motion_config: hwa::controllers::MotionConfigRef,
     #[cfg(feature = "with-probe")]
@@ -173,10 +173,10 @@ impl MotionDriver {
         let motion_config = motion_config_ref.lock().await;
         let steps_per_mm = motion_config.units_per_mm
             * TVector::from_coords(
-                Some(Real::from_lit(motion_config.usteps[0].into(), 0)),
-                Some(Real::from_lit(motion_config.usteps[1].into(), 0)),
-                Some(Real::from_lit(motion_config.usteps[2].into(), 0)),
-                None,
+            Some(Real::from_lit(motion_config.micro_steps_per_axis[0].into(), 0)),
+            Some(Real::from_lit(motion_config.micro_steps_per_axis[1].into(), 0)),
+            Some(Real::from_lit(motion_config.micro_steps_per_axis[2].into(), 0)),
+            None,
             );
         hwa::info!("Steps per mm: {}", steps_per_mm);
         let machine_bounds = motion_config.machine_bounds;

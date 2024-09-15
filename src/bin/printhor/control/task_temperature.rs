@@ -86,19 +86,30 @@ use hwa::{EventFlags, EventStatus};
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
 
+
+/// The `State` enum represents the different states in which the HeaterStateMachine can be during its execution.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 enum State {
+    /// The `Duty` state indicates that the system is operating in its default duty mode.
     Duty,
+    /// The `Targeting` state is when the system is trying to reach a target temperature.
     Targeting,
+    /// The `Maintaining` state indicates that the system is maintaining the current temperature.
     Maintaining,
 }
 
+/// Represents the finite state machine for handling the heater's operation states.
 struct HeaterStateMachine {
+    /// PID controller used to regulate the heater's temperature.
     pid: pid::Pid<f32>,
+    /// Current temperature being read from the heater.
     current_temp: f32,
+    /// The last recorded temperature of the heater.
     last_temp: f32,
+    /// The current state of the heater's finite state machine (FSM).
     state: State,
+    /// The time instant when the FSM was started, available only if the "native" feature is enabled.
     #[cfg(feature = "native")]
     t0: embassy_time::Instant,
 }
@@ -120,6 +131,36 @@ impl HeaterStateMachine {
         }
     }
 
+    
+    /// Updates the state machine with the current temperature readings and
+    /// performs the required actions based on the new temperature state.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctrl` - A reference to the heater controller.
+    /// * `event_bus` - A reference to the event bus.
+    /// * `temperature_flag` - The event flag indicating temperature-related events.
+    /// * `action` - The defer action to be executed.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `AdcPeri` - The ADC peripheral type.
+    /// * `AdcPin` - The ADC pin type.
+    /// * `PwmHwaDevice` - The PWM device type.
+    ///
+    /// This method carries out the following operations:
+    ///
+    /// 1. Locks the heater controller to ensure exclusive access during the update process.
+    /// 2. Reads the current temperature from the heater.
+    /// 3. If the "native" feature is enabled, checks whether the heater has been on for more than 5 seconds and
+    ///    adjusts the current temperature reading accordingly.
+    /// 4. Determines the new state of the heater based on the current temperature and target temperature:
+    ///    - If the heater is on, computes the control output using the PID controller and adjusts the power supplied to the heater.
+    ///    - If the heater is off, resets the current temperature to zero and sets the state to `Duty`.
+    /// 5. Updates the current state of the state machine if it has changed.
+    /// 6. Publishes events to the event bus based on the new state.
+    ///
+    /// This method requires the `AdcPeri`, `AdcPin`, and `PwmHwaDevice` types to implement specific traits as shown in the where clause.
     async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self,
         ctrl: &hwa::InterruptControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
@@ -230,7 +271,30 @@ impl HeaterStateMachine {
     }
 }
 
+
 #[embassy_executor::task(pool_size = 1)]
+///
+/// # Asynchronous Task Entry Point
+///
+/// This function serves as the entry point for the temperature task that runs asynchronously.
+///
+/// # Arguments
+///
+/// * `event_bus` - A reference to the event bus.
+///
+/// `#[cfg(feature = "with-hot-end")]` - If enabled, receives a reference to the hot end controller.
+///
+/// `#[cfg(feature = "with-hot-bed")]` - If enabled, receives a reference to the hot bed controller.
+///
+/// # Description
+///
+/// This method initializes and runs an infinite loop where the state machines for the hot end and hot bed (if enabled) are updated.
+/// Within the loop:
+///
+/// 1. It waits for an interval of 2 seconds.
+/// 2. It calls the `update` method of the heater state machines (hot end and hot bed) if they are enabled, providing references to their respective controllers and the event bus.
+///
+/// Note that this function uses async/await to coordinate asynchronous operations.
 pub async fn task_temperature(
     event_bus: EventBusRef,
     #[cfg(feature = "with-hot-end")] hotend_controller: hwa::controllers::HotendControllerRef,

@@ -191,14 +191,13 @@ mod tests {
 
         let t = rb.planned_segment_from_tail(1);
         assert!(t.is_err(), "No planned entry");
-        let _ = t;
 
         let t = rb.mut_entry_from_tail(1);
         drop(t);
         let t = rb.mut_entry_from_tail(1);
         drop(t);
-        let t = rb.entries_from_tail(0, 1);
-        let t = rb.planned_segment_from_tail(0);
+        let _t = rb.entries_from_tail(0, 1);
+        let _t = rb.planned_segment_from_tail(0);
         /*
         let mut rb = RingBuffer::new();
         rb.head = 1;

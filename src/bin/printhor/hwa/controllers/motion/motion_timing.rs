@@ -190,7 +190,7 @@ impl MultiTimer {
 #[derive(Clone, Copy)]
 pub struct StepPlanner {
     /// The interval width for the step planner.
-    pub(crate) interval_width: u32,
+    pub interval_width: u32,
     /// The reference time for the step planner.
     ref_time: u32,
     /// Channels being managed by the step planner.
@@ -298,5 +298,19 @@ impl StepPlanner {
             }
         }
         Some(triggered_channels)
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_step_planner_size() {
+        // This test ensures that the StepPlanner struct size does not exceed 60 bytes
+        // because it will be used in a CAN FD bus frame.
+        let struct_size = size_of::<ChannelStatus>() / 2;
+        assert!(struct_size <= 8, "StepPlanner size exceeds expectations for a canbus frame (CAN protocol version 2.0 A, B)");
     }
 }

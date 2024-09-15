@@ -59,6 +59,7 @@ impl Segment {
         cfg_if::cfg_if! {
             if #[cfg(feature="native")] {
                 static mut COUNTER: u32 = 0;
+                // TODO: remove unsafe
                 let id = unsafe {
                     COUNTER += 1;
                     COUNTER
@@ -122,6 +123,7 @@ where
                 Some(p) => {
                     let end_pos = self.profile.end_pos();
 
+                    // FIXME: Do it in a better way. Use half step length as margin
                     if p.0 + Real::from_f32(0.00001f32) >= end_pos {
                         self.exhausted = true;
                         hwa::trace!(

@@ -8,7 +8,6 @@ use crate::hwa::controllers::{MultiTimer, StepPlanner};
 use crate::hwa::drivers::motion_driver::MotionDriverRef;
 use critical_section::Mutex as CsMutex;
 
-
 /// The size of the timer queue.
 const TIMER_QUEUE_SIZE: usize = 4;
 

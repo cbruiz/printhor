@@ -26,51 +26,95 @@ use crate::hwa::controllers::motion::STEP_DRIVER;
 
 const DO_NOTHING: bool = false;
 
-/// Inactivity Timeout until steppers are disabled
+///
+/// This constant defines the duration of inactivity after which the stepper motors 
+/// are automatically disabled to save power and prevent overheating. 
+///
+/// # Value
+/// The timeout is set to 5 seconds, represented using `embassy_time::Duration`.
+///
+/// # Usage
+/// This constant is used in the stepper motor control task to determine the period 
+/// of inactivity before disabling the stepper motors. When no motion segment is 
+/// retrieved within this duration, the steppers are turned off automatically.
+///
+/// # Effect on Task Behavior
+/// In the `task_stepper` routine, this timeout plays a crucial role. If no motion 
+/// segment is available within this 5-second window, the routine will automatically 
+/// disable the stepper motors. This means that:
+/// - **Energy Savings**: Steppers are not left running indefinitely when they are not needed, saving energy.
+/// - **Overheating Prevention**: Prevents the steppers from overheating due to continuous power being applied without motion.
+/// - **Safety**: Ensures that the system does not remain in an unintended state.
+///
+/// # Example
+/// ```
+/// if embassy_time::with_timeout(STEPPER_INACTIVITY_TIMEOUT, /* some async operation */).await.is_err() {
+///     // Disable steppers here
+/// }
+/// ```
 const STEPPER_INACTIVITY_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_secs(5);
 
 
-///
-/// This constant defines the micro-segment period for the stepper planner in microseconds.
-///
-/// The period represents the duration of each micro-segment in the stepper motor control algorithm, 
-/// calculated based on the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY`. It is used to break down motion 
-/// profiles into smaller time intervals to achieve precise control of stepper motors.
-///
-/// # Calculation
-/// This constant value is computed by dividing 1,000,000 microseconds (which is equivalent to 1 second)
-/// by the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY`.
-///
-/// # Usage
-/// The constant is used in the stepper task to determine the sampling period for evaluating motion 
-/// profiles and generating stepping pulses.
-///
-/// # Note
-/// Ensure that the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY` is correctly set to match the desired motion 
-/// control frequency.
-///
+// This constant defines the period for generating the stepper planner micro segments.
+//
+// # Value
+// The period is defined in microseconds (`us`) and is determined by the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY`
+//
+// # Usage
+// This constant is pivotal in the stepper task to dictate the intervals at which micro-segments are evaluated.
+// It is a core part of the stepping pulse generation process.
+//
+// # Effect on Task Behavior
+// The period influences the following aspects of the task:
+// - **Precision**: Shorter periods mean higher frequency evaluation, leading to more precise control over motion segments and thus finer control of the stepping motors.
+// - **Latency**: Directly affects the responsiveness of the stepper control; shorter periods can lead to more immediate adjustments.
+// - **Performance**: A very short period increases the computational load on the CPU as the micro-segments need to be processed more frequently.
+//
+// In practical terms, this means:
+// - If `STEPPER_PLANNER_MICROSEGMENT_PERIOD_US` is too large, motion might be less smooth and precise, with potential jitters.
+// - If it's too small, the system might become CPU-bound and could miss steps or react slower to changes in motion segments.
+//
+// # Example
+// ```rust
+// let micro_segment_period_secs: Real = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6);
+// // Used in task_stepper to control stepper motor behavior
+// ```
 const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
     1_000_000 / hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
 
-/**
-This constant defines the micro-segment period for the stepper planner in microseconds.
 
-It represents the duration of each micro-segment in the stepper motor control algorithm, which is 
-calculated based on the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY`. A micro-segment is a small 
-time interval used to break down motion profiles for precise control of stepper motors.
-
-# Calculation
-The constant value is computed by dividing 1,000,000 microseconds (equivalent to 1 second) by 
-the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY`.
-
-# Usage
-This constant is used in the stepper task to determine the sampling period for evaluating 
-motion profiles and generating stepping pulses.
-
-# Note
-Ensure the `STEPPER_PLANNER_MICROSEGMENT_FREQUENCY` is set correctly to match the desired motion 
-control frequency.
-*/
+///
+/// This constant defines the period in microseconds for generating the clock ticks
+/// used by the stepper planner.
+///
+/// # Value
+/// The period is defined in microseconds (`us`) and is determined by the
+/// `STEPPER_PLANNER_CLOCK_FREQUENCY` value.
+///
+/// # Usage
+/// This constant is essential in the `task_stepper` routine as it dictates the clock
+/// frequency used for timing the stepper motor pulses.
+///
+/// # Effect on Task Behavior
+/// The clock period has a significant impact on the execution of the `task_stepper` routine:
+/// - **Timing Precision**: A shorter clock period implies higher frequency, thus
+///   providing more precise timing control over the stepper movements.
+/// - **System Load**: Very short clock periods can increase the computational load
+///   on the CPU, as the task needs to handle more clock interrupts per second.
+/// - **Motion Smoothness**: Appropriate clock period settings can help achieve smoother
+///   stepper motor movements, reducing the risk of jerky or uneven motion.
+///
+/// In more practical terms:
+/// - If `STEPPER_PLANNER_CLOCK_PERIOD_US` is set too large, the control over the stepping
+///   process becomes coarser, potentially resulting in less smooth motor operation.
+/// - Conversely, if it is too small, the CPU may become overwhelmed with clock interrupts,
+///   impacting overall system performance.
+///
+/// # Example
+/// ```rust
+/// let clock_period = STEPPER_PLANNER_CLOCK_PERIOD_US;
+/// // Use this value in timing calculations for stepper control
+/// ```
 pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
 
 /// This asynchronous task manages the steps of the stepper motors 

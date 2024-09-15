@@ -28,17 +28,180 @@ pub trait MotionProfile {
     fn eval_position(&self, t: Real) -> Option<(Real, u8)>;
 }
 
-#[derive(Clone, Copy, Default)]
+/// Struct representing the motion profile configuration.
+///
+/// # Fields
+///
+/// * `constraints` - The motion profile constraints.
+/// * `times` - The time parameters for different phases of the motion profile.
+/// * `initial_velocity` - Initial velocity for the motion profile (in mm/s).
+/// * `final_velocity` - Final velocity for the motion profile (in mm/s).
+/// * `error_correction` - An optional error correction factor.
+pub struct ProfileConfig {
+    /// The motion profile constraints.
+    ///
+    /// # Units
+    ///
+    /// - `v_max`: mm/s
+    /// - `a_max`: mm/s²
+    /// - `j_max`: mm/s³
+    pub constraints: Constraints,
+
+    /// The time parameters of the motion profile.
+    ///
+    /// # Units
+    ///
+    /// - `t_j1`: s
+    /// - `t_a`: s
+    /// - `t_v`: s
+    /// - `t_d`: s
+    /// - `t_j2`: s
+    pub times: Times,
+
+    /// Initial velocity for the motion profile.
+    ///
+    /// # Units
+    ///
+    /// - Initial velocity: mm/s
+    pub initial_velocity: Real,
+
+    /// Final velocity for the motion profile.
+    ///
+    /// # Units
+    ///
+    /// - Final velocity: mm/s
+    pub final_velocity: Real,
+
+    /// An optional error correction factor.
+    ///
+    /// # Units
+    ///
+    /// - Error correction factor: Implementation-specific units
+    pub error_correction: Option<Real>,
+}
+
+/// Implementation of the motion profile configuration struct.
+impl ProfileConfig {
+    /// Creates a new instance of `ProfileConfig` with default values.
+    ///
+    /// # Returns
+    ///
+    /// A new instance of `ProfileConfig`.
+    #[allow(unused)]
+    pub const fn new() -> Self {
+        Self {
+            constraints: Constraints {
+                v_max: ZERO,
+                a_max: ZERO,
+                j_max: ZERO,
+            },
+            times: Times {
+                t_j1: ZERO,
+                t_a: ZERO,
+                t_v: ZERO,
+                t_d: ZERO,
+                t_j2: ZERO,
+            },
+            initial_velocity: ZERO,
+            final_velocity: ZERO,
+            error_correction: None,
+        }
+    }
+
+    /// Sets the constraints for the motion profile configuration.
+    ///
+    /// # Parameters
+    ///
+    /// - `constraints`: The constraints to be applied.
+    ///
+    /// # Returns
+    ///
+    /// The updated instance of `ProfileConfig`.
+    #[allow(unused)]
+    pub fn with_constraints(mut self, constraints: Constraints) -> Self {
+        self.constraints = constraints;
+        self
+    }
+
+    /// Sets the time parameters for the motion profile configuration.
+    ///
+    /// # Parameters
+    ///
+    /// - `times`: The time parameters to be applied.
+    ///
+    /// # Returns
+    ///
+    /// The updated instance of `ProfileConfig`.
+    #[allow(unused)]
+    pub fn with_times(mut self, times: Times) -> Self {
+        self.times = times;
+        self
+    }
+
+    /// Sets the initial velocity for the motion profile configuration.
+    ///
+    /// # Parameters
+    ///
+    /// - `initial_velocity`: The initial velocity (in mm/s).
+    ///
+    /// # Returns
+    ///
+    /// The updated instance of `ProfileConfig`.
+    #[allow(unused)]
+    pub fn with_initial_velocity(mut self, initial_velocity: Real) -> Self {
+        self.initial_velocity = initial_velocity;
+        self
+    }
+
+    /// Sets the final velocity for the motion profile configuration.
+    ///
+    /// # Parameters
+    ///
+    /// - `final_velocity`: The final velocity (in mm/s).
+    ///
+    /// # Returns
+    ///
+    /// The updated instance of `ProfileConfig`.
+    #[allow(unused)]
+    pub fn with_final_velocity(mut self, final_velocity: Real) -> Self {
+        self.final_velocity = final_velocity;
+        self
+    }
+
+    /// Sets the optional error correction factor for the motion profile configuration.
+    ///
+    /// # Parameters
+    ///
+    /// - `error_correction`: The error correction factor.
+    ///
+    /// # Returns
+    ///
+    /// The updated instance of `ProfileConfig`.
+    #[allow(unused)]
+    pub fn with_error_correction(mut self, error_correction: Real) -> Self {
+        self.error_correction = Some(error_correction);
+        self
+    }
+}
+
+/// The `Constraints` struct represents the limits of the motion profile in terms of velocity, acceleration, and jerk.
+///
+/// # Fields
+///
+/// * `v_max` - The maximum velocity (in mm/s). This defines the upper limit of speed that can be achieved.
+/// * `a_max` - The maximum acceleration (in mm/s²). This represents the highest rate of change of velocity that is permissible.
+/// * `j_max` - The maximum jerk (in mm/s³). This is the maximum rate of change of acceleration.
+#[derive(Clone, Copy)]
 pub struct Constraints {
-    /// The maximum velocity (v_max).
+    /// The maximum velocity (v_max) (in mm/s).
     /// This defines the upper limit of speed that can be achieved.
     pub v_max: Real,
 
-    /// The maximum acceleration (a_max).
+    /// The maximum acceleration (a_max) (in mm/s²).
     /// This represents the highest rate of change of velocity that is permissible.
     pub a_max: Real,
 
-    /// The maximum jerk (j_max).
+    /// The maximum jerk (j_max) (in mm/s³).
     /// This is the maximum rate of change of acceleration.
     pub j_max: Real,
 }
@@ -57,25 +220,58 @@ impl core::fmt::Display for Constraints {
 }
 
 /// Struct representing the time parameters for different phases of the S-curve motion profile.
+///
+/// This struct is used to define the specific time segments allocated to different phases of the S-curve.
+///
+/// # Fields
+///
+/// * `t_j1` - Time spent in the first jerk phase (in seconds).
+/// * `t_a` - Time spent in the acceleration phase (in seconds).
+/// * `t_v` - Time spent at constant velocity (in seconds).
+/// * `t_d` - Time spent in the deceleration phase (in seconds).
+/// * `t_j2` - Time spent in the second jerk phase (in seconds).
 pub struct Times {
-    /// Time spent in the first jerk phase.
+    /// Time spent in the first jerk phase (in seconds).
     pub t_j1: Real,
 
-    /// Time spent in the acceleration phase.
+    /// Time spent in the acceleration phase (in seconds).
     pub t_a: Real,
 
-    /// Time spent at constant velocity.
+    /// Time spent at constant velocity (in seconds).
     pub t_v: Real,
 
-    /// Time spent in the deceleration phase.
+    /// Time spent in the deceleration phase (in seconds).
     pub t_d: Real,
 
-    /// Time spent in the second jerk phase.
+    /// Time spent in the second jerk phase (in seconds).
     pub t_j2: Real,
 }
 
 /// Struct representing the S-curve motion profile with various parameters.
-#[derive(Clone, Copy, Default)]
+///
+/// The S-curve motion profile is used to define the motion of an object 
+/// where the transition of velocity includes a jerk phase, an acceleration 
+/// phase, a constant velocity phase, a deceleration phase, and a final jerk 
+/// phase to achieve smooth motion.
+///
+/// This profile is characterized by the following parameters:
+///
+/// # Fields
+///
+/// * `t_j1` - Time spent in the first jerk phase (in seconds).
+/// * `t_a` - Time spent in the acceleration phase (in seconds).
+/// * `t_v` - Time spent at constant velocity (in seconds).
+/// * `t_d` - Time spent in the deceleration phase (in seconds).
+/// * `t_j2` - Time spent in the second jerk phase (in seconds).
+/// * `v_0` - Initial velocity (in mm/s).
+/// * `v_1` - Final velocity (in mm/s).
+/// * `j_max` - Maximum jerk (in mm/s³).
+/// * `a_lim_a` - Acceleration limit during the acceleration phase (in mm/s²).
+/// * `a_lim_d` - Deceleration limit during the deceleration phase (in mm/s²).
+/// * `v_lim` - Velocity limit (in mm/s).
+/// * `q1` - Displacement or position to be achieved (in mm).
+/// * `constraints` - Constraints applied to the motion profile.
+/// * `cache` - Cached values for optimization and repeated calculations.
 pub struct SCurveMotionProfile {
     /// Time spent in the first jerk phase.
     pub t_j1: Real,
@@ -126,10 +322,10 @@ impl SCurveMotionProfile {
     ///
     /// # Arguments
     ///
-    /// * `q_1` - Displacement or position to be achieved.
-    /// * `v_0` - Initial velocity.
-    /// * `v_1` - Final velocity.
-    /// * `constraints` - Constraints applied to the motion profile.
+    /// * `q_1` - Displacement or position to be achieved (in mm).
+    /// * `v_0` - Initial velocity (in mm/s).
+    /// * `v_1` - Final velocity (in mm/s).
+    /// * `constraints` - [Constraints] applied to the motion profile.
     /// * `error_correction` - Flag to enable error correction.
     ///
     /// # Returns

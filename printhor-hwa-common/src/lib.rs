@@ -67,14 +67,24 @@ pub mod traits;
 #[derive(strum::EnumCount, Clone, Copy, Debug)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum CommChannel {
+    /// Communication through Serial USB
     #[cfg(feature = "with-serial-usb")]
     SerialUsb,
+    /// Communication through Serial Port 1
     #[cfg(feature = "with-serial-port-1")]
     SerialPort1,
+    /// Communication through Serial Port 2
     #[cfg(feature = "with-serial-port-2")]
     SerialPort2,
-    /// This variant is mandatory. Used by SD prints, integration tests or marco/automation
+    /// This variant is mandatory. Used by SD prints, integration tests or macro/automation.
+    /// It means the source communication channel comes from programmatic and/or internal routines.
     Internal,
+}
+
+impl Default for CommChannel {
+    fn default() -> Self {
+        CommChannel::Internal
+    }
 }
 
 cfg_if::cfg_if! {

@@ -26,6 +26,20 @@ impl core::ops::Deref for MotionPlannerRef {
     }
 }
 
+
+/// The `MotionPlanner` struct is responsible for handling the motion planning logic 
+/// within the system. It encompasses the mechanisms for buffering motion plans, 
+/// signaling motion states, and interacting with the associated motion driver.
+///
+/// # Fields
+///
+/// * `defer_channel` - A reference to the channel used for sending deferred events.
+/// * `ringbuffer` - A `Mutex` guarding the ring buffer that stores motion plans.
+/// * `move_planned` - Configuration state indicating whether a move is planned.
+/// * `available` - Configuration state indicating availability for new motion plans.
+/// * `motion_config` - Reference to the configuration settings for the motion control.
+/// * `motion_st` - A `Mutex` guarding the motion status data.
+/// * `motion_driver` - Reference to the driver responsible for executing motion commands.
 pub struct MotionPlanner {
     //pub event_bus: EventBusRef,
     // The channel to send deferred events
@@ -42,6 +56,50 @@ pub struct MotionPlanner {
 // TODO: Refactor in progress
 #[allow(unused)]
 impl MotionPlanner {
+    /// This constructor sets up the `MotionPlanner` with provided references to the
+    /// necessary components such as the `defer_channel`, `motion_config`, and `motion_driver`.
+    /// It also initializes internal fields such as the motion plan ring buffer, motion status,
+    /// and various configuration states.
+    ///
+    /// # Arguments
+    ///
+    /// * `defer_channel` - A reference to the channel for sending deferred events.
+    /// * `motion_config` - Reference to the configuration settings for motion control.
+    /// * `motion_driver` - Reference to the driver responsible for executing motion commands.
+    ///
+    /// # Returns
+    ///
+    /// A new `MotionPlanner` instance with the specified configuration.
+    ///
+    /// # Explanation
+    ///
+    /// The `new` method is essential for creating a well-initialized `MotionPlanner` object that
+    /// can handle motion planning tasks effectively. By setting up the `defer_channel`, `motion_config`,
+    /// and `motion_driver`, the `MotionPlanner` is equipped with the necessary tools to manage motion commands
+    /// and states. The initialization of the ring buffer and motion status ensures that the planner starts
+    /// with a clean slate and is ready to process new motion plans.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crate::hwa::{DeferChannelRef, MotionConfigRef, MotionDriverRef, EventBusRef};
+    /// use crate::MotionPlanner;
+    ///
+    /// // Assume defer_channel, motion_config, motion_driver, and event_bus are already defined
+    /// let defer_channel: DeferChannelRef = /* initialize defer channel */;
+    /// let motion_config: MotionConfigRef = /* initialize motion config */;
+    /// let motion_driver: MotionDriverRef = /* initialize motion driver */;
+    /// let event_bus: EventBusRef = /* initialize event bus */;
+    ///
+    /// let motion_planner = MotionPlanner::new(defer_channel, motion_config, motion_driver);
+    ///
+    /// // To make the motion_planner ready, call the `start` method
+    /// async {
+    ///     motion_planner.start(&event_bus).await;
+    /// };
+    ///
+    /// // Now the motion_planner is ready to be used
+    /// ```
     pub const fn new(
         defer_channel: hwa::DeferChannelRef,
         motion_config: motion::MotionConfigRef,
@@ -59,6 +117,31 @@ impl MotionPlanner {
         }
     }
 
+
+    /// Starts the motion planner and publishes an event indicating that the motion queue is empty.
+    ///
+    /// This method resets the `move_planned` configuration, signals the `available` configuration,
+    /// and publishes an event to the provided `event_bus` indicating that the movement queue is empty.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_bus` - A reference to the event bus for publishing events.
+    ///
+    /// # Explanation
+    ///
+    /// This method is essential for initializing the motion planner's state and 
+    /// ensuring it starts from a clean slate. By resetting the `move_planned` configuration,
+    /// the method ensures that any previous move plans are discarded,
+    /// preventing unintended motions. The `available` configuration is set to `true` to
+    /// signal that the motion planner is ready to accept new motion plans.
+    ///
+    /// Publishing an event indicating that the motion queue is empty is crucial for
+    /// other components of the system to recognize that the motion planner is in an idle state
+    /// and ready for new instructions. This helps in maintaining synchronization across 
+    /// different parts of the system and ensuring smooth operation.
+    ///
+    /// It is important to note that the motion planner will remain idle and not execute any movements until this `start` method is called.
+    /// This ensures that no motion-related activities commence before the system is fully set up and ready, preventing any accidental or unplanned actions.
     pub async fn start(&self, event_bus: &hwa::EventBusRef) {
         self.move_planned.reset();
         self.available.signal(true);
@@ -70,6 +153,35 @@ impl MotionPlanner {
     }
 
     // Dequeues actual velocity plan
+    
+    /// Dequeues the current velocity plan segment.
+    ///
+    /// This method is used to retrieve the current segment of the motion plan and its associated communication channel.
+    /// It continuously checks the ring buffer for an available plan entry and processes it accordingly.
+    /// If a `PlannedMove` is found, it returns the planned data and the communication channel.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_bus` - A reference to the event bus for publishing events.
+    ///
+    /// # Returns
+    ///
+    /// An `Option` containing a tuple with the segment data and the communication channel.
+    /// If no segment data is available, it returns `None`.
+    ///
+    /// # Explanation
+    ///
+    /// This method plays a crucial role in the motion planning process as it dequeues the current segment of
+    /// the velocity plan, which is essential for executing motion commands in a sequential manner.
+    /// It ensures that the motion planner continually processes and executes planned movements, dwell commands,
+    /// and homing commands by checking the ring buffer and handling different types of `PlanEntry`.
+    /// If a `PlannedMove` entry is found, it marks it as `Executing` and returns the planned data and communication channel.
+    ///
+    /// In the case of a `Homing` entry, it publishes an event indicating that a homing operation is in progress.
+    /// For dwell commands, it sets a flag to indicate that dwelling needs to be performed.
+    ///
+    /// The method ensures that the motion planner's state is correctly updated and synchronized with the event
+    /// bus, which is important for maintaining the overall system's consistency and reliability.
     pub async fn get_current_segment_data(
         &self,
         event_bus: &hwa::EventBusRef,
@@ -120,6 +232,33 @@ impl MotionPlanner {
         }
     }
 
+    
+    /// Consumes the current segment data from the ring buffer.
+    ///
+    /// # Description
+    ///
+    /// This method is responsible for processing the current segment data that has been executed in the motion planner.
+    /// It retrieves the current entry from the ring buffer and performs the necessary actions based on the type of movement.
+    /// The method ensures the proper handling of homing, dwell, and move actions by publishing appropriate events
+    /// and updating the system's state.
+    ///
+    /// # Arguments
+    ///
+    /// * `event_bus` - A reference to the event bus for publishing events.
+    ///
+    /// # Returns
+    ///
+    /// A `u8` value indicating the remaining used slots in the ring buffer after consuming the current segment data.
+    ///
+    /// # Usage
+    ///
+    /// This method is essential for the motion planning system to maintain synchronization between the executed movements
+    /// and the event bus. It ensures that events such as homing completion and dwell completion are correctly published,
+    /// and it also handles the deferment of actions if necessary.
+    ///
+    /// This function is typically called after the execution of a movement has been completed to update the state
+    /// of the ring buffer and signal the availability of slots for new commands. It is an integral part of the system
+    /// to ensure that the motion planner operates smoothly and consistently by managing the state of planned and executed movements.
     pub async fn consume_current_segment_data(&self, event_bus: &hwa::EventBusRef) -> u8 {
         let mut rb = self.ringbuffer.lock().await;
         let head = rb.head;
@@ -173,6 +312,55 @@ impl MotionPlanner {
         rb.used
     }
 
+    
+    /// Schedules a raw movement operation for the motion planner.
+    ///
+    /// # Description
+    ///
+    /// This method is responsible for scheduling a raw movement action. It processes the given movement type and enqueues it in the
+    /// motion planner's ring buffer. This ensures the motion planner operates sequentially, managing the movement commands
+    /// based on their arrival and execution status.
+    ///
+    /// Scheduling a raw move involves:
+    /// - Checking availability in the ring buffer to enqueue new commands.
+    /// - Locking the ring buffer to ensure thread safety during enqueue operations.
+    /// - Possibly deferring the action if the ring buffer is full.
+    /// - Publishing events to notify other subsystems about the execution status and results.
+    ///
+    /// # Usage
+    ///
+    /// This method is commonly used in scenarios where precise control over the motion actions is required. The operations are:
+    /// - Scheduling homing actions for system calibration.
+    /// - Adding delay (dwell) operations between movements.
+    /// - Enqueuing move actions to control hardware actuators like motors and servos.
+    ///
+    /// The method is executed asynchronously to ensure non-blocking operations, allowing the motion planner to handle other tasks
+    /// concurrently. After enqueuing the new command, it signals availability in the ring buffer, coordinating subsequent operations
+    /// and maintaining smooth motion control.
+    ///
+    /// # Arguments
+    ///
+    /// * `channel` - The communication channel through which the motion planner receives commands.
+    /// * `action` - The deferred action (if any) that specifies the type of move.
+    /// * `move_type` - The type of movement to be scheduled (e.g., raw move, homing, dwell).
+    /// * `blocking` - A boolean indicating whether the operation should block until completion.
+    /// * `event_bus` - A reference to the event bus for publishing events.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` indicating the success or failure of the code execution. On success, it provides `CodeExecutionSuccess`; on failure,
+    /// it returns `CodeExecutionFailure`.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let result = planner.schedule_raw_move(channel, action, move_type, blocking, event_bus).await;
+    /// match result {
+    ///     Ok(success) => println!("Move scheduled successfully: {:?}", success),
+    ///     Err(failure) => eprintln!("Failed to schedule move: {:?}", failure),
+    /// }
+    /// ```
+    ///
     pub async fn schedule_raw_move(
         &self,
         channel: hwa::CommChannel,
@@ -443,7 +631,7 @@ impl MotionPlanner {
     }
 
     pub async fn set_usteps(&self, x_usteps: u8, y_usteps: u8, z_usteps: u8, e_usteps: u8) {
-        self.motion_config.lock().await.usteps = [
+        self.motion_config.lock().await.micro_steps_per_axis = [
             x_usteps.into(),
             y_usteps.into(),
             z_usteps.into(),
@@ -526,6 +714,31 @@ impl MotionPlanner {
             .assign(CoordSel::all(), &jerk);
     }
 
+
+    /// Plans and schedules a series of motion commands based on the given GCode.
+    ///
+    /// Depending on the provided GCode, this method performs different motion planning 
+    /// and scheduling actions. It supports G0 (rapid move), G1 (linear move), G4 (dwell), 
+    /// G28 (homing), G29 (leveling), G29_1, and G29_2 commands. Any unsupported GCodes 
+    /// will yield an error.
+    ///
+    /// # Parameters
+    /// - `channel`: The communication channel to be used for issuing commands.
+    /// - `gc`: The GCode command that needs to be processed.
+    /// - `blocking`: A boolean indicating if the command should block until completion.
+    /// - `event_bus`: A reference to the event bus for publishing events.
+    ///
+    /// # Returns
+    /// A `Result` which is:
+    /// - `Ok` if the command was successfully planned and scheduled.
+    /// - `Err` if the command was not yet implemented or other execution failures occurred.
+    ///
+    /// # Usage
+    /// This method is integral to motion control systems where precise planning and 
+    /// execution of motion commands are required. It ensures that various types of 
+    /// motion commands from GCode are handled correctly and appropriately scheduled 
+    /// to execute in an asynchronous manner. This helps in maintaining smooth and 
+    /// coordinated movements for CNC machines or 3D printers.
     pub async fn plan(
         &self,
         channel: hwa::CommChannel,
@@ -780,6 +993,30 @@ impl MotionPlanner {
     }
 }
 
+
+/// This method performs the cornering optimization algorithm on the given `RingBuffer`.
+///
+/// # Arguments
+///
+/// * `rb` - A mutable guard that locks the `hwa::ControllerMutexType` and provides access to the `RingBuffer`.
+///
+/// # Returns
+///
+/// * `Result<(), ()>` - Returns `Ok(())` if the cornering operation is successful, otherwise returns `Err(())`.
+///
+/// # Usage
+///
+/// This method is used to optimize the movement segments that are stored in the `RingBuffer`,
+/// ensuring smooth transitions and efficient processing of corners or turns in the motion path.
+/// It does this by adjusting the `speed_enter_mms` and `speed_exit_mms` fields of the segments
+/// based on their projected speeds and constraints.
+///
+/// The optimization runs a flood fill algorithm to determine the best possible speed values
+/// for entering and exiting each segment, aiming for minimal speed variations and smooth transitions.
+///
+/// The method is typically invoked during the planning phase of motion control, where multiple
+/// segments are queued, and the goal is to optimize the entire motion path by smoothing out the
+/// corners, hence enhancing overall motion performance.
 #[cfg(feature = "cornering")]
 fn perform_cornering(mut rb: MutexGuard<hwa::ControllerMutexType, RingBuffer>) -> Result<(), ()> {
     let mut left_offset = 2;
@@ -898,7 +1135,9 @@ pub fn display_content(
 
 #[cfg(test)]
 pub mod test {
-    use crate::hwa::controllers::{LinearMicrosegmentStepInterpolator, StepPlanner};
+    use printhor_hwa_common::{DeferChannelRef, EventStatus, TrackedStaticCell};
+    use crate::hwa::controllers::{LinearMicrosegmentStepInterpolator, MotionConfig, StepPlanner};
+    use crate::hwa;
 
     //#[cfg(feature = "wip-tests")]
     #[test]
@@ -1366,5 +1605,38 @@ pub mod test {
             expected_advanced_steps,
             real_advanced_steps
         )
+    }
+
+
+
+    #[futures_test::test]
+    async fn receiver_receives_given_try_send_async() {
+
+        let _event_bus = EventStatus::new();
+
+        let _defer_channel: DeferChannelRef = {
+            static MDC: TrackedStaticCell<hwa::DeferChannelChannelType> = TrackedStaticCell::new();
+            DeferChannelRef::new(
+                MDC.init::<{ hwa::MAX_STATIC_MEMORY }>("defer_channel", hwa::DeferChannelChannelType::new())
+            )
+        };
+
+        let _motion_config: hwa::InterruptControllerRef<MotionConfig> = {
+            static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> =
+                TrackedStaticCell::new();
+            hwa::ControllerRef::new(MCS.init::<{ hwa::MAX_STATIC_MEMORY }>(
+                "MotionConfig",
+                hwa::ControllerMutex::new(MotionConfig::new()),
+            ))
+        };
+        let _ = _motion_config.lock().await;
+
+
+        /*
+
+        Work in progress
+
+        */
+
     }
 }

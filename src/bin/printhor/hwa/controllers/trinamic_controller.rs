@@ -36,7 +36,7 @@ impl TrinamicController {
             }
         }
         if self
-            .init_stepper(0, get_microsteps(mcfg.usteps[0]))
+            .init_stepper(0, get_microsteps(mcfg.micro_steps_per_axis[0]))
             .await
             .is_ok()
         {
@@ -48,7 +48,7 @@ impl TrinamicController {
             }
         }
         if self
-            .init_stepper(1, get_microsteps(mcfg.usteps[1]))
+            .init_stepper(1, get_microsteps(mcfg.micro_steps_per_axis[1]))
             .await
             .is_ok()
         {
@@ -60,7 +60,7 @@ impl TrinamicController {
             }
         }
         if self
-            .init_stepper(2, get_microsteps(mcfg.usteps[2]))
+            .init_stepper(2, get_microsteps(mcfg.micro_steps_per_axis[2]))
             .await
             .is_ok()
         {
@@ -69,7 +69,7 @@ impl TrinamicController {
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "trinamic-uart-multi-channel", feature="with-hot-end"))] {
                 self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartE));
-                if self.init_stepper(3, get_microsteps(mcfg.usteps[3])).await.is_ok() {
+                if self.init_stepper(3, get_microsteps(mcfg.micro_steps_per_axis[3])).await.is_ok() {
                     hwa::info!("Trinamic_uart E init OK");
                 }
             }
