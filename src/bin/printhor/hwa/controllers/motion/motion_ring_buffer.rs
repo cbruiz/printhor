@@ -1,11 +1,22 @@
 use crate::hwa;
 use crate::hwa::controllers::{motion, PlanEntry};
 
-/// A ring buffer data structure for storing `PlanEntry` items.
-#[allow(unused)]
+/// A ring buffer data structure designed for storing `PlanEntry` items efficiently.
+///
+/// The `RingBuffer` maintains a circular buffer of fixed size. The `head` and `used` variables keep
+/// track of the current position in the buffer and the number of items stored, respectively.
+///
+/// # Fields
+///
+/// * `data` - An array of `PlanEntry` elements representing the buffer storage.
+/// * `head` - An index pointing to the start of the buffer.
+/// * `used` - The number of elements currently stored in the buffer.
 pub struct RingBuffer {
+    /// An array of `PlanEntry` elements representing the buffer storage.
     pub data: [PlanEntry; hwa::SEGMENT_QUEUE_SIZE as usize],
+    /// An index pointing to the start of the buffer.
     pub head: u8,
+    /// The number of elements currently stored in the buffer
     pub used: u8,
 }
 

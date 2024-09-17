@@ -5,45 +5,61 @@ use crate::math::Real;
 use crate::tgeo::TVector;
 
 /// Represents the data for a motion segment.
+///
+/// # Fields
+/// - `speed_enter_mms`: Initial speed at the entry of the segment in millimeters per second (mm/s).
+/// - `speed_exit_mms`: Speed at the exit of the segment in millimeters per second (mm/s).
+/// - `speed_target_mms`: Target speed for the segment in millimeters per second (mm/s).
+/// - `displacement_mm`: Total displacement to complete the movement in millimeters (mm).
+/// - `speed_enter_constrained_mms`: Constrained initial speed at the entry of the segment in millimeters per second (mm/s).
+/// - `speed_exit_constrained_mms`: Constrained speed at the exit of the segment in millimeters per second (mm/s).
+/// - `proj_prev`: Projection of the previous segment.
+/// - `proj_next`: Projection of the next segment.
+/// - `unit_vector_dir`: Unit vector for the direction of movement.
+/// - `dest_pos`: Destination position vector.
+/// - `tool_power`: Tool power utilized in the segment.
+/// - `constraints`: Motion constraints applicable to the segment.
 #[derive(Clone, Copy)]
 pub struct SegmentData {
-    /// Enter speed in mm/s
+    /// Initial speed at the entry of the segment in millimeters per second (mm/s).
     pub speed_enter_mms: Real,
-    /// Exit speed in mm/s
+    /// Speed at the exit of the segment in millimeters per second (mm/s).
     pub speed_exit_mms: Real,
-    /// Target speed in mm/s
+    /// Target speed for the segment in millimeters per second (mm/s).
     pub speed_target_mms: Real,
-    /// Total displacement to complete the movement in millimeters
+    /// Total displacement to complete the movement in millimeters (mm).
     pub displacement_mm: Real,
 
-    /// Constrained enter speed in mm/s
+    /// Constrained initial speed at the entry of the segment in millimeters per second (mm/s).
     pub speed_enter_constrained_mms: Real,
-    //pub speed_max_gain_mms: Real,
-    /// Constrained exit speed in mm/s
+    /// Constrained speed at the exit of the segment in millimeters per second (mm/s).
     pub speed_exit_constrained_mms: Real,
-    /// Previous projection
+    /// Projection of the previous segment.
     pub proj_prev: Real,
-    /// Next projection
+    /// Projection of the next segment.
     pub proj_next: Real,
 
-    /// Velocity direction vector
-    pub vdir: TVector<Real>,
-    /// Destination position vector
+    /// Unit vector for the direction of movement.
+    pub unit_vector_dir: TVector<Real>,
+    /// Destination position vector in millimeters.
     pub dest_pos: TVector<Real>,
 
     #[allow(unused)]
-    /// Tool power
+    /// Tool power utilized in the segment.
     pub tool_power: Real,
-    /// Motion constraints
+    /// Motion constraints applicable to the segment.
     pub constraints: Constraints,
 }
 
 /// Represents a motion segment.
+///
+/// # Fields
+/// - `segment_data`: Data for the segment, encapsulated in [SegmentData].
+/// - `id`: Segment ID, available only when the "native" feature is enabled.
 #[derive(Clone, Copy)]
 pub struct Segment {
     pub segment_data: SegmentData,
     #[cfg(feature = "native")]
-    /// Segment ID, available only when "native" feature is enabled
     pub id: u32,
 }
 
@@ -74,12 +90,19 @@ impl Segment {
 }
 
 /// Iterator over motion segments.
+///
+/// # Type Parameters
+/// - `'a`: Lifetime of the motion profile reference.
+/// - `P`: Type of the motion profile, which must implement the [MotionProfile] trait.
 pub struct SegmentIterator<'a, P>
 where
     P: MotionProfile,
 {
+    /// Reference to the motion profile.
     profile: &'a P,
+    /// Reference time for the iterator.
     ref_time: Real,
+    /// State flag indicating whether the iterator is exhausted.
     exhausted: bool,
 }
 
@@ -159,7 +182,7 @@ mod tests {
             speed_exit_constrained_mms: Real::from_f32(15.0),
             proj_prev: Real::from_f32(0.0),
             proj_next: Real::from_f32(100.0),
-            vdir: TVector::one(),
+            unit_vector_dir: TVector::one(),
             dest_pos: TVector::one() * math::ONE_HUNDRED,
             tool_power: Real::from_f32(5.0),
             constraints: Constraints {

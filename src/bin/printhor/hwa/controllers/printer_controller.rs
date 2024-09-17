@@ -6,42 +6,92 @@ use printhor_hwa_common::TrackedStaticCell;
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
+/// Enumeration representing various events that the Printer Controller can handle.
 pub enum PrinterControllerEvent {
+    /// Event to set a file to be printed.
+    /// Contains the file name as an `alloc::string::String`.
     SetFile(alloc::string::String),
+
+    /// Event to resume a paused print job.
     Resume,
+
+    /// Event to pause an ongoing print job.
     Pause,
+
+    /// Event to abort the current print job.
     Abort,
 }
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
 #[derive(Copy, Clone)]
+/// Enumeration representing the status of the Printer Controller.
 pub enum PrinterControllerStatus {
-    /// Ready to get orders
+    /// Indicates that the printer is ready to receive print jobs.
     Ready,
-    /// There is a job work in progress
+    /// Indicates that a print job is currently in progress.
     Printing,
-    /// There is a job work in progress but is paused
+    /// Indicates that a print job is in progress but currently paused.
     Paused,
 }
 
-#[allow(unused)]
+/// Enum representing possible errors that can occur in the Printer Controller.
+///
+/// Variants:
+///
+/// - `AlreadyPrinting`: 
+///     Occurs when attempting to start a new print job while another job is already in progress.
+///     To start a new job, the ongoing job must be stopped first.
+///
+/// - `NotPrinting`: 
+///     Occurs when attempting to stop a print job when no job is currently running. This generally happens when the printer is in a `Ready` state.
+///
+/// - `NoEffect`: 
+///     Occurs when the requested operation has no effect. 
+///     For example, trying to start a job that is already started, or stop a job that is already stopped.
 #[derive(Debug)]
 pub enum PrinterControllerError {
-    /// You wanted to schedule a print job but there is something running. It must be stopped first.
+    /// Attempted to start a new print job while another is already in progress.
+    /// To start a new job, the ongoing job must be stopped first.
     AlreadyPrinting,
-    /// You wanted to stop a print job but there is nothing running.
+
+    /// Attempted to stop a print job when no job is currently running.
+    /// This generally happens when the printer is in a `Ready` state.
     NotPrinting,
-    /// The command has no effect (start what is already started, stop what is already stopped...).
+
+    /// The requested operation has no effect.
+    /// For example, trying to start a job that is already started, or stop a job that is already stopped.
     NoEffect,
 }
 
 pub type PrinterControllerSignalType =
     embassy_sync::signal::Signal<hwa::ControllerMutexType, PrinterControllerEvent>;
 
+/// The `PrinterController` struct represents the controller for managing printer operations.
+///
+/// This controller maintains the state and communication channels necessary for handling print jobs and events.
+///
+/// Fields:
+///
+/// - `channel`:
+///     A reference to the signal channel for sending and receiving `PrinterControllerEvent` events.
+///     This channel is used to communicate event changes within the printer controller.
+///
+/// - `event_bus`:
+///     A reference to the event bus that facilitates communication between different components or modules that need to respond to printer events.
+///     This is typically used for broadcasting events to various parts of the system.
+///
+/// - `status`:
+///     A reference to the status configuration that keeps track of the current state of the printer.
+///     The status can be one of `PrinterControllerStatus::Ready`, `PrinterControllerStatus::Printing`, or `PrinterControllerStatus::Paused`.
 pub struct PrinterController {
+    /// The signal channel for handling printer controller events.
     channel: &'static PrinterControllerSignalType,
+
+    /// The event bus for broadcasting events.
     event_bus: EventBusRef,
+
+    /// The current status of the printer controller.
     status: &'static Config<hwa::ControllerMutexType, PrinterControllerStatus>,
 }
 

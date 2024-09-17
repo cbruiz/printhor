@@ -8,33 +8,57 @@ use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
 
 type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
 
+
+/// A controller struct for managing a heater device.
+///
+/// This controller interacts with both an ADC (Analog-Digital Converter) 
+/// and a PWM (Pulse-Width Modulation) controller to measure and regulate the temperature.
+///
+/// # Generics
+/// * `AdcPeri`: Represents the ADC peripheral, it must implement `AdcTrait`.
+/// * `AdcPin`: Represents the specific pin used by the ADC, it must implement `AdcPinTrait`.
+/// * `PwmHwaDevice`: Represents the PWM device, it must implement `embedded_hal_02::Pwm` with `u32` type for `Duty`.
+///
+/// # Fields
+/// * `adc`: A reference to the ADC controller used for temperature measurement.
+/// * `adc_pin`: The pin used by the ADC controller for reading values.
+/// * `v_ratio`: The precomputed ratio of volts per ADC unit for voltage to temperature conversion.
+/// * `pwm`: A PWM controller used to apply heating power.
+/// * `defer_channel`: A channel for submitting status changes for deferred processing.
+/// * `target_temp`: The target or desired temperature value in Celsius.
+/// * `current_temp`: The last measured temperature value in Celsius, cached for quick access.
+/// * `current_resistance`: The last measured resistance value in Ohms, cached for quick access.
+/// * `commander_channel`: The communication channel that sent the current request.
+/// * `on`: A boolean indicating whether the heater is currently on.
+/// * `thermistor_properties`: Properties of the thermistor including its resistance and beta coefficient.
 pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
 where
     AdcPeri: crate::hwa::device::AdcTrait + 'static,
     AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
+    PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
 {
-    /// Shared Analog-Digital Converter controller to measure temperature
+    /// Shared Analog-Digital Converter (ADC) controller used to measure temperature.
     adc: hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>,
+    /// The specific pin used by the ADC.
     adc_pin: AdcPin,
-    /// Precomputed ratio of volts per ADC unit
+    /// Precomputed ratio of volts per ADC unit, used for voltage to temperature conversion.
     v_ratio: f32,
-    /// Shared PWM controller to apply heating power
+    /// Shared Pulse-Width Modulation (PWM) controller used to apply heating power.
     pwm: PwmController<PwmHwaDevice>,
-    /// The defer channel to submit status changes to
+    /// The defer channel to submit status changes for deferred processing.
     defer_channel: DeferChannelRef,
-    /// The target/expected temperature value (in Celsius)
+    /// The target or expected temperature value in Celsius.
     target_temp: f32,
-    /// Cache of last temperature value measure (in Celsius)
+    /// Last measured temperature value in Celsius, cached for quick access.
     current_temp: f32,
-    /// Cache of last resistance value measure (in Ohms)
+    /// Last measured resistance value in Ohms, cached for quick access.
     current_resistance: f32,
-    /// The comm channel who commanded the request.
+    /// The communication channel that commanded the current request.
     commander_channel: CommChannel,
-    /// Cache of controller state
+    /// Cache of the heater controller's operational state (on or off).
     on: bool,
-    /// The thermistor properties
+    /// The properties of the thermistor being used, including its resistance and beta coefficient.
     thermistor_properties: &'static hwa::ThermistorProperties,
 }
 #[allow(dead_code)]
@@ -97,9 +121,29 @@ where
             self.v_ratio
         );
     }
-
-    // Read temperature in celsius degrees
-    #[inline]
+    
+    /// Reads the current temperature in Celsius degrees.
+    ///
+    /// # Returns
+    ///
+    /// * `f32` - The current temperature measurement in Celsius degrees.
+    ///
+    /// # Implementation Note
+    ///
+    /// This asynchronous function locks the ADC bus to perform a temperature 
+    /// measurement. Depending on the feature configuration, the measurement 
+    /// can be performed asynchronously or synchronously. The raw ADC value read 
+    /// from the ADC pin is then converted to a temperature value, using the 
+    /// `convert_to_celsius` method, which is also responsible for updating the 
+    /// cached temperature and resistance values.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let mut controller = HeaterController::new(adc, adc_pin, pwm, defer_channel, thermistor_properties);
+    /// let current_temp = controller.read_temp().await;
+    /// println!("Current Temperature: {} °C", current_temp);
+    /// ```
     pub async fn read_temp(&mut self) -> f32 {
         let mut bus = self.adc.lock().await;
         cfg_if::cfg_if! {
@@ -119,8 +163,29 @@ where
         self.target_temp
     }
 
-    /// Returns if true when command is deferred (needs to delay ACK to reach the temperature).
-    /// Automatically triggers a defer event
+    /// Sets the target temperature for the heater.
+    ///
+    /// This method is responsible for setting a new target temperature and determining whether
+    /// the command to reach that temperature should be deferred. If the requested temperature
+    /// is significantly different from the current target temperature, the method will trigger
+    /// a defer event.
+    ///
+    /// # Parameters
+    ///
+    /// * `channel`: The communication channel that has sent the current request.
+    /// * `action`: The action to be deferred.
+    /// * `requested_temp`: The newly requested temperature in Celsius degrees.
+    ///
+    /// # Returns
+    ///
+    /// * `bool` - Returns `true` if the command is deferred (i.e., it needs to delay ACK to reach the desired temperature).
+    ///
+    /// # Notes
+    ///
+    /// * If the requested temperature is above `0.0f32`, the heater will be turned on.
+    /// * If the difference between the requested temperature and the current target temperature
+    ///   is significant (more than 10%), a defer event will be triggered.
+    /// * If the requested temperature is `0.0f32` or less, the heater will be turned off.
     pub async fn set_target_temp(
         &mut self,
         channel: CommChannel,
@@ -149,9 +214,31 @@ where
         }
     }
 
-    /// Check temperature is OK
-    /// Returns if true when command is deferred (needs to delay ACK to reach the temperature).
-    /// Automatically triggers a defer event
+    /// Checks if the temperature is within an acceptable range compared to the target temperature.
+    ///
+    /// If the heater is on and the measured temperature differs from the target temperature by
+    /// more than 10%, this method will trigger a defer event, requesting to delay processing until
+    /// the temperature stabilizes.
+    ///
+    /// # Parameters
+    ///
+    /// * `channel`: The communication channel that sent the current request.
+    /// * `action`: The action to be deferred if the temperature is not within the acceptable range.
+    ///
+    /// # Returns
+    ///
+    /// * `bool` - Returns `true` if the command is deferred (indicating a need to delay ACK
+    ///   to allow the temperature to stabilize), otherwise returns `false`.
+    ///
+    /// # Notes
+    ///
+    /// * If the heater is off or the current temperature is not greater than zero, the method
+    ///   returns `false` without triggering a defer event.
+    /// * Otherwise, it compares the current temperature with the target temperature.
+    /// * If the difference exceeds 10% of the target temperature, a defer event is triggered,
+    ///   and the method returns `true`. The commander's channel is updated to the provided channel.
+    /// * If the temperature difference is within the 10% range, the method returns `false`
+    ///   and sets the commander's channel to `CommChannel::Internal`.
     pub async fn ping_subscribe(&mut self, channel: CommChannel, action: DeferAction) -> bool {
         if self.is_on() && self.current_temp > 0.0f32 {
             let tdiff = self.current_temp - self.target_temp;

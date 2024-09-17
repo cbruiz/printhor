@@ -3,6 +3,16 @@ use crate::hwa;
 use embedded_hal_02::Pwm;
 use printhor_hwa_common::InterruptControllerRef;
 
+/// A controller for managing PWM (Pulse-Width Modulation).
+///
+/// # Type Parameters
+///
+/// * `TimPeri` - A type that implements the `Pwm` trait and is 'static.
+///
+/// # Fields
+///
+/// * `pwm` - A reference to an interrupt controller managing the PWM peripheral.
+/// * `pwm_chan` - The specific PWM channel being controlled.
 pub struct PwmController<TimPeri>
 where
     TimPeri: Pwm + 'static,

@@ -452,11 +452,11 @@ impl MotionPlanner {
                                     PlanEntry::PlannedMove(prev_segment, _, _, _) => {
                                         let proj: Real = prev_segment
                                             .segment_data
-                                            .vdir
-                                            .orthogonal_projection(curr_segment.segment_data.vdir);
+                                            .unit_vector_dir
+                                            .orthogonal_projection(curr_segment.segment_data.unit_vector_dir);
                                         if proj.is_defined_positive() {
                                             hwa::debug!("RingBuffer [{}, {}] chained: ({}) proj ({}) = ({})", prev_index, curr_insert_index,
-                                                prev_segment.segment_data.vdir, curr_segment.segment_data.vdir, proj
+                                                prev_segment.segment_data.unit_vector_dir, curr_segment.segment_data.unit_vector_dir, proj
                                             );
                                             hwa::debug!("\ts : vi = [{} < {}] - vtarget = {} - vo = [{} < {}]:",
                                                 prev_segment.segment_data.speed_enter_mms, prev_segment.segment_data.speed_enter_constrained_mms,
@@ -856,7 +856,7 @@ impl MotionPlanner {
         // When dist is zero, value is map to None (NaN).
         // In case o E dimension, flow rate factor is applied
         let ds = p1 - p0;
-        let (vdir, module_target_distance) = ds
+        let (unit_vector_dir, module_target_distance) = ds
             .map_coord(CoordSel::all(), |coord_value, coord_idx| match coord_idx {
                 CoordSel::X | CoordSel::Y | CoordSel::Z => match coord_value.is_zero() {
                     true => None,
@@ -873,7 +873,7 @@ impl MotionPlanner {
         // Compute the speed module applying speed_rate factor
         let speed_module = requested_motion_speed.unwrap_or(dts);
         // Compute per-axis distance
-        let disp_vector: TVector<Real> = vdir.abs() * speed_module;
+        let disp_vector: TVector<Real> = unit_vector_dir.abs() * speed_module;
         // Clamp per-axis target speed to the physical restrictions
         let clamped_speed = disp_vector.clamp(max_speed);
 
@@ -881,8 +881,8 @@ impl MotionPlanner {
         let speed_vector = clamped_speed * speed_rate;
 
         let module_target_speed = speed_vector.norm2().unwrap_or(math::ZERO);
-        let module_target_accel = (vdir.abs() * max_accel).norm2().unwrap_or(math::ZERO);
-        let module_target_jerk = (vdir.abs() * max_jerk).norm2().unwrap_or(math::ZERO);
+        let module_target_accel = (unit_vector_dir.abs() * max_accel).norm2().unwrap_or(math::ZERO);
+        let module_target_jerk = (unit_vector_dir.abs() * max_jerk).norm2().unwrap_or(math::ZERO);
 
         let move_result = if module_target_distance.is_negligible() {
             Ok(control::CodeExecutionSuccess::OK)
@@ -899,7 +899,7 @@ impl MotionPlanner {
                 speed_exit_constrained_mms: Real::zero(),
                 proj_prev: Real::zero(),
                 //speed_max_gain_mms: Real::zero(),
-                vdir,
+                unit_vector_dir,
                 dest_pos: p1,
                 tool_power: Real::zero(),
                 constraints: control::motion::Constraints {
@@ -1165,7 +1165,7 @@ pub mod test {
             speed_exit_constrained_mms: Real::from_f32(6.25),
             proj_prev: Real::from_f32(0.999986052),
             proj_next: Real::from_f32(0.999938488),
-            vdir: TVector::from_coords(
+            unit_vector_dir: TVector::from_coords(
                 Some(Real::from_f32(-0.901716948)),
                 Some(Real::from_f32(-0.432327151)),
                 None,
@@ -1185,7 +1185,7 @@ pub mod test {
             },
         });
 
-        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let neutral_element = segment.segment_data.unit_vector_dir.map_val(&math::ZERO);
         let units_per_mm = TVector::from_coords(
             Some(Real::from_f32(10.0)),
             Some(Real::from_f32(10.0)),
@@ -1218,7 +1218,7 @@ pub mod test {
         let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
 
         let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
-            segment.segment_data.vdir.abs(),
+            segment.segment_data.unit_vector_dir.abs(),
             segment.segment_data.displacement_mm,
             steps_per_mm,
         );
@@ -1322,7 +1322,7 @@ pub mod test {
             speed_exit_constrained_mms: Real::from_f32(6.25),
             proj_prev: Real::from_f32(0.999986052),
             proj_next: Real::from_f32(0.999938488),
-            vdir: TVector::from_coords(
+            unit_vector_dir: TVector::from_coords(
                 Some(Real::from_f32(-0.901716948)),
                 Some(Real::from_f32(-0.432327151)),
                 None,
@@ -1342,7 +1342,7 @@ pub mod test {
             },
         });
 
-        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let neutral_element = segment.segment_data.unit_vector_dir.map_val(&math::ZERO);
         let units_per_mm = TVector::from_coords(
             Some(Real::from_f32(10.0)),
             Some(Real::from_f32(10.0)),
@@ -1375,7 +1375,7 @@ pub mod test {
         let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
 
         let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
-            segment.segment_data.vdir.abs(),
+            segment.segment_data.unit_vector_dir.abs(),
             segment.segment_data.displacement_mm,
             steps_per_mm,
         );
@@ -1477,7 +1477,7 @@ pub mod test {
             speed_exit_constrained_mms: Real::from_f32(6.25),
             proj_prev: Real::from_f32(0.999986052),
             proj_next: Real::from_f32(0.999938488),
-            vdir: TVector::from_coords(
+            unit_vector_dir: TVector::from_coords(
                 Some(Real::from_f32(-0.901716948)),
                 Some(Real::from_f32(-0.432327151)),
                 None,
@@ -1497,7 +1497,7 @@ pub mod test {
             },
         });
 
-        let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+        let neutral_element = segment.segment_data.unit_vector_dir.map_val(&math::ZERO);
         let units_per_mm = TVector::from_coords(
             Some(Real::from_f32(10.0)),
             Some(Real::from_f32(10.0)),
@@ -1530,7 +1530,7 @@ pub mod test {
         let mut microsegment_iterator = SegmentIterator::new(&motion_profile, math::ZERO);
 
         let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
-            segment.segment_data.vdir.abs(),
+            segment.segment_data.unit_vector_dir.abs(),
             segment.segment_data.displacement_mm,
             steps_per_mm,
         );

@@ -297,7 +297,7 @@ async fn main(spawner: embassy_executor::Spawner)
                 s_id += 1;
                 hwa::debug!("Dequeuing move at t_ref={}", ref_time);
                 data_points.seg_start(ref_time, total_disp, segment.segment_data.speed_enter_mms);
-                let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+                let neutral_element = segment.segment_data.unit_vector_dir.map_val(&math::ZERO);
 
                 match SCurveMotionProfile::compute(segment.segment_data.displacement_mm, segment.segment_data.speed_enter_mms, segment.segment_data.speed_exit_mms,
                                                    &segment.segment_data.constraints, false) {
@@ -316,7 +316,7 @@ async fn main(spawner: embassy_executor::Spawner)
                         let mut microsegment_iterator = motion::SegmentIterator::new(&motion_profile, math::ZERO);
 
                         let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
-                            segment.segment_data.vdir.abs(),
+                            segment.segment_data.unit_vector_dir.abs(),
                             segment.segment_data.displacement_mm,
                             mm_per_unit,
                         );

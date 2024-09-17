@@ -22,18 +22,34 @@ pub type SDCardBlockDevice = hwa::device::SDCardBlockDevice;
 #[allow(unused)]
 use crate::alloc::string::ToString;
 
+/// Represents various errors that can occur while interacting with an SD card.
 #[allow(unused)]
 #[derive(Debug)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum SDCardError {
+    /// Error indicating that no volume could be found.
     NoSuchVolume,
+
+    /// A general internal error.
     InternalError,
+
+    /// Error indicating that no directory was specified.
     NoDirectorySpecified,
+
+    /// Error for features that are not yet implemented.
     #[allow(unused)]
     NotYetImplemented,
+
+    /// Error indicating that the maximum number of open directories has been reached.
     MaxOpenDirs,
+
+    /// Error indicating an inconsistency within the filesystem or state.
     InconsistencyError,
+
+    /// Error indicating that there are trailing entries in the path.
     TrailingEntries,
+
+    /// Error indicating that the specified item was not found.
     NotFound,
 }
 

@@ -3,15 +3,34 @@ use crate::hwa;
 use embassy_time::Instant;
 use hwa::soft_uart::SerialError;
 
+/// Represents errors that can occur in the Trinamic UART controller.
 #[allow(unused)]
 pub enum TrinamicError {
+    /// Indicates a timeout error, which occurs when an operation exceeds the allotted time.
     Timeout,
+    /// Indicates a write error, which occurs when there is an issue writing data to the UART.
     WriteError,
+    /// Indicates a read error, which occurs when there is a problem reading data from the UART.
     ReadError,
 }
 
+/// Represents a controller for Trinamic UART-based devices.
+///
+/// The `TrinamicController` is responsible for handling communication
+/// and control of Trinamic UART-based stepper motor drivers. It provides
+/// methods to initialize the steppers, write to and read from the registers,
+/// and manage different motion configurations of the steppers.
 pub struct TrinamicController {
+    /// UART interface for communicating with the Trinamic device.
+    ///
+    /// This interface facilitates the transfer of data between the controller
+    /// and the Trinamic device, allowing for sending commands and receiving responses.
     uart: hwa::device::TrinamicUart,
+    /// Motion configuration reference used by the controller.
+    ///
+    /// The motion configuration holds various settings related to the movement
+    /// of the stepper motors, such as microstep configurations and possibly other
+    /// parameters needed to correctly drive the motors.
     motion_config: hwa::controllers::MotionConfigRef,
 }
 impl TrinamicController {

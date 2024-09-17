@@ -3,17 +3,62 @@ use crate::hwa;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
 use printhor_hwa_common::InterruptControllerRef;
+/// The `ProbeTrait` defines a set of asynchronous methods for controlling the probe.
+/// Each method represents a specific probe action, with a customizable sleep duration.
+///
+/// # Methods
+///
+/// * `probe_pin_down(&mut self, sleep_us: u64)` - Lowers the probe pin.
+/// * `probe_pin_up(&mut self, sleep_us: u64)` - Raises the probe pin.
+/// * `probe_self_test(&mut self, sleep_us: u64)` - Initiates a self-test sequence.
+/// * `probe_alarm_release(&mut self, sleep_us: u64)` - Releases any probe alarms.
+/// * `probe_test_mode(&mut self, sleep_us: u64)` - Sets the probe into test mode.
 #[allow(unused)]
 pub trait ProbeTrait {
+    /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
+    ///
+    /// # Parameters
+    /// * `sleep_us` - Duration in microseconds to sleep after lowering the pin.
     async fn probe_pin_down(&mut self, sleep_us: u64);
+
+    /// Raises the probe pin, moving it away from contact. The operation waits for a specified duration.
+    ///
+    /// # Parameters
+    /// * `sleep_us` - Duration in microseconds to sleep after raising the pin.
     async fn probe_pin_up(&mut self, sleep_us: u64);
+
+    /// Initiates a self-test sequence for the probe. The operation waits for a specified duration.
+    ///
+    /// # Parameters
+    /// * `sleep_us` - Duration in microseconds to sleep after performing the self-test.
     async fn probe_self_test(&mut self, sleep_us: u64);
+
+    /// Releases any active probe alarms. The operation waits for a specified duration.
+    ///
+    /// # Parameters
+    /// * `sleep_us` - Duration in microseconds to sleep after releasing the alarm.
     async fn probe_alarm_release(&mut self, sleep_us: u64);
+
+    /// Sets the probe into test mode. The operation waits for a specified duration.
+    ///
+    /// # Parameters
+    /// * `sleep_us` - Duration in microseconds to sleep after entering test mode.
     async fn probe_test_mode(&mut self, sleep_us: u64);
 }
 
+/// The `ServoController` structure is responsible for managing a servo motor 
+/// using an interrupt-controlled PWM (Pulse Width Modulation) channel. 
+/// It provides methods to control the angle of the servo and implements the `ProbeTrait` for additional probe-related actions.
+///
+/// # Fields
+///
+/// * `servo` - A reference to an interrupt-controlled PWM servo device (PwmServo).
+/// * `channel` - The specific PWM channel associated with the servo motor.
 pub struct ServoController {
+    /// A reference to an interrupt-controlled PWM servo device.
     servo: InterruptControllerRef<hwa::device::PwmServo>,
+
+    /// The specific PWM channel associated with the servo motor.
     channel: hwa::device::PwmChannel,
 }
 

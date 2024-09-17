@@ -249,7 +249,7 @@ pub async fn task_stepper(
                     .await;
 
                 // Vector helper to filter out irrelevant axes
-                let neutral_element = segment.segment_data.vdir.map_val(&math::ZERO);
+                let neutral_element = segment.segment_data.unit_vector_dir.map_val(&math::ZERO);
                 // Compute the Motion Profile
                 match SCurveMotionProfile::compute(
                     segment.segment_data.displacement_mm,
@@ -288,7 +288,7 @@ pub async fn task_stepper(
                             SegmentIterator::new(&motion_profile, math::ZERO);
 
                         let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
-                            segment.segment_data.vdir.abs(),
+                            segment.segment_data.unit_vector_dir.abs(),
                             segment.segment_data.displacement_mm,
                             steps_per_mm,
                         );
@@ -296,7 +296,7 @@ pub async fn task_stepper(
                         // Prepare enable and dir flags
                         let mut stepper_enable_flags = StepperChannel::empty();
                         let mut stepper_dir_fwd_flags = StepperChannel::empty();
-                        segment.segment_data.vdir.apply_coords(|cs| {
+                        segment.segment_data.unit_vector_dir.apply_coords(|cs| {
                             #[cfg(feature = "with-x-axis")]
                             if cs.0.contains(CoordSel::X) {
                                 stepper_enable_flags.set(StepperChannel::X, true);
@@ -445,7 +445,7 @@ pub async fn task_stepper(
 
                         {
                             let adv_steps = microsegment_interpolator.advanced_steps();
-                            if let Some(c) = segment.segment_data.vdir.x {
+                            if let Some(c) = segment.segment_data.unit_vector_dir.x {
                                 if c.is_defined_positive() {
                                     real_steppper_pos.set_coord(
                                         CoordSel::X,
@@ -464,7 +464,7 @@ pub async fn task_stepper(
                                     );
                                 }
                             }
-                            if let Some(c) = segment.segment_data.vdir.y {
+                            if let Some(c) = segment.segment_data.unit_vector_dir.y {
                                 if c.is_defined_positive() {
                                     real_steppper_pos.set_coord(
                                         CoordSel::Y,
@@ -483,7 +483,7 @@ pub async fn task_stepper(
                                     );
                                 }
                             }
-                            if let Some(c) = segment.segment_data.vdir.z {
+                            if let Some(c) = segment.segment_data.unit_vector_dir.z {
                                 if c.is_defined_positive() {
                                     real_steppper_pos.set_coord(
                                         CoordSel::Z,
