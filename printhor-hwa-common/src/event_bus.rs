@@ -241,13 +241,11 @@ impl EventBusRef {
     /// }
     /// ```
     ///
-    #[inline]
     pub async fn publish_event(&self, event: EventStatus) {
         let mut req = self.instance.lock().await;
         req.publish_event(event);
     }
 
-    #[inline]
     pub async fn get_status(&self) -> EventFlags {
         let req = self.instance.lock().await;
         req.get_status()
@@ -291,7 +289,6 @@ impl EventBusRef {
     /// }
     ///
     /// ```
-    #[inline]
     pub async fn has_flags(&self, flags: EventFlags) -> bool {
         let req = self.instance.lock().await;
         req.get_status().bitand(flags).eq(&flags)
@@ -309,7 +306,6 @@ impl EventBusRef {
 
 impl EventBusSubscriber<'_> {
     #[allow(unused)]
-    #[inline]
     pub async fn get_status(&mut self) -> EventFlags {
         let mut status = self.last_status;
         loop {
@@ -402,7 +398,6 @@ impl EventBusSubscriber<'_> {
     ///     }
     /// }
     /// ```
-    #[inline]
     pub async fn ft_wait_until(&mut self, flags: EventFlags)  -> Result<(),()> {
         self.ft_wait_for(EventStatus::containing(flags)).await
     }
@@ -435,7 +430,6 @@ impl EventBusSubscriber<'_> {
     ///     }
     /// }
     /// ```
-    #[inline]
     pub async fn ft_wait_until_reset(&mut self, flags: EventFlags) -> Result<(), ()> {
         self.ft_wait_for(EventStatus::not_containing(flags)).await
     }
@@ -468,7 +462,6 @@ impl EventBusSubscriber<'_> {
     ///     }
     /// }
     /// ```
-    #[inline]
     pub async fn ft_wait_while(&mut self, flags: EventFlags) -> Result<(),()> {
         self.ft_wait_for(EventStatus::not_containing(flags)).await
     }
@@ -535,6 +528,7 @@ impl EventStatus {
     /// let updated_event_status = event_status.and_not_containing(EventFlags::SYS_BOOTING);
     /// ```
     #[allow(unused)]
+    #[inline]
     pub const fn new() -> Self {
         Self {
             flags: EventFlags::empty(),

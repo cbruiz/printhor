@@ -11,6 +11,9 @@ cfg_if::cfg_if! {
         pub const FOUR: Real = Real::from_f32(4.0);
         pub const SIX: Real = Real::from_f32(6.0);
         pub const SIXTH: Real = Real::from_f32(1.0 / 6.0);
+
+        /// A very small value used to determine the difference between two floating point numbers.
+        /// This constant is useful for comparisons to handle floating point negligible differences.
         pub const EPSILON: Real = Real::from_f32(f32::EPSILON);
 
         #[allow(unused)]

@@ -45,6 +45,12 @@ cfg_if::cfg_if! {
             pub(crate) fn powi(self, x: i32) -> Self {
                 Self(self.0.powi(x))
             }
+
+            #[inline]
+            pub fn recip(self) -> Self {
+                Self(FloatCore::recip(self.0))
+            }
+
             #[inline]
             pub const fn zero() -> Self {
                 Self(0.0)
@@ -52,6 +58,11 @@ cfg_if::cfg_if! {
             #[inline]
             pub(crate) fn is_zero(&self) -> bool {
                 F::is_zero(&self.0)
+            }
+
+            #[inline]
+            pub const fn epsilon() -> Self {
+                crate::math::EPSILON
             }
 
             #[inline]

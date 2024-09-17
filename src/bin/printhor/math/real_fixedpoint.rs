@@ -58,9 +58,9 @@ cfg_if::cfg_if! {
                 self.0.is_zero()
             }
 
-            pub fn epsilon() -> Self {
-                //Real(<f32 as FloatCore>::epsilon())
-                Real(Decimal::ZERO)
+            #[inline]
+            pub const fn epsilon() -> Self {
+                crate::math::EPSILON
             }
 
             #[inline]

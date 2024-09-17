@@ -60,8 +60,9 @@ cfg_if::cfg_if! {
                 f32::is_zero(&self.0)
             }
 
-            pub fn epsilon() -> Self {
-                Real(<f32 as FloatCore>::epsilon())
+            #[inline]
+            pub const fn epsilon() -> Self {
+                crate::math::EPSILON
             }
 
             #[inline]

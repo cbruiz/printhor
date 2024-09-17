@@ -28,6 +28,8 @@ pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
+
+/// The maximum static memory expected/allowed, specified in bytes.
 pub const MAX_STATIC_MEMORY: usize = 32768;
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
@@ -35,7 +37,26 @@ pub const SDCARD_PARTITION: usize = 0;
 // The bit-banging uart in native simulator is set to ultra low speed for obvious reasons
 #[cfg(feature = "with-trinamic")]
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
-pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
+
+
+/// Defines a timeout value for the watchdog timer in nanoseconds.
+/// This value is crucial for ensuring the system can recover from
+/// unexpected states by triggering a system reset or another defined
+/// recovery action if the system becomes unresponsive. The timeout value
+/// should be carefully chosen based on:
+///
+/// 1. **System Responsiveness Needs**: A shorter timeout is useful for
+///    highly responsive systems, ensuring quick recovery.
+/// 2. **Processing Time**: Consider the maximum time a valid operation
+///    might need to complete. Timeout should be long enough to avoid
+///    unnecessary resets during normal operation.
+/// 3. **Resource Constraints**: A longer timeout might be needed for
+///    systems with limited processing power or more complex tasks.
+/// :
+///
+/// Defaulting to 30,000,000 nanoseconds (or 30 milliseconds).
+/// Modify this value as per the requirements of your specific application.
+pub const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 
 pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1650;
