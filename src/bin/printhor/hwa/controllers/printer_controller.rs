@@ -97,8 +97,12 @@ pub struct PrinterController {
 
 impl PrinterController {
     pub fn new(event_bus: EventBusRef) -> PrinterController {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> =
             TrackedStaticCell::new();
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static STATUS_INST: TrackedStaticCell<
             Config<hwa::ControllerMutexType, PrinterControllerStatus>,
         > = TrackedStaticCell::new();

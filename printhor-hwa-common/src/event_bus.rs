@@ -1,15 +1,16 @@
 //! The state manager controller.
 //!
 //! This module provides a global asynchronous event bus.
+
+use core::fmt::Formatter;
 use core::ops::{BitAnd, BitOr, BitXor};
 use crate::{TrackedStaticCell, ControllerMutex, ControllerRef, InterruptControllerMutexType};
-use bitflags::bitflags;
 
 pub type EventBusPubSubType = embassy_sync::pubsub::PubSubChannel<InterruptControllerMutexType, EventFlags, 1, 6, 1>;
 pub type EventBusPublisherType = embassy_sync::pubsub::Publisher<'static, InterruptControllerMutexType, EventFlags, 1, 6, 1>;
 pub type EventBusSubscriberType<'a> = embassy_sync::pubsub::Subscriber<'a, InterruptControllerMutexType, EventFlags, 1, 6, 1>;
 
-bitflags! {
+bitflags::bitflags! {
     /// Structure representing a collection of event flags.
     ///
     /// `EventFlags` is a bitflags structure used to define different states and conditions
@@ -18,23 +19,21 @@ bitflags! {
     ///
     /// # Variants
     ///
+    /// - `NOTHING`: Special flag meaning no expectations.
     /// - `SYS_ALARM`: System alarm flag.
     /// - `SYS_BOOTING`: System is booting.
     /// - `SYS_BOOT_FAILURE`: System boot failure.
     /// - `SYS_READY`: System is ready.
     /// - `ATX_ON`: ATX power is on.
-    /// - `HOMMING`: Homing operation in progress.
+    /// - `HOMING`: Homing operation in progress.
     /// - `MOVING`: System is moving.
     /// - `MOV_QUEUE_EMPTY`: Movement queue is empty.
-    /// - `JOB_FILE_SEL`: Job file selected.
+    /// - `MOV_QUEUE_FULL`: Movement queue is full.
     /// - `JOB_PRINTING`: Job printing in progress.
     /// - `JOB_PAUSED`: Job is paused.
     /// - `JOB_COMPLETED`: Job completed.
-    /// - `HOTBED_TEMP_OK`: Hotbed temperature is okay.
-    /// - `HOTEND_TEMP_OK`: Hotend temperature is okay.
-    /// - `X_MIN_ON`: X-axis minimum endstop is triggered.
-    /// - `Y_MIN_ON`: Y-axis minimum endstop is triggered.
-    /// - `Z_MIN_ON`: Z-axis minimum endstop is triggered.
+    /// - `HOT_BED_TEMP_OK`: HotBed temperature is okay.
+    /// - `HOT_END_TEMP_OK`: HotEnd temperature is okay.
     ///
     /// # Examples
     ///
@@ -57,45 +56,320 @@ bitflags! {
     /// // Remove a flag
     /// flags.remove(EventFlags::ATX_ON);
     /// ```
-    #[derive(Debug, Clone, Copy, PartialEq)]
-    pub struct EventFlags: u32 {
+    #[derive(Clone, Copy, PartialEq)]
+    pub struct EventFlags: u16 {
+        /// Special flag meaning no expectations
+        const NOTHING          = 0b0000000000000000;
         /// System alarm flag
-        const SYS_ALARM        = 0b1000000000000000000000000000000;
+        const SYS_ALARM        = 0b1000000000000000;
         /// System is booting
-        const SYS_BOOTING      = 0b0100000000000000000000000000000;
+        const SYS_BOOTING      = 0b0100000000000000;
         /// System boot failure
-        const SYS_BOOT_FAILURE = 0b0010000000000000000000000000000;
+        const SYS_BOOT_FAILURE = 0b0010000000000000;
         /// System is ready
-        const SYS_READY        = 0b0001000000000000000000000000000;
+        const SYS_READY        = 0b0001000000000000;
         /// ATX power is on
-        const ATX_ON           = 0b0000100000000000000000000000000;
+        const ATX_ON           = 0b0000100000000000;
         /// Homing operation in progress
-        const HOMMING          = 0b0000010000000000000000000000000;
+        const HOMING          = 0b0000010000000000;
         /// System is moving
-        const MOVING           = 0b0000001000000000000000000000000;
+        const MOVING           = 0b0000001000000000;
         /// Movement queue is empty
-        const MOV_QUEUE_EMPTY  = 0b0000000000000000000001000000000;
-        /// Job file selected
-        const JOB_FILE_SEL     = 0b0000000000000000000000100000000;
+        const MOV_QUEUE_EMPTY  = 0b0000000100000000;
+        /// Movement queue is full
+        const MOV_QUEUE_FULL   = 0b0000000010000000;
         /// Job printing in progress
-        const JOB_PRINTING     = 0b0000000000000000000000010000000;
+        const JOB_PRINTING     = 0b0000000001000000;
         /// Job is paused
-        const JOB_PAUSED       = 0b0000000000000000000000001000000;
+        const JOB_PAUSED       = 0b0000000000100000;
         /// Job completed
-        const JOB_COMPLETED    = 0b0000000000000000000000000100000;
-        /// Hotbed temperature is okay
-        const HOTBED_TEMP_OK   = 0b0000000000000000000000000010000;
-        /// Hotend temperature is okay
-        const HOTEND_TEMP_OK   = 0b0000000000000000000000000001000;
-        /// X-axis minimum endstop is triggered
-        const X_MIN_ON         = 0b0000000000000000000000000000100;
-        /// Y-axis minimum endstop is triggered
-        const Y_MIN_ON         = 0b0000000000000000000000000000010;
-        /// Z-axis minimum endstop is triggered
-        const Z_MIN_ON         = 0b0000000000000000000000000000001;
+        const JOB_COMPLETED    = 0b0000000000010000;
+        /// HotBed temperature is okay
+        const HOT_BED_TEMP_OK   = 0b0000000000001000;
+        /// HotEnd temperature is okay
+        const HOT_END_TEMP_OK   = 0b0000000000000100;
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-defmt")] {
+        impl defmt::Format for EventFlags {
+            fn format(&self, fmt: defmt::Formatter) {
+                let mut first = true;
+                for (flag_name, _) in self.iter_names() {
+                    if !first {
+                        defmt::write!(fmt, " ");
+                    }
+                    else {
+                        first = false;
+                    }
+                    defmt::write!(fmt, "{}", flag_name)
+                }
+            }
+        }
+
+    }
+
+}
+impl core::fmt::Debug for EventFlags {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> core::fmt::Result {
+        let mut first = true;
+        for (flag_name, _flag_bits) in self.iter_names() {
+            if !first {
+                core::write!(fmt, " ")?;
+            }
+            else {
+                first = false;
+            }
+            core::write!(fmt, "{}", flag_name)?;
+        }
+        Ok(())
+    }
+
+}
+
+/// Represents the status of an event with associated flags and mask.
+///
+/// The `EventStatus` structure holds two primary fields:
+/// - `flags`: Contains the status of relevant bit values (set or unset) for the bits set in mask.
+/// - `mask`: Defines which bits in the `flags` field are relevant for event matching.
+#[derive(Clone, Copy)]
+pub struct EventStatus {
+    /// Contains the status of relevant bit values (set or unset) for the bits set in mask.
+    pub flags: EventFlags,
+    /// Defines which bits in the `flags` field are relevant for event matching.
+    pub mask: EventFlags,
+}
+
+impl EventStatus {
+    /// Updates the `flags` and `mask` of the current `EventStatus` by complementing and
+    /// bitwise ANDing with the provided `flags` for `flags`, and bitwise ORing with the
+    /// provided `flags` for `mask`.
+    ///
+    /// This method applies a bitwise AND between the current `flags` and the complement of
+    /// the provided `flags`, and applies a bitwise OR between the current `mask` and the
+    /// provided `flags`. This allows selective modification of the current event state and
+    /// its relevance mask.
+    ///
+    /// # Parameters
+    ///
+    /// - `flags`: The `EventFlags` value to apply for the updates.
+    ///
+    /// # Returns
+    ///
+    /// A new `EventStatus` with updated `flags` and `mask` based on the provided `flags`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::EventFlags;
+    /// use hwa::EventStatus;
+    ///
+    /// // Initial EventStatus with no flags set
+    /// let mut event_status = EventStatus::new();
+    ///
+    /// // EventStatus updated to exclude certain flags and add to the mask
+    /// let updated_event_status = event_status.and_not_containing(EventFlags::SYS_BOOTING);
+    /// ```
+    #[allow(unused)]
+    #[inline]
+    pub const fn new() -> Self {
+        Self {
+            flags: EventFlags::empty(),
+            mask: EventFlags::empty(),
+        }
+    }
+
+    /// Returns an `EventStatus` instance with all bits set in the `flags` and `mask` fields.
+    ///
+    /// This method initializes the `flags` field with the value provided by
+    /// the `flags` parameter and sets the `mask` field with the same value.
+    /// It essentially creates an `EventStatus` where all bits in `flags` are
+    /// considered relevant for event checks.
+    ///
+    /// # Parameters
+    ///
+    /// - `flags`: An `EventFlags` value that represents the current state or
+    /// condition of the event, used to initialize both the `flags` and `mask` fields.
+    ///
+    /// # Returns
+    ///
+    /// An `EventStatus` instance where `flags` is set to the provided `EventFlags` value
+    /// and `mask` is set to the same value, indicating that all bits in `flags` are relevant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::EventFlags;
+    /// use hwa::EventStatus;
+    ///
+    /// // An event containging SYS_BOOTING flag
+    /// let event_status = EventStatus::containing(EventFlags::SYS_BOOTING);
+    /// ```
+    #[inline]
+    pub const fn containing(flags: EventFlags) -> Self {
+        Self {
+            flags,
+            mask: flags,
+        }
+    }
+
+    /// Returns an `EventStatus` instance with the complement of the provided `flags` set in the `flags` field
+    /// and the original `flags` set in the `mask` field.
+    ///
+    /// This method initializes the `flags` field with the complement of the value provided by
+    /// the `flags` parameter and sets the `mask` field with the original value.
+    /// It creates an `EventStatus` where all bits not in the provided `flags` are considered relevant
+    /// for event checks.
+    ///
+    /// # Parameters
+    ///
+    /// - `flags`: An `EventFlags` value that represents the current state or
+    /// condition of the event, used to initialize the `flags` and `mask` fields.
+    ///
+    /// # Returns
+    ///
+    /// An `EventStatus` instance where `flags` is set to the complement of the provided `EventFlags` value
+    /// and `mask` is set to the original value, indicating that all bits not in `flags` are relevant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::EventFlags;
+    /// use hwa::EventStatus;
+    ///
+    /// // An event not containing the SYS_BOOTING flag
+    /// let event_status = EventStatus::not_containing(EventFlags::SYS_BOOTING);
+    /// ```
+    #[inline]
+    pub const fn not_containing(flags: EventFlags) -> Self {
+        Self {
+            flags: flags.complement(),
+            mask: flags,
+        }
+    }
+
+    /// Returns a new `EventStatus` instance with the complement of the provided `flags` bitwise AND
+    /// with the current `flags` field, and the provided `flags` bitwise OR with the current `mask` field.
+    ///
+    /// This method computes a new `flags` field by taking the bitwise AND of the current `flags` and the
+    /// complement of the provided `flags`. The `mask` field is updated by taking the bitwise OR of the
+    /// current `mask` and the provided `flags`.
+    ///
+    /// # Parameters
+    ///
+    /// - `flags`: An `EventFlags` value that will be used to update the `flags` and `mask` fields.
+    ///
+    /// # Returns
+    ///
+    /// An `EventStatus` instance where the `flags` field is the result of the current `flags` AND the complement
+    /// of the provided `EventFlags`, and the `mask` field is the result of the current `mask` OR the provided
+    /// `EventFlags`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::EventFlags;
+    /// use hwa::EventStatus;
+    ///
+    /// let current_status = EventStatus::containing(EventFlags::SYS_BOOTING)
+    ///     .and_not_containing(EventFlags::SYS_READY);
+    /// ```
+    #[allow(unused)]
+    #[inline]
+    pub fn and_containing(&self, flags: EventFlags) -> Self {
+        Self {
+            flags: self.flags.bitor(flags),
+            mask: self.mask.bitor(flags),
+        }
+    }
+
+
+    /// Returns a new `EventStatus` instance with the provided `flags` removed from the current `flags` field,
+    /// and the provided `flags` bitwise OR with the current `mask` field.
+    ///
+    /// This method computes a new `flags` field by taking the bitwise AND of the current `flags` and the
+    /// complement of the provided `flags`. The `mask` field is updated by taking the bitwise OR of the
+    /// current `mask` and the provided `flags`.
+    ///
+    /// # Parameters
+    ///
+    /// - `flags`: An `EventFlags` value that represents the current state or condition of the event,
+    /// which will be used to update the `flags` and `mask` fields.
+    ///
+    /// # Returns
+    ///
+    /// An `EventStatus` instance where the `flags` field is the result of the current `flags` AND the
+    /// complement of the provided `EventFlags`, and the `mask` field is the result of the current `mask` OR
+    /// the provided `EventFlags`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::EventFlags;
+    /// use hwa::EventStatus;
+    ///
+    /// let current_status = EventStatus::containing(EventFlags::SYS_BOOTING)
+    ///     .and_not_containing(EventFlags::SYS_READY);
+    /// ```
+    #[allow(unused)]
+    #[inline]
+    pub fn and_not_containing(&self, flags: EventFlags) -> Self {
+        Self {
+            flags: self.flags.bitand(flags.complement()),
+            mask: self.mask.bitor(flags),
+        }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-defmt")] {
+        impl defmt::Format for EventStatus {
+            fn format(&self, fmt: defmt::Formatter) {
+                let mut first = true;
+                for (flag_name, flag_bits) in self.mask.iter_names() {
+                    if !first {
+                        defmt::write!(fmt, " & ");
+                    }
+                    else {
+                        first = false;
+                    }
+                    if self.flags.contains(flag_bits) {
+                        defmt::write!(fmt, "{}", flag_name);
+                    }
+                    else {
+                        defmt::write!(fmt, "!{}", flag_name);
+                    }
+                }
+            }
+        }
+    }
+}
+impl core::fmt::Debug for EventStatus {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> core::fmt::Result {
+        let mut first = true;
+        for (flag_name, flag_bits) in self.mask.iter_names() {
+            if !first {
+                core::write!(fmt, " & ")?;
+            }
+            else {
+                first = false;
+            }
+            if self.flags.contains(flag_bits) {
+                core::write!(fmt, "{}", flag_name)?;
+            }
+            else {
+                core::write!(fmt, "!{}", flag_name)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 /// Represents the EventBus responsible for managing and
 /// publishing events within the system. The `EventBus` 
@@ -350,22 +624,37 @@ impl EventBusSubscriber<'_> {
     ///     }
     /// }
     /// ```
+    ///
     pub async fn ft_wait_for(&mut self, what: EventStatus) -> Result<(), ()> {
-        let wanted = what.flags.bitand(what.mask);
-        if let Some(msg) = self.inner.try_next_message_pure() {
-            //crate::trace!("last_status = {:?}", msg);
-            self.last_status = msg;
+        if what.flags.is_empty() {
+            Ok(())
         }
-        loop {
-            // Check SYS_ALARM condition unless SYS_ALARM is explicitly mentioned
-            if !what.mask.contains(EventFlags::SYS_ALARM) && self.last_status.contains(EventFlags::SYS_ALARM) {
-                return Err(());
+        else {
+            #[cfg(any(feature = "with-log", feature = "with-defmt"))]
+            let t0 = embassy_time::Instant::now();
+            let wanted = what.flags.bitand(what.mask);
+
+            #[cfg(any(feature = "with-log", feature = "with-defmt"))]
+            crate::debug!("ft_wait_for [{:?}]...", what);
+            if let Some(msg) = self.inner.try_next_message_pure() {
+                //crate::trace!("last_status = {:?}", msg);
+                self.last_status = msg;
             }
-            let relevant_bits = self.last_status.bitand(what.mask);
-            if wanted.eq(&relevant_bits) {
-                return Ok(());
+            loop {
+                // Check SYS_ALARM condition unless SYS_ALARM is explicitly mentioned
+                if !what.mask.contains(EventFlags::SYS_ALARM) && self.last_status.contains(EventFlags::SYS_ALARM) {
+                    #[cfg(any(feature = "with-log", feature = "with-defmt"))]
+                    crate::debug!("ft_wait_for [{:?}] -> ERR (took: {} us)", what, t0.elapsed().as_micros());
+                    return Err(());
+                }
+                let relevant_bits = self.last_status.bitand(what.mask);
+                if wanted.eq(&relevant_bits) {
+                    #[cfg(any(feature = "with-log", feature = "with-defmt"))]
+                    crate::debug!("ft_wait_for [{:?}] -> DONE (took: {} us)", what, t0.elapsed().as_micros());
+                    return Ok(());
+                }
+                self.last_status = self.inner.next_message_pure().await;
             }
-            self.last_status = self.inner.next_message_pure().await;
         }
     }
 
@@ -474,210 +763,6 @@ impl Clone for EventBusRef {
 
         EventBusRef {
             instance: pusher
-        }
-    }
-}
-
-/// Represents the status of an event with associated flags and mask.
-///
-/// The `EventStatus` structure holds two primary fields:
-/// - `flags`: Represents the current state or condition of the event using `EventFlags`.
-/// - `mask`: Defines which bits in the `flags` field are relevant for event matching.
-///
-/// # Examples
-///
-/// TBD
-///
-/// The `mask` is used to filter out non-relevant bits during event checks.
-/// The `flags` field stores the actual event bits currently set.
-#[derive(Debug, Clone, Copy)]
-pub struct EventStatus {
-    pub flags: EventFlags,
-    pub mask: EventFlags,
-}
-
-impl EventStatus {
-    /// Updates the `flags` and `mask` of the current `EventStatus` by complementing and
-    /// bitwise ANDing with the provided `flags` for `flags`, and bitwise ORing with the 
-    /// provided `flags` for `mask`.
-    ///
-    /// This method applies a bitwise AND between the current `flags` and the complement of 
-    /// the provided `flags`, and applies a bitwise OR between the current `mask` and the 
-    /// provided `flags`. This allows selective modification of the current event state and 
-    /// its relevance mask.
-    ///
-    /// # Parameters
-    ///
-    /// - `flags`: The `EventFlags` value to apply for the updates.
-    ///
-    /// # Returns
-    ///
-    /// A new `EventStatus` with updated `flags` and `mask` based on the provided `flags`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::EventFlags;
-    /// use hwa::EventStatus;
-    ///
-    /// // Initial EventStatus with no flags set
-    /// let mut event_status = EventStatus::new();
-    ///
-    /// // EventStatus updated to exclude certain flags and add to the mask
-    /// let updated_event_status = event_status.and_not_containing(EventFlags::SYS_BOOTING);
-    /// ```
-    #[allow(unused)]
-    #[inline]
-    pub const fn new() -> Self {
-        Self {
-            flags: EventFlags::empty(),
-            mask: EventFlags::empty(),
-        }
-    }
-    
-    /// Returns an `EventStatus` instance with all bits set in the `flags` and `mask` fields.
-    ///
-    /// This method initializes the `flags` field with the value provided by 
-    /// the `flags` parameter and sets the `mask` field with the same value. 
-    /// It essentially creates an `EventStatus` where all bits in `flags` are 
-    /// considered relevant for event checks.
-    ///
-    /// # Parameters
-    ///
-    /// - `flags`: An `EventFlags` value that represents the current state or 
-    /// condition of the event, used to initialize both the `flags` and `mask` fields.
-    ///
-    /// # Returns
-    ///
-    /// An `EventStatus` instance where `flags` is set to the provided `EventFlags` value
-    /// and `mask` is set to the same value, indicating that all bits in `flags` are relevant.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::EventFlags;
-    /// use hwa::EventStatus;
-    ///
-    /// // An event containging SYS_BOOTING flag
-    /// let event_status = EventStatus::containing(EventFlags::SYS_BOOTING);
-    /// ```
-    #[inline]
-    pub const fn containing(flags: EventFlags) -> Self {
-        Self {
-            flags,
-            mask: flags,
-        }
-    }
-    
-    /// Returns an `EventStatus` instance with the complement of the provided `flags` set in the `flags` field 
-    /// and the original `flags` set in the `mask` field.
-    ///
-    /// This method initializes the `flags` field with the complement of the value provided by 
-    /// the `flags` parameter and sets the `mask` field with the original value. 
-    /// It creates an `EventStatus` where all bits not in the provided `flags` are considered relevant 
-    /// for event checks.
-    ///
-    /// # Parameters
-    ///
-    /// - `flags`: An `EventFlags` value that represents the current state or 
-    /// condition of the event, used to initialize the `flags` and `mask` fields.
-    ///
-    /// # Returns
-    ///
-    /// An `EventStatus` instance where `flags` is set to the complement of the provided `EventFlags` value
-    /// and `mask` is set to the original value, indicating that all bits not in `flags` are relevant.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::EventFlags;
-    /// use hwa::EventStatus;
-    ///
-    /// // An event not containing the SYS_BOOTING flag
-    /// let event_status = EventStatus::not_containing(EventFlags::SYS_BOOTING);
-    /// ```
-    #[inline]
-    pub const fn not_containing(flags: EventFlags) -> Self {
-        Self {
-            flags: flags.complement(),
-            mask: flags,
-        }
-    }
-    
-    /// Returns a new `EventStatus` instance with the complement of the provided `flags` bitwise AND 
-    /// with the current `flags` field, and the provided `flags` bitwise OR with the current `mask` field.
-    ///
-    /// This method computes a new `flags` field by taking the bitwise AND of the current `flags` and the 
-    /// complement of the provided `flags`. The `mask` field is updated by taking the bitwise OR of the 
-    /// current `mask` and the provided `flags`.
-    ///
-    /// # Parameters
-    ///
-    /// - `flags`: An `EventFlags` value that will be used to update the `flags` and `mask` fields.
-    ///
-    /// # Returns
-    ///
-    /// An `EventStatus` instance where the `flags` field is the result of the current `flags` AND the complement 
-    /// of the provided `EventFlags`, and the `mask` field is the result of the current `mask` OR the provided 
-    /// `EventFlags`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::EventFlags;
-    /// use hwa::EventStatus;
-    ///
-    /// let current_status = EventStatus::containing(EventFlags::SYS_BOOTING)
-    ///     .and_not_containing(EventFlags::SYS_READY);
-    /// ```
-    #[allow(unused)]
-    #[inline]
-    pub fn and_containing(&self, flags: EventFlags) -> Self {
-        Self {
-            flags: self.flags.bitor(flags),
-            mask: self.mask.bitor(flags),
-        }
-    }
-
-
-    /// Returns a new `EventStatus` instance with the provided `flags` removed from the current `flags` field, 
-    /// and the provided `flags` bitwise OR with the current `mask` field.
-    ///
-    /// This method computes a new `flags` field by taking the bitwise AND of the current `flags` and the 
-    /// complement of the provided `flags`. The `mask` field is updated by taking the bitwise OR of the 
-    /// current `mask` and the provided `flags`.
-    ///
-    /// # Parameters
-    ///
-    /// - `flags`: An `EventFlags` value that represents the current state or condition of the event, 
-    /// which will be used to update the `flags` and `mask` fields.
-    ///
-    /// # Returns
-    ///
-    /// An `EventStatus` instance where the `flags` field is the result of the current `flags` AND the 
-    /// complement of the provided `EventFlags`, and the `mask` field is the result of the current `mask` OR 
-    /// the provided `EventFlags`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::EventFlags;
-    /// use hwa::EventStatus;
-    ///
-    /// let current_status = EventStatus::containing(EventFlags::SYS_BOOTING)
-    ///     .and_not_containing(EventFlags::SYS_READY);
-    /// ```
-    #[allow(unused)]
-    #[inline]
-    pub fn and_not_containing(&self, flags: EventFlags) -> Self {
-        Self {
-            flags: self.flags.bitand(flags.complement()),
-            mask: self.mask.bitor(flags),
         }
     }
 }

@@ -316,7 +316,7 @@ pub async fn task_temperature(
             .update(
                 &hotend_controller,
                 &event_bus,
-                EventFlags::HOTEND_TEMP_OK,
+                EventFlags::HOT_END_TEMP_OK,
                 DeferAction::HotEndTemperature,
             )
             .await;
@@ -325,7 +325,7 @@ pub async fn task_temperature(
             .update(
                 &hotbed_controller,
                 &event_bus,
-                EventFlags::HOTBED_TEMP_OK,
+                EventFlags::HOT_BED_TEMP_OK,
                 DeferAction::HotbedTemperature,
             )
             .await;

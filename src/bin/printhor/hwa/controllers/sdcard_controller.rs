@@ -364,6 +364,8 @@ pub struct CardController {
 #[allow(unused)]
 impl CardController {
     pub async fn new(device: SDCardBlockDevice) -> Self {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static CARD_CTRL_SHARED_STATE: TrackedStaticCell<StandardControllerMutex<SDCard>> =
             TrackedStaticCell::new();
         let mut card =

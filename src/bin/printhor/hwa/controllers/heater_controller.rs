@@ -5,6 +5,7 @@ use crate::hwa::controllers::pwm_controller::PwmController;
 use crate::tgeo::ArithmeticOps;
 use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
 use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
+use crate::math::Real;
 
 type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
 
@@ -114,11 +115,12 @@ where
             }
         }
         self.v_ratio = vref_default / (vref_sample * 1000.0f32);
+
         hwa::info!(
             "ADC Initialized: refint_default = {}, vref_sample = {} | v_ratio = {} volts/adc_unit",
-            vref_default,
-            vref_sample,
-            self.v_ratio
+            Real::from_f32(vref_default),
+            Real::from_f32(vref_sample),
+            Real::from_f32(self.v_ratio),
         );
     }
     
@@ -298,12 +300,14 @@ where
         let sample_v = f32::from(sample) * self.v_ratio;
         let measured_resistance: f32 = (sample_v * self.thermistor_properties.r_pullup)
             / ((4095.0f32 * self.v_ratio) - sample_v);
+
         hwa::debug!(
             "sample: {} : v: {} Volt measured_resistance: {} Ohm",
             sample,
-            sample_v,
-            measured_resistance
+            Real::from_f32(sample_v),
+            Real::from_f32(measured_resistance),
         );
+
         let log_mr_by_r_nominal: f32 =
             micromath::F32::from(measured_resistance / self.thermistor_properties.r_nominal)
                 .ln()

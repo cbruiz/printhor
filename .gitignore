@@ -20,8 +20,7 @@ data/*.puml
 # Best practice is https://blog.sebastian-daschner.com/entries/global-gitignore but I'd better to maintain to avoid mistakes for people who are not highly proficient in git.
 .idea
 .vscode
-patched-crates
-
+libs/*/target
 /s-plot/plot.pdf
 /design/*.drawio
 /hwi-boards/*/*.bin

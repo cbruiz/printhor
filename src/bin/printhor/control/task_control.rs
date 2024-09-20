@@ -1,7 +1,11 @@
+use async_gcode::AsyncParserState;
+use printhor_hwa_common::CommChannel;
 use crate::control::CodeExecutionSuccess;
 use crate::control::{GCode, GCodeLineParserError, GCodeMultiplexedInputStream};
 use crate::hwa;
 use hwa::{EventBusSubscriber, EventFlags, EventStatus};
+use crate::hwa::GCodeProcessor;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-printjob")] {
         use crate::hwa::controllers::{PrinterController, PrinterControllerEvent};
@@ -27,28 +31,49 @@ pub struct ControlTaskControllers {
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_control(
-    _processor: hwa::GCodeProcessor,
-    mut _d: GCodeMultiplexedInputStream,
-    mut _c: ControlTaskControllers,
+    mut processor: GCodeProcessor,
+    mut gcode_input_stream: GCodeMultiplexedInputStream,
+    #[allow(unused)]
+    mut controllers: ControlTaskControllers,
 ) {
-    let mut s: EventBusSubscriber<'static> =
-        hwa::task_allocations::init_control_subscriber(_processor.event_bus.clone()).await;
+    // Initialize an event bus subscriber
+    let mut subscriber: EventBusSubscriber<'static> =
+        hwa::task_allocations::init_control_subscriber(processor.event_bus.clone()).await;
 
-    let mut processor = _processor;
-
-    if s.ft_wait_for(EventStatus::containing(EventFlags::SYS_READY))
-        .await
-        .is_err()
+    hwa::info!("task_control waiting for SYS_READY");
+    // Pauses this task until system is ready
+    match subscriber.ft_wait_for(EventStatus::containing(EventFlags::SYS_READY)).await
     {
-        crate::initialization_error()
+        Ok(_) => hwa::info!("task_control got ATX_ON. Continuing."),
+        Err(_) => crate::initialization_error(),
     }
+
+    // The task loop
     loop {
-        match embassy_time::with_timeout(embassy_time::Duration::from_secs(6), _d.next_gcode())
+        match embassy_time::with_timeout(
+            embassy_time::Duration::from_secs(6), gcode_input_stream.next_gcode())
             .await
         {
             // Timeout
             Err(_) => {
-                hwa::debug!("task_control: Timeout");
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-serial-usb")] {
+                        manage_timeout(&mut processor, &mut subscriber, &mut gcode_input_stream,
+                            CommChannel::SerialUsb).await;
+                    }
+                }
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-serial-port-1")] {
+                        manage_timeout(&mut processor, &mut subscriber, &mut gcode_input_stream,
+                            CommChannel::SerialPort1).await;
+                    }
+                }
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-serial-port-2")] {
+                        manage_timeout(&mut processor, &mut subscriber, &mut gcode_input_stream,
+                            CommChannel::SerialPort2).await;
+                    }
+                }
             }
             Ok((Err(GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
@@ -69,7 +94,7 @@ pub async fn task_control(
                 //embassy_time::Timer::after_secs(1).await; // Avoid respawn too fast
             }
             Ok((Ok(Some(gc)), channel)) => {
-                hwa::info!("{:?} Got {:?}", channel, gc);
+                hwa::debug!("{:?} Got {:?}", channel, gc);
                 match gc {
                     GCode::NOP => {
                         // Should not happen
@@ -82,7 +107,7 @@ pub async fn task_control(
                     #[cfg(feature = "with-sdcard")]
                     GCode::M20(path) => {
                         let path = path.unwrap_or(alloc::string::String::from("/"));
-                        match _c.card_controller.list_dir(path.as_str()).await {
+                        match controllers.card_controller.list_dir(path.as_str()).await {
                             Ok(mut it) => {
                                 loop {
                                     //crate::debug!("will get next");
@@ -129,7 +154,7 @@ pub async fn task_control(
                     }
                     #[cfg(feature = "with-printjob")]
                     GCode::M23(f) => {
-                        match _c
+                        match controllers
                             .printer_controller
                             .set(PrinterControllerEvent::SetFile(
                                 f.map_or(alloc::string::String::from("default"), |s| {
@@ -149,7 +174,7 @@ pub async fn task_control(
                     }
                     #[cfg(feature = "with-printjob")]
                     GCode::M24 => {
-                        match _c
+                        match controllers
                             .printer_controller
                             .set(PrinterControllerEvent::Resume)
                             .await
@@ -165,7 +190,7 @@ pub async fn task_control(
                     }
                     #[cfg(feature = "with-printjob")]
                     GCode::M25 => {
-                        match _c
+                        match controllers
                             .printer_controller
                             .set(PrinterControllerEvent::Pause)
                             .await
@@ -181,7 +206,7 @@ pub async fn task_control(
                     }
                     _ => match processor.execute(channel, &gc, false).await {
                         Ok(CodeExecutionSuccess::OK) => {
-                            hwa::info!("Control sending OK");
+                            hwa::debug!("Control sending OK");
                             cfg_if::cfg_if! {
                                 if #[cfg(feature="trace-commands")] {
                                     let s = alloc::format!("ok; {}\n", gc.as_ref());
@@ -193,7 +218,7 @@ pub async fn task_control(
                             }
                         }
                         Ok(CodeExecutionSuccess::QUEUED) => {
-                            hwa::info!("Control sending OK (Q) BEGIN");
+                            hwa::debug!("Control sending OK (Q) BEGIN");
                             cfg_if::cfg_if! {
                                 if #[cfg(feature="trace-commands")] {
                                     let s = alloc::format!("ok; {} (QUEUED)\n", gc.as_ref());
@@ -203,10 +228,10 @@ pub async fn task_control(
                                     processor.write(channel, "ok\n").await;
                                 }
                             }
-                            hwa::info!("Control sending OK (Q) END");
+                            hwa::debug!("Control sending OK (Q) END");
                         }
                         Ok(CodeExecutionSuccess::DEFERRED(_)) => {
-                            hwa::info!("Control not sending (deferred)");
+                            hwa::debug!("Control not sending (deferred)");
                         }
                         Ok(CodeExecutionSuccess::CONSUMED) => {
                             hwa::info!("Control not sending (implicitly consumed)");
@@ -219,6 +244,34 @@ pub async fn task_control(
                     },
                 }
             }
+        }
+    }
+}
+
+async fn manage_timeout(processor: &mut GCodeProcessor,
+                        subscriber: &mut EventBusSubscriber<'_>,
+                        gcode_input_stream: &mut GCodeMultiplexedInputStream,
+                        comm_channel: CommChannel,
+) {
+
+    let current_parser_state = gcode_input_stream.get_state(comm_channel);
+
+    match current_parser_state {
+        // Parser is currently ready to accept a gcode. Nothing to do
+        AsyncParserState::Start(_) => {},
+        // Parser is at any other intermediate state
+        _ => {
+            // Notify there is a timeout on [CommChannel::Internal] channel
+            processor.write(CommChannel::Internal, "echo: Control timeout.").await;
+            // Dumps the relevant status for a more easy troubleshooting
+            let z3 = alloc::format!("echo: EventBus status: {:?}", subscriber.get_status().await);
+            processor.write(CommChannel::Internal, z3.as_str()).await;
+
+            let z = alloc::format!("echo: Will reset channel: {:?} state was: {:?}", comm_channel, current_parser_state);
+            processor.write(CommChannel::Internal, z.as_str()).await;
+            gcode_input_stream.reset(comm_channel);
+            // Submit an err to give up the intermediate state.
+            processor.write(comm_channel, "err").await;
         }
     }
 }

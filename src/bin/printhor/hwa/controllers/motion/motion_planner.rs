@@ -1,4 +1,5 @@
 use embassy_sync::mutex::{Mutex, MutexGuard};
+use printhor_hwa_common::{EventFlags, EventStatus};
 use crate::{control, hwa, math};
 use crate::hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
 use crate::hwa::controllers::motion::motion_ring_buffer::RingBuffer;
@@ -147,8 +148,8 @@ impl MotionPlanner {
         self.available.signal(true);
         event_bus
             .publish_event(hwa::EventStatus::containing(
-                hwa::EventFlags::MOV_QUEUE_EMPTY,
-            ))
+                EventFlags::MOV_QUEUE_EMPTY,
+            ).and_not_containing(EventFlags::MOV_QUEUE_FULL))
             .await;
     }
 
@@ -214,7 +215,7 @@ impl MotionPlanner {
                     }
                     PlanEntry::Homing(channel, _deferred) => {
                         event_bus
-                            .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMMING))
+                            .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                             .await;
                         rb.data[head] = PlanEntry::Executing(MovType::Homing(channel), true);
                         return None;
@@ -266,7 +267,7 @@ impl MotionPlanner {
         match &rb.data[head as usize] {
             PlanEntry::Executing(MovType::Homing(channel), _) => {
                 event_bus
-                    .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMMING))
+                    .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))
                     .await;
                 self.defer_channel
                     .send(hwa::DeferEvent::Completed(
@@ -301,13 +302,13 @@ impl MotionPlanner {
         };
         rb.used -= 1;
         hwa::debug!("- used={}, h={} ", rb.used, head);
-        if rb.used == 0 {
-            event_bus
-                .publish_event(hwa::EventStatus::containing(
-                    hwa::EventFlags::MOV_QUEUE_EMPTY,
-                ))
-                .await;
-        }
+        let mut queue_status_event = EventStatus::not_containing(EventFlags::MOV_QUEUE_FULL);
+        event_bus.publish_event(
+            match rb.used == 0 {
+                true => queue_status_event.and_containing(EventFlags::MOV_QUEUE_EMPTY),
+                false => queue_status_event,
+            }
+        ).await;
         self.available.signal(true);
         rb.used
     }
@@ -361,7 +362,7 @@ impl MotionPlanner {
     /// }
     /// ```
     ///
-    pub async fn schedule_raw_move(
+    async fn schedule_raw_move(
         &self,
         channel: hwa::CommChannel,
         action: hwa::DeferAction,
@@ -476,19 +477,18 @@ impl MotionPlanner {
                                     _ => {}
                                 }
                             }
-
                             self.update_last_planned_pos(&curr_segment.segment_data.dest_pos)
                                 .await;
                             (
                                 PlanEntry::PlannedMove(curr_segment, action, channel, is_defer),
-                                hwa::EventStatus::new(),
+                                hwa::EventStatus::containing(EventFlags::NOTHING)
                             )
                         }
                         ScheduledMove::Homing => {
                             is_defer = true;
                             (
                                 PlanEntry::Homing(channel, is_defer),
-                                hwa::EventStatus::not_containing(hwa::EventFlags::HOMMING),
+                                hwa::EventStatus::not_containing(hwa::EventFlags::HOMING),
                             )
                         }
                         ScheduledMove::Dwell => {
@@ -533,6 +533,7 @@ impl MotionPlanner {
                     }
                 } else {
                     self.available.reset();
+                    event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_FULL)).await;
                     if !blocking {
                         hwa::warn!(
                             "Mov rejected: {} / {} h={}",
@@ -788,7 +789,7 @@ impl MotionPlanner {
                 .await?),
             control::GCode::G28(_x) => {
                 event_bus
-                    .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMMING))
+                    .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                     .await;
                 Ok(self
                     .schedule_raw_move(
@@ -958,14 +959,15 @@ impl MotionPlanner {
                 self.set_last_planned_pos(&_pos).await;
             }
             Err(_pos) => {
-                hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
+
                 self.set_last_planned_pos(&_pos).await;
-                //self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
+                // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
+                // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
                 // return Err(())
             }
         };
         event_bus
-            .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMMING))
+            .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))
             .await;
         Ok(())
     }
@@ -1108,8 +1110,10 @@ fn perform_cornering(mut rb: MutexGuard<hwa::ControllerMutexType, RingBuffer>) -
         }
     }
     #[cfg(feature = "native")]
-    display_content(&rb, from_offset, to_offset)?;
-    hwa::debug!("Cornering algorithm END");
+    if hwa::is_log_debug_enabled() {
+        display_content(&rb, from_offset, to_offset)?;
+        hwa::debug!("Cornering algorithm END");
+    }
     Ok(())
 }
 
@@ -1135,7 +1139,8 @@ pub fn display_content(
 
 #[cfg(test)]
 pub mod test {
-    use printhor_hwa_common::{DeferChannelRef, EventStatus, TrackedStaticCell};
+    use std::future::Future;
+    use printhor_hwa_common::{DeferChannelRef, TrackedStaticCell};
     use crate::hwa::controllers::{LinearMicrosegmentStepInterpolator, MotionConfig, StepPlanner};
     use crate::hwa;
 
@@ -1607,14 +1612,36 @@ pub mod test {
         )
     }
 
-
+    #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+    #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+    static STACK: embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,heapless::FnvIndexMap<&'static str, bool, 16>> = embassy_sync::mutex::Mutex::new(heapless::FnvIndexMap::<_, _, 16>::new());
 
     #[futures_test::test]
     async fn receiver_receives_given_try_send_async() {
 
-        let _event_bus = EventStatus::new();
+        const MAX_STATIC_MEMORY: usize = 1024;
+
+        let event_bus = {
+            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+            static EVT_BUS: hwa::TrackedStaticCell<hwa::EventBusPubSubType> = hwa::TrackedStaticCell::new();
+            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+            static EVT_CTRL_BUS: hwa::TrackedStaticCell<hwa::ControllerMutex<hwa::InterruptControllerMutexType, hwa::EventBus>> = hwa::TrackedStaticCell::new();
+            let bus = EVT_BUS.init::<MAX_STATIC_MEMORY>("EventBusChannel", hwa::EventBusPubSubType::new());
+            let publisher: hwa::EventBusPublisherType = bus. publisher().expect("publisher exausted");
+            hwa::EventBusRef::new(
+                hwa::ControllerRef::new(
+                    EVT_CTRL_BUS. init::<MAX_STATIC_MEMORY>("EventBus", hwa::ControllerMutex::new(
+                        hwa::EventBus::new( bus, publisher, hwa::EventFlags::empty())
+                    ))
+                )
+            )
+        };
 
         let _defer_channel: DeferChannelRef = {
+            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
             static MDC: TrackedStaticCell<hwa::DeferChannelChannelType> = TrackedStaticCell::new();
             DeferChannelRef::new(
                 MDC.init::<{ hwa::MAX_STATIC_MEMORY }>("defer_channel", hwa::DeferChannelChannelType::new())
@@ -1622,6 +1649,8 @@ pub mod test {
         };
 
         let _motion_config: hwa::InterruptControllerRef<MotionConfig> = {
+            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
             static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> =
                 TrackedStaticCell::new();
             hwa::ControllerRef::new(MCS.init::<{ hwa::MAX_STATIC_MEMORY }>(
@@ -1631,6 +1660,35 @@ pub mod test {
         };
         let _ = _motion_config.lock().await;
 
+        async fn run_for_me<F,T>(_future: F, _from: &'static str) -> T
+        where F: Future<Output=T>
+        {
+            let mut mg = STACK.lock().await;
+
+            if mg.contains_key(_from) {
+                hwa::info!("Big mistake");
+            }
+            else {
+                let _ = mg.insert(_from, false);
+            }
+            let result = _future.await;
+            if !mg.contains_key(_from) {
+                hwa::info!("Big mistake");
+            }
+            else {
+                let _ = mg.remove(_from);
+            }
+
+            result
+        }
+
+
+        let _st = event_bus.get_status().await;
+        let _s2 = event_bus.get_status().await;
+        let _x = event_bus.get_status();
+        run_for_me(_x, "here").await;
+        let _x = event_bus.get_status();
+        run_for_me(_x, "here").await;
 
         /*
 

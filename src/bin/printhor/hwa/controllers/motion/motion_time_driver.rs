@@ -333,7 +333,7 @@ pub struct SoftTimer(pub CsMutex<RefCell<SoftTimerDriver>>);
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "assert-motion", test))] {
-        pub type FlushResult = crate::TVector<u32>;
+        pub type FlushResult = crate::tgeo::TVector<u32>;
     }
     else {
         pub type FlushResult = ();

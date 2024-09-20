@@ -20,8 +20,12 @@ pub struct EmbeddedGraphicsUI {
 
 impl EmbeddedGraphicsUI {
     pub async fn new(event_bus: EventBusRef) -> Self {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static EVENT_BUS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
         let bus = EVENT_BUS.init("UIEventBusRef", event_bus);
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static UI_SUBSCRIBER: TrackedStaticCell<EventBusSubscriber<'static>> =
             TrackedStaticCell::new();
         let subscriber = UI_SUBSCRIBER.init("UIEventSubscriber", bus.subscriber().await);
@@ -43,7 +47,7 @@ impl DisplayScreenUI for EmbeddedGraphicsUI {
         let current_status = self.subscriber.get_status().await;
         let state = if current_status.contains(EventFlags::SYS_BOOTING) {
             "BOOTING"
-        } else if current_status.contains(EventFlags::HOMMING) {
+        } else if current_status.contains(EventFlags::HOMING) {
             "HOMMING"
         } else if current_status.contains(EventFlags::SYS_READY) {
             "READY"

@@ -6,6 +6,7 @@ use crate::control::{GCode, GCodeLineParserError};
 use embassy_futures::select::Either3;
 #[allow(unused)]
 use futures_util::future;
+use printhor_hwa_common::CommChannel;
 
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
@@ -101,6 +102,34 @@ impl GCodeMultiplexedInputStream {
                     }
                 }
             }
+        }
+    }
+
+    #[allow(unused)]
+    pub fn get_state(&self, channel: crate::hwa::CommChannel) -> async_gcode::AsyncParserState {
+
+        match channel {
+            #[cfg(feature="with-serial-usb")]
+            CommChannel::SerialUsb => self.serial_usb_line_parser.get_state(),
+            #[cfg(feature="with-serial-port-1")]
+            CommChannel::SerialPort1 => self.serial_port1_line_parser.get_state(),
+            #[cfg(feature="with-serial-port-2")]
+            CommChannel::SerialPort2 => self.serial_port2_line_parser.get_state(),
+            CommChannel::Internal => {
+                async_gcode::AsyncParserState::ErrorRecovery
+            }
+        }
+    }
+
+    pub fn reset(&mut self, comm_channel: CommChannel) {
+        match comm_channel {
+            #[cfg(feature="with-serial-usb")]
+            CommChannel::SerialUsb => self.serial_usb_line_parser.reset(),
+            #[cfg(feature="with-serial-port-1")]
+            CommChannel::SerialPort1 => self.serial_port1_line_parser.reset(),
+            #[cfg(feature="with-serial-port-2")]
+            CommChannel::SerialPort2 => self.serial_port2_line_parser.reset(),
+            CommChannel::Internal => {}
         }
     }
 }

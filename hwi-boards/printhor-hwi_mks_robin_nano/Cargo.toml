@@ -66,3 +66,6 @@ embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["un
 
 cfg-if = {version = "1.0.0"}
 const_env = { version = "0.1" }
+
+[patch.crates-io]
+async-gcode = { path = "../../libs/async-gcode" }

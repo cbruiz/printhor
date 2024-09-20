@@ -1,4 +1,4 @@
-
+/*
 use embedded_graphics_core::prelude::DrawTarget;
 use embedded_graphics_core::prelude::RgbColor;
 
@@ -9,3 +9,5 @@ pub trait DisplayScreenUI
     where D:DrawTarget,
         <D as DrawTarget>::Color: RgbColor;
 }
+
+ */

@@ -19,6 +19,7 @@ pub mod usbserial {
     }
 
     #[embassy_executor::task(pool_size=1)]
+    #[allow(unreachable_code)]
     pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
         defmt::info!("Running usb task...");
         usb.run().await;
@@ -37,13 +38,17 @@ pub mod usbserial {
             config.device_sub_class = 0x02;
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
+            #[link_section(".bss")]
             static CONFIG_DESCRIPTOR_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 256]> = crate::board_stm32l4::TrackedStaticCell::new();
             let config_descriptor = CONFIG_DESCRIPTOR_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", [0; 256]);
+            #[link_section(".bss")]
             static BOS_DESCRIPTOR_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 256]> = crate::board_stm32l4::TrackedStaticCell::new();
             let bos_descriptor = BOS_DESCRIPTOR_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", [0; 256]);
+            #[link_section(".bss")]
             static CONTROL_BUF_ST: crate::board_stm32l4::TrackedStaticCell<[u8; 64]> = crate::board_stm32l4::TrackedStaticCell::new();
             let control_buf = CONTROL_BUF_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", [0; 64]);
 
+            #[link_section(".bss")]
             static STATE_ST: crate::board_stm32l4::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = crate::board_stm32l4::TrackedStaticCell::new();
             let state = STATE_ST.init::<{crate::board::MAX_STATIC_MEMORY}>("", embassy_usb::class::cdc_acm::State::new());
             let mut builder = embassy_usb::Builder::new(
@@ -191,6 +196,7 @@ pub mod uart_port1 {
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
+            #[link_section(".bss")]
             static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
             cfg_if::cfg_if! {
                 if #[cfg(feature="without-ringbuffer")] {

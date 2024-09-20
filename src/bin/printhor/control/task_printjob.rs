@@ -63,17 +63,13 @@ pub async fn task_printjob(
                                 hwa::error!("SetFile: Internal error {:?}", _e);
                             }
                         }
-                        processor
-                            .event_bus
-                            .publish_event(EventStatus::not_containing(EventFlags::JOB_FILE_SEL))
-                            .await;
                         continue;
                     }
                 };
                 processor
                     .event_bus
                     .publish_event(EventStatus::containing(
-                        EventFlags::JOB_FILE_SEL | EventFlags::JOB_PAUSED,
+                        EventFlags::JOB_PAUSED,
                     ))
                     .await;
             }

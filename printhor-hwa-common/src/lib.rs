@@ -1,5 +1,4 @@
 //! Common Hardware Abstraction types and traits
-#![allow(async_fn_in_trait)]
 #![no_std]
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-log")] {
@@ -64,7 +63,7 @@ pub mod soft_uart;
 pub mod traits;
 
 /// Represents a logical channel where the request(s) come from
-#[derive(strum::EnumCount, Clone, Copy, Debug)]
+#[derive(strum::EnumCount, Clone, Copy, PartialEq, Debug)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum CommChannel {
     /// Communication through Serial USB
@@ -109,6 +108,36 @@ cfg_if::cfg_if! {
     }
 }
 impl CommChannel {
+    ///
+    /// Retrieves the communication channel instance associated with the specified index.
+    ///
+    /// # Arguments
+    ///
+    /// * `_idx` - An index that corresponds to a specific communication channel.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `CommChannel` variant that matches the specified index.
+    /// If the index does not correspond to any known communication channel, 
+    /// `CommChannel::Internal` is returned as a default.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::CommChannel;
+    ///
+    /// let idx = 0;
+    /// let comm_channel = CommChannel::index(idx);
+    ///
+    /// match comm_channel {
+    ///     CommChannel::SerialUsb => println!("Index corresponds to SerialUsb"),
+    ///     CommChannel::SerialPort1 => println!("Index corresponds to SerialPort1"),
+    ///     CommChannel::SerialPort2 => println!("Index corresponds to SerialPort2"),
+    ///     CommChannel::Internal => println!("Index does not match any external channel, defaulting to Internal"),
+    /// }
+    /// ```
+    ///
     pub const fn index(_idx: usize) -> CommChannel {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-serial-usb")] {
@@ -130,6 +159,36 @@ impl CommChannel {
         CommChannel::Internal
     }
 
+    
+    /// Retrieves the communication channel based on an index value.
+    ///
+    /// This method is used to obtain a `CommChannel` variant based on the provided
+    /// index value. The index values are mapped to specific communication channels
+    /// depending on the features enabled in the build configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `_idx` - An index value representing the communication channel to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// This method returns a `CommChannel` variant corresponding to the provided index
+    /// value. If the index value does not match any available communication channels,
+    /// the `CommChannel::Internal` variant is returned.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::CommChannel;
+    ///
+    /// // Assuming the appropriate feature flags are set:
+    /// let channel = CommChannel::index(0);
+    /// assert_eq!(channel, CommChannel::SerialUsb); // Example assuming `with-serial-usb` feature is enabled
+    ///
+    /// let internal_channel = CommChannel::index(10);
+    /// assert_eq!(internal_channel, CommChannel::Internal);
+    /// ```
     pub const fn index_of(channel: CommChannel) -> usize {
         match channel {
             #[cfg(feature = "with-serial-usb")]
@@ -150,6 +209,28 @@ impl CommChannel {
         }
     }
 
+    
+    /// Provides the number of communication channels available.
+    ///
+    /// The `count` method is useful to retrieve the total number of
+    /// communication channels defined by the `CommChannel` enum.
+    /// This count includes all variants of the enum based on the features
+    /// enabled in the build configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::CommChannel;
+    ///
+    /// let total_channels = CommChannel::count();
+    /// println!("Total number of communication channels: {}", total_channels);
+    /// ```
+    ///
+    /// # Returns
+    ///
+    /// This method returns a constant `usize` value representing the total
+    /// number of communication channels available.
     pub const fn count() -> usize {
         Self::COUNT
     }
@@ -164,18 +245,58 @@ impl NoDevice {
     pub const fn new() -> Self { Self {} }
 }
 
-
 bitflags! {
-    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    /// A bitmask structure representing different stepper channels.
+    ///
+    /// This structure uses bitflags to define constant values for each
+    /// stepper channel. Each flag represents a specific axis or state.
+    ///
+    /// Flags:
+    /// - `X`: Represents the X-axis stepper channel. This flag is only available if the `with-x-axis` feature is enabled.
+    /// - `Y`: Represents the Y-axis stepper channel. This flag is only available if the `with-y-axis` feature is enabled.
+    /// - `Z`: Represents the Z-axis stepper channel. This flag is only available if the `with-z-axis` feature is enabled.
+    /// - `E`: Represents the E-axis stepper channel. This flag is only available if the `with-e-axis` feature is enabled.
+    /// - `UNSET`: Represents an unset or undefined channel. This flag is always available.
+    ///
+    /// Example usage:
+    ///
+    /// ```rust
+    /// use printhor_hwa_common as hwa;
+    /// use hwa::StepperChannel;
+    /// // Assuming the appropriate feature flags are set:
+    /// let mut channels = StepperChannel::X | StepperChannel::Y;
+    ///
+    /// // Check if a specific channel is set:
+    /// if channels.contains(StepperChannel::X) {
+    ///     // Do something with the X channel
+    /// }
+    ///
+    /// // Set another channel:
+    /// channels.insert(StepperChannel::Z);
+    ///
+    /// // Remove a channel:
+    /// channels.remove(StepperChannel::Y);
+    ///
+    /// // Check if a channel is unset:
+    /// if channels.contains(StepperChannel::UNSET) {
+    ///     // Handle unset channel
+    /// }
+    /// ```
+    #[derive(Clone, Copy, PartialEq, Debug)]
     pub struct StepperChannel: u8 {
+        /// Represents the X-axis stepper channel. This flag is only available if the `with-x-axis` feature is enabled.
         #[cfg(feature = "with-x-axis")]
         const X    = 0b00000001;
+        /// Represents the Y-axis stepper channel. This flag is only available if the `with-y-axis` feature is enabled.
         #[cfg(feature = "with-y-axis")]
         const Y    = 0b00000010;
+        /// Represents the Z-axis stepper channel. This flag is only available if the `with-z-axis` feature is enabled.
         #[cfg(feature = "with-z-axis")]
         const Z    = 0b00000100;
+        /// Represents the E-axis stepper channel. This flag is only available if the `with-e-axis` feature is enabled.
         #[cfg(feature = "with-e-axis")]
         const E    = 0b00001000;
+        /// Represents an unset or undefined channel. This flag is always available.
         const UNSET  = 0b10000000;
     }
 }

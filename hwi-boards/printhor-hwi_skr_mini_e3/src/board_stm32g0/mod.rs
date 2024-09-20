@@ -313,6 +313,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         if #[cfg(feature = "with-spi")] {
             let mut cfg = spi::Config::default();
             cfg.frequency = embassy_stm32::time::Hertz(SPI_FREQUENCY_HZ);
+            #[link_section = ".bss"]
             static SPI1_INST: TrackedStaticCell<StandardControllerMutex<device::Spi1>> = TrackedStaticCell::new();
             let spi1_device = ControllerRef::new(
                 SPI1_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -334,6 +335,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                 let mut usb_serial_device = device::USBSerialDevice::new(driver);
                 usb_serial_device.spawn(_spawner);
                 let (usb_serial_rx_device, sender) = usb_serial_device.split();
+                #[link_section = ".bss"]
                 static USB_INST: TrackedStaticCell<Mutex<ControllerMutexType, device::USBSerialDeviceSender>> = TrackedStaticCell::new();
                 let serial_usb_tx = ControllerRef::new(
                     USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", Mutex::<ControllerMutexType, _>::new(sender))
@@ -359,6 +361,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                                                                     p.DMA2_CH2, p.DMA2_CH1,
                                                                     cfg).expect("Ready").split();
 
+                #[link_section = ".bss"]
                 static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<printhor_hwa_common::SerialAsyncWrapper<device::UartPort1TxDevice>>> = TrackedStaticCell::new();
                 let serial_port1_tx = ControllerRef::new(
                     UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", Mutex::<ControllerMutexType, _>::new(printhor_hwa_common::SerialAsyncWrapper::new(uart_port1_tx_device, crate::UART_PORT1_BAUD_RATE)))
@@ -383,7 +386,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                                                                     UartPort2Irqs,
                                                                     p.DMA2_CH4, p.DMA2_CH3,
                                                                     cfg).expect("Ready").split();
-
+                #[link_section = ".bss"]
                 static UART_PORT2_INST: TrackedStaticCell<StandardControllerMutex<printhor_hwa_common::SerialAsyncWrapper<device::UartPort2TxDevice>>> = TrackedStaticCell::new();
                 let serial_port2_tx = ControllerRef::new(
                     UART_PORT2_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort2", Mutex::<ControllerMutexType, _>::new(
@@ -484,6 +487,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
                     embassy_stm32::time::hz(5_000),
                     CenterAlignedBothInterrupts,
                 );
+                #[link_section = ".bss"]
                 static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmFan0Fan1HotendHotbed>> = TrackedStaticCell::new();
                 ControllerRef::new(PWM_INST.init::<{crate::MAX_STATIC_MEMORY}>(
                     "PwmFanFan0HotendHotbed",
@@ -506,6 +510,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
         use embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts;
 
+        #[link_section = ".bss"]
         static PWM_LASER_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmLaser>> = TrackedStaticCell::new();
         (
             ControllerRef::new(PWM_LASER_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -530,6 +535,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
     let adc_hotend_hotbed = {
         let mut adc_hotend_hotbed = device::AdcHotendHotbed::new(p.ADC1);
         adc_hotend_hotbed.set_sample_time(SampleTime::CYCLES7_5);
+        #[link_section = ".bss"]
         static ADC_INST: TrackedStaticCell<InterruptControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
         ControllerRef::new(ADC_INST.init::<{crate::MAX_STATIC_MEMORY}>(
@@ -544,6 +550,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-probe")] {
+            #[link_section = ".bss"]
             static PWM_INST: TrackedStaticCell<InterruptControllerMutex<device::PwmServo>> = TrackedStaticCell::new();
             let pwm_dev: device::PwmServo = device::PwmServo::new(
                   p.TIM2,
@@ -574,6 +581,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
 
     #[cfg(feature = "with-ps-on")]
     let ps_on = {
+        #[link_section = ".bss"]
         static PS_ON: TrackedStaticCell<StandardControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
             PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(
@@ -582,6 +590,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         )
     };
 
+    #[link_section = ".bss"]
     static WD: TrackedStaticCell<StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(p.IWDG, WATCHDOG_TIMEOUT))));
 

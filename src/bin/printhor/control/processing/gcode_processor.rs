@@ -1,3 +1,47 @@
+//! This module defines the G-code processing logic for a 3D printer control system.
+//!
+//! The purpose of this module is to handle various aspects of G-code interpretation
+//! and execution, including communication with hardware controllers and asynchronous
+//! message handling. The module includes structures and functions that facilitate
+//! the execution of G-codes on the hardware components of the 3D printer.
+//!
+//! # Structures
+//!
+//! - `GCodeProcessorParams`: Contains configuration parameters and references to
+//!   various hardware controllers needed for G-code processing.
+//! - `GCodeProcessor`: The main G-code processor structure that includes methods for
+//!   writing responses to communication channels and handling G-code execution.
+//!
+//! # Features
+//!
+//! The module supports conditional compilation based on feature flags. The following
+//! feature flags are used:
+//!
+//! - `with-motion`: Enables motion planning features.
+//! - `with-serial-usb`: Enables serial USB communication.
+//! - `with-serial-port-1`, `with-serial-port-2`: Enable serial port communication for two ports.
+//! - `with-ps-on`: Enables PSU control.
+//! - `with-probe`: Enables probe hardware support.
+//! - `with-hot-end`, `with-hot-bed`: Enable hotend and hotbed control respectively.
+//! - `with-fan-layer`, `with-fan-extra-1`: Enable additional fan control.
+//! - `with-laser`: Enables laser PWM control.
+//!
+//! # Usage
+//!
+//! To use the GCodeProcessor, create an instance of `GCodeProcessorParams` with the
+//! needed references and initialize `GCodeProcessor` using the `new` method. Utilize
+//! the provided async methods to write to communication channels and handle G-code commands.
+//!
+//! # Remark
+//! Do not **format** on f32 directly and use [math::Real] instead to avoid large code generation.
+//!
+//! Reasoning: core::fmt::float::impl_general_format macro expansion will take around:
+//! - 7.6KiB by [core::fmt::float::float_to_decimal_common_shortest]
+//! - 6.3KiB by [core::fmt::float::float_to_decimal_common_exact]
+//!
+//! Around 14KB in total
+//!
+//! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core.
 use crate::control::GCode;
 use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::hwa;
@@ -11,7 +55,6 @@ use printhor_hwa_common::StepperChannel;
 use hwa::controllers::ProbeTrait;
 #[allow(unused)]
 use hwa::{CommChannel, DeferAction, DeferEvent, EventBusRef, EventFlags, EventStatus};
-use math::Real;
 use strum::VariantNames;
 
 #[cfg(feature = "with-motion")]
@@ -80,11 +123,12 @@ pub struct GCodeProcessor {
     #[allow(unused)]
     pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
     #[cfg(feature = "with-laser")]
-    pub laser: hwa::controllers::LaserPwmControllerRef,
+    pub _laser: hwa::controllers::LaserPwmControllerRef,
 }
 
 impl GCodeProcessor {
     pub fn new(params: GCodeProcessorParams) -> Self {
+
         Self {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx: params.serial_usb_tx,
@@ -107,7 +151,7 @@ impl GCodeProcessor {
             #[cfg(feature = "with-fan-extra-1")]
             fan_extra_1: params.fan_extra_1,
             #[cfg(feature = "with-laser")]
-            laser: params.laser,
+            _laser: params.laser,
 
             event_bus: params.event_bus,
         }
@@ -140,7 +184,9 @@ impl GCodeProcessor {
                 let _ = mg.wrapped_write(_msg.as_bytes()).await;
                 mg.wrapped_flush().await;
             }
-            CommChannel::Internal => {}
+            CommChannel::Internal => {
+                hwa::info!("[Internal] {}", _msg)
+            }
         }
     }
 
@@ -167,9 +213,34 @@ impl GCodeProcessor {
         }
     }
 
-    /***
 
-    */
+    /// Executes the given GCode command.
+    ///
+    /// # Arguments
+    ///
+    /// * `channel` - The communication channel to use for the execution.
+    /// * `gc` - The GCode command to execute.
+    /// * `blocking` - A boolean indicating whether the execution should be blocking or not.
+    ///
+    /// # Returns
+    ///
+    /// * `CodeExecutionResult` - The result of the GCode command execution.
+    ///
+    /// # Errors
+    ///
+    /// This method may return `CodeExecutionFailure::PowerRequired` if the ATX power is not on 
+    /// and the command requires power. It may also return `CodeExecutionFailure::BUSY` if the 
+    /// system is currently busy, for instance during homing or probing.
+    ///
+    /// # Features
+    ///
+    /// This method supports conditional compilation flags such as `grbl-compat`, `with-motion`, 
+    /// and `with-probe`. Based on these features, the behavior and supported GCode commands
+    /// will vary.
+    ///
+    /// # Async
+    ///
+    /// This is an asynchronous method and should be awaited.
     #[allow(unused)]
     pub(crate) async fn execute(
         &mut self,
@@ -230,7 +301,7 @@ impl GCodeProcessor {
             GCode::G17 => Ok(CodeExecutionSuccess::OK),
             GCode::G21 => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
-            GCode::G28(_) => match self.event_bus.has_flags(EventFlags::HOMMING).await {
+            GCode::G28(_) => match self.event_bus.has_flags(EventFlags::HOMING).await {
                 true => Err(CodeExecutionFailure::BUSY),
                 false => {
                     if !self
@@ -252,7 +323,7 @@ impl GCodeProcessor {
             },
             #[cfg(feature = "with-probe")]
             GCode::G31 => {
-                if self.event_bus.has_flags(EventFlags::HOMMING).await {
+                if self.event_bus.has_flags(EventFlags::HOMING).await {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
                     if !self
@@ -270,7 +341,7 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-probe")]
             GCode::G32 => {
-                if self.event_bus.has_flags(EventFlags::HOMMING).await {
+                if self.event_bus.has_flags(EventFlags::HOMING).await {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
                     if !self
@@ -368,7 +439,7 @@ impl GCodeProcessor {
                     "echo: {}/{} {}% of heap usage\n",
                     heap_current,
                     heap_max,
-                    Real::from_f32(100.0f32 * heap_current as f32 / heap_max as f32).rdp(4),
+                    math::Real::from_f32(100.0f32 * heap_current as f32 / heap_max as f32),
                 );
                 self.write(channel, z1.as_str()).await;
 
@@ -376,9 +447,13 @@ impl GCodeProcessor {
                     "echo: {}/{} {}% of stack reservation\n",
                     stack_current,
                     stack_max,
-                    Real::from_f32(100.0f32 * stack_current as f32 / stack_max as f32).rdp(4),
+                    math::Real::from_f32(100.0f32 * stack_current as f32 / stack_max as f32),
                 );
                 self.write(channel, z2.as_str()).await;
+
+                let status = self.event_bus.get_status().await;
+                let z3 = alloc::format!("echo: Status: {:?}\n", status);
+                self.write(channel, z3.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             // Set hotend temperature
@@ -410,10 +485,10 @@ impl GCodeProcessor {
                         let mut h = self.hotend.lock().await;
                         alloc::format!(
                             " T:{} /{} T@:{} TZ:{}",
-                            h.get_current_temp(),
-                            h.get_target_temp(),
-                            h.get_current_power().await,
-                            h.get_current_resistance(),
+                            math::Real::from_f32(h.get_current_temp()),
+                            math::Real::from_f32(h.get_target_temp()),
+                            math::Real::from_f32(h.get_current_power().await),
+                            math::Real::from_f32(h.get_current_resistance()),
                         )
                     }
                     #[cfg(not(feature = "with-hot-end"))]
@@ -425,16 +500,19 @@ impl GCodeProcessor {
                         let mut h = self.hotbed.lock().await;
                         alloc::format!(
                             " B:{} /{} B@:{} BZ:{}",
-                            h.get_current_temp(),
-                            h.get_target_temp(),
-                            h.get_current_power().await,
-                            h.get_current_resistance(),
+                            math::Real::from_f32(h.get_current_temp()),
+                            math::Real::from_f32(h.get_target_temp()),
+                            math::Real::from_f32(h.get_current_power().await),
+                            math::Real::from_f32(h.get_current_resistance()),
                         )
                     }
                     #[cfg(not(feature = "with-hot-bed"))]
                     alloc::string::String::new()
                 };
-                let report = alloc::format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
+
+                let report = alloc::format!(
+                    "ok{}{}\n", hotend_temp_report, hotbed_temp_report
+                );
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
@@ -480,7 +558,7 @@ impl GCodeProcessor {
                 };
                 if deferred {
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
-                        EventFlags::HOTEND_TEMP_OK,
+                        EventFlags::HOT_END_TEMP_OK,
                     )))
                 } else {
                     Ok(CodeExecutionSuccess::OK)
@@ -489,12 +567,12 @@ impl GCodeProcessor {
             GCode::M110(_n) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
             GCode::M114 => {
+
                 let _pos = self
                     .motion_planner
                     .get_last_planned_pos()
                     .await
-                    .unwrap_or(TVector::zero())
-                    .rdp(6);
+                    .unwrap_or(TVector::zero());
                 let _spos = self
                     .motion_planner
                     .get_last_planned_real_pos()
@@ -502,15 +580,16 @@ impl GCodeProcessor {
                     .unwrap_or(TVector::zero());
                 let z = alloc::format!(
                     "X:{} Y:{} Z:{} E:{} Count X:{} Y:{} Z:{}\n",
-                    _pos.x.unwrap_or(crate::math::ZERO),
-                    _pos.y.unwrap_or(crate::math::ZERO),
-                    _pos.z.unwrap_or(crate::math::ZERO),
-                    _pos.e.unwrap_or(crate::math::ZERO),
-                    _spos.x.unwrap_or(crate::math::ZERO),
-                    _spos.y.unwrap_or(crate::math::ZERO),
-                    _spos.z.unwrap_or(crate::math::ZERO),
+                    _pos.x.unwrap_or(math::ZERO),
+                    _pos.y.unwrap_or(math::ZERO),
+                    _pos.z.unwrap_or(math::ZERO),
+                    _pos.e.unwrap_or(math::ZERO),
+                    _spos.x.unwrap_or(math::ZERO),
+                    _spos.y.unwrap_or(math::ZERO),
+                    _spos.z.unwrap_or(math::ZERO),
                 );
                 let _ = self.write(channel, z.as_str()).await;
+
                 Ok(CodeExecutionSuccess::OK)
             }
             GCode::M115 => {
@@ -607,7 +686,7 @@ impl GCodeProcessor {
                 };
                 if deferred {
                     Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
-                        EventFlags::HOTBED_TEMP_OK,
+                        EventFlags::HOT_BED_TEMP_OK,
                     )))
                 } else {
                     Ok(CodeExecutionSuccess::OK)

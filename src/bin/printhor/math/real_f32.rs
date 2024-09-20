@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
         use num_traits::ToPrimitive;
         use micromath::F32Ext;
 
-        #[derive(Copy, Clone, Default, Debug)]
+        #[derive(Copy, Clone, Default)]
         pub struct Real(pub f32);
         pub type RealImpl = f32;
 
@@ -352,16 +352,49 @@ cfg_if::cfg_if! {
             }
         }
 
+        impl Debug for Real {
+            fn fmt(&self, _f: &mut Formatter<'_>) -> core::fmt::Result {
+                use lexical_core::BUFFER_SIZE;
+                let mut buffer = [b'0'; BUFFER_SIZE];
+                const FORMAT: u128 = lexical_core::format::STANDARD;
+                let mut options = lexical_core::WriteFloatOptions::new();
+                //options.set_trim_floats(true);
+                options.set_max_significant_digits(core::num::NonZero::new(6));
+                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+                core::write!(_f, "{}", core::str::from_utf8(&slice).map_err(|_| core::fmt::Error)?)?;
+                Ok(())
+            }
+        }
+
         impl Display for Real {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Display::fmt(&self.0, f)
+            fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                use lexical_core::BUFFER_SIZE;
+                let mut buffer = [b'0'; BUFFER_SIZE];
+                const FORMAT: u128 = lexical_core::format::STANDARD;
+                let mut options = lexical_core::WriteFloatOptions::new();
+                //options.set_trim_floats(true);
+                options.set_max_significant_digits(core::num::NonZero::new(6));
+                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+                core::write!(_f, "{}", core::str::from_utf8(&slice).map_err(|_| core::fmt::Error)?)?;
+                Ok(())
             }
         }
 
         #[cfg(feature = "with-defmt")]
         impl Format for Real {
-            fn format(&self, fmt: defmt::Formatter) {
-                defmt::write!(fmt, "{:?}", self.0.to_f64());
+            fn format(&self, _f: defmt::Formatter) {
+                use lexical_core::BUFFER_SIZE;
+                let mut buffer = [b'0'; BUFFER_SIZE];
+
+                const FORMAT: u128 = lexical_core::format::STANDARD;
+                let mut options = lexical_core::WriteFloatOptions::new();
+                options.set_trim_floats(true);
+                lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+
+                if let Ok(s) = core::str::from_utf8(&buffer) {
+                    defmt::write!(_f, "{}", s);
+                }
+
             }
         }
 

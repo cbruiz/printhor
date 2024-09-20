@@ -3,7 +3,8 @@ use super::timing_monitor::*;
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use crate::hwa::controllers::ProbeTrait;
-use crate::math::{Real, ONE, TWO};
+use crate::math;
+use crate::math::Real;
 use crate::tgeo::{ArithmeticOps, CoordSel, TVector};
 #[allow(unused)]
 use crate::{hwa, hwi};
@@ -45,7 +46,7 @@ pub struct MotionDriver {
     #[allow(unused)]
     pub fan_extra_1_controller: InterruptControllerRef<hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-laser")]
-    pub laser_controller: InterruptControllerRef<hwa::controllers::LaserPwmController>,
+    pub _laser_controller: InterruptControllerRef<hwa::controllers::LaserPwmController>,
     #[cfg(all(feature = "native", feature = "plot-timings"))]
     tmon: TimingsMonitor,
 }
@@ -67,7 +68,7 @@ impl MotionDriver {
             #[cfg(feature = "with-fan-extra-1")]
             fan_extra_1_controller: params.fan_extra_1_controller,
             #[cfg(feature = "with-laser")]
-            laser_controller: params.laser_controller,
+            _laser_controller: params.laser_controller,
             #[cfg(all(feature = "native", feature = "plot-timings"))]
             tmon: TimingsMonitor::new(),
         }
@@ -162,11 +163,47 @@ impl MotionDriver {
         self.set_forward_direction(dir_fwd);
     }
 
+    
+    /// This method performs the homing action for the stepper motors.
+    ///
+    /// The homing action involves moving the stepper motors to a known reference 
+    /// position. This is typically done by moving the motors towards the end-stop 
+    /// switches and then setting the current position to zero, which serves as a 
+    /// reference point for future movements.
+    ///
+    /// # Arguments
+    ///
+    /// * `motion_config_ref` - A reference to the motion configuration which contains
+    ///                         parameters such as units per millimeter, micro-steps 
+    ///                         per axis, and machine bounds.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` with the new position as `TVector<Real>`, or an error with the 
+    /// homing position if the homing action fails.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let result = controller.homing_action(&motion_config_ref).await;
+    /// match result {
+    ///     Ok(position) => println!("New homing position: {:?}", position),
+    ///     Err(err_position) => eprintln!("Homing failed at position: {:?}", err_position),
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if it is unable to complete the homing
+    /// process, such as if an end-stop switch is not triggered within the expected 
+    /// range of motion.
+    // TODO: Carefully review
     pub async fn homing_action(
         &mut self,
         motion_config_ref: &motion::MotionConfigRef,
     ) -> Result<TVector<Real>, TVector<Real>> {
-        hwa::info!("Homing");
+
+        hwa::debug!("Homing");
 
         let mut homming_position = TVector::zero();
 
@@ -177,77 +214,108 @@ impl MotionDriver {
             Some(Real::from_lit(motion_config.micro_steps_per_axis[1].into(), 0)),
             Some(Real::from_lit(motion_config.micro_steps_per_axis[2].into(), 0)),
             None,
-            );
+        );
         hwa::info!("Steps per mm: {}", steps_per_mm);
         let machine_bounds = motion_config.machine_bounds;
         drop(motion_config);
 
         hwa::info!("Machine bounds: {}", machine_bounds);
 
-        hwa::info!("Raise Z");
-        let advanced = self
-            .shabbily_move_to(
-                TVector::from_coords(None, None, Some(ONE), None),
-                Real::from_lit(10, 0),
-                steps_per_mm,
-                2000,
-                false,
-                Some(&mut homming_position),
-            )
-            .await;
-        hwa::info!("ADV: {}", advanced);
+        // Raise Z axis 10mm to avoid obstacles during X and Y homing
+        hwa::info!("Raise Z +10mm");
+        self.shabbily_move_to(
+            TVector::from_coords(None, None, Some(math::ONE), None),
+            Real::from_lit(10, 0),
+            steps_per_mm,
+            2000,
+            false,
+            Some(&mut homming_position),
+        ).await;
 
-        hwa::info!("Homing X axis");
-        let advanced = self
-            .shabbily_move_to(
-                TVector::from_coords(Some(ONE.neg()), None, None, None),
-                machine_bounds.x.unwrap_or(Real::zero()),
-                steps_per_mm,
-                8000,
-                true,
-                None,
-            )
-            .await;
-        hwa::info!("ADV: {}", advanced);
+        hwa::debug!("ADV: {}", homming_position);
 
-        let advanced = self
-            .shabbily_move_to(
-                TVector::from_coords(Some(ONE), None, None, None),
-                machine_bounds.x.unwrap_or(Real::zero()) / TWO,
-                steps_per_mm,
-                8000,
-                false,
-                Some(&mut homming_position),
-            )
-            .await;
+        // Home the X axis quickly
+        hwa::info!("Quick Homing X axis with a max of -{} mm", machine_bounds.x.unwrap_or(math::ZERO));
+        self.shabbily_move_to(
+            TVector::from_coords(Some(math::ONE.neg()), None, None, None),
+            machine_bounds.x.unwrap_or(Real::zero()),
+            steps_per_mm,
+            2000,
+            true,
+            None,
+        ).await;
 
-        hwa::info!("ADV: {}", advanced);
+        hwa::info!("Quick Separate X axis 5 mm");
+        // Home the X axis precisely
+        self.shabbily_move_to(
+            TVector::from_coords(Some(math::ONE), None, None, None),
+            Real::from_lit(5, 0),
+            steps_per_mm,
+            1000,
+            false,
+            Some(&mut homming_position),
+        ).await;
+        hwa::info!("Slow approximate X axis up to 6 mm");
+        // Home the X axis precisely
+        self.shabbily_move_to(
+            TVector::from_coords(Some(math::ONE.neg()), None, None, None),
+            Real::from_lit(6, 0),
+            steps_per_mm,
+            1000,
+            true,
+            Some(&mut homming_position),
+        ).await;
 
-        hwa::info!("Homing Y axis");
-        let advanced = self
-            .shabbily_move_to(
-                TVector::from_coords(None, Some(ONE.neg()), None, None),
-                machine_bounds.y.unwrap_or(Real::zero()),
-                steps_per_mm,
-                8000,
-                true,
-                None,
-            )
-            .await;
-        hwa::info!("{}", advanced);
+        hwa::debug!("ADV: {}", homming_position);
 
-        let advanced = self
-            .shabbily_move_to(
-                TVector::from_coords(None, Some(ONE), None, None),
-                machine_bounds.y.unwrap_or(Real::zero()) / TWO,
-                steps_per_mm,
-                8000,
-                false,
-                Some(&mut homming_position),
-            )
-            .await;
+        // Home the Y axis quickly
+        hwa::info!("Quick Homing Y axis with a max of -{} mm", machine_bounds.y.unwrap_or(math::ZERO));
+        self.shabbily_move_to(
+            TVector::from_coords(None, Some(math::ONE.neg()), None, None),
+            machine_bounds.y.unwrap_or(Real::zero()),
+            steps_per_mm,
+            2000,
+            true,
+            None,
+        ).await;
 
-        hwa::info!("ADV: {}", advanced);
+        hwa::info!("Quick Separate Y axis 5 mm");
+        // Home the Y axis precisely
+        self.shabbily_move_to(
+            TVector::from_coords(None, Some(math::ONE), None, None),
+            Real::from_lit(5, 0),
+            steps_per_mm,
+            2000,
+            false,
+            Some(&mut homming_position),
+        ).await;
+
+        hwa::info!("Slow approximate Y axis up to 6 mm");
+        // Home the X axis precisely
+        self.shabbily_move_to(
+            TVector::from_coords(None, Some(math::ONE.neg()), None, None),
+            Real::from_lit(6, 0),
+            steps_per_mm,
+            1000,
+            true,
+            Some(&mut homming_position),
+        ).await;
+
+        hwa::info!("ADV: {}", homming_position);
+
+        // TODO:
+        // Go to center
+
+
+        hwa::info!("Upper Z + 10mm");
+        self.shabbily_move_to(
+            TVector::from_coords(None, None, Some(math::ONE.neg()), None),
+            Real::from_lit(10, 0),
+            steps_per_mm,
+            200,
+            false,
+            Some(&mut homming_position),
+        ).await;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
@@ -255,24 +323,34 @@ impl MotionDriver {
             }
         }
 
-        hwa::info!("Homing Z axis");
-        let advanced = self
-            .shabbily_move_to(
-                TVector::from_coords(None, None, Some(ONE.neg()), None),
-                Real::from_lit(10, 0),
-                steps_per_mm,
-                2000,
-                true,
-                None,
-            )
-            .await;
-        hwa::info!("ADV {}", advanced);
+        // FIXME: As of now, until tested in real hardware, for safety
+        let zbounds = machine_bounds.z.unwrap_or(math::ONE)  / Real::from_lit(16, 0);
+
+        hwa::info!("Lower Z up to {} mm", zbounds); // reduced for safety
+        self.shabbily_move_to(
+            TVector::from_coords(None, None, Some(math::ONE.neg()), None),
+            zbounds,
+            steps_per_mm,
+            200,
+            true,
+            Some(&mut homming_position),
+        ).await;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
                 self.probe_controller.lock().await.probe_pin_up(100).await;
             }
         }
+
+        hwa::info!("Upper Z + 10mm");
+        self.shabbily_move_to(
+            TVector::from_coords(None, None, Some(math::ONE.neg()), None),
+            Real::from_lit(10, 0),
+            steps_per_mm,
+            200,
+            false,
+            Some(&mut homming_position),
+        ).await;
 
         Ok(homming_position)
     }
@@ -317,11 +395,11 @@ impl MotionDriver {
         loop {
             let mut completed = false;
             if check_endstops && self.endstop_triggered(channel) {
-                hwa::info!("ENDSTOP TRIGGERED");
+                hwa::debug!("ENDSTOP TRIGGERED");
                 completed = true;
             }
             if !steps_advanced.bounded_by(&steps_to_advance) {
-                hwa::info!("FULL ADV");
+                hwa::debug!("FULL ADV");
                 completed = true;
             }
             if completed {
@@ -338,9 +416,12 @@ impl MotionDriver {
             }
             cfg_if::cfg_if! {
                 if #[cfg(feature="pulsed")] {
+                    compile_error!("Not yet implemented");
                     self.step_high(channel);
-                    crate::control::motion_timing::s_block_for(Duration::from_micros(1));
+                    // TODO
+                    //crate::control::motion_timing::s_block_for(Duration::from_micros(1));
                     self.step_low(channel);
+
                 }
                 else {
                     self.step_toggle(channel);

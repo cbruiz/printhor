@@ -504,7 +504,7 @@ pub async fn task_stepper(
                             }
                         }
 
-                        hwa::info!(" + POS: {}", real_steppper_pos);
+                        hwa::debug!(" + POS: {}", real_steppper_pos);
                         let _moves_left = motion_planner
                             .consume_current_segment_data(&event_bus)
                             .await;

@@ -1,4 +1,5 @@
 //! TODO: This feature is still in incubation
+
 use crate::hwa;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
@@ -14,6 +15,7 @@ use printhor_hwa_common::InterruptControllerRef;
 /// * `probe_alarm_release(&mut self, sleep_us: u64)` - Releases any probe alarms.
 /// * `probe_test_mode(&mut self, sleep_us: u64)` - Sets the probe into test mode.
 #[allow(unused)]
+#[allow(async_fn_in_trait)]
 pub trait ProbeTrait {
     /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
     ///
@@ -100,11 +102,26 @@ impl ServoController {
 }
 
 impl ProbeTrait for ServoController {
-    #[allow(unused)]
+    /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
+    ///
+    /// This method is part of the `ProbeTrait` implementation for the `ServoController`
+    /// and sets the probe to an angle of 10 degrees.
+    ///
+    /// # Parameters
+    ///
+    /// * `sleep_us` - Duration in microseconds to sleep after lowering the pin.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let mut controller = ServoController::new(servo, channel);
+    /// controller.probe_pin_down(1000).await;
+    /// ```
     #[inline(always)]
     async fn probe_pin_down(&mut self, sleep_us: u64) {
         self.set_angle(10, sleep_us).await;
     }
+
     #[allow(unused)]
     #[inline(always)]
     async fn probe_pin_up(&mut self, sleep_us: u64) {

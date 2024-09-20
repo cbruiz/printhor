@@ -76,9 +76,9 @@ cfg_if::cfg_if! {
         #[cfg(feature = "with-sdcard")]
         pub use board_stm32f4::SDCARD_PARTITION;
         #[cfg(feature = "with-serial-usb")]
-        const USBSERIAL_BUFFER_SIZE: usize = 512;
+        const USBSERIAL_BUFFER_SIZE: usize = 64;
         #[cfg(feature = "with-serial-port-1")]
-        const UART_PORT1_BUFFER_SIZE: usize = 512;
+        const UART_PORT1_BUFFER_SIZE: usize = 64;
         #[cfg(feature = "with-serial-port-1")]
         const UART_PORT1_BAUD_RATE: u32 = 115200;
 

@@ -1,3 +1,4 @@
+#[allow(async_fn_in_trait)]
 pub trait AsyncWrapper<E> {
     async fn wrapped_write(&mut self, data: &[u8]) -> Result<usize, E>;
 

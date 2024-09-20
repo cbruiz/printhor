@@ -397,8 +397,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         match embassy_time::with_timeout(
             embassy_time::Duration::from_secs(5),
             subscriber.ft_wait_for(
-                printhor_hwa_common::EventStatus::containing(EventFlags::JOB_FILE_SEL)
-                    .and_containing(EventFlags::JOB_PAUSED),
+                printhor_hwa_common::EventStatus::containing(EventFlags::JOB_PAUSED),
             ),
         )
         .await

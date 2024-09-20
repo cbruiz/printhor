@@ -392,8 +392,19 @@ where
         }
     }
 
+    pub fn reset(&mut self) {
+        hwa::warn!("AsyncGcodeParser reset");
+        self.raw_parser.reset();
+    }
+
+    pub fn get_state(&self) -> async_gcode::AsyncParserState {
+        self.raw_parser.get_state()
+    }
+
     #[allow(unused)]
-    pub async fn close(&mut self) {}
+    pub async fn close(&mut self) {
+        self.raw_parser.reset();
+    }
 }
 
 /// This trait is just a hack to give backward compatibility with unpatched async-gcode 0.3.0

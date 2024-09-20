@@ -111,6 +111,8 @@ async-gcode = {version = "0.3", features = ["optional-value", "parse-checksum", 
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
 bitflags = { version = "2.6.0", default-features = false, features = [] }
 
+lexical-core = {version = "1.0.1", default-features = false, features = ["write-floats"]}
+
 cfg-if = { version = "1.0.0", features = [] }
 const_env = { version = "0.1" }
 
@@ -159,5 +161,6 @@ embassy-sync = { path = "../libs/embassy/embassy-sync" }
 embassy-time = { path = "../libs/embassy/embassy-time" }
 embassy-futures = { path = "../libs/embassy/embassy-futures" }
 #embassy-embedded-hal = { path = "../libs/embassy/embassy-embedded-hal" }
+async-gcode = { path = "../libs/async-gcode" }
 #[workspace.vars]
 # TBD

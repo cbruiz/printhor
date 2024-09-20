@@ -3,16 +3,18 @@
 #![cfg_attr(not(feature = "native"), no_main)]
 extern crate alloc;
 extern crate core;
-pub(crate) mod control;
+pub mod control;
 #[cfg(feature = "with-display")]
-pub(crate) mod display;
-pub(crate) mod helpers;
-mod hwa;
+pub mod display;
+pub mod helpers;
+pub mod hwa;
 mod hwi;
-pub(crate) mod machine;
+pub mod machine;
 pub mod math;
-pub(crate) mod sync;
+pub mod sync;
 pub mod tgeo;
+
+pub use tgeo::TVector;
 
 use crate::control::task_control::ControlTaskControllers;
 use crate::control::GCodeProcessorParams;
@@ -26,36 +28,44 @@ use crate::hwa::controllers::HotendPwmController;
 use crate::hwa::controllers::PrinterController;
 #[cfg(feature = "with-motion")]
 use crate::hwa::drivers::MotionDriver;
-#[allow(unused)]
-use crate::tgeo::TVector;
 use embassy_executor::Spawner;
 #[cfg(feature = "with-motion")]
 use hwa::controllers::{MotionConfig, MotionPlanner, MotionPlannerRef};
 use hwa::GCodeProcessor;
 use hwa::{Controllers, IODevices, MotionDevices, PwmDevices, SysDevices};
-#[allow(unused)]
-use hwa::{DeferChannelRef, EventBusRef, TrackedStaticCell};
-#[cfg(any(
-    feature = "with-probe",
-    feature = "with-hot-bed",
-    feature = "with-hot-end",
-    feature = "with-fan-layer",
-    feature = "with-fan-extra-1",
-    feature = "with-laser"
-))]
-use printhor_hwa_common::ControllerRef;
-#[allow(unused)]
-use printhor_hwa_common::{ControllerMutexType, InterruptControllerMutexType};
-#[allow(unused)]
-use printhor_hwa_common::{EventFlags, EventStatus};
-
 
 //noinspection RsUnresolvedReference
 /// Entry point
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) -> ! {
+
     hwa::info!("Init");
     hwa::init_logger();
+
+    let wdt = match sys_start(spawner).await {
+        Ok(wdt) => wdt,
+        Err(_) => {
+            hwa::error!("Error starting system");
+            panic!("Unable to start");
+        }
+    };
+
+    // The core of the main function is just to periodically feed watchdog
+
+    let mut ticker = embassy_time::Ticker::every(embassy_time::Duration::from_secs(2));
+    let _t0 = embassy_time::Instant::now();
+    loop {
+        //let _r = event_bus.get_status().await;
+        //hwa::info!("STATUS: {:?}", _r);
+        //hwa::info!("watchdog feed at {}", _t0.elapsed().as_micros());
+        {
+            wdt.lock().await.pet();
+        }
+        ticker.next().await;
+    }
+}
+
+async fn sys_start(spawner: embassy_executor::Spawner) -> Result<hwa::StandardControllerRef<hwa::device::Watchdog>, ()> {
 
     hwa::info!("Init printhor {}", machine::MACHINE_INFO.firmware_version);
     let peripherals = hwa::init();
@@ -67,14 +77,14 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         core::mem::size_of_val(&context)
     );
 
-    let event_bus: EventBusRef =
+    let event_bus: hwa::EventBusRef =
         printhor_hwa_common::init_event_bus::<{ hwa::MAX_STATIC_MEMORY }>();
 
     event_bus
-        .publish_event(EventStatus::containing(EventFlags::SYS_BOOTING))
+        .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_BOOTING))
         .await;
 
-    let defer_channel: DeferChannelRef =
+    let defer_channel: hwa::DeferChannelRef =
         printhor_hwa_common::init_defer_channel::<{ hwa::MAX_STATIC_MEMORY }>();
 
     let wdt = context.controllers.sys_watchdog.clone();
@@ -91,17 +101,17 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
         context.pwm,
         wdt.clone(),
     )
-    .await
-    .is_ok()
+        .await
+        .is_ok()
     {
         event_bus
-            .publish_event(EventStatus::not_containing(EventFlags::SYS_BOOTING))
+            .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::SYS_BOOTING))
             .await;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
                 let mut event_suscriber = event_bus.subscriber().await;
-                if event_suscriber.ft_wait_until(EventFlags::MOV_QUEUE_EMPTY).await.is_err() {
+                if event_suscriber.ft_wait_until(hwa::EventFlags::MOV_QUEUE_EMPTY).await.is_err() {
                     initialization_error()
                 }
             }
@@ -112,33 +122,23 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
             crate::hwa::mem::stack_reservation_current_size(),
         );
         event_bus
-            .publish_event(EventStatus::containing(EventFlags::SYS_READY))
+            .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_READY))
             .await;
+        Ok(wdt)
     } else {
         event_bus
-            .publish_event(EventStatus::containing(EventFlags::SYS_BOOT_FAILURE))
+            .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_BOOT_FAILURE))
             .await;
         hwa::error!("Unable start. Any task launch failed");
+        Err(())
     }
 
-    let mut ticker = embassy_time::Ticker::every(embassy_time::Duration::from_secs(2));
-    let _t0 = embassy_time::Instant::now();
-    loop {
-        let _r = event_bus.get_status().await;
-        //hwa::info!("STATUS: {:?}", _r);
-        //hwa::info!("watchdog feed at {}", _t0.elapsed().as_micros());
-        {
-            wdt.lock().await.pet();
-        }
-        ticker.next().await;
-    }
 }
 
-#[inline(never)]
 async fn spawn_tasks(
     spawner: Spawner,
-    event_bus: EventBusRef,
-    _defer_channel: DeferChannelRef,
+    event_bus: hwa::EventBusRef,
+    _defer_channel: hwa::DeferChannelRef,
     _controllers: Controllers,
     _sys_devices: SysDevices,
     _io_devices: IODevices,
@@ -146,6 +146,7 @@ async fn spawn_tasks(
     _pwm_devices: PwmDevices,
     _wd: hwa::WatchdogRef,
 ) -> Result<(), ()> {
+
     #[cfg(all(feature = "with-sdcard", feature = "sdcard-uses-spi"))]
     let sdcard_adapter =
         hwa::adapters::SPIAdapter::new(_io_devices.sdcard_device, _io_devices.sdcard_cs_pin);
@@ -172,10 +173,12 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-probe")]
     let probe_controller = {
-        static PROBE_CONTROLLER_INST: TrackedStaticCell<
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static PROBE_CONTROLLER_INST: hwa::TrackedStaticCell<
             printhor_hwa_common::InterruptControllerMutex<hwa::controllers::ServoController>,
-        > = TrackedStaticCell::new();
-        ControllerRef::new(PROBE_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
+        > = hwa::TrackedStaticCell::new();
+        hwa::ControllerRef::new(PROBE_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "ProbeServoController",
             printhor_hwa_common::InterruptControllerMutex::new(
                 hwa::controllers::ServoController::new(
@@ -188,10 +191,12 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-fan-layer")]
     let fan_layer_controller = {
-        static LAYER_CONTROLLER_INST: TrackedStaticCell<
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static LAYER_CONTROLLER_INST: hwa::TrackedStaticCell<
             printhor_hwa_common::InterruptControllerMutex<hwa::controllers::FanLayerPwmController>,
-        > = TrackedStaticCell::new();
-        ControllerRef::new(LAYER_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
+        > = hwa::TrackedStaticCell::new();
+        hwa::ControllerRef::new(LAYER_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "FanLayerController",
             printhor_hwa_common::ControllerMutex::new(
                 hwa::controllers::FanLayerPwmController::new(
@@ -204,10 +209,12 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-fan-extra-1")]
     let fan_extra_1_controller = {
-        static FAN_EXTRA_1_CONTROLLER_INST: TrackedStaticCell<
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static FAN_EXTRA_1_CONTROLLER_INST: hwa::TrackedStaticCell<
             printhor_hwa_common::InterruptControllerMutex<hwa::controllers::FanExtra1PwmController>,
-        > = TrackedStaticCell::new();
-        ControllerRef::new(
+        > = hwa::TrackedStaticCell::new();
+        hwa::ControllerRef::new(
             FAN_EXTRA_1_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
                 "FanExtra1Controller",
                 hwa::ControllerMutex::new(hwa::controllers::FanExtra1PwmController::new(
@@ -220,10 +227,12 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-laser")]
     let laser_controller = {
-        static LASER_CONTROLLER_INST: TrackedStaticCell<
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static LASER_CONTROLLER_INST: hwa::TrackedStaticCell<
             hwa::InterruptControllerMutex<hwa::controllers::LaserPwmController>,
-        > = TrackedStaticCell::new();
-        ControllerRef::new(LASER_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
+        > = hwa::TrackedStaticCell::new();
+        hwa::ControllerRef::new(LASER_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "LaserController",
             hwa::ControllerMutex::new(hwa::controllers::LaserPwmController::new(
                 _pwm_devices.laser.power_pwm,
@@ -234,10 +243,12 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-hot-end")]
     let hotend_controller = {
-        static HOTEND_CONTROLLER_INST: TrackedStaticCell<
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static HOTEND_CONTROLLER_INST: hwa::TrackedStaticCell<
             hwa::InterruptControllerMutex<hwa::controllers::HotendController>,
-        > = TrackedStaticCell::new();
-        ControllerRef::new(HOTEND_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
+        > = hwa::TrackedStaticCell::new();
+        hwa::ControllerRef::new(HOTEND_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "HotEndController",
             hwa::ControllerMutex::new(hwa::controllers::HotendController::new(
                 _pwm_devices.hotend.temp_adc.clone(),
@@ -253,10 +264,12 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-hot-bed")]
     let hotbed_controller = {
-        static HOTBED_CONTROLLER_INST: TrackedStaticCell<
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static HOTBED_CONTROLLER_INST: hwa::TrackedStaticCell<
             hwa::InterruptControllerMutex<hwa::controllers::HotbedController>,
-        > = TrackedStaticCell::new();
-        ControllerRef::new(HOTBED_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
+        > = hwa::TrackedStaticCell::new();
+        hwa::ControllerRef::new(HOTBED_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "HotbedController",
             hwa::ControllerMutex::new(hwa::controllers::HotbedController::new(
                 _pwm_devices.hotbed.temp_adc,
@@ -272,17 +285,21 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-motion")]
     let motion_planer = {
-        static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> =
-            TrackedStaticCell::new();
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static MCS: hwa::TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> =
+            hwa::TrackedStaticCell::new();
         let motion_config: printhor_hwa_common::InterruptControllerRef<MotionConfig> =
             hwa::ControllerRef::new(MCS.init::<{ hwa::MAX_STATIC_MEMORY }>(
                 "MotionConfig",
                 hwa::ControllerMutex::new(MotionConfig::new()),
             ));
 
-        static MDS: TrackedStaticCell<
-            hwa::ControllerMutex<InterruptControllerMutexType, MotionDriver>,
-        > = TrackedStaticCell::new();
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static MDS: hwa::TrackedStaticCell<
+            hwa::ControllerMutex<hwa::InterruptControllerMutexType, MotionDriver>,
+        > = hwa::TrackedStaticCell::new();
         let motion_driver: printhor_hwa_common::InterruptControllerRef<MotionDriver> =
             hwa::ControllerRef::new(MDS.init::<{ hwa::MAX_STATIC_MEMORY }>(
                 "MotionDriver",
@@ -300,7 +317,9 @@ async fn spawn_tasks(
                     laser_controller: laser_controller.clone(),
                 })),
             ));
-        static MPS: TrackedStaticCell<MotionPlanner> = TrackedStaticCell::new();
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+#[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
+        static MPS: hwa::TrackedStaticCell<MotionPlanner> = hwa::TrackedStaticCell::new();
         MotionPlannerRef::new(MPS.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "MotionPlanner",
             MotionPlanner::new(_defer_channel.clone(), motion_config.clone(), motion_driver),
@@ -363,7 +382,7 @@ async fn spawn_tasks(
             .await;
         motion_planer.set_default_travel_speed(100).await;
         // Homing unneeded
-        motion_planer.set_last_planned_pos(&TVector::zero()).await;
+        motion_planer.set_last_planned_pos(&tgeo::TVector::zero()).await;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "native")] {

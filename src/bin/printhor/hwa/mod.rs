@@ -61,6 +61,8 @@ pub mod task_allocations {
     use printhor_hwa_common::{EventBusRef, EventBusSubscriber, TrackedStaticCell};
 
     pub async fn init_control_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static> {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
         let bi: &mut EventBusRef =
             SUBS.init::<{ hwa::MAX_STATIC_MEMORY }>("control_task::EventBusSubscriber", event_bus);
@@ -69,6 +71,8 @@ pub mod task_allocations {
 
     #[cfg(feature = "with-printjob")]
     pub async fn init_printer_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static> {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
         let bi: &mut EventBusRef =
             SUBS.init::<{ hwa::MAX_STATIC_MEMORY }>("printer_task::EventBusSubscriber", event_bus);
@@ -79,6 +83,8 @@ pub mod task_allocations {
     pub async fn init_integration_subscriber(
         event_bus: EventBusRef,
     ) -> EventBusSubscriber<'static> {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
         let bi: &mut EventBusRef = SUBS
             .init::<{ hwa::MAX_STATIC_MEMORY }>("integration_task::EventBusSubscriber", event_bus);

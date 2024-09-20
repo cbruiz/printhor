@@ -37,15 +37,20 @@ pub mod usbserial {
             config.device_sub_class = 0x02;
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
+            #[link_section(".bss")]
             static DEVICE_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
             let device_descriptor = DEVICE_DESCRIPTOR_ST.init("", [0; 256]);
+            #[link_section(".bss")]
             static CONFIG_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
             let config_descriptor = CONFIG_DESCRIPTOR_ST.init("", [0; 256]);
+            #[link_section(".bss")]
             static BOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
             let bos_descriptor = BOS_DESCRIPTOR_ST.init("", [0; 256]);
+            #[link_section(".bss")]
             static CONTROL_BUF_ST: crate::board::TrackedStaticCell<[u8; 64]> = crate::board::TrackedStaticCell::new();
             let control_buf = CONTROL_BUF_ST.init("", [0; 64]);
 
+            #[link_section(".bss")]
             static STATE_ST: crate::board::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = crate::board::TrackedStaticCell::new();
             let state = STATE_ST.init("", embassy_usb::class::cdc_acm::State::new());
             let mut builder = embassy_usb::Builder::new(
@@ -194,6 +199,7 @@ pub mod uart_port1 {
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
+            #[link_section =".bss"]
             static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
             cfg_if::cfg_if! {
                 if #[cfg(feature="without-ringbuffer")] {
@@ -205,8 +211,10 @@ pub mod uart_port1 {
                     }
                 }
                 else {
+                    let mut rb_receiver = receiver.into_ring_buffered(BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]));
+                    let _ = rb_receiver.start();
                     Self {
-                        receiver: receiver.into_ring_buffered(BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
+                        receiver: rb_receiver,
                         buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
                         bytes_read: 0,
                         current_byte_index: 0,
@@ -234,9 +242,11 @@ pub mod uart_port1 {
                 let r = core::pin::pin!({
                     cfg_if::cfg_if! {
                         if #[cfg(feature="without-ringbuffer")] {
+                            defmt::info!("read_until_idle()");
                             this.receiver.read_until_idle(&mut this.buffer)
                         }
                         else {
+                            defmt::info!("io::read()");
                             this.receiver.read(&mut this.buffer)
                         }
                     }
@@ -249,6 +259,7 @@ pub mod uart_port1 {
                             this.current_byte_index += 1;
                             Poll::Ready(Some(Ok(byte)))
                         } else {
+                            defmt::info!(">(Ready(None))");
                             Poll::Ready(None)
                         }
                     }
@@ -257,7 +268,7 @@ pub mod uart_port1 {
                         Poll::Ready(None)
                     }
                     Poll::Pending => {
-                        defmt::trace!("poll() -> Pending");
+                        defmt::info!("poll() -> Pending");
                         Poll::Pending
                     }
                 }

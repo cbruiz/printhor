@@ -65,6 +65,8 @@ impl TFTDisplay {
 
         // Display init with its draw buffer
         #[cfg(feature = "with-lvgl")]
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static mut DRAW_BUFFER: [MaybeUninit<PixelColor>; LVGL_BUFFER_LEN] =
             [MaybeUninit::<PixelColor>::uninit(); LVGL_BUFFER_LEN];
 
@@ -129,6 +131,8 @@ pub struct RawDisplay {
 
 impl RawDisplay {
     pub async fn new(device: hwa::display::DisplayDevice) -> Self {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static DISPLAY_PINS: TrackedStaticCell<ControllerMutex<Pins>> = TrackedStaticCell::new();
         let pins = ControllerRef::new(DISPLAY_PINS.init(
             "DisplayController::Pins",

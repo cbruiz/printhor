@@ -37,16 +37,19 @@ pub mod usbserial {
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
 
+            #[link_section = ".bss"]
             static DEVICE_DESCRIPTOR_ST: printhor_hwa_common::TrackedStaticCell<[u8; 256]> = printhor_hwa_common::TrackedStaticCell::new();
             let device_descriptor = DEVICE_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
+            #[link_section = ".bss"]
             static CONFIG_DESCRIPTOR_ST: printhor_hwa_common::TrackedStaticCell<[u8; 256]> = printhor_hwa_common::TrackedStaticCell::new();
             let config_descriptor = CONFIG_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
+            #[link_section = ".bss"]
             static BOS_DESCRIPTOR_ST: printhor_hwa_common::TrackedStaticCell<[u8; 256]> = printhor_hwa_common::TrackedStaticCell::new();
             let bos_descriptor = BOS_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
-
+            #[link_section = ".bss"]
             static CONTROL_BUF_ST: printhor_hwa_common::TrackedStaticCell<[u8; 64]> = printhor_hwa_common::TrackedStaticCell::new();
             let control_buf = CONTROL_BUF_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 64]);
-
+            #[link_section = ".bss"]
             static STATE_ST: printhor_hwa_common::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = printhor_hwa_common::TrackedStaticCell::new();
             let state = STATE_ST.init::<{crate::MAX_STATIC_MEMORY}>("", embassy_usb::class::cdc_acm::State::new());
             let mut builder = embassy_usb::Builder::new(
@@ -201,6 +204,7 @@ pub mod uart_port1 {
                     }
                 }
                 else {
+                    #[link_section = ".bss"]
                     static BUFF: printhor_hwa_common::TrackedStaticCell<[u8;crate::UART_PORT1_BUFFER_SIZE]> = printhor_hwa_common::TrackedStaticCell::new();
                     Self {
                         receiver: receiver.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE])),
@@ -304,6 +308,7 @@ pub mod uart_port2 {
                     }
                 }
                 else {
+                    #[link_section = ".bss"]
                     static BUFF: printhor_hwa_common::TrackedStaticCell<[u8;crate::UART_PORT2_BUFFER_SIZE]> = printhor_hwa_common::TrackedStaticCell::new();
                     Self {
                         receiver: receiver.into_ring_buffered(BUFF.init::<{crate::MAX_STATIC_MEMORY}>("UartPort2RXRingBuff", [0; crate::UART_PORT2_BUFFER_SIZE])),
@@ -376,6 +381,7 @@ cfg_if::cfg_if!{
 
         impl TrinamicUartWrapper {
             pub fn new(inner: crate::device::TrinamicUartDevice) -> Self {
+                #[link_section = ".bss"]
                 static BUFF: printhor_hwa_common::TrackedStaticCell<[u8; 32]> = printhor_hwa_common::TrackedStaticCell::new();
 
                 let (tx, rx) = inner.split();

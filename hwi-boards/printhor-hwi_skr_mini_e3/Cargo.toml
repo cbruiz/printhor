@@ -79,3 +79,6 @@ futures = { version = "0.3.17", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }
+
+[patch.crates-io]
+async-gcode = { path = "../../libs/async-gcode" }

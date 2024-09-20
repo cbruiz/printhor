@@ -1,0 +1,33 @@
+[package]
+name = "async-gcode"
+version = "0.3.0"
+authors = ["Wilfried Chauveau <wilfried.chauveau@ithinuel.me>"]
+description = "An async gcode parser for no_std targets."
+keywords = ["async", "await", "gcode"]
+license = "MIT"
+edition = "2021"
+repository = "https://github.com/ithinuel/async-gcode"
+categories = ["asynchronous", "embedded", "no-std", "parsing"]
+
+[features]
+default = ["std"]
+std = ["float-f64"]
+parse-comments = []
+parse-trailing-comment = []
+parse-checksum = []
+parse-parameters = []
+parse-expressions = []
+optional-value = []
+string-value = []
+float-f64 = []
+
+[badges]
+maintenance = { status = "experimental" }
+
+[dev-dependencies]
+futures-executor = { version = "0.3.21" }
+
+[dependencies]
+either = {version = "^1", default-features = false }
+futures = { version = "0.3.21", default-features = false }
+pin-project-lite = { version = "0.2.9" }
