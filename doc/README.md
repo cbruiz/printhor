@@ -1,4 +1,4 @@
-![Minimum Rust: 1.75](https://img.shields.io/badge/Minimum%20Rust%20Version-1.75-green.svg)
+![Minimum Rust: 1.79](https://img.shields.io/badge/Minimum%20Rust%20Version-1.79-green.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -66,7 +66,7 @@ The thermistor itself should be easy to determine from manufacturer specs/datash
   
   * HOT_END_THERM_BETA and HOT_BED_THERM_BETA.
   
-    The &#946; value of hot-end NTC thermistor, that can be gotten frm manufacturer as well. By default: 3950.0
+    The &#946; value of hot-end NTC thermistor, that can be gotten frm manufacturer as well. By default, 3950.0
 
 If few words, if the <b>resistance</b> measured by M114 is correct and NTC nominal resistance and beta parameters are also correct, it should be fine.
 

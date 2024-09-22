@@ -15,9 +15,9 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Versions/boards
-skr_mini_e3_v2 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
-skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
-with-defmt = ["printhor-hwa-common/defmt", "embassy-stm32/defmt", "embassy-usb?/defmt"]
+skr_mini_e3_v2 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
+skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
+with-defmt = ["printhor-hwa-common/defmt", "embassy-stm32/defmt"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
 with-printjob = []
@@ -61,7 +61,7 @@ defmt = {version = "0.3", default-features = false }
 printhor-hwa-common = { version = "0.0"}
 
 embassy-stm32 = { version = "*", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
-embassy-executor = { version = "*", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0.6.0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "*", features = ["defmt"] }
 embassy-time = { version = "*", features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-futures = { version = "*", features = [] }
@@ -79,3 +79,6 @@ futures = { version = "0.3.17", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }
+
+[patch.crates-io]
+async-gcode = { path = "../../libs/async-gcode" }

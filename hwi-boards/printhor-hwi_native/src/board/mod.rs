@@ -28,6 +28,8 @@ pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
 #[allow(unused)]
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
+
+/// The maximum static memory expected/allowed, specified in bytes.
 pub const MAX_STATIC_MEMORY: usize = 32768;
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
@@ -35,7 +37,26 @@ pub const SDCARD_PARTITION: usize = 0;
 // The bit-banging uart in native simulator is set to ultra low speed for obvious reasons
 #[cfg(feature = "with-trinamic")]
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
-pub(crate) const WATCHDOG_TIMEOUT: u32 = 30_000_000;
+
+
+/// Defines a timeout value for the watchdog timer in nanoseconds.
+/// This value is crucial for ensuring the system can recover from
+/// unexpected states by triggering a system reset or another defined
+/// recovery action if the system becomes unresponsive. The timeout value
+/// should be carefully chosen based on:
+///
+/// 1. **System Responsiveness Needs**: A shorter timeout is useful for
+///    highly responsive systems, ensuring quick recovery.
+/// 2. **Processing Time**: Consider the maximum time a valid operation
+///    might need to complete. Timeout should be long enough to avoid
+///    unnecessary resets during normal operation.
+/// 3. **Resource Constraints**: A longer timeout might be needed for
+///    systems with limited processing power or more complex tasks.
+/// :
+///
+/// Defaulting to 30,000,000 nanoseconds (or 30 milliseconds).
+/// Modify this value as per the requirements of your specific application.
+pub const WATCHDOG_TIMEOUT: u32 = 30_000_000;
 
 pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1650;
@@ -157,9 +178,10 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             use printhor_hwa_common::StandardControllerMutex;
 
             let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
+            #[link_section = "__DATA,.bss"]
             static UART_PORT1_INS: TrackedStaticCell<StandardControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
             let serial_port1_tx = ControllerRef::new(
-                UART_PORT1_INS.init::<{self::MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
+                UART_PORT1_INS.init::<{MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
             );
             let serial_port1_rx_stream = device::UartPort1RxInputStream::new(uart_port1_rx_device);
         }
@@ -168,6 +190,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     cfg_if::cfg_if!{
         if #[cfg(all(feature = "with-serial-port-2"))] {
             let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new().split();
+            #[link_section = "__DATA,.bss"]
             static UART_PORT2_INS: TrackedStaticCell<ControllerMutex<device::UartPort2Tx>> = TrackedStaticCell::new();
             let serial_port2_tx = ControllerRef::new(
                 UART_PORT2_INS.init::<{self::MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port2_tx_device))
@@ -189,6 +212,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
 
     #[cfg(all(feature = "with-trinamic"))]
     {
+        #[link_section = "__DATA,.bss"]
         static EXECUTOR: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
 
         let builder = std::thread::Builder::new()
@@ -214,6 +238,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     #[allow(unused)]
     #[cfg(feature = "with-spi")]
     let spi1_device = {
+        #[link_section = "__DATA,.bss"]
         static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi>> = TrackedStaticCell::new();
         ControllerRef::new(SPI1_INST.init(
             "SPI1",
@@ -268,8 +293,9 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     #[cfg(any(feature = "with-probe", feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
     let pwm_any = {
         let pwm_any = mocked_peripherals::MockedPwm::new(20, _pin_state);
+        #[link_section = "__DATA,.bss"]
         static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmAny>> = TrackedStaticCell::new();
-        printhor_hwa_common::InterruptControllerRef::new(PWM_INST.init::<{self::MAX_STATIC_MEMORY}>(
+        printhor_hwa_common::InterruptControllerRef::new(PWM_INST.init::<{MAX_STATIC_MEMORY}>(
             "PwmAny",
             printhor_hwa_common::InterruptControllerMutex::new(pwm_any)
         ))
@@ -278,6 +304,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
     let adc_hotend_hotbed = {
         let adc_hotend_hotbed = device::AdcHotendHotbed::new(0);
+        #[link_section = "__DATA,.bss"]
         static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
 
         ControllerRef::new(ADC_INST.init(
@@ -291,14 +318,15 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
 
     #[cfg(feature = "with-ps-on")]
     let ps_on = {
+        #[link_section = "__DATA,.bss"]
         static PS_ON: TrackedStaticCell<StandardControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init::<{self::MAX_STATIC_MEMORY}>("", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
+            PS_ON.init::<{MAX_STATIC_MEMORY}>("PSOn", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
         )
     };
 
     static WD: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
-    let sys_watchdog = ControllerRef::new(WD.init::<{self::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
+    let sys_watchdog = ControllerRef::new(WD.init::<{MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
 
     MachineContext {
         controllers: Controllers {

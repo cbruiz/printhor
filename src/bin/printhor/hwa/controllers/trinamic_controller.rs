@@ -1,31 +1,50 @@
 //! TODO: This feature is still very experimental/preliminar
+use crate::hwa;
 use embassy_time::Instant;
 use hwa::soft_uart::SerialError;
-use crate::hwa;
 
+/// Represents errors that can occur in the Trinamic UART controller.
 #[allow(unused)]
 pub enum TrinamicError {
+    /// Indicates a timeout error, which occurs when an operation exceeds the allotted time.
     Timeout,
+    /// Indicates a write error, which occurs when there is an issue writing data to the UART.
     WriteError,
+    /// Indicates a read error, which occurs when there is a problem reading data from the UART.
     ReadError,
 }
 
-pub struct TrinamicController
-{
+/// Represents a controller for Trinamic UART-based devices.
+///
+/// The `TrinamicController` is responsible for handling communication
+/// and control of Trinamic UART-based stepper motor drivers. It provides
+/// methods to initialize the steppers, write to and read from the registers,
+/// and manage different motion configurations of the steppers.
+pub struct TrinamicController {
+    /// UART interface for communicating with the Trinamic device.
+    ///
+    /// This interface facilitates the transfer of data between the controller
+    /// and the Trinamic device, allowing for sending commands and receiving responses.
     uart: hwa::device::TrinamicUart,
+    /// Motion configuration reference used by the controller.
+    ///
+    /// The motion configuration holds various settings related to the movement
+    /// of the stepper motors, such as microstep configurations and possibly other
+    /// parameters needed to correctly drive the motors.
     motion_config: hwa::controllers::MotionConfigRef,
-
 }
-impl TrinamicController
-{
-    pub const fn new(uart: hwa::device::TrinamicUart, motion_config: hwa::controllers::MotionConfigRef) -> Self {
+impl TrinamicController {
+    pub const fn new(
+        uart: hwa::device::TrinamicUart,
+        motion_config: hwa::controllers::MotionConfigRef,
+    ) -> Self {
         Self {
             uart,
-            motion_config
+            motion_config,
         }
     }
 
-    pub async fn init(&mut self) -> Result<(),TrinamicError> {
+    pub async fn init(&mut self) -> Result<(), TrinamicError> {
         hwa::debug!("Trinamic_uart CMD");
 
         let mcfg = self.motion_config.lock().await;
@@ -35,7 +54,11 @@ impl TrinamicController
                 self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartX));
             }
         }
-        if self.init_stepper(0, get_microsteps(mcfg.usteps[0])).await.is_ok() {
+        if self
+            .init_stepper(0, get_microsteps(mcfg.micro_steps_per_axis[0]))
+            .await
+            .is_ok()
+        {
             hwa::info!("Trinamic_uart X init OK");
         }
         cfg_if::cfg_if! {
@@ -43,7 +66,11 @@ impl TrinamicController
                 self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartY));
             }
         }
-        if self.init_stepper(1, get_microsteps(mcfg.usteps[1])).await.is_ok() {
+        if self
+            .init_stepper(1, get_microsteps(mcfg.micro_steps_per_axis[1]))
+            .await
+            .is_ok()
+        {
             hwa::info!("Trinamic_uart Y init OK");
         }
         cfg_if::cfg_if! {
@@ -51,13 +78,17 @@ impl TrinamicController
                 self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartZ));
             }
         }
-        if self.init_stepper(2, get_microsteps(mcfg.usteps[2])).await.is_ok() {
+        if self
+            .init_stepper(2, get_microsteps(mcfg.micro_steps_per_axis[2]))
+            .await
+            .is_ok()
+        {
             hwa::info!("Trinamic_uart Z init OK");
         }
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "trinamic-uart-multi-channel", feature="with-hot-end"))] {
                 self.uart.set_axis_channel(Some(hwa::device::AxisChannel::TMCUartE));
-                if self.init_stepper(3, get_microsteps(mcfg.usteps[3])).await.is_ok() {
+                if self.init_stepper(3, get_microsteps(mcfg.micro_steps_per_axis[3])).await.is_ok() {
                     hwa::info!("Trinamic_uart E init OK");
                 }
             }
@@ -66,7 +97,11 @@ impl TrinamicController
         Ok(())
     }
 
-    async fn init_stepper(&mut self,  addr: u8, micro_steps_pow_of_2: u32) -> Result<(), TrinamicError> {
+    async fn init_stepper(
+        &mut self,
+        addr: u8,
+        micro_steps_pow_of_2: u32,
+    ) -> Result<(), TrinamicError> {
         hwa::debug!("Trinamic_uart applying gconf on {}", addr);
 
         let mut gconf = tmc2209::reg::GCONF::default();
@@ -90,8 +125,7 @@ impl TrinamicController
             if self.write_register(addr, chopconf).await.is_ok() {
                 hwa::debug!("Done {}", addr);
             }
-        }
-        else {
+        } else {
             hwa::error!("Error initializing stepper {}", addr);
         }
 
@@ -99,19 +133,26 @@ impl TrinamicController
     }
 
     #[inline]
-    async fn write_register<T: tmc2209::WritableRegister>(&mut self, slave_addr: u8, reg: T) -> Result<(), TrinamicError>
-    {
-        self.raw_write(tmc2209::WriteRequest::new(slave_addr, reg).bytes()).await
+    async fn write_register<T: tmc2209::WritableRegister>(
+        &mut self,
+        slave_addr: u8,
+        reg: T,
+    ) -> Result<(), TrinamicError> {
+        self.raw_write(tmc2209::WriteRequest::new(slave_addr, reg).bytes())
+            .await
     }
 
     #[inline]
     #[allow(unused)]
-    async fn read_register<T: tmc2209::ReadableRegister + core::fmt::Debug>(&mut self, slave_addr: u8) -> Result<T, TrinamicError>
-    {
+    async fn read_register<T: tmc2209::ReadableRegister + core::fmt::Debug>(
+        &mut self,
+        slave_addr: u8,
+    ) -> Result<T, TrinamicError> {
         //hwa::info!("Flush");
         //let _ = self.uart.consume().await;
         hwa::debug!("Send req");
-        self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes()).await?;
+        self.raw_write(tmc2209::read_request::<T>(slave_addr).bytes())
+            .await?;
         //embassy_time::Timer::after_millis(5).await;
         hwa::debug!("Now reading response...");
         let mut buff = [0u8; 32];
@@ -134,14 +175,17 @@ impl TrinamicController
                                         hwa::debug!("response[0]. l={} : {}", _n, x.as_str());
                                         Ok(r)
                                     }
-                                    _ => {
-                                        Err(TrinamicError::ReadError)
-                                    }
+                                    _ => Err(TrinamicError::ReadError),
                                 }
                             }
                             (n, None) => {
                                 let x = alloc::format!("{:?}", reader.awaiting());
-                                hwa::warn!("Uncompleted. (readed {}: {:?}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
+                                hwa::warn!(
+                                    "Uncompleted. (readed {}: {:?}) awaiting {}",
+                                    n,
+                                    &buff[0..num_bytes_read],
+                                    x.as_str()
+                                );
                             }
                         }
                     }
@@ -152,7 +196,7 @@ impl TrinamicController
                 }
                 Err(err) => {
                     hwa::error!("Read error reading trinamic: {:?}", err);
-                    return Err(TrinamicError::ReadError)
+                    return Err(TrinamicError::ReadError);
                 }
             }
         }
@@ -160,8 +204,14 @@ impl TrinamicController
 
     pub async fn raw_write(&mut self, bytes: &[u8]) -> Result<(), TrinamicError> {
         hwa::debug!("Trinamic_uart sent {:?}", bytes);
-        self.uart.write(bytes).await.map_err(|_| TrinamicError::WriteError)?;
-        let _ = self.uart.blocking_flush().map_err(|_| TrinamicError::WriteError)?;
+        self.uart
+            .write(bytes)
+            .await
+            .map_err(|_| TrinamicError::WriteError)?;
+        let _ = self
+            .uart
+            .blocking_flush()
+            .map_err(|_| TrinamicError::WriteError)?;
         Ok(())
     }
 }

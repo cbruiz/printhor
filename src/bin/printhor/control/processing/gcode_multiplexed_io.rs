@@ -3,22 +3,25 @@
 ///! This feature is a bit inefficient and could be improved leveraging macros
 ///! because currently useless polls are performed in disabled channels
 use crate::control::{GCode, GCodeLineParserError};
+use embassy_futures::select::Either3;
 #[allow(unused)]
 use futures_util::future;
-use embassy_futures::select::Either3;
+use printhor_hwa_common::CommChannel;
 
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
     #[cfg(feature = "with-serial-usb")]
-    serial_usb_line_parser: crate::control::GCodeLineParser<crate::hwa::device::USBSerialDeviceInputStream>,
+    serial_usb_line_parser:
+        crate::control::GCodeLineParser<crate::hwa::device::USBSerialDeviceInputStream>,
     #[cfg(feature = "with-serial-port-1")]
-    serial_port1_line_parser: crate::control::GCodeLineParser<crate::hwa::device::UartPort1RxInputStream>,
+    serial_port1_line_parser:
+        crate::control::GCodeLineParser<crate::hwa::device::UartPort1RxInputStream>,
     #[cfg(feature = "with-serial-port-2")]
-    serial_port2_line_parser: crate::control::GCodeLineParser<crate::hwa::device::UartPort2RxInputStream>,
+    serial_port2_line_parser:
+        crate::control::GCodeLineParser<crate::hwa::device::UartPort2RxInputStream>,
 }
 
 impl GCodeMultiplexedInputStream {
-
     pub fn new(
         #[cfg(feature = "with-serial-usb")]
         serial_usb_rx_stream: crate::hwa::device::USBSerialDeviceInputStream,
@@ -37,8 +40,12 @@ impl GCodeMultiplexedInputStream {
         }
     }
 
-    pub async fn next_gcode(&mut self) -> (Result<Option<GCode>, GCodeLineParserError>, crate::hwa::CommChannel) {
-
+    pub async fn next_gcode(
+        &mut self,
+    ) -> (
+        Result<Option<GCode>, GCodeLineParserError>,
+        crate::hwa::CommChannel,
+    ) {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-usb")] {
                 let f1 = self.serial_usb_line_parser.next_gcode();
@@ -95,6 +102,34 @@ impl GCodeMultiplexedInputStream {
                     }
                 }
             }
+        }
+    }
+
+    #[allow(unused)]
+    pub fn get_state(&self, channel: crate::hwa::CommChannel) -> async_gcode::AsyncParserState {
+
+        match channel {
+            #[cfg(feature="with-serial-usb")]
+            CommChannel::SerialUsb => self.serial_usb_line_parser.get_state(),
+            #[cfg(feature="with-serial-port-1")]
+            CommChannel::SerialPort1 => self.serial_port1_line_parser.get_state(),
+            #[cfg(feature="with-serial-port-2")]
+            CommChannel::SerialPort2 => self.serial_port2_line_parser.get_state(),
+            CommChannel::Internal => {
+                async_gcode::AsyncParserState::ErrorRecovery
+            }
+        }
+    }
+
+    pub fn reset(&mut self, comm_channel: CommChannel) {
+        match comm_channel {
+            #[cfg(feature="with-serial-usb")]
+            CommChannel::SerialUsb => self.serial_usb_line_parser.reset(),
+            #[cfg(feature="with-serial-port-1")]
+            CommChannel::SerialPort1 => self.serial_port1_line_parser.reset(),
+            #[cfg(feature="with-serial-port-2")]
+            CommChannel::SerialPort2 => self.serial_port2_line_parser.reset(),
+            CommChannel::Internal => {}
         }
     }
 }

@@ -1,32 +1,31 @@
-/// Based on https://github.com/yuri91/ili9341-rs
-
-use crate::{hwa};
-#[cfg(feature = "with-lvgl")]
-use lvgl::core::{Lvgl, Display, Screen};
-use embedded_graphics_core::pixelcolor::Rgb565;
-use core::iter::once;
-#[cfg(feature = "with-lvgl")]
-use std::mem::MaybeUninit;
-use embassy_time::{Duration, Timer};
-use embedded_graphics_core::draw_target::DrawTarget;
-use embedded_graphics_core::Pixel;
-use embedded_graphics_core::geometry::Size;
-use embedded_graphics_core::primitives::{PointsIter, Rectangle};
-use embedded_graphics_core::geometry::{Dimensions, OriginDimensions, Point};
-use embedded_graphics_core::pixelcolor::raw::{RawU16, ToBytes};
-use embedded_graphics_core::prelude::RawData;
-use crate::hwi;
 #[cfg(feature = "with-lvgl")]
 use crate::display::ui;
+use crate::display::ui::eg_ui::EmbeddedGraphicsUI;
 #[cfg(feature = "with-lvgl")]
 use crate::display::ui::MotionScreen;
+/// Based on https://github.com/yuri91/ili9341-rs
+use crate::hwa;
+use crate::hwa::mem::TrackedStaticCell;
+use crate::hwi;
+use crate::hwi::{ControllerMutex, ControllerRef};
+use core::iter::once;
+use embassy_time::{Duration, Timer};
+use embedded_graphics_core::draw_target::DrawTarget;
+use embedded_graphics_core::geometry::Size;
+use embedded_graphics_core::geometry::{Dimensions, OriginDimensions, Point};
+use embedded_graphics_core::pixelcolor::raw::{RawU16, ToBytes};
+use embedded_graphics_core::pixelcolor::Rgb565;
+use embedded_graphics_core::prelude::RawData;
+use embedded_graphics_core::primitives::{PointsIter, Rectangle};
+use embedded_graphics_core::Pixel;
+#[cfg(feature = "with-lvgl")]
+use lvgl::core::ObjExt;
 #[cfg(feature = "with-lvgl")]
 use lvgl::core::Ticks;
 #[cfg(feature = "with-lvgl")]
-use lvgl::core::ObjExt;
-use crate::display::ui::eg_ui::EmbeddedGraphicsUI;
-use crate::hwa::mem::TrackedStaticCell;
-use crate::hwi::{ControllerMutex, ControllerRef};
+use lvgl::core::{Display, Lvgl, Screen};
+#[cfg(feature = "with-lvgl")]
+use std::mem::MaybeUninit;
 
 const WIDTH: u32 = 240;
 const HEIGHT: u32 = 320;
@@ -49,18 +48,25 @@ pub struct TFTDisplay {
 }
 
 impl TFTDisplay {
-    pub async fn new(display_dev: hwa::display::DisplayDevice, _event_bus: hwa::EventBusRef) -> Self {
-
+    pub async fn new(
+        display_dev: hwa::display::DisplayDevice,
+        _event_bus: hwa::EventBusRef,
+    ) -> Self {
         #[cfg(feature = "with-lvgl")]
         let mut lvgl = Lvgl::new();
         #[cfg(feature = "with-lvgl")]
         lvgl.register_logger(|s| info!("LVGL: {}", s));
 
         #[cfg(feature = "with-lvgl")]
-        info!("BUFF prec size:{}", core::mem::size_of::<PixelColor>() * LVGL_BUFFER_LEN);
+        info!(
+            "BUFF prec size:{}",
+            core::mem::size_of::<PixelColor>() * LVGL_BUFFER_LEN
+        );
 
         // Display init with its draw buffer
         #[cfg(feature = "with-lvgl")]
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static mut DRAW_BUFFER: [MaybeUninit<PixelColor>; LVGL_BUFFER_LEN] =
             [MaybeUninit::<PixelColor>::uninit(); LVGL_BUFFER_LEN];
 
@@ -72,9 +78,7 @@ impl TFTDisplay {
         let mut lvgl_display = Display::new(&lvgl, raw_display, unsafe { &mut DRAW_BUFFER });
 
         #[cfg(feature = "with-lvgl")]
-        let mut main_ui = ui::new_screen(&lvgl_display, |screen| {
-            ui::MotionScreen::new(screen)
-        });
+        let mut main_ui = ui::new_screen(&lvgl_display, |screen| ui::MotionScreen::new(screen));
         #[cfg(feature = "with-lvgl")]
         lvgl_display.load_screen(&mut main_ui);
 
@@ -127,17 +131,20 @@ pub struct RawDisplay {
 
 impl RawDisplay {
     pub async fn new(device: hwa::display::DisplayDevice) -> Self {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static DISPLAY_PINS: TrackedStaticCell<ControllerMutex<Pins>> = TrackedStaticCell::new();
-        let pins = ControllerRef::new(
-            DISPLAY_PINS.init("DisplayController::Pins", ControllerMutex::new(Pins{
+        let pins = ControllerRef::new(DISPLAY_PINS.init(
+            "DisplayController::Pins",
+            ControllerMutex::new(Pins {
                 rst: device.rst,
                 cs: device.cs,
                 dc: device.dc,
-            }))
-        );
+            }),
+        ));
         Self {
             dev: device.interface,
-            pins
+            pins,
         }
     }
 
@@ -158,7 +165,7 @@ impl RawDisplay {
     pub async fn init(&self) {
         self.retain().await;
 
-        // RST signal must to be enabled for at least 10us
+        // RST signal must be enabled for at least 10us
         Timer::after(Duration::from_micros(15)).await;
         let _ = self.pins.apply(|pins| {
             let _ = pins.rst.set_high();
@@ -196,7 +203,8 @@ impl RawDisplay {
     }
 
     fn send_u8<'a, I>(&self, iter: I)
-        where I: Iterator<Item=u8>
+    where
+        I: Iterator<Item = u8>,
     {
         let mut buf = [0; 32];
         let mut i = 0;
@@ -221,12 +229,12 @@ impl RawDisplay {
     }
 
     fn send_u16<'a, I>(&self, iter: I)
-        where I: Iterator<Item=u16>
+    where
+        I: Iterator<Item = u16>,
     {
         let mut buf = [0; 32];
         let mut i = 0;
         let blen = buf.len();
-
 
         let _ = self.dev.apply(|spi| {
             for v in iter {
@@ -246,7 +254,7 @@ impl RawDisplay {
     }
 
     #[inline]
-    fn command<'a>(&self, cmd: Command, args: &[u8])  {
+    fn command<'a>(&self, cmd: Command, args: &[u8]) {
         let _ = self.pins.apply(|pins| {
             pins.dc.set_low();
             Ok(())
@@ -267,7 +275,8 @@ impl RawDisplay {
 
     #[inline]
     fn data_u16<'a, I>(&self, data: I)
-        where I: Iterator<Item=u16>
+    where
+        I: Iterator<Item = u16>,
     {
         let _ = self.pins.apply(|pins| {
             pins.dc.set_high();
@@ -285,15 +294,19 @@ impl RawDisplay {
         self.command(
             Command::ColumnAddressSet,
             &[
-                (src.x >> 8) as u8, (src.x & 0xff) as u8,
-                (dst.x >> 8) as u8, (dst.x & 0xff) as u8,
+                (src.x >> 8) as u8,
+                (src.x & 0xff) as u8,
+                (dst.x >> 8) as u8,
+                (dst.x & 0xff) as u8,
             ],
         );
         self.command(
             Command::PageAddressSet,
             &[
-                (src.y >> 8) as u8, (src.y & 0xff) as u8,
-                (dst.y >> 8) as u8, (dst.y & 0xff) as u8,
+                (src.y >> 8) as u8,
+                (src.y & 0xff) as u8,
+                (dst.y >> 8) as u8,
+                (dst.y & 0xff) as u8,
             ],
         );
     }
@@ -308,12 +321,7 @@ impl RawDisplay {
     /// The iterator is useful to avoid wasting memory by holding a buffer for
     /// the whole screen when it is not necessary.
     #[inline]
-    pub fn draw_raw_iter<I: IntoIterator<Item = u16>>(
-        &self,
-        src: Point,
-        dst: Point,
-        data: I,
-    ) {
+    pub fn draw_raw_iter<I: IntoIterator<Item = u16>>(&self, src: Point, dst: Point, data: I) {
         let _ = self.pins.apply(|pins| {
             pins.cs.set_low();
             Ok(())
@@ -341,10 +349,9 @@ impl DrawTarget for RawDisplay {
 
     #[inline]
     fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-        where
-            I: IntoIterator<Item = Pixel<Self::Color>>,
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-
         let bbox = self.bounding_box();
         let _ = self.pins.apply(|pins| {
             pins.cs.set_low();
@@ -379,8 +386,8 @@ impl DrawTarget for RawDisplay {
 
     #[inline]
     fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I) -> Result<(), Self::Error>
-        where
-            I: IntoIterator<Item = Self::Color>,
+    where
+        I: IntoIterator<Item = Self::Color>,
     {
         #[cfg(feature = "native")]
         println!("fill_contiguous");
@@ -389,22 +396,18 @@ impl DrawTarget for RawDisplay {
             None => {
                 // Nothing to draw
             }
-            Some(bottom_right) => {
-                self.draw_raw_iter(
-                    drawable_area.top_left,
-                    bottom_right,
-                    area.points()
-                        .zip(colors)
-                        .filter(|(point, _)| drawable_area.contains(*point))
-                        .map(|(_, color)| RawU16::from(color).into_inner()),
-                )
-            }
+            Some(bottom_right) => self.draw_raw_iter(
+                drawable_area.top_left,
+                bottom_right,
+                area.points()
+                    .zip(colors)
+                    .filter(|(point, _)| drawable_area.contains(*point))
+                    .map(|(_, color)| RawU16::from(color).into_inner()),
+            ),
         }
         Ok(())
     }
 }
-
-
 
 #[allow(unused)]
 #[derive(Clone, Copy)]

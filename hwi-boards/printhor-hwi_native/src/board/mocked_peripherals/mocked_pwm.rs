@@ -8,7 +8,7 @@ pub type PwmChannel = u8;
 pub struct MockedPwm {
     #[allow(unused)]
     p: MockedIOPin,
-    // Allow state by channel to share pwm in the same way a MCU does
+    // Allow state by channel to share pwm in the same way the MCU does
     duty_map: HashMap<PwmChannel, <Self as Pwm>::Duty>,
 
 }

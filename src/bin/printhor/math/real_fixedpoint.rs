@@ -42,13 +42,25 @@ cfg_if::cfg_if! {
             pub(crate) fn powi(self, x: i32) -> Self {
                 Real(self.0.powi(x as i64))
             }
+
+            #[inline]
+            pub fn recip(self) -> Self {
+                use num_traits::Inv;
+                Real(self.0.inv())
+            }
+
             #[inline]
             pub const fn zero() -> Self {
-                Real(dec!(0.0))
+                Real(Decimal::ZERO)
             }
             #[inline]
             pub(crate) const fn is_zero(&self) -> bool {
                 self.0.is_zero()
+            }
+
+            #[inline]
+            pub const fn epsilon() -> Self {
+                crate::math::EPSILON
             }
 
             #[inline]

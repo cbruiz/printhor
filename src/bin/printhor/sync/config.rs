@@ -1,22 +1,26 @@
 //! A synchronization primitive for polling values from a task.
-//! Basically, an copy of embassy_sync::Signal with a dirty hack to not loose the consumed value
+//! Basically, a copy of embassy_sync::Signal with a dirty hack to not lose the consumed value
 use core::cell::Cell;
 use core::future::{poll_fn, Future};
 use core::task::{Context, Poll, Waker};
-use embassy_sync::blocking_mutex::Mutex;
 use embassy_sync::blocking_mutex::raw::RawMutex;
+use embassy_sync::blocking_mutex::Mutex;
 
 #[allow(unused)]
 pub struct Config<M, T>
-    where
-        M: RawMutex, T: Send + Copy
+where
+    M: RawMutex,
+    T: Send + Copy,
 {
     state: Mutex<M, Cell<State<T>>>,
 }
 
 #[allow(unused)]
 #[derive(Clone)]
-enum State<T> where T: Send + Copy {
+enum State<T>
+where
+    T: Send + Copy,
+{
     None,
     Waiting(Waker),
     Signaled(T),
@@ -24,8 +28,9 @@ enum State<T> where T: Send + Copy {
 
 #[allow(unused)]
 impl<M, T> Config<M, T>
-    where
-        M: RawMutex, T: Send + Copy
+where
+    M: RawMutex,
+    T: Send + Copy,
 {
     /// Create a new `Signal`.
     pub const fn new() -> Self {
@@ -37,8 +42,9 @@ impl<M, T> Config<M, T>
 
 #[allow(unused)]
 impl<M, T> Default for Config<M, T>
-    where
-        M: RawMutex, T: Send + Copy
+where
+    M: RawMutex,
+    T: Send + Copy,
 {
     fn default() -> Self {
         Self::new()
@@ -47,9 +53,9 @@ impl<M, T> Default for Config<M, T>
 
 #[allow(unused)]
 impl<M, T> Config<M, T>
-    where
-        M: RawMutex,
-        T: Send + Copy
+where
+    M: RawMutex,
+    T: Send + Copy,
 {
     /// Mark this Signal as signaled.
     pub fn signal(&self, val: T) {
@@ -69,7 +75,6 @@ impl<M, T> Config<M, T>
 
     fn poll_wait(&self, cx: &mut Context<'_>) -> Poll<T> {
         self.state.lock(|cell| {
-
             let state = cell.replace(State::None);
 
             match state {
@@ -93,7 +98,7 @@ impl<M, T> Config<M, T>
                     //info!("Poll State::Signaled cv=({})", r);
                     cell.set(State::Signaled(r));
                     Poll::Ready(r)
-                },
+                }
             }
         })
     }

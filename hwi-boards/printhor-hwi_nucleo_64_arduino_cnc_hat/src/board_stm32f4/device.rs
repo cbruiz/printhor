@@ -13,6 +13,12 @@ cfg_if::cfg_if! {
         pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static>;
         pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>;
         pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>;
+        /*
+        // For UARTBuffered
+        pub type UartPort1Device = embassy_stm32::usart::BufferedUart<'static>;
+        pub type UartPort1TxDevice = embassy_stm32::usart::BufferedUartTx<'static>;
+        pub type UartPort1RxDevice = embassy_stm32::usart::BufferedUartRx<'static>;
+         */
 
         pub type UartPort1TxControllerRef = printhor_hwa_common::StandardControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort1TxDevice>>;
         pub use crate::board::io::uart_port1::UartPort1RxInputStream;

@@ -28,7 +28,7 @@ Which means the principal short-term goal is not to develop a productive firmwar
 ## Features
 * "Clean" hardware abstraction.
 * Vector geometry / linear algebra calculus for kinematics
-  * Smooth acceleration and jerk limited motion plan leveraging "Trajectory with Double S Velocity Profile" [1]. Briefly explained at [Plan implementation](src/bin/printhor/control/motion_planning/plan.rs) and visualy explained in [Printhor motion plan. A simplified overview of the velocity integration](https://www.geogebra.org/m/hwpnmhcu) (GeoGebra).
+  * Smooth acceleration and jerk limited motion plan leveraging "Trajectory with Double S Velocity Profile" [1]. Briefly explained at [Plan implementation](src/bin/printhor/control/motion/profile.rs) and visualy explained in [Printhor motion plan. A simplified overview of the velocity integration](https://www.geogebra.org/m/hwpnmhcu) (GeoGebra).
     
     "[1] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)"
   * High precision and deterministic kinematics and computations with configurable resolution. Briefly explained at [Stepper Task](src/bin/printhor/control/task_stepper.rs).
@@ -63,7 +63,7 @@ Assuming the following maturity convention:
 
 # Help wanted
 If you are interested in this project and want to collaborate, you are welcome.
-A Discord server has been created for informal discussions. Otherwise, Github Issues and Pull Requests are preferred.  
+A Discord server has been created for informal discussions. Otherwise, GitHub Issues and Pull Requests are preferred.  
 [![Discord Banner 4](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=banner4)](https://discord.gg/VSag6T4KS6)
 
 # Checkout
@@ -71,7 +71,6 @@ A Discord server has been created for informal discussions. Otherwise, Github Is
 ```shell
 git clone https://github.com/cbruiz/printhor
 cd printhor
-git checkout feature/motion_accuracy_and_state_5
 git submodule update --init --recursive
 ```
 
@@ -169,7 +168,6 @@ As Vector:
 <object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
   <embed src="./design/motion_plan.pdf">
     <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
-  </embed>
 </object>
 
 There are (currently) two plots:

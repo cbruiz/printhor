@@ -37,8 +37,8 @@ with-e-axis = []
 portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.1",  default-features = false, features = [] }
 
-embassy-sync = { version = "0.6.0", features = [] }
-embassy-time = { version = "0.3", features = [] }
+embassy-sync = { version = "*", features = [] }
+embassy-time = { version = "*", features = [] }
 
 embedded-hal = { version = "1.0.0", default-features = false }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }

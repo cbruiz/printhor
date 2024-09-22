@@ -4,9 +4,9 @@ use core::cell::RefCell;
 #[cfg(feature = "with-sdcard")]
 use embedded_hal_02::prelude::_embedded_hal_blocking_delay_DelayUs;
 #[cfg(feature = "with-sdcard")]
-use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
-#[cfg(feature = "with-sdcard")]
 use embedded_sdmmc::sdcard::AcquireOpts;
+#[cfg(feature = "with-sdcard")]
+use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
 #[cfg(feature = "with-sdcard")]
 use embedded_sdmmc::sdcard::proto::*;
@@ -40,7 +40,6 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
         #[cfg(feature = "sdcard-uses-spi")]
         self.spi.release().await;
     }
-
 
     /// Read the 'card specific data' block.
     fn read_csd(&self) -> Result<Csd, Error> {
@@ -103,7 +102,10 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
     }
 
     fn cs_high(&self) -> Result<(), Error> {
-        self.cs.borrow_mut().set_high().map_err(|_| Error::GpioError)
+        self.cs
+            .borrow_mut()
+            .set_high()
+            .map_err(|_| Error::GpioError)
     }
 
     fn cs_low(&self) -> Result<(), Error> {
@@ -112,7 +114,6 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
 
     /// Check the card is initialised.
     fn check_init(&self) -> Result<(), Error> {
-
         if self.card_type.borrow().is_none() {
             // If we don't know what the card type is, try and initialise the
             // card. This will tell us what type of card it is.
@@ -141,7 +142,7 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
                     Err(Error::TimeoutCommand(0)) => {
                         defmt::trace!("\tEnter SPI mode, timeout");
                         // Try again?
-                        //warn!("Timed out, trying again..");
+                        //warn!("Timed out, trying again...");
                         // Try flushing the card as done here: https://github.com/greiman/SdFat/blob/master/src/SdCard/SdSpiCard.cpp#L170,
                         // https://github.com/rust-embedded-community/embedded-sdmmc-rs/pull/65#issuecomment-1270709448
                         for _ in 0..0xFF {
@@ -186,7 +187,7 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
                     card_type = CardType::SD2;
                     break 0x4000_0000;
                 }
-                delay.delay( Error::TimeoutCommand(CMD8))?;
+                delay.delay(Error::TimeoutCommand(CMD8))?;
             };
 
             let mut delay = Delay::new_command();
@@ -199,7 +200,7 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
                     return Err(Error::Cmd58Error);
                 }
                 let mut buffer = [0xFF; 4];
-                s.transfer_bytes( &mut buffer)?;
+                s.transfer_bytes(&mut buffer)?;
                 if (buffer[0] & 0xC0) == 0xC0 {
                     card_type = CardType::SDHC;
                 }
@@ -218,8 +219,8 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
     /// Perform a function that might error with the chipselect low.
     /// Always releases the chipselect, even if the function errors.
     fn with_chip_select<F, T>(&self, func: F) -> Result<T, Error>
-        where
-            F: FnOnce(&Self) -> Result<T, Error>,
+    where
+        F: FnOnce(&Self) -> Result<T, Error>,
     {
         self.cs_low()?;
         let result = func(self);
@@ -277,26 +278,39 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
 
     /// Send one byte and receive one byte over the SPI bus.
     fn transfer_byte(&self, out: u8) -> Result<u8, Error> {
-        let mut received: [u8;1] = [0];
-        Ok(self.spi.apply_result(|spi| {
-            spi.blocking_transfer(&mut received, &[out]).map_err(|_| Error::Transport)
-        }, Error::Transport).map(|_| received[0])?)
+        let mut received: [u8; 1] = [0];
+        Ok(self
+            .spi
+            .apply_result(
+                |spi| {
+                    spi.blocking_transfer(&mut received, &[out])
+                        .map_err(|_| Error::Transport)
+                },
+                Error::Transport,
+            )
+            .map(|_| received[0])?)
     }
 
     /// Send mutiple bytes and ignore what comes back over the SPI bus.
     fn write_bytes(&self, out: &[u8]) -> Result<(), Error> {
-        self.spi.apply_result(|spi| {
-            defmt::debug!("SPI: write_bytes ....");
-            spi.blocking_write(out).map_err(|_e| Error::Transport)
-        }, Error::Transport)
+        self.spi.apply_result(
+            |spi| {
+                defmt::debug!("SPI: write_bytes ....");
+                spi.blocking_write(out).map_err(|_e| Error::Transport)
+            },
+            Error::Transport,
+        )
     }
-
 
     /// Send multiple bytes and replace them with what comes back over the SPI bus.
     fn transfer_bytes(&self, in_out: &mut [u8]) -> Result<(), Error> {
-        self.spi.apply_result(|spi| {
-            spi.blocking_transfer_in_place(in_out).map_err(|_e| Error::Transport)
-        }, Error::Transport)
+        self.spi.apply_result(
+            |spi| {
+                spi.blocking_transfer_in_place(in_out)
+                    .map_err(|_e| Error::Transport)
+            },
+            Error::Transport,
+        )
     }
 
     /// Spin until the card returns 0xFF, or we spin too many times and
@@ -317,7 +331,12 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
 impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PIN> {
     type Error = Error;
 
-    fn read(&self, blocks: &mut [Block], start_block_idx: BlockIdx, _reason: &str) -> Result<(), Self::Error> {
+    fn read(
+        &self,
+        blocks: &mut [Block],
+        start_block_idx: BlockIdx,
+        _reason: &str,
+    ) -> Result<(), Self::Error> {
         self.check_init()?;
         let start_idx = match *self.card_type.borrow() {
             Some(CardType::SD1 | CardType::SD2) => start_block_idx.0 * 512,
@@ -400,20 +419,19 @@ pub enum Error {
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum CardType {
-    /// An standard-capacity SD Card supporting v1.x of the standard.
+    /// A standard-capacity SD Card supporting v1.x of the standard.
     ///
     /// Uses byte-addressing internally, so limited to 2GiB in size.
     SD1,
-    /// An standard-capacity SD Card supporting v2.x of the standard.
+    /// A standard-capacity SD Card supporting v2.x of the standard.
     ///
     /// Uses byte-addressing internally, so limited to 2GiB in size.
     SD2,
-    /// An high-capacity 'SDHC' Card.
+    /// A high-capacity 'SDHC' Card.
     ///
     /// Uses block-addressing internally to support capacities above 2GiB.
     SDHC,
 }
-
 
 /// This an object you can use to busy-wait with a timeout.
 ///
@@ -472,10 +490,9 @@ impl Delay {
     /// Wait for a while.
     ///
     /// Checks the retry counter first, and if we hit the max retry limit, the
-    /// value `err` is returned. Otherwise we wait for 10us and then return
+    /// value `err` is returned. Otherwise, we wait for 10us and then return
     /// `Ok(())`.
-    fn delay(&mut self, err: Error) -> Result<(), Error>
-    {
+    fn delay(&mut self, err: Error) -> Result<(), Error> {
         if self.retries_left == 0 {
             Err(err)
         } else {

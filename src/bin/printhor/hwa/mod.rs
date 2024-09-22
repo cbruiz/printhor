@@ -1,13 +1,13 @@
+pub use crate::control::GCodeProcessor;
 use crate::hwi;
 pub use printhor_hwa_common::*;
-pub use crate::control::GCodeProcessor;
 
 #[cfg(feature = "with-defmt")]
 pub use defmt;
 
 #[cfg(feature = "with-defmt")]
 #[allow(unused)]
-pub use defmt::{trace, debug, info, warn, error};
+pub use defmt::{debug, error, info, trace, warn};
 
 pub mod controllers;
 pub mod drivers;
@@ -32,7 +32,6 @@ pub mod mem {
     #[inline]
     pub fn stack_reservation_max_size() -> u32 {
         hwi::MAX_STATIC_MEMORY as u32
-
     }
 
     #[inline]
@@ -58,42 +57,43 @@ pub mod display {
 
 /// Simple module to manage and measure static controller allocations in async tasks
 pub mod task_allocations {
-    use printhor_hwa_common::{EventBusRef, EventBusSubscriber, TrackedStaticCell};
     use crate::hwa;
+    use printhor_hwa_common::{EventBusRef, EventBusSubscriber, TrackedStaticCell};
 
-    pub async fn init_control_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static>  {
+    pub async fn init_control_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static> {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut EventBusRef = SUBS.init::<{hwa::MAX_STATIC_MEMORY}>("control_task::EventBusSubscriber", event_bus);
+        let bi: &mut EventBusRef =
+            SUBS.init::<{ hwa::MAX_STATIC_MEMORY }>("control_task::EventBusSubscriber", event_bus);
         bi.subscriber().await
     }
 
     #[cfg(feature = "with-printjob")]
-    pub async fn init_printer_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static>  {
+    pub async fn init_printer_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static> {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut EventBusRef = SUBS.init::<{hwa::MAX_STATIC_MEMORY}>("printer_task::EventBusSubscriber", event_bus);
+        let bi: &mut EventBusRef =
+            SUBS.init::<{ hwa::MAX_STATIC_MEMORY }>("printer_task::EventBusSubscriber", event_bus);
         bi.subscriber().await
     }
 
     #[cfg(all(feature = "integration-test"))]
-    pub async fn init_integration_subscriber(event_bus: EventBusRef) -> EventBusSubscriber<'static>  {
+    pub async fn init_integration_subscriber(
+        event_bus: EventBusRef,
+    ) -> EventBusSubscriber<'static> {
+        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
+        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static SUBS: TrackedStaticCell<EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut EventBusRef = SUBS.init::<{hwa::MAX_STATIC_MEMORY}>("integration_task::EventBusSubscriber", event_bus);
+        let bi: &mut EventBusRef = SUBS
+            .init::<{ hwa::MAX_STATIC_MEMORY }>("integration_task::EventBusSubscriber", event_bus);
         bi.subscriber().await
     }
-
-    /*
-    #[cfg(feature = "with-sdcard")]
-    pub async fn init_defer_subscriber(event_bus: hwa::EventBusRef) -> EventBusSubscriber<'static>  {
-        static SUBS: TrackedStaticCell<hwa::EventBusRef> = TrackedStaticCell::new();
-        let bi: &mut hwa::EventBusRef = SUBS.init("deferred_task::EventBusSubscriber", event_bus);
-        bi.subscriber().await
-    }
-     */
 }
 
 #[cfg(feature = "with-sdcard")]
-pub struct DummyTimeSource {
-}
+pub struct DummyTimeSource {}
 
 #[cfg(feature = "with-sdcard")]
 impl embedded_sdmmc::TimeSource for DummyTimeSource {
@@ -110,4 +110,3 @@ impl embedded_sdmmc::TimeSource for DummyTimeSource {
 }
 
 pub type WatchdogRef = ControllerRef<ControllerMutexType, hwi::device::Watchdog>;
-

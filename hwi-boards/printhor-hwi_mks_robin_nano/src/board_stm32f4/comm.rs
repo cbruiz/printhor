@@ -101,11 +101,10 @@ impl SingleWireSoftwareUart {
                     nb += 1;
                 }
                 Err(_e) => {
-                    if nb > 0 {
-                        return Ok(nb);
-                    }
-                    else {
-                        return Err(SerialError::Timeout);
+                    return if nb > 0 {
+                        Ok(nb)
+                    } else {
+                        Err(SerialError::Timeout)
                     }
                 }
             }

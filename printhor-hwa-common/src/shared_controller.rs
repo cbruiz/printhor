@@ -1,3 +1,37 @@
+//! This module provides synchronization primitives for controllers using the `embassy_sync` crate.
+//!
+//! The key components in this module are mutexes and their wrappers, which allow for safe concurrent
+//! access to shared resources, as well as traits and helper structures that facilitate the controlled
+//! acquisition and release of locks.
+//!
+//! # Types
+//!
+//! - `StandardControllerMutex<D>`: A standard mutex for controllers using the `ControllerMutexType`.
+//! - `InterruptControllerMutex<D>`: A mutex for controllers in interrupt handlers using the `InterruptControllerMutexType`.
+//! - `ControllerMutex<M, D>`: A generic mutex usable in various contexts.
+//!
+//! # Traits
+//!
+//! - `ControllerKind<M, T>`: A trait defining the types for different controller kinds.
+//!
+//! # Structs
+//!
+//! - `Holder<M, T>`: A holding structure for an optional mutex guard, allowing safe reference cell manipulation.
+//! - `ControllerRef<M, T>`: A reference to a controller, managing the acquisition and release of a associated mutex.
+//!
+//! # Methods
+//!
+//! - `Holder::new()`: Creates a new `Holder` with an empty guard.
+//! - `Holder::set()`: Sets the guard in the holder.
+//! - `Holder::release()`: Releases the held guard.
+//!
+//! - `ControllerRef::new()`: Constructs a new `ControllerRef`.
+//! - `ControllerRef::lock()`: Asynchronously locks the associated mutex, providing a guard.
+//! - `ControllerRef::try_lock()`: Attempts to lock the associated mutex without waiting, providing a result.
+//! - `ControllerRef::retain()`: Asynchronously acquires and holds the mutex lock.
+//! - `ControllerRef::release()`: Releases the retained mutex lock.
+//! - `ControllerRef::apply()`: Applies a function to the locked controller, providing a result.
+//! - `ControllerRef::apply_result()`: Applies a function to the locked controller, providing a custom result.
 use core::cell::RefCell;
 use embassy_sync::mutex::TryLockError;
 use crate::{ControllerMutexType, InterruptControllerMutexType};

@@ -1,6 +1,6 @@
 use printhor_hwa_common::EventStatus;
 
-#[cfg_attr(all(feature = "defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
 #[cfg_attr(feature = "native", derive(Debug))]
 #[cfg_attr(feature = "native", derive(strum::Display))]
 #[allow(unused)]
@@ -15,7 +15,7 @@ pub enum CodeExecutionSuccess {
     DEFERRED(EventStatus),
 }
 
-#[cfg_attr(all(feature = "defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
 #[cfg_attr(feature = "native", derive(strum::Display))]
 #[derive(Debug)]
 #[allow(unused)]

@@ -55,8 +55,9 @@ use embassy_executor::Executor;
 use embassy_rp::multicore::{spawn_core1, Stack};
 use printhor_hwa_common::TrackedStaticCell;
 
-
+#[link_section = ".bss"]
 static CORE1_STACK: TrackedStaticCell<Stack<4096>> = TrackedStaticCell::new();
+#[link_section = ".bss"]
 static EXECUTOR_HIGH: TrackedStaticCell<Executor> = TrackedStaticCell::new();
 
 struct TokenHolder<S> {

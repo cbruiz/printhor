@@ -60,7 +60,7 @@ cortex-m-rt = { version = "0.7.0", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
 
 embassy-stm32 = { version = "*", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m"] }
+embassy-executor = { version = "0.6.0", default-features = false, features = ["executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "*", features = ["defmt"] }
 embassy-time = { version = "*", features = ["defmt"] }
 embassy-futures = { version = "*", features = ["defmt"] }
@@ -75,3 +75,6 @@ embedded-io-async = { version = "0.6.1", default-features = false, optional = tr
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }
+
+[patch.crates-io]
+async-gcode = { path = "../../libs/async-gcode" }

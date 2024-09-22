@@ -1,11 +1,10 @@
+use crate::display::ui::MainUI;
 use crate::hwa;
 use embassy_time;
 use printhor_hwa_common::EventBusRef;
-use crate::display::ui::MainUI;
 
-#[embassy_executor::task(pool_size=1)]
+#[embassy_executor::task(pool_size = 1)]
 pub async fn display_task(display_dev: hwa::display::DisplayDevice, event_bus: EventBusRef) -> ! {
-
     hwa::info!("Display task started");
     let t0 = embassy_time::Instant::now();
     let main_ui = MainUI::new(event_bus.clone()).await;

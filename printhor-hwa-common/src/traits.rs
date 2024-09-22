@@ -1,6 +1,10 @@
-use crate::StepperChannel;
+
 
 /*
+
+use crate::StepperChannel;
+
+
 pub trait BoardTrait: Sized {
     type Controllers;
     type SysDevices;
@@ -20,7 +24,7 @@ pub trait BoardTrait: Sized {
 
 
 }
- */
+
 
 pub trait MotionTrait {
     fn enable(&mut self, channels: crate::StepperChannel);
@@ -37,3 +41,4 @@ pub trait MotionTrait {
 
     fn endstop_triggered(&mut self, channels: StepperChannel) -> bool;
 }
+*/

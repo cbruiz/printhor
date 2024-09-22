@@ -205,6 +205,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         let mut usb_serial_device = io::usbserial::USBSerialDevice::new(driver);
         usb_serial_device.spawn(_spawner);
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
+        #[link_section = ".bss"]
         static USB_INST: TrackedStaticCell<StandardControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let serial_usb_tx = ControllerRef::new(
             USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", ControllerMutex::new(sender))
@@ -220,8 +221,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
 
+        #[link_section = ".bss"]
         static RXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
         let rxb = RXB.init::<{crate::MAX_STATIC_MEMORY}>("RXBuffer", [0u8; 32]);
+        #[link_section = ".bss"]
         static TXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
         let txb = TXB.init::<{crate::MAX_STATIC_MEMORY}>("TXBuffer", [0u8; 32]);
 
@@ -229,6 +232,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
             p.UART0, p.PIN_0, p.PIN_1, cfg
         ).into_buffered(UartPort1Irqs, txb, rxb).split();
 
+        #[link_section = ".bss"]
         static UART_PORT1_INST: TrackedStaticCell<StandardControllerMutex<device::UartPort1TxDevice>> = TrackedStaticCell::new();
         let serial_port1_tx = ControllerRef::new(
             UART_PORT1_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port1_tx_device))
@@ -244,8 +248,10 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
 
+        #[link_section = ".bss"]
         static RXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
         let rxb = RXB.init::<{crate::MAX_STATIC_MEMORY}>("RXBuffer", [0u8; 32]);
+        #[link_section = ".bss"]
         static TXB: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
         let txb = TXB.init::<{crate::MAX_STATIC_MEMORY}>("TXBuffer", [0u8; 32]);
 
@@ -253,6 +259,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
             p.UART1, p.PIN_4, p.PIN_5, cfg
         ).into_buffered(UartPort2Irqs, txb, rxb).split();
 
+        #[link_section = ".bss"]
         static UART_PORT2_INST: TrackedStaticCell<ControllerMutex<device::UartPort2TxDevice>> = TrackedStaticCell::new();
         let serial_port2_tx = ControllerRef::new(
             UART_PORT2_INST.init::<{crate::MAX_STATIC_MEMORY}>("UartPort1", ControllerMutex::new(uart_port2_tx_device))
@@ -339,6 +346,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
 
     #[cfg(feature = "with-ps-on")]
         let ps_on = {
+        #[link_section = ".bss"]
         static PS_ON: TrackedStaticCell<ControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
             PS_ON.init::<{crate::MAX_STATIC_MEMORY}>("", ControllerMutex::new(
@@ -348,6 +356,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_rp::Peripherals) -> printhor_hw
     };
 
     let watchdog = device::Watchdog::new(p.WATCHDOG);
+    #[link_section = ".bss"]
     static WD: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
     let sys_watchdog = ControllerRef::new(WD.init::<{crate::MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(watchdog)));
 

@@ -1,5 +1,6 @@
 #![no_std]
 #![allow(stable_features)]
+extern crate alloc;
 
 pub use defmt::{trace, debug, info, warn, error};
 pub use defmt;
@@ -76,9 +77,9 @@ cfg_if::cfg_if! {
         #[cfg(feature = "with-sdcard")]
         pub use board_stm32f4::SDCARD_PARTITION;
         #[cfg(feature = "with-serial-usb")]
-        const USBSERIAL_BUFFER_SIZE: usize = 512;
+        const USBSERIAL_BUFFER_SIZE: usize = 64;
         #[cfg(feature = "with-serial-port-1")]
-        const UART_PORT1_BUFFER_SIZE: usize = 512;
+        const UART_PORT1_BUFFER_SIZE: usize = 128;
         #[cfg(feature = "with-serial-port-1")]
         const UART_PORT1_BAUD_RATE: u32 = 115200;
 
@@ -124,7 +125,7 @@ cfg_if::cfg_if! {
 
 // Execute closure f in an interrupt-free context.
 // Required to safety lock a resource that can be also requested by an ISR.
-// Such ISR, hence, won't miss it's interrupt and won't be too much delayed
+// Such ISR, hence, won't miss its interrupt and won't be too much delayed
 pub fn interrupt_free<F, R>(f: F) -> R
     where
         F: FnOnce() -> R,

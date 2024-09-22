@@ -1,3 +1,78 @@
+#![doc = r"
+This module provides a software-based serial communication (UART) implementation. 
+It includes traits and structures to facilitate read/write operations over a single 
+IOPin in a half-duplex mode. 
+
+## Enums
+
+### `SerialError`
+Represents possible errors that can occur during serial communication.
+- `Timeout`: Indicates a read or write operation has timed out.
+- `Framing`: Indicates framing error, where the stop bit was not as expected.
+
+### `UartChannel`
+Represents different UART channels.
+- `Ch1`: Channel 1
+- `Ch2`: Channel 2
+- `Ch3`: Channel 3
+- `Ch4`: Channel 4
+
+## Traits
+
+### `IOPin`
+Defines the necessary operations for an IO pin used in serial communication.
+- `set_output`: Sets the pin mode to output.
+- `set_input`: Sets the pin mode to input.
+- `is_high`: Checks if the pin is high.
+- `is_low`: Checks if the pin is low (inline default implementation).
+- `set_high`: Sets the pin high.
+- `set_low`: Sets the pin low.
+- `set_open_drain`: Sets the pin to open drain mode.
+
+### `MultiChannel`
+Defines the method to set the UART channel.
+- `set_channel`: Sets the UART channel.
+
+### `AsyncRead`
+Provides an asynchronous method to read a single word from the serial interface.
+- `read`: Reads a single word.
+
+### `AsyncWrite`
+Provides an asynchronous method to write a single word to the serial interface.
+- `write`: Writes a single word.
+
+## Structs
+
+### `HalfDuplexSerial`
+Represents a software-based half-duplex UART implementation.
+- `new`: Initializes a new `HalfDuplexSerial`.
+- `word_transfer_duration`: Returns the duration for transferring a word.
+- `set_timeout`: Sets the read/write timeout.
+- `set_write_mode`: Sets the pin mode to write (asynchronously).
+- `set_read_mode`: Sets the pin mode to read (asynchronously).
+
+## Example
+
+```rust
+use embassy_time::Timer;
+use embassy_time::Duration;
+
+impl<RXTX> HalfDuplexSerial<RXTX>
+    where
+        RXTX: IOPin,
+{
+    pub fn new(mut rxtx: RXTX, baud_rate: u32) -> Self {
+        // Initialize the UART pin and set it to high
+        rxtx.set_output();
+        rxtx.set_high();
+
+        Self { rxtx, bit_period: Duration::from_hz(baud_rate as u64), timeout_ms: None }
+    }
+
+    // Other methods...
+}
+```
+"]
 //! TODO: [Work In progress] Software serial communication (UART)
 
 use embassy_time::Timer;

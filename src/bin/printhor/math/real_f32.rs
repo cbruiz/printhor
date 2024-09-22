@@ -10,7 +10,7 @@ cfg_if::cfg_if! {
         use num_traits::ToPrimitive;
         use micromath::F32Ext;
 
-        #[derive(Copy, Clone, Default, Debug)]
+        #[derive(Copy, Clone, Default)]
         pub struct Real(pub f32);
         pub type RealImpl = f32;
 
@@ -60,8 +60,9 @@ cfg_if::cfg_if! {
                 f32::is_zero(&self.0)
             }
 
-            pub fn epsilon() -> Self {
-                Real(<f32 as FloatCore>::epsilon())
+            #[inline]
+            pub const fn epsilon() -> Self {
+                crate::math::EPSILON
             }
 
             #[inline]
@@ -126,7 +127,7 @@ cfg_if::cfg_if! {
 
             pub fn sqrt(self) -> Option<Self> {
                 let num = self.inner();
-                // The famous inverse square root approximation of Id software
+                // The famous inverse square root approximation of 'ID Software'
                 let _r = 1.0f32 / Self::quake_isqrt(num);
 
                 // Micromath crate, based on https://bits.stephan-brumme.com/squareRoot.html
@@ -165,7 +166,7 @@ cfg_if::cfg_if! {
                 https://github.com/SolraBizna/ieee-apsqrt/blob/main/src/lib.rs
                 https://github.com/ARM-software/CMSIS_4/blob/master/CMSIS/DSP_Lib/Source/FastMathFunctions/arm_sqrt_q31.c
                 https://forum.mikroe.com/viewtopic.php?t=65263
-                http://www.ganssle.com/approx-2.htm
+                https://www.ganssle.com/approx-2.htm
                 https://www.reddit.com/r/rust/comments/1722v9d/help_with_sqrt_hardware_implementation_on_arm/
                 uint32 isqrt3(uint32 n)
                 {
@@ -351,16 +352,48 @@ cfg_if::cfg_if! {
             }
         }
 
+        impl Debug for Real {
+            fn fmt(&self, _f: &mut Formatter<'_>) -> core::fmt::Result {
+                use lexical_core::BUFFER_SIZE;
+                let mut buffer = [b'0'; BUFFER_SIZE];
+                const FORMAT: u128 = lexical_core::format::STANDARD;
+                let mut options = lexical_core::WriteFloatOptions::new();
+                //options.set_trim_floats(true);
+                options.set_max_significant_digits(core::num::NonZero::new(6));
+                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+                core::write!(_f, "{}", core::str::from_utf8(&slice).map_err(|_| core::fmt::Error)?)?;
+                Ok(())
+            }
+        }
+
         impl Display for Real {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Display::fmt(&self.0, f)
+            fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                use lexical_core::BUFFER_SIZE;
+                let mut buffer = [b'0'; BUFFER_SIZE];
+                const FORMAT: u128 = lexical_core::format::STANDARD;
+                let mut options = lexical_core::WriteFloatOptions::new();
+                //options.set_trim_floats(true);
+                options.set_max_significant_digits(core::num::NonZero::new(6));
+                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+                core::write!(_f, "{}", core::str::from_utf8(&slice).map_err(|_| core::fmt::Error)?)?;
+                Ok(())
             }
         }
 
         #[cfg(feature = "with-defmt")]
         impl Format for Real {
-            fn format(&self, fmt: defmt::Formatter) {
-                defmt::write!(fmt, "{:?}", self.0.to_f64());
+            fn format(&self, _f: defmt::Formatter) {
+                use lexical_core::BUFFER_SIZE;
+                let mut buffer = [b'0'; BUFFER_SIZE];
+                const FORMAT: u128 = lexical_core::format::STANDARD;
+                let mut options = lexical_core::WriteFloatOptions::new();
+                //options.set_trim_floats(true);
+                options.set_max_significant_digits(core::num::NonZero::new(6));
+                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+                if let Ok(s) = core::str::from_utf8(&slice) {
+                    defmt::write!(_f, "{}", s);
+                }
+
             }
         }
 
