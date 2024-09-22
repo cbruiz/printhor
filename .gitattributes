@@ -2,3 +2,5 @@
 *.htpl linguist-language=linguist-vendored
 *.img linguist-language=linguist-vendored
 *.cfg linguist-language=linguist-vendored
+*.gcode linguist-language=linguist-vendored
+*.sh linguist-language=linguist-vendored
