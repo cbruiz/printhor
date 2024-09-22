@@ -168,6 +168,59 @@ pub mod usbserial {
 }
 
 #[cfg(feature = "with-serial-port-1")]
+/*
+pub mod uart_port1 {
+    use alloc::string::ToString;
+    use crate::board::device::UartPort1RxDevice;
+    use futures::Stream;
+    use core::pin::Pin;
+    use futures::task::Context;
+    use futures::task::Poll;
+    use futures::Future;
+
+    pub struct UartPort1RxInputStream {
+        receiver: UartPort1RxDevice,
+    }
+
+    impl UartPort1RxInputStream {
+        pub fn new(receiver: UartPort1RxDevice) -> Self {
+            Self {
+                receiver,
+            }
+
+        }
+    }
+
+    impl Stream for UartPort1RxInputStream
+    {
+        type Item = Result<u8, async_gcode::Error>;
+
+        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
+            let this = self.get_mut();
+            use embedded_io_async::BufRead;
+            let response = core::pin::pin!(this.receiver.fill_buf()).poll(ctx);
+            match response {
+                Poll::Ready(result) => {
+                    match result {
+                        Ok(buff) => {
+                            let byte = buff[0];
+                            this.receiver.consume(1);
+                            Poll::Ready(Some(Ok(byte)))
+                        }
+                        Err(_e) => {
+                            defmt::error!("Serial port error: {:?}", _e);
+                            Poll::Ready(None)
+                        }
+                    }
+                },
+                Poll::Pending => {
+                    Poll::Pending
+                }
+            }
+        }
+    }
+}
+*/
 pub mod uart_port1 {
     use crate::board::device::UartPort1RxDevice;
     use crate::board::device::UartPort1RingBufferedRxDevice;
@@ -201,25 +254,12 @@ pub mod uart_port1 {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
             #[link_section =".bss"]
             static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
-            cfg_if::cfg_if! {
-                if #[cfg(feature="without-ringbuffer")] {
-                    Self {
-                        receiver,
-                        buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
-                        bytes_read: 0,
-                        current_byte_index: 0,
-                    }
-                }
-                else {
-                    let mut rb_receiver = receiver.into_ring_buffered(BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]));
-                    let _ = rb_receiver.start();
-                    Self {
-                        receiver: rb_receiver,
-                        buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
-                        bytes_read: 0,
-                        current_byte_index: 0,
-                    }
-                }
+            let rb_receiver = receiver.into_ring_buffered(BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]));
+            Self {
+                receiver: rb_receiver,
+                buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
+                bytes_read: 0,
+                current_byte_index: 0,
             }
         }
     }
@@ -236,39 +276,29 @@ pub mod uart_port1 {
                 Poll::Ready(Some(Ok(byte)))
             }
             else {
-                this.current_byte_index = 0;
-                this.bytes_read = 0;
-
-                let r = core::pin::pin!({
-                    cfg_if::cfg_if! {
-                        if #[cfg(feature="without-ringbuffer")] {
-                            defmt::info!("read_until_idle()");
-                            this.receiver.read_until_idle(&mut this.buffer)
+                let response = core::pin::pin!(this.receiver.read(&mut this.buffer)).poll(ctx);
+                match response {
+                    Poll::Ready(result) => {
+                        match result {
+                            Ok(n) => {
+                                this.current_byte_index = 0;
+                                this.bytes_read = n as u8;
+                                if n > 0 {
+                                    let byte = this.buffer[this.current_byte_index as usize];
+                                    this.current_byte_index += 1;
+                                    Poll::Ready(Some(Ok(byte)))
+                                } else {
+                                    defmt::warn!(">(Ready(None))");
+                                    Poll::Ready(None)
+                                }
+                            }
+                            Err(_e) => {
+                                defmt::error!("UART Error: {:?}", _e);
+                                Poll::Ready(None)
+                            }
                         }
-                        else {
-                            defmt::info!("io::read()");
-                            this.receiver.read(&mut this.buffer)
-                        }
-                    }
-                }).poll(ctx);
-                match r {
-                    Poll::Ready(Ok(n)) => {
-                        this.bytes_read = n as u8;
-                        if n > 0 {
-                            let byte = this.buffer[this.current_byte_index as usize];
-                            this.current_byte_index += 1;
-                            Poll::Ready(Some(Ok(byte)))
-                        } else {
-                            defmt::info!(">(Ready(None))");
-                            Poll::Ready(None)
-                        }
-                    }
-                    Poll::Ready(Err(_e)) => {
-                        defmt::warn!("poll() -> Error {:?}", _e);
-                        Poll::Ready(None)
-                    }
+                    },
                     Poll::Pending => {
-                        defmt::info!("poll() -> Pending");
                         Poll::Pending
                     }
                 }

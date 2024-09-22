@@ -1,5 +1,6 @@
 #![no_std]
 #![allow(stable_features)]
+extern crate alloc;
 
 pub use defmt::{trace, debug, info, warn, error};
 pub use defmt;
@@ -78,7 +79,7 @@ cfg_if::cfg_if! {
         #[cfg(feature = "with-serial-usb")]
         const USBSERIAL_BUFFER_SIZE: usize = 64;
         #[cfg(feature = "with-serial-port-1")]
-        const UART_PORT1_BUFFER_SIZE: usize = 64;
+        const UART_PORT1_BUFFER_SIZE: usize = 128;
         #[cfg(feature = "with-serial-port-1")]
         const UART_PORT1_BAUD_RATE: u32 = 115200;
 

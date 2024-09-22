@@ -385,13 +385,12 @@ cfg_if::cfg_if! {
             fn format(&self, _f: defmt::Formatter) {
                 use lexical_core::BUFFER_SIZE;
                 let mut buffer = [b'0'; BUFFER_SIZE];
-
                 const FORMAT: u128 = lexical_core::format::STANDARD;
                 let mut options = lexical_core::WriteFloatOptions::new();
-                options.set_trim_floats(true);
-                lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
-
-                if let Ok(s) = core::str::from_utf8(&buffer) {
+                //options.set_trim_floats(true);
+                options.set_max_significant_digits(core::num::NonZero::new(6));
+                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
+                if let Ok(s) = core::str::from_utf8(&slice) {
                     defmt::write!(_f, "{}", s);
                 }
 

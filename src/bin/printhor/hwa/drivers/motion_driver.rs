@@ -312,7 +312,7 @@ impl MotionDriver {
             TVector::from_coords(None, None, Some(math::ONE.neg()), None),
             Real::from_lit(10, 0),
             steps_per_mm,
-            200,
+            1000,
             false,
             Some(&mut homming_position),
         ).await;
@@ -331,7 +331,7 @@ impl MotionDriver {
             TVector::from_coords(None, None, Some(math::ONE.neg()), None),
             zbounds,
             steps_per_mm,
-            200,
+            1000,
             true,
             Some(&mut homming_position),
         ).await;
@@ -344,10 +344,10 @@ impl MotionDriver {
 
         hwa::info!("Upper Z + 10mm");
         self.shabbily_move_to(
-            TVector::from_coords(None, None, Some(math::ONE.neg()), None),
+            TVector::from_coords(None, None, Some(math::ONE), None),
             Real::from_lit(10, 0),
             steps_per_mm,
-            200,
+            2000,
             false,
             Some(&mut homming_position),
         ).await;

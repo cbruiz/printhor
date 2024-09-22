@@ -260,7 +260,6 @@ nucleo64-f410rb = [
     "cornering",
     #"nightly",
     #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
-    #"executor-interrupt",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
     #"debug-signals",
@@ -274,9 +273,9 @@ nucleo64-f410rb = [
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
     #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
     "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
-    "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
-    "with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
-    "with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
+    #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
+    #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
+    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
     "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
     "with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
 

@@ -35,7 +35,7 @@ pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
 pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 400;
 pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 40_000;
 
-pub const HEAP_SIZE_BYTES: usize = 1024;
+pub const HEAP_SIZE_BYTES: usize = 256;
 pub const MAX_STATIC_MEMORY: usize = 4096;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
@@ -219,6 +219,21 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
             p.USART2, p.PA3, p.PA2, UartPort1Irqs, p.DMA1_CH6, p.DMA1_CH7, cfg
         ).expect("Ready").split();
+
+        /*
+        // For UART Buffered
+        #[link_section = ".bss"]
+        static UART_RX_BUFFER: TrackedStaticCell<[u8; 512]> =  TrackedStaticCell::new();
+        let uart_rx_buffer = UART_RX_BUFFER.init::<MAX_STATIC_MEMORY>("UartRXBuffer", [0u8; 512]);
+
+        #[link_section = ".bss"]
+        static UART_TX_BUFFER: TrackedStaticCell<[u8; 32]> =  TrackedStaticCell::new();
+        let uart_tx_buffer = UART_TX_BUFFER.init::<MAX_STATIC_MEMORY>("UartTXBuffer", [0u8; 32]);
+
+        let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
+            p.USART2, UartPort1Irqs, p.PA3, p.PA2, uart_tx_buffer, uart_rx_buffer, cfg
+        ).expect("Ready").split();
+        */
 
         #[link_section = ".bss"]
         static UART_PORT1_INST: TrackedStaticCell<ControllerMutex<ControllerMutexType, printhor_hwa_common::SerialAsyncWrapper<device::UartPort1TxDevice>>> = TrackedStaticCell::new();
@@ -417,7 +432,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         #[link_section = ".bss"]
         static PS_ON: TrackedStaticCell<ControllerMutex<ControllerMutexType, device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init::<{MAX_STATIC_MEMORY}>("", ControllerMutex::new(
+            PS_ON.init::<{MAX_STATIC_MEMORY}>("PSOn", ControllerMutex::new(
                 Output::new(p.PA4, Level::Low, Speed::Low)
             ))
         )

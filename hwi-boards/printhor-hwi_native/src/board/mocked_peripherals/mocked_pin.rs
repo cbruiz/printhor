@@ -30,7 +30,7 @@ impl PinState {
         self.digital[id as usize]
     }
 }
-
+#[link_section = "__DATA,.bss"]
 static GLOBAL_PIN_STATE: TrackedStaticCell<PinsCell<PinState>> = TrackedStaticCell::new();
 
 #[inline]

@@ -391,10 +391,6 @@ cfg_if::cfg_if!{
                 }
             }
 
-            pub async fn consume(&mut self) {
-                let _ = self.rx.start();
-            }
-
             pub async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, printhor_hwa_common::soft_uart::SerialError> {
                 match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), self.rx.read(buffer)).await {
                     Ok(Ok(x)) => {

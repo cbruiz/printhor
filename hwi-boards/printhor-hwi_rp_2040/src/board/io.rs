@@ -18,6 +18,7 @@ pub mod usbserial {
     }
 
     #[embassy_executor::task(pool_size=1)]
+    #[allow(unreachable_code)]
     pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
         defmt::info!("Running usb task...");
         usb.run().await;

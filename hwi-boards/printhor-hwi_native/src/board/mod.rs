@@ -321,7 +321,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
         #[link_section = "__DATA,.bss"]
         static PS_ON: TrackedStaticCell<StandardControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
         ControllerRef::new(
-            PS_ON.init::<{MAX_STATIC_MEMORY}>("", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
+            PS_ON.init::<{MAX_STATIC_MEMORY}>("PSOn", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
         )
     };
 
