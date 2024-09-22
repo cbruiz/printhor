@@ -1,1 +1,4 @@
 *.x linguist-language=linguist-vendored
+*.htpl linguist-language=linguist-vendored
+*.img linguist-language=linguist-vendored
+*.cfg linguist-language=linguist-vendored
