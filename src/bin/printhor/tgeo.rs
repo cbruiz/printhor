@@ -809,7 +809,7 @@ where
         ((*self) * rhs).sum()
     }
 
-    /// Computes the orthogonal projection of [other] over this
+    /// Computes the orthogonal projection of `other` over `this`
     /// proj(self, other) = \frac{self \cdot other}{|self|^(2)}
     pub fn orthogonal_projection(&self, other: TVector<T>) -> T
     where

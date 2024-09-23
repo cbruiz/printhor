@@ -53,6 +53,9 @@ pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
 pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 400;
 pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 40_000;
 
+#[cfg(feature = "with-serial-port-2")]
+compile_error!("with-serial-port-2 not implemented");
+
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-end")] {
@@ -253,11 +256,11 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         // Maybe OTG_FS is not the right peripheral...
         // USB_OTG_FS is DM=PB14, DP=PB15
         let driver = embassy_stm32::usb::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11,  ep_out_buffer, config);
-        let mut usb_serial_device = device::USBSerialDevice::new(driver);
+        let mut usb_serial_device = io::usbserial::USBSerialDevice::new(driver);
         usb_serial_device.spawn(_spawner);
         let (usb_serial_rx_device, sender) = usb_serial_device.split();
         #[link_section = ".bss"]
-        static USB_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::USBSerialDeviceSender>> = TrackedStaticCell::new();
+        static USB_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<io::usbserial::USBSerialDeviceSender>> = TrackedStaticCell::new();
         let serial_usb_tx = ControllerRef::new(
             USB_INST.init::<{crate::MAX_STATIC_MEMORY}>("USBSerialTxController", ControllerMutex::new(sender))
         );

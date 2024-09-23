@@ -47,12 +47,12 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         dg.pins.z_endstop_pin.set_high();
     }
 
-    #[cfg(feature = "integration-test-m100")]
+    //#[cfg(feature = "integration-test-m100")]
     {
         hwa::info!("Testing M100");
         if params
             .processor
-            .execute(CommChannel::Internal, &GCode::M100, true)
+            .execute(CommChannel::Internal, &GCodeCmd::new(0, None, GCodeValue::M100), true)
             .await
             .and_then(expect_immediate)
             .is_ok()
@@ -68,7 +68,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("Testing M80");
         if params
             .processor
-            .execute(CommChannel::Internal, &GCode::M80, false)
+            .execute(CommChannel::Internal, &GCodeCmd::new(0, None, GCodeValue::M80), false)
             .await
             .and_then(expect_immediate)
             .is_err()
@@ -84,7 +84,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("Testing M502");
         if params
             .processor
-            .execute(CommChannel::Internal, &GCode::M502, false)
+            .execute(CommChannel::Internal, &GCodeCmd::new(0, None, GCodeValue::M502), false)
             .await
             .and_then(expect_immediate)
             .is_err()
@@ -97,13 +97,15 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
 
     #[cfg(feature = "integration-test-homing")]
     {
-        let homing_gcode = GCode::G28(XYZE {
-            ln: None,
-            x: None,
-            y: None,
-            z: None,
-            e: None,
-        });
+        let homing_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G28(XYZE {
+                x: None,
+                y: None,
+                z: None,
+                e: None,
+            })
+        );
 
         hwa::info!("Testing G28");
         let t0 = embassy_time::Instant::now();
@@ -125,13 +127,15 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
 
     #[cfg(feature = "integration-test-reset-pos")]
     {
-        let set_pos_gcode = GCode::G92(XYZE {
-            ln: None,
-            x: Some(math::ZERO),
-            y: Some(math::ZERO),
-            z: Some(math::ZERO),
-            e: Some(math::ZERO),
-        });
+        let set_pos_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G92(XYZE {
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            })
+        );
 
         hwa::info!("Testing G92");
         if params
@@ -151,15 +155,17 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     {
         hwa::info!("Testing G1 Ortho");
 
-        let g1_code = GCode::G1(crate::control::XYZEFS {
-            ln: None,
-            x: Some(Real::new(10, 0)),
-            y: None,
-            z: None,
-            e: None,
-            f: None,
-            s: None,
-        });
+        let g1_code = GCodeCmd::new(
+            0, None,
+            GCodeValue::G1(XYZEFS {
+                x: Some(Real::new(10, 0)),
+                y: None,
+                z: None,
+                e: None,
+                f: None,
+                s: None,
+            })
+        );
 
         if let Some(_evt) = params
             .processor
@@ -178,7 +184,18 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     {
         hwa::info!("Testing G1 Oblique");
 
-        let g1_code = GCode::G1(crate::control::XYZEFS {
+        let set_pos_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G92(XYZE {
+                ln: None,
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            })
+        );
+
+        let g1_code = GCodeCmd::G1(crate::control::XYZEFS {
             ln: None,
             x: Some(Real::new(20, 0)),
             y: Some(Real::new(20, 0)),
@@ -205,7 +222,18 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     {
         hwa::info!("Testing G1 retract");
 
-        let g1_code = GCode::G1(crate::control::XYZEFS {
+        let set_pos_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G92(XYZE {
+                ln: None,
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            })
+        );
+
+        let g1_code = GCodeCmd::G1(crate::control::XYZEFS {
             ln: None,
             x: None,
             y: None,
@@ -231,7 +259,17 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
 
     #[cfg(feature = "integration-test-move-boundaries")]
     {
-        let g1_code = GCode::G1(crate::control::XYZEFS {
+        let set_pos_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G92(XYZE {
+                ln: None,
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            })
+        );
+        let g1_code = GCodeCmd::G1(crate::control::XYZEFS {
             ln: None,
             x: Some(Real::new(7414, 2)),
             y: Some(Real::new(9066, 2)),
@@ -259,7 +297,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("Testing G4");
         if let Some(evt) = params
             .processor
-            .execute(CommChannel::Internal, &GCode::G4, false)
+            .execute(CommChannel::Internal, &GCodeCmd::new(0, None, GCodeValue::G4), false)
             .await
             .and_then(expect_deferred)
             .ok()
@@ -274,11 +312,21 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     #[cfg(feature = "integration-test-set-hotend-temp")]
     {
         hwa::info!("Testing M104");
+        let set_pos_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G92(XYZE {
+                ln: None,
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            })
+        );
         if !params
             .processor
             .execute(
                 CommChannel::Internal,
-                &GCode::M104(S {
+                &GCodeCmd::M104(S {
                     ln: None,
                     s: Some(Real::new(235, 0)),
                 }),
@@ -291,11 +339,21 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             hwa::error!("M104: unexpected result");
         }
         hwa::info!("Testing M109 S235");
+        let set_pos_gcode = GCodeCmd::new(
+            0, None,
+            GCodeValue::G92(XYZE {
+                ln: None,
+                x: Some(math::ZERO),
+                y: Some(math::ZERO),
+                z: Some(math::ZERO),
+                e: Some(math::ZERO),
+            })
+        );
         if let Some(evt) = params
             .processor
             .execute(
                 CommChannel::Internal,
-                &GCode::M109(S {
+                &GCodeCmd::M109(S {
                     ln: None,
                     s: Some(Real::new(235, 0)),
                 }),
@@ -315,7 +373,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("Testing GCODE for engraving");
         params
             .printer_controller
-            .set(PrinterControllerEvent::SetFile(String::from("dir/laser.g")))
+            .set(PrinterControllerEvent::SetFile(CommChannel::Internal, String::from("dir/laser.g")))
             .await
             .unwrap();
         match embassy_time::with_timeout(
@@ -352,7 +410,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("Testing GCODE for benchy FDM print");
         params
             .printer_controller
-            .set(PrinterControllerEvent::SetFile(String::from("benchy.g")))
+            .set(PrinterControllerEvent::SetFile(CommChannel::Internal, String::from("benchy.g")))
             .await
             .unwrap();
         match embassy_time::with_timeout(
@@ -391,7 +449,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("Testing GCODE for pen (plotter)");
         params
             .printer_controller
-            .set(PrinterControllerEvent::SetFile(String::from("dir/pen.g")))
+            .set(PrinterControllerEvent::SetFile(CommChannel::Internal, String::from("dir/pen.g")))
             .await
             .unwrap();
         match embassy_time::with_timeout(
@@ -406,7 +464,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
                 // command resume (eq: M24)
                 params
                     .printer_controller
-                    .set(PrinterControllerEvent::Resume)
+                    .set(PrinterControllerEvent::Resume(CommChannel::Internal))
                     .await
                     .unwrap();
                 // wait for job completion

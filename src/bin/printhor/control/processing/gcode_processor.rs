@@ -42,7 +42,7 @@
 //! Around 14KB in total
 //!
 //! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core.
-use crate::control::GCode;
+use crate::control::{GCodeCmd, GCodeValue};
 use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::hwa;
 use crate::machine::MACHINE_INFO;
@@ -56,7 +56,6 @@ use hwa::controllers::ProbeTrait;
 #[allow(unused)]
 use hwa::{CommChannel, DeferAction, DeferEvent, EventBusRef, EventFlags, EventStatus};
 use strum::VariantNames;
-
 #[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
 cfg_if::cfg_if! {
@@ -245,12 +244,12 @@ impl GCodeProcessor {
     pub(crate) async fn execute(
         &mut self,
         channel: CommChannel,
-        gc: &GCode,
+        gc: &GCodeCmd,
         blocking: bool,
     ) -> CodeExecutionResult {
-        let result = match gc {
+        let result = match &gc.value {
             #[cfg(feature = "grbl-compat")]
-            GCode::GRBLCMD => {
+            GCodeValue::GRBLCmd => {
                 let str = format!(
                     "[VER:1.1 {} v{}:]\n[MSG: Machine: {} {}]\n",
                     MACHINE_INFO.firmware_name,
@@ -261,8 +260,8 @@ impl GCodeProcessor {
                 self.write(channel, str.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::G => {
-                for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("G")) {
+            GCodeValue::G => {
+                for x in GCodeValue::VARIANTS.iter().filter(|x| x.starts_with("G")) {
                     let _ = self
                         .write(channel, alloc::format!("echo: {}\n", x).as_str())
                         .await;
@@ -270,7 +269,7 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
-            GCode::G0(_) | GCode::G1(_) => {
+            GCodeValue::G0(_) | GCodeValue::G1(_) => {
                 if !self
                     .event_bus
                     .get_status()
@@ -285,7 +284,7 @@ impl GCodeProcessor {
                     .await?)
             }
             #[cfg(feature = "with-motion")]
-            GCode::G4 => {
+            GCodeValue::G4 => {
                 if !blocking {
                     self.motion_planner
                         .defer_channel
@@ -297,11 +296,11 @@ impl GCodeProcessor {
                     .plan(channel, &gc, blocking, &self.event_bus)
                     .await?)
             }
-            GCode::G10 => Ok(CodeExecutionSuccess::OK),
-            GCode::G17 => Ok(CodeExecutionSuccess::OK),
-            GCode::G21 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::G10 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::G17 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::G21 => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
-            GCode::G28(_) => match self.event_bus.has_flags(EventFlags::HOMING).await {
+            GCodeValue::G28(_) => match self.event_bus.has_flags(EventFlags::HOMING).await {
                 true => Err(CodeExecutionFailure::BUSY),
                 false => {
                     if !self
@@ -322,7 +321,7 @@ impl GCodeProcessor {
                 }
             },
             #[cfg(feature = "with-probe")]
-            GCode::G31 => {
+            GCodeValue::G31 => {
                 if self.event_bus.has_flags(EventFlags::HOMING).await {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
@@ -340,7 +339,7 @@ impl GCodeProcessor {
                 }
             }
             #[cfg(feature = "with-probe")]
-            GCode::G32 => {
+            GCodeValue::G32 => {
                 if self.event_bus.has_flags(EventFlags::HOMING).await {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
@@ -361,19 +360,19 @@ impl GCodeProcessor {
                     Ok(CodeExecutionSuccess::OK)
                 }
             }
-            GCode::G80 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::G80 => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
-            GCode::G90 => {
+            GCodeValue::G90 => {
                 self.motion_planner.set_absolute_positioning(true).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
-            GCode::G91 => {
+            GCodeValue::G91 => {
                 self.motion_planner.set_absolute_positioning(false).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
-            GCode::G92(_pos) => {
+            GCodeValue::G92(_pos) => {
                 self.motion_planner
                     .set_last_planned_pos(&TVector {
                         x: _pos.x,
@@ -384,29 +383,30 @@ impl GCodeProcessor {
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::G94 => Ok(CodeExecutionSuccess::OK),
-            GCode::M => {
-                for x in GCode::VARIANTS.iter().filter(|x| x.starts_with("M")) {
+            GCodeValue::G94 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M => {
+                for x in GCodeValue::VARIANTS.iter().filter(|x| x.starts_with("M")) {
                     let _ = self
                         .write(channel, alloc::format!("echo: {}\n", x).as_str())
                         .await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M3 => Ok(CodeExecutionSuccess::OK),
-            GCode::M5 => Ok(CodeExecutionSuccess::OK),
-            GCode::M73 => Ok(CodeExecutionSuccess::OK),
-            GCode::M79 => {
+            GCodeValue::M3 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M5 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M73 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M79 => {
                 let _ = self.write(channel, "echo: Software reset\n").await;
                 self.flush(channel).await;
                 hwa::sys_reset();
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M80 => {
+            GCodeValue::M80 => {
+                hwa::info!("Received PowerOn");
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-ps-on")] {
                         self.ps_on.lock().await.set_high();
-                        embassy_time::Timer::after_secs(1).await;
+                        embassy_time::Timer::after_millis(500).await;
                     }
                 }
                 cfg_if::cfg_if! {
@@ -419,17 +419,21 @@ impl GCodeProcessor {
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M81 => {
-                #[cfg(feature = "with-ps-on")]
-                self.ps_on.lock().await.set_low();
+            GCodeValue::M81 => {
+                hwa::info!("Received PowerOff");
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-ps-on")] {
+                        self.ps_on.lock().await.set_low();
+                    }
+                }
                 self.event_bus
                     .publish_event(EventStatus::not_containing(EventFlags::ATX_ON))
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M83 => Ok(CodeExecutionSuccess::OK),
-            GCode::M84 => Ok(CodeExecutionSuccess::OK),
-            GCode::M100 => {
+            GCodeValue::M83 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M84 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M100 => {
                 let heap_current = hwa::mem::heap_current_size();
                 let heap_max = hwa::mem::heap_max_size();
                 let stack_current = hwa::mem::stack_reservation_current_size();
@@ -459,7 +463,7 @@ impl GCodeProcessor {
             // Set hotend temperature
             // An immediate command
             #[cfg(feature = "with-hot-end")]
-            GCode::M104(s) => {
+            GCodeValue::M104(s) => {
                 if !self
                     .event_bus
                     .get_status()
@@ -478,7 +482,7 @@ impl GCodeProcessor {
                 .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M105 => {
+            GCodeValue::M105 => {
                 let hotend_temp_report = {
                     #[cfg(feature = "with-hot-end")]
                     {
@@ -517,7 +521,7 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
             #[cfg(feature = "with-fan-layer")]
-            GCode::M106 => {
+            GCodeValue::M106 => {
                 if !self
                     .event_bus
                     .get_status()
@@ -532,14 +536,14 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-fan-layer")]
-            GCode::M107 => {
+            GCodeValue::M107 => {
                 self.fan_layer.lock().await.set_power(0).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             // Wait for hot-end temperature
             // Mostly deferred code
             #[cfg(feature = "with-hot-end")]
-            GCode::M109(s) => {
+            GCodeValue::M109(s) => {
                 if !self
                     .event_bus
                     .get_status()
@@ -564,10 +568,9 @@ impl GCodeProcessor {
                     Ok(CodeExecutionSuccess::OK)
                 }
             }
-            GCode::M110(_n) => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M110(_n) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
-            GCode::M114 => {
-
+            GCodeValue::M114 => {
                 let _pos = self
                     .motion_planner
                     .get_last_planned_pos()
@@ -592,8 +595,8 @@ impl GCodeProcessor {
 
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M115 => {
-                let _ = self.write(channel, "C; FIRMWARE_NAME: ").await;
+            GCodeValue::M115 => {
+                let _ = self.write(channel, "echo: FIRMWARE_NAME: ").await;
                 let _ = self.write(channel, MACHINE_INFO.firmware_name).await;
                 let _ = self.write(channel, " FIRMWARE_VERSION: ").await;
                 let _ = self.write(channel, MACHINE_INFO.firmware_version).await;
@@ -616,12 +619,12 @@ impl GCodeProcessor {
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M117 => {
-                let _ = self.write(channel, "O.K.; (display msg)\n").await;
+            GCodeValue::M117 => {
+                let _ = self.write(channel, "echo: (display msg)\n").await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
-            GCode::M119 => {
+            GCodeValue::M119 => {
                 let mut d = self.motion_planner.motion_driver.lock().await;
                 let z = alloc::format!(
                     "M119 X {} Y {} Z {}\n",
@@ -648,7 +651,7 @@ impl GCodeProcessor {
             // Set hot-bed temperature
             // An immediate command
             #[cfg(feature = "with-hot-bed")]
-            GCode::M140(s) => {
+            GCodeValue::M140(s) => {
                 if !self
                     .event_bus
                     .get_status()
@@ -670,7 +673,7 @@ impl GCodeProcessor {
             // Wait for hot-bed temperature
             // A normally deferred command
             #[cfg(feature = "with-hot-bed")]
-            GCode::M190 => {
+            GCodeValue::M190 => {
                 if !self
                     .event_bus
                     .get_status()
@@ -692,15 +695,15 @@ impl GCodeProcessor {
                     Ok(CodeExecutionSuccess::OK)
                 }
             }
-            GCode::M201 => Ok(CodeExecutionSuccess::OK),
-            GCode::M203 => Ok(CodeExecutionSuccess::OK),
-            GCode::M204 => Ok(CodeExecutionSuccess::OK),
-            GCode::M205 => Ok(CodeExecutionSuccess::OK),
-            GCode::M206 => Ok(CodeExecutionSuccess::OK),
-            GCode::M220(_) => Ok(CodeExecutionSuccess::OK),
-            GCode::M221(_) => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M201 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M203 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M204 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M205 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M206 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M220(_) => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M221(_) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-trinamic")]
-            GCode::M502 => {
+            GCodeValue::M502 => {
                 /*
                 if !self.event_bus.get_status().await.contains(EventFlags::ATX_ON) {
                     return Err(CodeExecutionFailure::PowerRequired)
@@ -723,10 +726,10 @@ impl GCodeProcessor {
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCode::M862_1 => Ok(CodeExecutionSuccess::OK),
-            GCode::M862_3 => Ok(CodeExecutionSuccess::OK),
-            GCode::M900 => Ok(CodeExecutionSuccess::OK),
-            GCode::M907 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M862_1 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M862_3 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M900 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M907 => Ok(CodeExecutionSuccess::OK),
             _ => Err(CodeExecutionFailure::NotYetImplemented),
         };
         result

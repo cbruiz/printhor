@@ -184,8 +184,7 @@ impl LinearMicrosegmentStepInterpolator {
 }
 
 #[cfg(test)]
-pub mod test {
-
+pub mod interpolation_test {
 
     #[cfg(feature = "wip-tests")]
     #[test]

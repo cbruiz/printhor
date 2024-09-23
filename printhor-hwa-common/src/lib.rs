@@ -17,7 +17,7 @@ cfg_if::cfg_if! {
 
     }
     else {
-        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
+        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
     }
 }
 

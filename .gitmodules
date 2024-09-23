@@ -1,3 +1,6 @@
 [submodule "libs/embassy"]
 	path = libs/embassy
 	url = https://github.com/embassy-rs/embassy/
+[submodule "libs/async-gcode"]
+	path = libs/async-gcode
+	url = https://github.com/cbruiz/async-gcode.git

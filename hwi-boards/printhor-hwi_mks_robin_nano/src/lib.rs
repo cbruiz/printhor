@@ -38,6 +38,8 @@ const USBSERIAL_BUFFER_SIZE: usize = 512;
 const UART_PORT1_BUFFER_SIZE: usize = 512;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BAUD_RATE: u32 = 115200;
+#[cfg(feature = "with-serial-port-2")]
+compile_error!("Not implemented");
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
@@ -46,27 +48,6 @@ cfg_if::cfg_if! {
     }
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-motion")] {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "executor-interrupt")] {
-                use embassy_stm32::interrupt;
-                use embassy_executor::InterruptExecutor;
-
-                pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
-                #[interrupt]
-                unsafe fn RTC_ALARM() {
-                    EXECUTOR_HIGH.on_interrupt()
-                }
-                #[inline]
-                pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-                    let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
-                    spawner.spawn(token).map_err(|_| ())
-                }
-            }
-        }
-    }
-}
 #[inline]
 pub fn init_logger() {
 }

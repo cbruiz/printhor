@@ -5,9 +5,9 @@
 //!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`], disable all steppers
 //!   - If motion segment is execution-ready, dequeue it and then:
 //!     - Enable all steppers
-//!     - Evaluate the motion profile displacement at [`MICRO_SEGMENT_PERIOD_HZ`]
+//!     - Evaluate the motion profile displacement at [`crate::hwa::STEPPER_PLANNER_CLOCK_FREQUENCY`]
 //!     - Compute number of steps to do in each axis (independently)
-//!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`]
+//!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`](hwa::controllers::motion::MultiTimer)
 //!     - Consume a micro-segment until iterator is exhausted
 //!
 //! TODO: This is a work still in progress
@@ -240,7 +240,7 @@ pub async fn task_stepper(
                 #[cfg(feature = "verbose-timings")]
                 let mut tq = 0;
 
-                hwa::debug!("SEGMENT START");
+                hwa::trace!("SEGMENT START");
 
                 #[cfg(feature = "verbose-timings")]
                 let tx = embassy_time::Instant::now();
@@ -347,7 +347,7 @@ pub async fn task_stepper(
                             if DO_NOTHING {
                                 break;
                             }
-                            hwa::debug!("Micro-segment START");
+                            hwa::trace!("Micro-segment START");
 
                             if let Some((estimated_position, _)) =
                                 microsegment_iterator.next(micro_segment_real_time_rel)

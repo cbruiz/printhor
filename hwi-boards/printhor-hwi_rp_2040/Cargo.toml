@@ -41,7 +41,7 @@ with-z-axis = []
 with-e-axis = []
 
 nightly = ["embassy-executor/nightly"]
-executor-interrupt = ["embassy-executor/executor-interrupt"]
+cooperative = ["embassy-time/generic-queue-128"]
 verbose-timings = []
 without-uart-until_idle = []
 with-uart-buffered = []

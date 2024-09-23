@@ -46,7 +46,6 @@ with-e-axis = []
 debug-signals = []
 
 nightly = []
-executor-interrupt = []
 cooperative = ["embassy-time/generic-queue-128"]
 verbose-timings = []
 sdcard-uses-spi = []
@@ -78,4 +77,4 @@ const_env = { version = "0.1" }
 pin-project = "1.1.5"
 
 [patch.crates-io]
-async-gcode = { path = "../../../async-gcode" }
+async-gcode = { path = "../../libs/async-gcode" }

@@ -96,33 +96,6 @@ cfg_if::cfg_if! {
     }
 }
 
-
-cfg_if::cfg_if! {
-    if #[cfg(feature="executor-interrupt")] {
-
-        use embassy_stm32::interrupt;
-        use embassy_executor::InterruptExecutor;
-
-        pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
-
-        #[interrupt]
-        unsafe fn RNG() {
-            EXECUTOR_HIGH.on_interrupt()
-        }
-
-        #[inline]
-        pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-
-            use embassy_stm32::interrupt::InterruptExt;
-            #[cfg(feature = "with-serial-port-1")]
-            interrupt::USART2.set_priority(embassy_stm32::interrupt::Priority::P3);
-            interrupt::RNG.set_priority(embassy_stm32::interrupt::Priority::P2);
-            let spawner = EXECUTOR_HIGH.start(interrupt::RNG);
-            spawner.spawn(token).map_err(|_| ())
-        }
-    }
-}
-
 // Execute closure f in an interrupt-free context.
 // Required to safety lock a resource that can be also requested by an ISR.
 // Such ISR, hence, won't miss its interrupt and won't be too much delayed

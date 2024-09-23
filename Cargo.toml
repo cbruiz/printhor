@@ -70,8 +70,10 @@ debug-skip-homing = []
 debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
 
 cooperative = [
+    "printhor-hwi_mks_robin_nano?/cooperative",
     "printhor-hwi_nucleo_64_arduino_cnc_hat?/cooperative",
     "printhor-hwi_skr_mini_e3?/cooperative",
+    "printhor-hwi_rp_2040?/cooperative",
 ]
 
 sdcard-uses-spi = []
@@ -103,6 +105,7 @@ integration-test = [
     "debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
+    "trace-commands",
     "assert-motion",
     "native",
 ]
@@ -190,10 +193,10 @@ mks_robin_nano = [
 
     "with-serial-usb", "printhor-hwi_mks_robin_nano/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
-    #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2",
-    #"with-spi", "printhor-hwi_mks_robin_nano/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
+    #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2", # Not implemented
+    "with-spi", "printhor-hwi_mks_robin_nano/with-spi",
+    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
+    "with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
     "with-probe", "printhor-hwi_mks_robin_nano/with-probe",
     "with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end",
     "with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed",
@@ -205,7 +208,7 @@ mks_robin_nano = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    "printhor-hwi_mks_robin_nano",
+    "printhor-hwi_mks_robin_nano", "embassy-executor/executor-thread", "cortex-m-rt",
 ]
 
 #################
@@ -215,13 +218,12 @@ mks_robin_nano = [
 nucleo64-l476rg = [
     "cornering",
     #"nightly",
-    #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
     #"executor-interrupt",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
-    #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
+    "with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
@@ -347,7 +349,7 @@ skr_mini_e3_v3 = [
 ]
 
 skr_mini_e3 = [
-    "printhor-hwi_skr_mini_e3",
+    "printhor-hwi_skr_mini_e3", "embassy-executor/executor-thread", "cortex-m-rt"
 ]
 
 #################
@@ -487,8 +489,8 @@ strip = false
 incremental = false
 debug-assertions = true
 overflow-checks = true
-opt-level = "s"
-lto = true
+opt-level = "z"
+lto = "fat"
 panic = "unwind"
 
 [profile.release-opt]
@@ -500,13 +502,13 @@ debug-assertions = false
 overflow-checks = false
 strip = false
 opt-level = "z"
-lto = true
+lto = "fat"
 panic = "abort"
 
 [patch.crates-io]
 
 #async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
-async-gcode = { path = "../async-gcode" }
+async-gcode = { path = "libs/async-gcode" }
 #lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path = "printhor-hwa-common" }

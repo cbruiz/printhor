@@ -25,6 +25,25 @@ cfg_if::cfg_if! {
     }
 }
 cfg_if::cfg_if! {
+    if #[cfg(feature="with-serial-port-1")] {
+
+        pub type UartPort1Device = embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>;
+        pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static>;
+        pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>;
+        pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>;
+        /*
+        // For UARTBuffered
+        pub type UartPort1Device = embassy_stm32::usart::BufferedUart<'static>;
+        pub type UartPort1TxDevice = embassy_stm32::usart::BufferedUartTx<'static>;
+        pub type UartPort1RxDevice = embassy_stm32::usart::BufferedUartRx<'static>;
+         */
+
+        pub type UartPort1TxControllerRef = printhor_hwa_common::StandardControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort1TxDevice>>;
+        pub use crate::board::io::uart_port1::UartPort1RxInputStream;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature="with-trinamic")] {
         type UartTrinamicPeri = embassy_stm32::peripherals::USART4;
         type UartTrinamicTxDma = embassy_stm32::peripherals::DMA1_CH7;

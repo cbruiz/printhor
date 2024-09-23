@@ -1,9 +1,15 @@
 use crate::math::Real;
+#[allow(unused)]
+use crate::hwa;
+
 #[cfg(feature = "native")]
 use strum::Display;
 use strum::{AsRefStr, VariantNames};
 #[cfg(feature = "with-motion")]
 pub mod motion;
+
+#[cfg(feature = "with-defmt")]
+use crate::hwa::defmt;
 
 mod processing;
 pub use processing::*;
@@ -22,53 +28,88 @@ pub mod task_stepper;
 pub mod task_temperature;
 
 #[allow(dead_code)]
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct S {
-    pub(crate) ln: Option<u32>,
-    pub(crate) s: Option<Real>,
-}
-#[allow(dead_code)]
-#[derive(Clone, Default, Debug)]
-pub struct N {
-    pub(crate) ln: Option<u32>,
-    pub(crate) n: Option<Real>,
-}
-#[allow(dead_code)]
-#[derive(Clone, Default, Debug)]
-pub struct XYZE {
-    pub(crate) ln: Option<u32>,
-    pub(crate) x: Option<Real>,
-    pub(crate) y: Option<Real>,
-    pub(crate) z: Option<Real>,
-    pub(crate) e: Option<Real>,
+    pub s: Option<Real>,
 }
 
-#[cfg(feature = "with-defmt")]
-impl crate::hwa::defmt::Format for XYZE {
-    fn format(&self, fmt: crate::hwa::defmt::Formatter) {
-        crate::hwa::defmt::write!(fmt, "XYZE {:?}", self.ln)
+impl S {
+    pub const fn new() -> Self {
+        Self {
+            s: None,
+        }
     }
 }
 
-#[derive(Clone, Default, Debug)]
-pub struct XYZ {
-    #[allow(unused)]
-    pub ln: Option<u32>,
-    pub f: Option<Real>,
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct N {
+    pub n: Option<Real>,
+}
+
+impl N {
+    pub const fn new() -> Self {
+        Self {
+            n: None,
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct XYZE {
     pub x: Option<Real>,
     pub y: Option<Real>,
     pub z: Option<Real>,
+    pub e: Option<Real>,
+}
+
+impl XYZE {
+    pub const fn new() -> Self {
+        Self {
+            x: None,
+            y: None,
+            z: None,
+            e: None,
+        }
+    }
 }
 
 #[cfg(feature = "with-defmt")]
-impl crate::hwa::defmt::Format for XYZ {
-    fn format(&self, fmt: crate::hwa::defmt::Formatter) {
-        crate::hwa::defmt::write!(fmt, "XYZ {:?}", self.ln)
+impl defmt::Format for XYZE {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "X_Y_Z_E")
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct XYZF {
+    pub x: Option<Real>,
+    pub y: Option<Real>,
+    pub z: Option<Real>,
+    pub f: Option<Real>,
+}
+
+impl XYZF {
+    pub const fn new() -> Self {
+        Self {
+            x: None,
+            y: None,
+            z: None,
+            f: None,
+        }
+    }
+}
+
+#[cfg(feature = "with-defmt")]
+impl defmt::Format for XYZF {
+    fn format(&self, fmt: defmt::Formatter) {
+        defmt::write!(fmt, "X_Y_Z_F")
     }
 }
 
 #[cfg(feature = "native")]
-impl core::fmt::Display for XYZ {
+impl core::fmt::Display for XYZF {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::write!(
             f,
@@ -84,20 +125,28 @@ impl core::fmt::Display for XYZ {
 #[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
 pub struct XYZEFS {
-    pub(crate) ln: Option<u32>,
-    pub(crate) e: Option<Real>,
-    pub(crate) f: Option<Real>,
-    pub(crate) s: Option<Real>,
-    pub(crate) x: Option<Real>,
-    pub(crate) y: Option<Real>,
-    pub(crate) z: Option<Real>,
+    pub x: Option<Real>,
+    pub y: Option<Real>,
+    pub z: Option<Real>,
+    pub e: Option<Real>,
+    pub f: Option<Real>,
+    pub s: Option<Real>,
 }
 
 impl XYZEFS {
+    pub const fn new() -> Self {
+        Self {
+            x: None,
+            y: None,
+            z: None,
+            e: None,
+            f: None,
+            s: None,
+        }
+    }
     #[allow(unused)]
     pub fn with_x(&self, pos: i32) -> Self {
         Self {
-            ln: self.ln,
             e: self.e,
             f: self.f,
             s: self.s,
@@ -109,31 +158,69 @@ impl XYZEFS {
 }
 
 #[cfg(feature = "with-defmt")]
-impl crate::hwa::defmt::Format for XYZEFS {
+impl defmt::Format for XYZEFS {
     fn format(&self, fmt: crate::hwa::defmt::Formatter) {
-        crate::hwa::defmt::write!(fmt, "XYZEFS {:?}", self.ln)
+        defmt::write!(fmt, "XYZEFS")
     }
 }
 
-#[allow(unused)]
+#[derive(Debug)]
+pub struct GCodeCmd {
+    /// The gcode sequential number as coming from parser
+    pub order_num: u32,
+    /// The line number tagged in the gcode (if any)
+    pub line_tag: Option<u32>,
+    /// The gcode variant
+    pub value: GCodeValue
+}
+
+impl GCodeCmd {
+    pub const fn new(num: u32, line: Option<u32>, value: GCodeValue) -> Self {
+        Self {
+            order_num: num,
+            line_tag: line,
+            value,
+        }
+    }
+}
+
+impl core::fmt::Display for GCodeCmd {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::write!(f, "{{ gcode: {}, order_num: {}, line: ", self.value.as_ref(), self.order_num)?;
+        match &self.line_tag {
+            None => {
+                core::write!(f, "None }}")
+            }
+            Some(ln) => {
+                core::write!(f, "{} }}", ln)
+            }
+        }
+    }
+}
+
+//noinspection SpellCheckingInspection
 #[derive(Clone, VariantNames, AsRefStr, Default, Debug)]
 #[cfg_attr(feature = "native", derive(Display))]
-pub enum GCode {
+pub enum GCodeValue {
     /// No Operation
     #[default]
-    NOP,
+    Nop,
+
+    /// `GRBL` compat status
     #[cfg(feature = "grbl-compat")]
-    /// GRBL compat status
-    STATUS,
+    Status,
+
+    /// `GRBL` compat cmd
     #[cfg(feature = "grbl-compat")]
-    /// GRBL compat cmd
-    GRBLCMD,
+    GRBLCmd,
     /// List supported G-Codes
     G,
     /// Rapid move
-    G0(XYZ),
+    G0(XYZF),
+
     /// Linear move
     G1(XYZEFS),
+
     /// Dwell
     G4,
     /// Set coordinate system data
@@ -341,10 +428,10 @@ pub enum GCode {
 }
 
 #[cfg(feature = "with-defmt")]
-impl crate::hwa::defmt::Format for GCode {
-    fn format(&self, fmt: crate::hwa::defmt::Formatter) {
-        let gcode_name: &str = self.as_ref();
-        crate::hwa::defmt::write!(fmt, "{}", gcode_name)
+impl defmt::Format for GCodeCmd {
+    fn format(&self, fmt: defmt::Formatter) {
+        let gcode_name: &str = self.value.as_ref();
+        defmt::write!(fmt, "{}", gcode_name)
     }
 }
 
