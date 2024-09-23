@@ -2,12 +2,7 @@ use std::io::{stdout, Write};
 use embassy_executor::SendSpawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
-use futures::Stream;
-use core::pin::Pin;
 use async_std::io::ReadExt;
-use futures::task::Context;
-use futures::task::Poll;
-use futures::Future;
 
 pub(crate) static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
 
@@ -102,49 +97,40 @@ impl MockedUartRxInputStream {
     }
 }
 
-impl Stream for MockedUartRxInputStream
+impl async_gcode::ByteStream for MockedUartRxInputStream
 {
     type Item = Result<u8, async_gcode::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
+    async fn next(&mut self) -> Option<Self::Item> {
 
-        let this = self.get_mut();
-
-        if this.current_byte_index < this.bytes_read {
-            let byte = this.buffer[this.current_byte_index as usize];
-            this.current_byte_index += 1;
-            Poll::Ready(Some(Ok(byte)))
+        if self.current_byte_index < self.bytes_read {
+            let byte = self.buffer[self.current_byte_index as usize];
+            self.current_byte_index += 1;
+            Some(Ok(byte))
         }
         else {
-            this.current_byte_index = 0;
-            this.bytes_read = 0;
-            let r = core::pin::pin!(
-                this.receiver.read_until_idle(&mut this.buffer)
-            ).poll(ctx);
+            self.current_byte_index = 0;
+            self.bytes_read = 0;
+            let r = self.receiver.read_until_idle(&mut self.buffer).await;
             match r {
-                Poll::Ready(rst) => {
-                    match rst {
-                        Ok(n) => {
-                            this.bytes_read = n as u8;
-                            if n > 0 {
-                                let byte = this.buffer[this.current_byte_index as usize];
-                                this.current_byte_index += 1;
-                                Poll::Ready(Some(Ok(byte)))
-                            }
-                            else {
-                                Poll::Ready(None)
-                            }
-                        }
-                        Err(_e) => {
-                            log::error!("Error: {:?}", _e);
-                            Poll::Ready(None)
-                        }
+                Ok(n) => {
+                    self.bytes_read = n as u8;
+                    if n > 0 {
+                        let byte = self.buffer[self.current_byte_index as usize];
+                        self.current_byte_index += 1;
+                        Some(Ok(byte))
+                    }
+                    else {
+                        log::error!("0 bytes read. EOF?");
+                        None
                     }
                 }
-                Poll::Pending => {
-                    Poll::Pending
+                Err(_e) => {
+                    log::error!("Error: {:?}", _e);
+                    None
                 }
             }
         }
     }
+
 }

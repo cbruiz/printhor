@@ -224,85 +224,46 @@ pub mod uart_port1 {
 pub mod uart_port1 {
     use crate::board::device::UartPort1RxDevice;
     use crate::board::device::UartPort1RingBufferedRxDevice;
-    use futures::Stream;
-    use core::pin::Pin;
-    use futures::task::Context;
-    use futures::task::Poll;
-    use futures::Future;
     use printhor_hwa_common::TrackedStaticCell;
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature="without-ringbuffer")] {
-            pub struct UartPort1RxInputStream {
-                receiver: UartPort1RxDevice,
-                buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
-                bytes_read: u8,
-                current_byte_index: u8,
-            }
-        }
-        else {
-            pub struct UartPort1RxInputStream {
-                receiver: UartPort1RingBufferedRxDevice,
-                buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
-                bytes_read: u8,
-                current_byte_index: u8,
-            }
-        }
+    pub struct UartPort1RxInputStream {
+        receiver: UartPort1RingBufferedRxDevice,
     }
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
             #[link_section =".bss"]
             static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
-            let rb_receiver = receiver.into_ring_buffered(BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]));
+            let buffer = BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]);
+
             Self {
-                receiver: rb_receiver,
-                buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
-                bytes_read: 0,
-                current_byte_index: 0,
+                receiver: receiver.into_ring_buffered(buffer),
             }
         }
     }
 
-    impl Stream for UartPort1RxInputStream
+    impl async_gcode::ByteStream for UartPort1RxInputStream
     {
         type Item = Result<u8, async_gcode::Error>;
 
-        fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as Stream>::Item>> {
-            let this = self.get_mut();
-            if this.current_byte_index < this.bytes_read {
-                let byte = this.buffer[this.current_byte_index as usize];
-                this.current_byte_index += 1;
-                Poll::Ready(Some(Ok(byte)))
+        async fn next(&mut self) -> Option<Self::Item> {
+
+            let mut buff: [u8; 1] = [0; 1];
+
+            match self.receiver.read(&mut buff).await {
+                Ok(_r) => Some(Ok(buff[0])),
+                Err(_e) => None,
             }
-            else {
-                let response = core::pin::pin!(this.receiver.read(&mut this.buffer)).poll(ctx);
-                match response {
-                    Poll::Ready(result) => {
-                        match result {
-                            Ok(n) => {
-                                this.current_byte_index = 0;
-                                this.bytes_read = n as u8;
-                                if n > 0 {
-                                    let byte = this.buffer[this.current_byte_index as usize];
-                                    this.current_byte_index += 1;
-                                    Poll::Ready(Some(Ok(byte)))
-                                } else {
-                                    defmt::warn!(">(Ready(None))");
-                                    Poll::Ready(None)
-                                }
-                            }
-                            Err(_e) => {
-                                defmt::error!("UART Error: {:?}", _e);
-                                Poll::Ready(None)
-                            }
-                        }
-                    },
-                    Poll::Pending => {
-                        Poll::Pending
-                    }
+/*
+            match pinfut1.poll(ctx) {
+                Poll::Ready(_r) => match _r {
+                    Ok(_) => Poll::Ready(Some(Ok(1))),
+                    Err(_) => Poll::Ready(Some(Ok(1))),
                 }
+                Poll::Pending => Poll::Pending
             }
+
+ */
         }
     }
 }

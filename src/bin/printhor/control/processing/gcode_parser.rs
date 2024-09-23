@@ -1,7 +1,6 @@
 use crate::control::{GCode, N, S, XYZ, XYZE, XYZEFS};
 use crate::helpers;
 use crate::hwa;
-use futures::Stream;
 
 #[cfg_attr(not(feature = "with-defmt"), derive(Debug))]
 pub enum GCodeLineParserError {
@@ -36,16 +35,15 @@ impl defmt::Format for GCodeLineParserError {
 // dyn trait could reduce code size a lot with the penalty of the indirection
 pub struct GCodeLineParser<STREAM>
 where
-    STREAM: Stream<Item = Result<u8, async_gcode::Error>> + Unpin,
+    STREAM: async_gcode::ByteStream<Item = Result<u8, async_gcode::Error>>,
 {
     raw_parser: async_gcode::Parser<STREAM, async_gcode::Error>,
     current_line: u32,
 }
 
-#[allow(unused)]
 impl<STREAM> GCodeLineParser<STREAM>
 where
-    STREAM: Stream<Item = Result<u8, async_gcode::Error>> + Unpin,
+    STREAM: async_gcode::ByteStream<Item = Result<u8, async_gcode::Error>>,
 {
     pub fn new(stream: STREAM) -> Self {
         Self {
@@ -403,7 +401,8 @@ where
 
     #[allow(unused)]
     pub async fn close(&mut self) {
-        self.raw_parser.reset();
+        todo!("");
+        //self.raw_parser.reset();
     }
 }
 

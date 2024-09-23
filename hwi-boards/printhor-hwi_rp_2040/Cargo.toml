@@ -54,7 +54,7 @@ ili9341_spi = ["with-spi"]
 [dependencies]
 defmt = {version = "0.3", default-features = false}
 cortex-m = { version = "0.7.7", features = ["inline-asm"] }
-cortex-m-rt = { version = "0.7.0", default-features = false }
+cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-rp = { version = "*", default-features = false, features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}

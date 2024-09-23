@@ -69,17 +69,6 @@ motion-async-task-exclusive = []
 debug-skip-homing = []
 debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
 
-# Deprecated
-executor-interrupt = [
-    "printhor-hwa-common/executor-interrupt",
-    "printhor-hwi_native?/executor-interrupt",
-    "printhor-hwi_skr_mini_e3?/executor-interrupt", # Does not work. For any reason, time driver does not work in executor interrupt
-    "printhor-hwi_mks_robin_nano?/executor-interrupt",
-    "printhor-hwi_rp_2040?/executor-interrupt",
-    "printhor-hwi_nucleo_64_arduino_cnc_hat?/executor-interrupt",
-    "embassy-executor/executor-interrupt",
-]
-
 cooperative = [
     "printhor-hwi_nucleo_64_arduino_cnc_hat?/cooperative",
     "printhor-hwi_skr_mini_e3?/cooperative",
@@ -216,10 +205,7 @@ mks_robin_nano = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
     "printhor-hwi_mks_robin_nano",
-    "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
-    "cortex-m/critical-section-single-core",
 ]
 
 #################
@@ -287,10 +273,7 @@ nucleo64-f410rb = [
 ]
 
 nucleo_64_arduino_cnc_hat = [
-    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
-    "printhor-hwi_nucleo_64_arduino_cnc_hat",
-    "embassy-executor/arch-cortex-m", "embassy-executor/executor-thread",
-    "cortex-m/critical-section-single-core",
+    "printhor-hwi_nucleo_64_arduino_cnc_hat", "embassy-executor/executor-thread", "cortex-m-rt"
 ]
 
 #################
@@ -365,9 +348,6 @@ skr_mini_e3_v3 = [
 
 skr_mini_e3 = [
     "printhor-hwi_skr_mini_e3",
-    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
-    "embassy-executor/arch-cortex-m", "embassy-executor/executor-thread",
-    "cortex-m/critical-section-single-core",
 ]
 
 #################
@@ -418,7 +398,7 @@ panic-probe = { version = "0.3.2", features = ["print-defmt"], optional = true}
 defmt-rtt = { version = "0.4.1", optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
-cortex-m-rt = { version = "0.7.0", optional = true}
+cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
 critical-section = {version = "1.1.2", default-features = false}
 
@@ -526,7 +506,7 @@ panic = "abort"
 [patch.crates-io]
 
 #async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
-async-gcode = { path = "libs/async-gcode" }
+async-gcode = { path = "../async-gcode" }
 #lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path = "printhor-hwa-common" }

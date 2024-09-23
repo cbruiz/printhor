@@ -51,7 +51,7 @@ pub async fn task_control(
     // The task loop
     loop {
         match embassy_time::with_timeout(
-            embassy_time::Duration::from_secs(10), gcode_input_stream.next_gcode())
+            embassy_time::Duration::from_secs(5), gcode_input_stream.next_gcode())
             .await
         {
             // Timeout
