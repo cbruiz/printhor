@@ -11,7 +11,6 @@ pub mod hwa;
 mod hwi;
 pub mod machine;
 pub mod math;
-pub mod sync;
 pub mod tgeo;
 
 pub use tgeo::TVector;

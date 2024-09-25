@@ -118,20 +118,41 @@ pub fn setup_timer() {
         defmt::info!("SYST reload set to {}", reload);
         syst.set_reload(reload);
         syst.enable_counter();
-        syst.enable_interrupt();
     }
 }
 
 extern "Rust" {fn do_tick();}
 
-use cortex_m_rt::exception;
+#[no_mangle]
+pub extern "Rust" fn pause_tick() {
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.disable_counter();
+        syst.disable_interrupt();
+    }
+    defmt::info!("Ticker Paused");
+}
+#[no_mangle]
+pub extern "Rust" fn resume_tick() {
 
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.enable_interrupt();
+        syst.enable_counter();
+    }
+    defmt::info!("Ticker Resumed");
+}
+
+use cortex_m_rt::exception;
 #[exception]
 fn SysTick() {
     unsafe {
         do_tick();
     }
 }
+
 
 #[inline]
 pub fn init_logger() {

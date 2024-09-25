@@ -11,18 +11,19 @@
 //!     - Consume a micro-segment until iterator is exhausted
 //!
 //! TODO: This is a work still in progress
+
 use crate::control::motion::SCurveMotionProfile;
 use crate::hwa;
 use crate::math;
 use crate::math::Real;
 use crate::tgeo::{CoordSel, TVector};
 use num_traits::ToPrimitive;
+use hwa::{DeferAction, DeferEvent};
+use hwa::{EventBusRef, StepperChannel};
+use hwa::{EventFlags, EventStatus};
 use hwa::controllers::motion::SegmentIterator;
-use printhor_hwa_common::{DeferAction, DeferEvent};
-use printhor_hwa_common::{EventBusRef, StepperChannel};
-use printhor_hwa_common::{EventFlags, EventStatus};
-use crate::hwa::controllers::LinearMicrosegmentStepInterpolator;
-use crate::hwa::controllers::motion::STEP_DRIVER;
+use hwa::controllers::LinearMicrosegmentStepInterpolator;
+use hwa::controllers::motion::STEP_DRIVER;
 
 const DO_NOTHING: bool = false;
 
@@ -176,65 +177,28 @@ pub async fn task_stepper(
     }
 
     loop {
-        let mut wait_for_sysalarm = false;
-        if !s.get_status().await.contains(EventFlags::ATX_ON) {
-            hwa::info!("task_stepper waiting for ATX_ON");
-            // For safely, disable steppers
-            // TODO: Park
-            STEP_DRIVER.flush().await;
-            motion_planner
-                .motion_driver
-                .lock()
-                .await
-                .disable_steppers(StepperChannel::all());
-            STEP_DRIVER.reset();
-            steppers_off = true;
-
-            if s.ft_wait_until(EventFlags::ATX_ON).await.is_err() {
-                hwa::info!("Interrupted waiting for ATX_ON. SYS_ALARM?");
-                wait_for_sysalarm = true;
-            } else {
-                hwa::info!("task_stepper got ATX_ON. Continuing.");
-            }
-        }
-        if wait_for_sysalarm || s.get_status().await.contains(EventFlags::SYS_ALARM) {
-            hwa::warn!("task stepper waiting for SYS_ALARM release");
-            // TODO: Park
-            STEP_DRIVER.flush().await;
-            motion_planner
-                .motion_driver
-                .lock()
-                .await
-                .disable_steppers(StepperChannel::all());
-            STEP_DRIVER.reset();
-            steppers_off = true;
-            if s.ft_wait_while(EventFlags::SYS_ALARM).await.is_err() {
-                panic!("Unexpected situation");
-            }
-        }
         match embassy_time::with_timeout(
             STEPPER_INACTIVITY_TIMEOUT,
             motion_planner.get_current_segment_data(&event_bus),
-        )
-            .await
-        {
+        ).await {
             // Timeout
             Err(_) => {
                 hwa::trace!("stepper_task timeout");
                 if !steppers_off {
-                    hwa::info!("Timeout. Powering steppers off");
-                    STEP_DRIVER.flush().await;
-                    motion_planner
-                        .motion_driver
-                        .lock()
-                        .await
-                        .disable_steppers(StepperChannel::all());
-                    STEP_DRIVER.reset();
+                    park(&motion_planner).await;
                     steppers_off = true;
                 }
             }
             // Process segment plan
             Ok(Some((segment, channel))) => {
+
+                match s.ft_wait_for(EventStatus::containing(EventFlags::ATX_ON)).await {
+                    Ok(_) => {}
+                    Err(_) => {
+                        let _ = s.ft_wait_while(EventFlags::SYS_ALARM).await;
+                    }
+                }
+
                 #[cfg(feature = "verbose-timings")]
                 let t0 = embassy_time::Instant::now();
                 #[cfg(feature = "verbose-timings")]
@@ -324,6 +288,7 @@ pub async fn task_stepper(
                         });
                         if steppers_off {
                             hwa::info!("\tPowering steppers on");
+                            unpark(&motion_planner, false).await;
                         }
                         steppers_off = false;
 
@@ -547,18 +512,11 @@ pub async fn task_stepper(
             Ok(None) => {
                 hwa::debug!("Homing init");
 
-                STEP_DRIVER.flush().await;
-                motion_planner
-                    .motion_driver
-                    .lock()
-                    .await
-                    .enable_steppers(StepperChannel::all());
-                STEP_DRIVER.reset();
-
                 if steppers_off {
                     hwa::info!("\tPowering steppers on");
+                    unpark(&motion_planner, true).await;
+                    steppers_off = false;
                 }
-                steppers_off = false;
                 cfg_if::cfg_if! {
                     if #[cfg(feature="debug-skip-homing")] {
                         // Do nothing
@@ -578,3 +536,36 @@ pub async fn task_stepper(
         }
     }
 }
+
+async fn park(motion_planner: &hwa::controllers::MotionPlannerRef) {
+    hwa::warn!("Stepping parked");
+    STEP_DRIVER.flush().await;
+    motion_planner
+        .motion_driver
+        .lock()
+        .await
+        .disable_steppers(StepperChannel::all());
+    STEP_DRIVER.reset();
+    unsafe {
+        pause_tick();
+    }
+}
+
+async fn unpark(motion_planner: &hwa::controllers::MotionPlannerRef, enable_steppers: bool) {
+    hwa::warn!("Stepping resumed");
+    unsafe {
+        resume_tick();
+    }
+    if enable_steppers {
+        STEP_DRIVER.flush().await;
+        motion_planner
+            .motion_driver
+            .lock()
+            .await
+            .enable_steppers(StepperChannel::all());
+        STEP_DRIVER.reset();
+    }
+}
+
+extern "Rust" {pub fn pause_tick();}
+extern "Rust" {pub fn resume_tick();}

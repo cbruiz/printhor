@@ -186,7 +186,7 @@ impl GCodeCmd {
 
 impl core::fmt::Display for GCodeCmd {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(f, "{{ gcode: {}, order_num: {}, line: ", self.value.as_ref(), self.order_num)?;
+        core::write!(f, "{{ gcode: {}, order_num: {}, line_tag: ", self.value.as_ref(), self.order_num)?;
         match &self.line_tag {
             None => {
                 core::write!(f, "None }}")

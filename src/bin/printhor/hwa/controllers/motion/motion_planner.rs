@@ -1,12 +1,11 @@
+use crate::{control, hwa, math, tgeo};
+use hwa::{EventFlags, EventStatus, PersistentState};
+use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
+use hwa::drivers::motion_driver::MotionDriverRef;
+use math::Real;
+use tgeo::{CoordSel, TVector};
 use embassy_sync::mutex::{Mutex, MutexGuard};
-use printhor_hwa_common::{EventFlags, EventStatus};
-use crate::{control, hwa, math};
-use crate::hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
-use crate::hwa::controllers::motion::motion_ring_buffer::RingBuffer;
-use crate::hwa::drivers::motion_driver::MotionDriverRef;
-use crate::math::Real;
-use crate::sync::config::Config;
-use crate::tgeo::{CoordSel, TVector};
 
 #[derive(Clone)]
 pub struct MotionPlannerRef {
@@ -47,8 +46,8 @@ pub struct MotionPlanner {
     pub defer_channel: hwa::DeferChannelRef,
 
     ringbuffer: Mutex<hwa::ControllerMutexType, RingBuffer>,
-    move_planned: Config<hwa::ControllerMutexType, bool>,
-    available: Config<hwa::ControllerMutexType, bool>,
+    move_planned: PersistentState<hwa::ControllerMutexType, bool>,
+    available: PersistentState<hwa::ControllerMutexType, bool>,
     motion_config: motion::MotionConfigRef,
     motion_st: Mutex<hwa::ControllerMutexType, motion::MotionStatus>,
     pub motion_driver: MotionDriverRef,
@@ -111,8 +110,8 @@ impl MotionPlanner {
             defer_channel,
             motion_config,
             ringbuffer: Mutex::new(RingBuffer::new()),
-            move_planned: Config::new(),
-            available: Config::new(),
+            move_planned: PersistentState::new(),
+            available: PersistentState::new(),
             motion_st: Mutex::new(motion::MotionStatus::new()),
             motion_driver,
         }

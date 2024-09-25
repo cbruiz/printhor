@@ -1,8 +1,7 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use crate::sync::config::Config;
-use printhor_hwa_common::{CommChannel, EventBusRef};
-use printhor_hwa_common::TrackedStaticCell;
+use hwa::{CommChannel, EventBusRef, PersistentState};
+use hwa::TrackedStaticCell;
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
@@ -92,7 +91,7 @@ pub struct PrinterController {
     event_bus: EventBusRef,
 
     /// The current status of the printer controller.
-    status: &'static Config<hwa::ControllerMutexType, PrinterControllerStatus>,
+    status: &'static PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>,
 }
 
 impl PrinterController {
@@ -104,14 +103,14 @@ impl PrinterController {
         #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
         #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
         static STATUS_INST: TrackedStaticCell<
-            Config<hwa::ControllerMutexType, PrinterControllerStatus>,
+            PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>,
         > = TrackedStaticCell::new();
 
         let channel = SIGNAL_CHANNEL_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
             "PrinterController::channel",
             PrinterControllerSignalType::new(),
         );
-        let status_cfg = Config::new();
+        let status_cfg = PersistentState::new();
         status_cfg.signal(PrinterControllerStatus::Ready(CommChannel::Internal));
         let status =
             STATUS_INST.init::<{ hwa::MAX_STATIC_MEMORY }>("PrinterController::state", status_cfg);

@@ -45,6 +45,9 @@ use bitflags::bitflags;
 
 use strum::EnumCount;
 
+mod persistent_state;
+pub use persistent_state::PersistentState;
+
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
         mod thermistor;

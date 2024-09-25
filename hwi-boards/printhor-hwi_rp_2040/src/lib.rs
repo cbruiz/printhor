@@ -45,6 +45,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
         pub const SEGMENT_QUEUE_SIZE: u8 = 10;
+        compile_error("Incomplete. Pending: Ticket, etc")
     }
 }
 
