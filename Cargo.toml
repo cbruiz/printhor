@@ -21,7 +21,7 @@ nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
-default = []
+default = ["embassy-executor/executor-thread", "embassy-executor/arch-std"]
 
 # Hardware device features
 without-bootloader = []
@@ -89,24 +89,23 @@ ili9341_spi = []
 
 integration-test = [
     "cornering",
-    #"motion-async-task-exclusive",
     "integration-test-m100",
     "integration-test-power-on",
     #"integration-test-homing",
     "integration-test-reset-pos",
-    #"integration-test-move-ortho",
-    #"integration-test-move-oblique",
-    #"integration-test-move-boundaries",
-    #"integration-test-trinamic",
-    #"integration-test-benchy",
+    "integration-test-move-ortho",
+    "integration-test-move-oblique",
+    "integration-test-move-boundaries",
+    "integration-test-trinamic",
+    "integration-test-benchy",
     "integration-test-pen",
-    #"integration-test-laser-engrave",
+    "integration-test-laser-engrave",
     #"plot-timings",
-    "debug-skip-homing",
+    #"debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
-    "trace-commands",
-    "assert-motion",
+    #"trace-commands",
+    #"assert-motion",
     "native",
 ]
 integration-test-m100 = []
@@ -247,10 +246,10 @@ nucleo64-l476rg = [
 nucleo64-f410rb = [
     "cornering",
     #"nightly",
-    #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    #"debug-signals",
+    "debug-signals",
+    "trace-commands",
 
     #"verbose-timings",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
@@ -405,7 +404,7 @@ alloc-cortex-m = { version = "0.4.4", optional = true}
 critical-section = {version = "1.1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.6.0", default-features = false, features = [], optional = true }
+embassy-executor = { version = "0.6.0", default-features = false, features = ["executor-thread"], optional = true }
 embassy-sync = { version = "0.6.0", features = [] }
 embassy-time = { version = "*", features = [] }
 embassy-futures = { version = "0.1.1", features = [] }
@@ -478,7 +477,8 @@ debug = 2
 strip = false
 incremental = false
 debug-assertions = true
-#opt-level = "s"
+overflow-checks = true
+#opt-level = "z" # disable to play with GDB
 lto = true
 panic = "unwind"
 

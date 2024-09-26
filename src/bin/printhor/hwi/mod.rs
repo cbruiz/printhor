@@ -20,7 +20,7 @@ cfg_if::cfg_if! {
         pub use printhor_hwi_native::*;
     }
     else {
-        compile_error!("You need to select a board")
+        compile_error!("You need to select a board");
     }
 }
 //#endregion

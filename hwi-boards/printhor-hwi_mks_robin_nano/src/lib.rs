@@ -70,7 +70,7 @@ cfg_if::cfg_if! {
         extern "Rust" {fn do_tick();}
 
         #[no_mangle]
-        pub extern "Rust" fn pause_tick() {
+        pub extern "Rust" fn pause_ticker() {
             unsafe {
                 let p = cortex_m::Peripherals::steal();
                 let mut syst = p.SYST;
@@ -80,7 +80,7 @@ cfg_if::cfg_if! {
             defmt::info!("Ticker Paused");
         }
         #[no_mangle]
-        pub extern "Rust" fn resume_tick() {
+        pub extern "Rust" fn resume_ticker() {
 
             unsafe {
                 let p = cortex_m::Peripherals::steal();

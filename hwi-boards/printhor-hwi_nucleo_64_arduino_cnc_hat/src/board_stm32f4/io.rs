@@ -29,6 +29,12 @@ pub mod uart_port1 {
 
         async fn next(&mut self) -> Option<Self::Item> {
 
+            // DMA1 REQ:
+            // USART_2 RX ->    CHANNEL_4, STREAM_5 [CH: I2C1_RX, DAC1]
+            //                  CHANNEL_6 - STREAM_7 [CH: I2C1_TX, I2C4_TX, I2C2_TX]
+            // USART_2 TX ->    CHANNEL_4 STREAM_6 [CH: I2C1_TX, TIM5_UP, DAC2]
+
+
             let mut buff: [u8; 1] = [0; 1];
 
             match self.receiver.read(&mut buff).await {

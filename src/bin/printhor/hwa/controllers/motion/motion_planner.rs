@@ -187,7 +187,6 @@ impl MotionPlanner {
         event_bus: &hwa::EventBusRef,
     ) -> Option<(motion::Segment, hwa::CommChannel)> {
         loop {
-            // FIXME: wrong with timeout
             let _ = self.move_planned.wait().await;
             let mut do_dwell = false;
             {
@@ -199,6 +198,7 @@ impl MotionPlanner {
                     }
                     PlanEntry::Dwell(channel, _deferred) => {
                         rb.data[head] = PlanEntry::Executing(MovType::Dwell(channel), true);
+                        // TODO: Need to revisit this logic
                         do_dwell = true;
                     }
                     PlanEntry::PlannedMove(planned_data, action, channel, deferred) => {
@@ -226,8 +226,8 @@ impl MotionPlanner {
                 }
             }
             if do_dwell {
-                unreachable!("suspecting not OK");
-                //self.consume_current_segment_data(&event_bus).await;
+                // Just consume. TODO: need to wait for some time as specified
+                self.consume_current_segment_data(&event_bus).await;
             }
         }
     }
@@ -363,6 +363,7 @@ impl MotionPlanner {
     ///
     async fn schedule_raw_move(
         &self,
+        _mnemonic: &'static str,
         channel: hwa::CommChannel,
         action: hwa::DeferAction,
         move_type: ScheduledMove,
@@ -524,12 +525,14 @@ impl MotionPlanner {
                     return if is_defer {
                         // Shall wait for one de-allocation in order to enqueue more
                         hwa::debug!("schedule_raw_move() - Finally deferred");
-                        hwa::info!("Promised #order: {} line: {:?}", num_order, line_tag);
+                        #[cfg(feature="trace-commands")]
+                        hwa::info!("Promised {} #order: {} line: {:?}", _mnemonic, num_order, line_tag);
                         self.defer_channel
                             .send(hwa::DeferEvent::AwaitRequested(action, channel))
                             .await;
                         Ok(control::CodeExecutionSuccess::DEFERRED(event))
                     } else {
+                        #[cfg(feature = "trace-commands")]
                         hwa::info!("Commited #order: {} #line: {:?}", num_order, line_tag);
                         hwa::debug!("schedule_raw_move() END - Finally queued");
                         Ok(control::CodeExecutionSuccess::QUEUED)
@@ -753,6 +756,7 @@ impl MotionPlanner {
         match &gc.value {
             control::GCodeValue::G0(t) => Ok(
                 self.schedule_move(
+                    "G0",
                     channel,
                     hwa::DeferAction::RapidMove,
                     TVector {
@@ -769,6 +773,7 @@ impl MotionPlanner {
             ),
             control::GCodeValue::G1(t) => Ok(
                 self.schedule_move(
+                    "G1",
                     channel,
                     hwa::DeferAction::LinearMove,
                     TVector {
@@ -785,6 +790,7 @@ impl MotionPlanner {
             ),
             control::GCodeValue::G4 => Ok(
                 self.schedule_raw_move(
+                    "G4",
                     channel,
                     hwa::DeferAction::Dwell,
                     ScheduledMove::Dwell,
@@ -800,6 +806,7 @@ impl MotionPlanner {
                     .await;
                 Ok(self
                     .schedule_raw_move(
+                        "G28",
                         channel,
                         hwa::DeferAction::Homing,
                         ScheduledMove::Homing,
@@ -818,6 +825,7 @@ impl MotionPlanner {
 
     async fn schedule_move(
         &self,
+        mnemonic: &'static str,
         channel: hwa::CommChannel,
         action: hwa::DeferAction,
         p1_t: TVector<Real>,
@@ -827,6 +835,8 @@ impl MotionPlanner {
         num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
+
+        // TODO Reduce locks
         let p0 = self
             .get_last_planned_pos()
             .await
@@ -923,6 +933,7 @@ impl MotionPlanner {
 
             let r = self
                 .schedule_raw_move(
+                    mnemonic,
                     channel,
                     action,
                     ScheduledMove::Move(segment_data),

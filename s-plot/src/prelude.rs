@@ -15,9 +15,6 @@ pub mod hwa;
 #[path = "../../src/bin/printhor/helpers/mod.rs"]
 pub mod helpers;
 
-#[path = "../../src/bin/printhor/sync/mod.rs"]
-pub mod sync;
-
 #[path = "../../src/bin/printhor/machine.rs"]
 pub mod machine;
 

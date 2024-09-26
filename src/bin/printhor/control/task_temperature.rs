@@ -271,8 +271,6 @@ impl HeaterStateMachine {
     }
 }
 
-
-#[embassy_executor::task(pool_size = 1)]
 ///
 /// # Asynchronous Task Entry Point
 ///
@@ -295,12 +293,13 @@ impl HeaterStateMachine {
 /// 2. It calls the `update` method of the heater state machines (hot end and hot bed) if they are enabled, providing references to their respective controllers and the event bus.
 ///
 /// Note that this function uses async/await to coordinate asynchronous operations.
+#[embassy_executor::task(pool_size = 1)]
 pub async fn task_temperature(
     event_bus: EventBusRef,
     #[cfg(feature = "with-hot-end")] hotend_controller: hwa::controllers::HotendControllerRef,
     #[cfg(feature = "with-hot-bed")] hotbed_controller: hwa::controllers::HotbedControllerRef,
-) -> ! {
-    hwa::debug!("temperature_task started");
+) {
+    hwa::info!("[task_temperature] Started");
 
     let mut ticker = Ticker::every(Duration::from_secs(2));
 
@@ -310,7 +309,15 @@ pub async fn task_temperature(
     let mut hotbed_sm = HeaterStateMachine::new();
 
     loop {
+        // TODO: Park on SYS_ALARM
         ticker.next().await;
+
+        #[cfg(test)]
+        if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+            hwa::info!("[task_temperature] Ending gracefully");
+            return ();
+        }
+
         #[cfg(feature = "with-hot-end")]
         hotend_sm
             .update(

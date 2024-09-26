@@ -117,33 +117,10 @@ pub fn setup_timer() {
         let reload: u32 = ((crate::board::PROCESSOR_SYS_CK_MHZ / crate::board::STEPPER_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
         defmt::info!("SYST reload set to {}", reload);
         syst.set_reload(reload);
-        syst.enable_counter();
     }
 }
 
 extern "Rust" {fn do_tick();}
-
-#[no_mangle]
-pub extern "Rust" fn pause_tick() {
-    unsafe {
-        let p = cortex_m::Peripherals::steal();
-        let mut syst = p.SYST;
-        syst.disable_counter();
-        syst.disable_interrupt();
-    }
-    defmt::info!("Ticker Paused");
-}
-#[no_mangle]
-pub extern "Rust" fn resume_tick() {
-
-    unsafe {
-        let p = cortex_m::Peripherals::steal();
-        let mut syst = p.SYST;
-        syst.enable_interrupt();
-        syst.enable_counter();
-    }
-    defmt::info!("Ticker Resumed");
-}
 
 use cortex_m_rt::exception;
 #[exception]
@@ -153,12 +130,36 @@ fn SysTick() {
     }
 }
 
+pub fn sys_reset() {
+    cortex_m::peripheral::SCB::sys_reset();
+}
+
+pub fn sys_stop() {
+    // Not needed
+}
+
+pub fn pause_ticker() {
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.disable_counter();
+        syst.disable_interrupt();
+    }
+    debug!("Ticker Paused");
+}
+
+pub fn resume_ticker() {
+    printhor_hwa_common::debug!("Ticker Resumed");
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.enable_interrupt();
+        syst.enable_counter();
+    }
+    debug!("Ticker Resumed");
+}
 
 #[inline]
 pub fn init_logger() {
 }
 
-#[inline]
-pub fn sys_reset() {
-    cortex_m::peripheral::SCB::sys_reset();
-}

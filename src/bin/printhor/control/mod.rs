@@ -18,10 +18,10 @@ mod base;
 pub mod task_control;
 #[cfg(feature = "with-motion")]
 pub mod task_defer;
-#[cfg(feature = "integration-test")]
+#[cfg(any(test, feature = "integration-test"))]
 pub mod task_integration;
 #[cfg(feature = "with-printjob")]
-pub mod task_printjob;
+pub mod task_print_job;
 #[cfg(feature = "with-motion")]
 pub mod task_stepper;
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]

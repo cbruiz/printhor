@@ -42,6 +42,7 @@
 //! Around 14KB in total
 //!
 //! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core.
+
 use crate::control::{GCodeCmd, GCodeValue};
 use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use crate::hwa;
@@ -184,7 +185,22 @@ impl GCodeProcessor {
                 mg.wrapped_flush().await;
             }
             CommChannel::Internal => {
-                hwa::info!("[Internal] {}", _msg)
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="native")] {
+                        use std::io::Write;
+                        // In native backend, we will use stdout as convention for internal output
+                        std::print!("<< {}", _msg);
+                        if std::io::stdout().flush().is_err() {
+                            hwa::error!("[Internal] Could not flush (unexpectedly)");
+                        }
+                    }
+                    else {
+                        // A message shall be always end by \n, so we need to trim it for pretty printing
+                        hwa::info!("[Internal] {}", _msg.trim_end());
+                    }
+                }
+                //#[cfg(feature = "")]
+
             }
         }
     }
@@ -402,7 +418,7 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCodeValue::M80 => {
-                hwa::info!("Received PowerOn");
+                hwa::debug!("Received PowerOn");
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-ps-on")] {
                         self.ps_on.lock().await.set_high();

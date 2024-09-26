@@ -4,7 +4,7 @@
 //! Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
 use crate::hwa;
 use crate::hwa::{CommChannel, DeferAction, DeferEvent};
-use embassy_time::Duration;
+use embassy_time::{with_timeout, Duration};
 
 #[derive(Clone, Copy, Default)]
 struct SubscriptionCounting {
@@ -67,26 +67,33 @@ impl Subscriptions {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_defer(processor: hwa::GCodeProcessor) -> ! {
-    hwa::debug!("task_defer started");
+pub async fn task_defer(processor: hwa::GCodeProcessor) {
+    hwa::info!("[task_defer] started");
 
     let mut subscriptions = Subscriptions::new();
 
     loop {
-        match embassy_time::with_timeout(
-            Duration::from_secs(60),
+
+        match with_timeout(
+            Duration::from_secs(30),
             processor.motion_planner.defer_channel.receive(),
-        )
-        .await
-        {
+        ).await {
+
             Err(_) => {
-                hwa::info!("task_defer timeout: counts: {}", subscriptions.total_counts);
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[task_defer] Timeout: counts: {}", subscriptions.total_counts);
+                #[cfg(test)]
+                if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+                    hwa::info!("[task_defer] Ending gracefully");
+                    return ()
+                }
             }
 
             Ok(DeferEvent::AwaitRequested(action, channel)) => {
                 hwa::debug!("AwaitRequested {:?}", action);
                 let _ = subscriptions.update(action, channel, 1);
             }
+
             Ok(DeferEvent::Completed(action, channel)) => {
                 hwa::debug!("AwaitCompleted {:?}", action);
                 if subscriptions.update(action, channel, -1) {

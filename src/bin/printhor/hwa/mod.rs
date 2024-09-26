@@ -79,7 +79,7 @@ pub mod task_allocations {
         bi.subscriber().await
     }
 
-    #[cfg(all(feature = "integration-test"))]
+    #[cfg(any(test, feature = "integration-test"))]
     pub async fn init_integration_subscriber(
         event_bus: EventBusRef,
     ) -> EventBusSubscriber<'static> {

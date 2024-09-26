@@ -78,10 +78,7 @@ pub fn init_logger() {
         .init();
 }
 
-#[inline]
-pub fn sys_reset() {
-    std::process::exit(0);
-}
+
 
 #[inline]
 // Execute closure f in an interrupt-free context.
@@ -97,12 +94,21 @@ extern "Rust" {fn do_tick();}
 
 static TICKER_SIGNAL: hwa::PersistentState<CriticalSectionRawMutex, bool> = hwa::PersistentState::new();
 
+static TERMINATION: hwa::PersistentState<CriticalSectionRawMutex, bool> = hwa::PersistentState::new();
+
 #[embassy_executor::task]
 pub async fn task_stepper_ticker()
 {
+    info!("[task_stepper_ticker] starting");
     let mut t = embassy_time::Ticker::every(Duration::from_micros((1_000_000 / board::STEPPER_PLANNER_CLOCK_FREQUENCY) as u64));
     loop {
-        TICKER_SIGNAL.wait().await;
+        if embassy_time::with_timeout(Duration::from_secs(5), TICKER_SIGNAL.wait()).await.is_err() {
+            if TERMINATION.signaled() {
+                info!("[task_stepper_ticker] Ending gracefully");
+                return ();
+            }
+            continue;
+        }
         unsafe {
             do_tick();
         }
@@ -110,13 +116,21 @@ pub async fn task_stepper_ticker()
     }
 }
 
-#[no_mangle]
-pub extern "Rust" fn pause_tick() {
-    log::info!("Ticker Paused");
+pub fn sys_reset() {
+    std::process::exit(0);
+}
+
+pub fn sys_stop() {
+    info!("Sending terminate signal");
+    TERMINATION.signal(true);
+}
+
+pub fn pause_ticker() {
+    info!("Ticker Paused");
     TICKER_SIGNAL.reset();
 }
-#[no_mangle]
-pub extern "Rust" fn resume_tick() {
-    log::info!("Ticker Resumed");
+
+pub fn resume_ticker() {
+    debug!("Ticker Resumed");
     TICKER_SIGNAL.signal(true);
 }

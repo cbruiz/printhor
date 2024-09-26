@@ -1,4 +1,4 @@
-/// https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32F407VE.json
+/// <https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32F407VE.json>
 ///
 pub mod device;
 pub mod io;
