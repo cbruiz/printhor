@@ -96,33 +96,6 @@ cfg_if::cfg_if! {
     }
 }
 
-
-cfg_if::cfg_if! {
-    if #[cfg(feature="executor-interrupt")] {
-
-        use embassy_stm32::interrupt;
-        use embassy_executor::InterruptExecutor;
-
-        pub static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
-
-        #[interrupt]
-        unsafe fn RNG() {
-            EXECUTOR_HIGH.on_interrupt()
-        }
-
-        #[inline]
-        pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-
-            use embassy_stm32::interrupt::InterruptExt;
-            #[cfg(feature = "with-serial-port-1")]
-            interrupt::USART2.set_priority(embassy_stm32::interrupt::Priority::P3);
-            interrupt::RNG.set_priority(embassy_stm32::interrupt::Priority::P2);
-            let spawner = EXECUTOR_HIGH.start(interrupt::RNG);
-            spawner.spawn(token).map_err(|_| ())
-        }
-    }
-}
-
 // Execute closure f in an interrupt-free context.
 // Required to safety lock a resource that can be also requested by an ISR.
 // Such ISR, hence, won't miss its interrupt and won't be too much delayed
@@ -144,15 +117,12 @@ pub fn setup_timer() {
         let reload: u32 = ((crate::board::PROCESSOR_SYS_CK_MHZ / crate::board::STEPPER_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
         defmt::info!("SYST reload set to {}", reload);
         syst.set_reload(reload);
-        syst.enable_counter();
-        syst.enable_interrupt();
     }
 }
 
 extern "Rust" {fn do_tick();}
 
 use cortex_m_rt::exception;
-
 #[exception]
 fn SysTick() {
     unsafe {
@@ -160,11 +130,36 @@ fn SysTick() {
     }
 }
 
+pub fn sys_reset() {
+    cortex_m::peripheral::SCB::sys_reset();
+}
+
+pub fn sys_stop() {
+    // Not needed
+}
+
+pub fn pause_ticker() {
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.disable_counter();
+        syst.disable_interrupt();
+    }
+    debug!("Ticker Paused");
+}
+
+pub fn resume_ticker() {
+    printhor_hwa_common::debug!("Ticker Resumed");
+    unsafe {
+        let p = cortex_m::Peripherals::steal();
+        let mut syst = p.SYST;
+        syst.enable_interrupt();
+        syst.enable_counter();
+    }
+    debug!("Ticker Resumed");
+}
+
 #[inline]
 pub fn init_logger() {
 }
 
-#[inline]
-pub fn sys_reset() {
-    cortex_m::peripheral::SCB::sys_reset();
-}

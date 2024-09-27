@@ -21,7 +21,7 @@ nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
-default = []
+default = ["embassy-executor/executor-thread", "embassy-executor/arch-std"]
 
 # Hardware device features
 without-bootloader = []
@@ -69,20 +69,11 @@ motion-async-task-exclusive = []
 debug-skip-homing = []
 debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
 
-# Deprecated
-executor-interrupt = [
-    "printhor-hwa-common/executor-interrupt",
-    "printhor-hwi_native?/executor-interrupt",
-    "printhor-hwi_skr_mini_e3?/executor-interrupt", # Does not work. For any reason, time driver does not work in executor interrupt
-    "printhor-hwi_mks_robin_nano?/executor-interrupt",
-    "printhor-hwi_rp_2040?/executor-interrupt",
-    "printhor-hwi_nucleo_64_arduino_cnc_hat?/executor-interrupt",
-    "embassy-executor/executor-interrupt",
-]
-
 cooperative = [
+    "printhor-hwi_mks_robin_nano?/cooperative",
     "printhor-hwi_nucleo_64_arduino_cnc_hat?/cooperative",
     "printhor-hwi_skr_mini_e3?/cooperative",
+    "printhor-hwi_rp_2040?/cooperative",
 ]
 
 sdcard-uses-spi = []
@@ -98,23 +89,23 @@ ili9341_spi = []
 
 integration-test = [
     "cornering",
-    #"motion-async-task-exclusive",
     "integration-test-m100",
     "integration-test-power-on",
     #"integration-test-homing",
     "integration-test-reset-pos",
-    #"integration-test-move-ortho",
-    #"integration-test-move-oblique",
-    #"integration-test-move-boundaries",
-    #"integration-test-trinamic",
-    #"integration-test-benchy",
+    "integration-test-move-ortho",
+    "integration-test-move-oblique",
+    "integration-test-move-boundaries",
+    "integration-test-trinamic",
+    "integration-test-benchy",
     "integration-test-pen",
-    #"integration-test-laser-engrave",
+    "integration-test-laser-engrave",
     #"plot-timings",
-    "debug-skip-homing",
+    #"debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
-    "assert-motion",
+    #"trace-commands",
+    #"assert-motion",
     "native",
 ]
 integration-test-m100 = []
@@ -201,10 +192,10 @@ mks_robin_nano = [
 
     "with-serial-usb", "printhor-hwi_mks_robin_nano/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
-    #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2",
-    #"with-spi", "printhor-hwi_mks_robin_nano/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
+    #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2", # Not implemented
+    "with-spi", "printhor-hwi_mks_robin_nano/with-spi",
+    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
+    "with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
     "with-probe", "printhor-hwi_mks_robin_nano/with-probe",
     "with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end",
     "with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed",
@@ -216,10 +207,7 @@ mks_robin_nano = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
-    "printhor-hwi_mks_robin_nano",
-    "embassy-executor/arch-cortex-m", "embassy-executor/executor-interrupt",
-    "cortex-m/critical-section-single-core",
+    "printhor-hwi_mks_robin_nano", "embassy-executor/executor-thread", "cortex-m-rt",
 ]
 
 #################
@@ -229,13 +217,12 @@ mks_robin_nano = [
 nucleo64-l476rg = [
     "cornering",
     #"nightly",
-    #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
     #"executor-interrupt",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
-    #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
+    "with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
@@ -259,10 +246,10 @@ nucleo64-l476rg = [
 nucleo64-f410rb = [
     "cornering",
     #"nightly",
-    #"printhor-hwi_nucleo_64_arduino_cnc_hat/without-ringbuffer",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    #"debug-signals",
+    "debug-signals",
+    "trace-commands",
 
     #"verbose-timings",
     "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
@@ -287,10 +274,7 @@ nucleo64-f410rb = [
 ]
 
 nucleo_64_arduino_cnc_hat = [
-    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
-    "printhor-hwi_nucleo_64_arduino_cnc_hat",
-    "embassy-executor/arch-cortex-m", "embassy-executor/executor-thread",
-    "cortex-m/critical-section-single-core",
+    "printhor-hwi_nucleo_64_arduino_cnc_hat", "embassy-executor/executor-thread", "cortex-m-rt"
 ]
 
 #################
@@ -364,10 +348,7 @@ skr_mini_e3_v3 = [
 ]
 
 skr_mini_e3 = [
-    "printhor-hwi_skr_mini_e3",
-    "cortex-m", "cortex-m-rt", "alloc-cortex-m",
-    "embassy-executor/arch-cortex-m", "embassy-executor/executor-thread",
-    "cortex-m/critical-section-single-core",
+    "printhor-hwi_skr_mini_e3", "embassy-executor/executor-thread", "cortex-m-rt"
 ]
 
 #################
@@ -418,12 +399,12 @@ panic-probe = { version = "0.3.2", features = ["print-defmt"], optional = true}
 defmt-rtt = { version = "0.4.1", optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
-cortex-m-rt = { version = "0.7.0", optional = true}
+cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
 critical-section = {version = "1.1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1.0", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.6.0", default-features = false, features = [], optional = true }
+embassy-executor = { version = "0.6.0", default-features = false, features = ["executor-thread"], optional = true }
 embassy-sync = { version = "0.6.0", features = [] }
 embassy-time = { version = "*", features = [] }
 embassy-futures = { version = "0.1.1", features = [] }
@@ -496,7 +477,8 @@ debug = 2
 strip = false
 incremental = false
 debug-assertions = true
-#opt-level = "s"
+overflow-checks = true
+#opt-level = "z" # disable to play with GDB
 lto = true
 panic = "unwind"
 
@@ -507,8 +489,8 @@ strip = false
 incremental = false
 debug-assertions = true
 overflow-checks = true
-opt-level = "s"
-lto = true
+opt-level = "z"
+lto = "fat"
 panic = "unwind"
 
 [profile.release-opt]
@@ -520,7 +502,7 @@ debug-assertions = false
 overflow-checks = false
 strip = false
 opt-level = "z"
-lto = true
+lto = "fat"
 panic = "abort"
 
 [patch.crates-io]

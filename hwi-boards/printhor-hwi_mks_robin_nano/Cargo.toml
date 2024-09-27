@@ -17,6 +17,7 @@ homepage = "https://github.com/cbruiz/printhor"
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
 with-serial-port-1 = []
+with-serial-port-2 = []
 with-printjob = []
 with-spi = ["embedded-hal"]
 with-hot-end = ["embedded-hal"]
@@ -36,8 +37,7 @@ with-z-axis = []
 with-e-axis = []
 
 nightly = []
-executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue-128"]
-cooperative = ["embassy-executor/integrated-timers"]
+cooperative = ["embassy-time/generic-queue-128"]
 without-ringbuffer = []
 verbose-timings = []
 upstream-embassy = []
@@ -48,13 +48,13 @@ without-bootloader = []
 [dependencies]
 defmt = {version = "0.3", default-features = false}
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = { version = "0.7.0", default-features = false }
+cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-stm32 = { version = "*", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m", "integrated-timers", "task-arena-size-16384"] }
+embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
 embassy-sync = { version = "*", features = [] }
-embassy-time = { version = "*", features = ["tick-hz-2_000_000"] }
+embassy-time = { version = "*", features = ["tick-hz-1_000_000"] }
 embassy-futures = { version = "*", features = [] }
 embassy-usb = { version = "*", features = [], optional = true }
 

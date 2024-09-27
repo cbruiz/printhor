@@ -1,4 +1,4 @@
-/// https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32G0B1RE.json
+/// <https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32G0B1RE.json>
 pub mod device;
 pub mod io;
 

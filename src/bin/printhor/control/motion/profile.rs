@@ -1,6 +1,6 @@
-//! The Motion profile trait and current implementation: Trajectory with Double S Velocity Profile [[1]]
+//! The Motion profile trait and current implementation: Trajectory with Double S Velocity Profile \[1\]
 //!
-//! [[1]] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)
+//! \[1\] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)
 
 use crate::control::CodeExecutionFailure;
 use crate::math::*;

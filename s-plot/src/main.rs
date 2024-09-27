@@ -1,15 +1,18 @@
 #![allow(unused)]
 
 extern crate alloc;
-mod prelude;
-use crate::math::Real;
+extern crate core;
 
+mod prelude;
+pub use prelude::*;
+
+use math::Real;
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
 use printhor_hwa_common::{ControllerMutex, ControllerRef, DeferChannelRef, EventBusRef, StepperChannel, TrackedStaticCell};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use prelude::*;
+
 
 use crate::tgeo::{TVector, CoordSel};
 use crate::control::motion::*;
@@ -18,7 +21,7 @@ use crate::hwa::device::MotionDevice;
 use crate::hwa::drivers::{MotionDriver, MotionDriverParams};
 use crate::math::{RealInclusiveRange, TWO, ZERO};
 use crate::hwa::CommChannel;
-use crate::prelude::control::{GCode, XYZ};
+use crate::control::{GCodeCmd, GCodeValue, XYZF};
 use crate::hwa::controllers::SoftTimer;
 use crate::hwa::controllers::LinearMicrosegmentStepInterpolator;
 use crate::hwa::controllers::StepPlanner;
@@ -235,16 +238,26 @@ async fn main(spawner: embassy_executor::Spawner)
     //hwa::info!("Segment from [0, 0, 0] to [0, 100, 0] at 200 mm/s");
     let _r00 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(1), x: None, y: Some(Real::from_f32(100.0f32)), z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            1, Some(1),
+            GCodeValue::G0(XYZF {
+                x: None, y: Some(Real::from_f32(100.0f32)), z: None,
+                f: Some(Real::from_f32(2000.0f32)),
+            })
+        ),
+        false, &event_bus,
     ).await;
 
     let _r01 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(1), x: None, y: Some(Real::from_f32(0.0f32)), z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            2, Some(2),
+            GCodeValue::G0(XYZF {
+                x: None, y: Some(Real::from_f32(0.0f32)), z: None,
+                f: Some(Real::from_f32(2000.0f32))
+            })
+        ),
+        false, &event_bus,
     ).await;
 
     // Enqueue 5 consecutive moves
@@ -252,39 +265,64 @@ async fn main(spawner: embassy_executor::Spawner)
 
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(1), x: Some(Real::from_f32(1.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            3, Some(3),
+            GCodeValue::G0(XYZF {
+                x: Some(Real::from_f32(1.0f32)), y: None, z: None,
+                f:Some(Real::from_f32(2000.0f32)),
+            })
+        ),
+        false, &event_bus,
     ).await;
 
     //hwa::info!("Segment from [1, 0, 0] to [2, 0, 0] at 200 mm/s");
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(2), x: Some(Real::from_f32(2.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            5, Some(5),
+            GCodeValue::G0(XYZF {
+                x: Some(Real::from_f32(2.0f32)), y: None, z: None,
+                f:Some(Real::from_f32(2000.0f32))
+            })
+        ),
+        false, &event_bus,
     ).await;
 
-    //hwa::info!("Segment from [2, 0, 0] to [3.0, 0.5, 0] at 200 mm/s");
+    //hwa::info!("Segment from [2, 0, 0] to [3.0, 0.0, 0] at 200 mm/s");
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(3), x: Some(Real::from_f32(3.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            6, Some(6),
+            GCodeValue::G0(XYZF {
+                x: Some(Real::from_f32(3.0f32)), y: None, z: None,
+                f:Some(Real::from_f32(2000.0f32)),
+            })
+        ),
+        false, &event_bus,
     ).await;
 
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(4), x: Some(Real::from_f32(4.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            7, Some(7),
+            GCodeValue::G0(XYZF {
+                x: Some(Real::from_f32(4.0f32)), y: None, z: None,
+                f:Some(Real::from_f32(2000.0f32)),
+            })
+        ),
+        false, &event_bus,
     ).await;
 
     let _r1 = motion_planner.plan(
         CommChannel::Internal,
-        &GCode::G0(XYZ{
-            ln: Some(5), x: Some(Real::from_f32(5.0f32)), y: None, z: None, f:Some(Real::from_f32(2000.0f32)),
-        }), false, &event_bus,
+        &GCodeCmd::new(
+            8, Some(8),
+            GCodeValue::G0(XYZF {
+                x: Some(Real::from_f32(5.0f32)), y: None, z: None,
+                f:Some(Real::from_f32(2000.0f32)),
+            })
+        ),
+        false, &event_bus,
     ).await;
     //hwa::info!("pos = {}", motion_planner.get_last_planned_pos().await.unwrap());
 

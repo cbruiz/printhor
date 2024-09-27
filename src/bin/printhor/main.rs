@@ -11,7 +11,6 @@ pub mod hwa;
 mod hwi;
 pub mod machine;
 pub mod math;
-pub mod sync;
 pub mod tgeo;
 
 pub use tgeo::TVector;
@@ -28,7 +27,6 @@ use crate::hwa::controllers::HotendPwmController;
 use crate::hwa::controllers::PrinterController;
 #[cfg(feature = "with-motion")]
 use crate::hwa::drivers::MotionDriver;
-use embassy_executor::Spawner;
 #[cfg(feature = "with-motion")]
 use hwa::controllers::{MotionConfig, MotionPlanner, MotionPlannerRef};
 use hwa::GCodeProcessor;
@@ -37,10 +35,16 @@ use hwa::{Controllers, IODevices, MotionDevices, PwmDevices, SysDevices};
 //noinspection RsUnresolvedReference
 /// Entry point
 #[embassy_executor::main]
-async fn main(spawner: embassy_executor::Spawner) -> ! {
+async fn main(spawner: embassy_executor::Spawner) {
 
-    hwa::info!("Init");
+    printhor_main(spawner, true).await;
+    unreachable!("Main should not end");
+}
+
+pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: bool) {
+
     hwa::init_logger();
+    hwa::info!("Init");
 
     let wdt = match sys_start(spawner).await {
         Ok(wdt) => wdt,
@@ -51,17 +55,18 @@ async fn main(spawner: embassy_executor::Spawner) -> ! {
     };
 
     // The core of the main function is just to periodically feed watchdog
-
-    let mut ticker = embassy_time::Ticker::every(embassy_time::Duration::from_secs(2));
-    let _t0 = embassy_time::Instant::now();
-    loop {
-        //let _r = event_bus.get_status().await;
-        //hwa::info!("STATUS: {:?}", _r);
-        //hwa::info!("watchdog feed at {}", _t0.elapsed().as_micros());
-        {
-            wdt.lock().await.pet();
+    if keep_feeding {
+        let mut ticker = embassy_time::Ticker::every(embassy_time::Duration::from_secs(2));
+        let _t0 = embassy_time::Instant::now();
+        loop {
+            //let _r = event_bus.get_status().await;
+            //hwa::info!("STATUS: {:?}", _r);
+            //hwa::info!("watchdog feed at {}", _t0.elapsed().as_micros());
+            {
+                wdt.lock().await.pet();
+            }
+            ticker.next().await;
         }
-        ticker.next().await;
     }
 }
 
@@ -78,14 +83,14 @@ async fn sys_start(spawner: embassy_executor::Spawner) -> Result<hwa::StandardCo
     );
 
     let event_bus: hwa::EventBusRef =
-        printhor_hwa_common::init_event_bus::<{ hwa::MAX_STATIC_MEMORY }>();
+        hwa::init_event_bus::<{ hwa::MAX_STATIC_MEMORY }>();
 
     event_bus
         .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_BOOTING))
         .await;
 
     let defer_channel: hwa::DeferChannelRef =
-        printhor_hwa_common::init_defer_channel::<{ hwa::MAX_STATIC_MEMORY }>();
+        hwa::init_defer_channel::<{ hwa::MAX_STATIC_MEMORY }>();
 
     let wdt = context.controllers.sys_watchdog.clone();
     wdt.lock().await.unleash();
@@ -136,7 +141,7 @@ async fn sys_start(spawner: embassy_executor::Spawner) -> Result<hwa::StandardCo
 }
 
 async fn spawn_tasks(
-    spawner: Spawner,
+    spawner: embassy_executor::Spawner,
     event_bus: hwa::EventBusRef,
     _defer_channel: hwa::DeferChannelRef,
     _controllers: Controllers,
@@ -408,13 +413,16 @@ async fn spawn_tasks(
             .map_err(|_| ())?;
     }
 
-    #[cfg(feature = "integration-test")]
+    #[cfg(any(test, feature = "integration-test"))]
     spawner
         .spawn(control::task_integration::task_integration(
             control::task_integration::IntegrationaskParams {
                 processor: processor.clone(),
+                #[cfg(feature = "with-sdcard")]
+                card_controller: sdcard_controller.clone(),
                 #[cfg(feature = "with-printjob")]
                 printer_controller: printer_controller.clone(),
+
             },
         ))
         .map_err(|_| ())?;
@@ -441,7 +449,7 @@ async fn spawn_tasks(
 
     #[cfg(feature = "with-printjob")]
     spawner
-        .spawn(control::task_printjob::task_printjob(
+        .spawn(control::task_print_job::task_print_job(
             processor.clone(),
             printer_controller,
             sdcard_controller,

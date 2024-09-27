@@ -105,7 +105,7 @@ embassy-sync = { version = "0.6.0", features = [] }
 embassy-time = { version = "0.3.2", features = [] }
 critical-section = { version = "1.1.2", features = ["std"] }
 embassy-executor = { version = "0.6.0", features = [] }
-async-gcode = {version = "0.3", features = ["optional-value", "parse-checksum", "parse-comments"]}
+async-gcode = {version = "0.3", default-features = false, features = ["parse-trailing-comment", "optional-value", "string-value", "parse-checksum"]}
 
 # machinery
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }

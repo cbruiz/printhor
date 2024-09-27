@@ -23,7 +23,8 @@ impl MockedTrinamicDriver {
 #[embassy_executor::task(pool_size=1)]
 pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
 
-    log::info!("Trinamic Simulator stared");
+    compile_error!("TODO");
+    log::info!("[task] Simulator stared");
 
     let mut ticker = embassy_time::Ticker::every(Duration::from_millis(100));
     let mut buff: [u8; 32] = [0; 32];

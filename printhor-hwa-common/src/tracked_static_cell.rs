@@ -57,6 +57,7 @@ fn stack_reservation_increment<const MAX_SIZE: usize>(_element_name: &str, nbyte
     #[cfg(any(feature = "with-log", feature = "with-defmt"))]
     crate::debug!("D; statically allocated {} bytes for {}", nbytes, _element_name);
     if nbytes > MAX_SIZE {
+        #[cfg(any(feature = "with-log", feature = "with-defmt"))]
         crate::error!("Too much allocation! {} / {}", nbytes, MAX_SIZE);
         panic!("Too much allocation! {} / {}", nbytes, MAX_SIZE);
     }

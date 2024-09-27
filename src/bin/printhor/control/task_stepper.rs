@@ -5,24 +5,25 @@
 //!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`], disable all steppers
 //!   - If motion segment is execution-ready, dequeue it and then:
 //!     - Enable all steppers
-//!     - Evaluate the motion profile displacement at [`MICRO_SEGMENT_PERIOD_HZ`]
+//!     - Evaluate the motion profile displacement at [`crate::hwa::STEPPER_PLANNER_CLOCK_FREQUENCY`]
 //!     - Compute number of steps to do in each axis (independently)
-//!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`]
+//!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`](hwa::controllers::motion::MultiTimer)
 //!     - Consume a micro-segment until iterator is exhausted
 //!
 //! TODO: This is a work still in progress
+
 use crate::control::motion::SCurveMotionProfile;
 use crate::hwa;
 use crate::math;
 use crate::math::Real;
 use crate::tgeo::{CoordSel, TVector};
 use num_traits::ToPrimitive;
+use hwa::{DeferAction, DeferEvent};
+use hwa::{EventBusRef, StepperChannel};
+use hwa::{EventFlags, EventStatus};
 use hwa::controllers::motion::SegmentIterator;
-use printhor_hwa_common::{DeferAction, DeferEvent};
-use printhor_hwa_common::{EventBusRef, StepperChannel};
-use printhor_hwa_common::{EventFlags, EventStatus};
-use crate::hwa::controllers::LinearMicrosegmentStepInterpolator;
-use crate::hwa::controllers::motion::STEP_DRIVER;
+use hwa::controllers::LinearMicrosegmentStepInterpolator;
+use hwa::controllers::motion::STEP_DRIVER;
 
 const DO_NOTHING: bool = false;
 
@@ -52,7 +53,7 @@ const DO_NOTHING: bool = false;
 ///     // Disable steppers here
 /// }
 /// ```
-const STEPPER_INACTIVITY_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_secs(5);
+const STEPPER_INACTIVITY_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_secs(10);
 
 
 // This constant defines the period for generating the stepper planner micro segments.
@@ -141,7 +142,7 @@ pub async fn task_stepper(
     event_bus: EventBusRef,
     motion_planner: hwa::controllers::MotionPlannerRef,
     _watchdog: hwa::WatchdogRef,
-) -> ! {
+) {
     let mut steppers_off = true;
 
     let mut real_steppper_pos: TVector<i32> = TVector::zero();
@@ -157,7 +158,7 @@ pub async fn task_stepper(
     let mut s = event_bus.subscriber().await;
 
     hwa::info!(
-        "Micro-segment controller starting with {} us micro-segment period at {} us resolution",
+        "[task_stepper] Starting with {} us micro-segment period at {} us resolution",
         STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
         STEPPER_PLANNER_CLOCK_PERIOD_US
     );
@@ -176,71 +177,39 @@ pub async fn task_stepper(
     }
 
     loop {
-        let mut wait_for_sysalarm = false;
-        if !s.get_status().await.contains(EventFlags::ATX_ON) {
-            hwa::info!("task_stepper waiting for ATX_ON");
-            // For safely, disable steppers
-            // TODO: Park
-            STEP_DRIVER.flush().await;
-            motion_planner
-                .motion_driver
-                .lock()
-                .await
-                .disable_steppers(StepperChannel::all());
-            STEP_DRIVER.reset();
-            steppers_off = true;
-
-            if s.ft_wait_until(EventFlags::ATX_ON).await.is_err() {
-                hwa::info!("Interrupted waiting for ATX_ON. SYS_ALARM?");
-                wait_for_sysalarm = true;
-            } else {
-                hwa::info!("task_stepper got ATX_ON. Continuing.");
-            }
-        }
-        if wait_for_sysalarm || s.get_status().await.contains(EventFlags::SYS_ALARM) {
-            hwa::warn!("task stepper waiting for SYS_ALARM release");
-            // TODO: Park
-            STEP_DRIVER.flush().await;
-            motion_planner
-                .motion_driver
-                .lock()
-                .await
-                .disable_steppers(StepperChannel::all());
-            STEP_DRIVER.reset();
-            steppers_off = true;
-            if s.ft_wait_while(EventFlags::SYS_ALARM).await.is_err() {
-                panic!("Unexpected situation");
-            }
-        }
         match embassy_time::with_timeout(
             STEPPER_INACTIVITY_TIMEOUT,
             motion_planner.get_current_segment_data(&event_bus),
-        )
-            .await
-        {
+        ).await {
             // Timeout
             Err(_) => {
                 hwa::trace!("stepper_task timeout");
                 if !steppers_off {
-                    hwa::info!("Timeout. Powering steppers off");
-                    STEP_DRIVER.flush().await;
-                    motion_planner
-                        .motion_driver
-                        .lock()
-                        .await
-                        .disable_steppers(StepperChannel::all());
-                    STEP_DRIVER.reset();
+                    park(&motion_planner).await;
                     steppers_off = true;
+                }
+                #[cfg(test)]
+                if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+                    hwa::info!("[task_stepper] Ending gracefully");
+                    return ();
                 }
             }
             // Process segment plan
             Ok(Some((segment, channel))) => {
+
+                match s.ft_wait_for(EventStatus::containing(EventFlags::ATX_ON)).await {
+                    Ok(_) => {}
+                    Err(_) => {
+                        let _ = s.ft_wait_while(EventFlags::SYS_ALARM).await;
+                    }
+                }
+
                 #[cfg(feature = "verbose-timings")]
                 let t0 = embassy_time::Instant::now();
                 #[cfg(feature = "verbose-timings")]
                 let mut tq = 0;
 
-                hwa::debug!("SEGMENT START");
+                hwa::trace!("SEGMENT START");
 
                 #[cfg(feature = "verbose-timings")]
                 let tx = embassy_time::Instant::now();
@@ -323,7 +292,9 @@ pub async fn task_stepper(
                             }
                         });
                         if steppers_off {
+                            #[cfg(feature = "trace-commands")]
                             hwa::info!("\tPowering steppers on");
+                            unpark(&motion_planner, false).await;
                         }
                         steppers_off = false;
 
@@ -347,7 +318,7 @@ pub async fn task_stepper(
                             if DO_NOTHING {
                                 break;
                             }
-                            hwa::debug!("Micro-segment START");
+                            hwa::trace!("Micro-segment START");
 
                             if let Some((estimated_position, _)) =
                                 microsegment_iterator.next(micro_segment_real_time_rel)
@@ -547,18 +518,12 @@ pub async fn task_stepper(
             Ok(None) => {
                 hwa::debug!("Homing init");
 
-                STEP_DRIVER.flush().await;
-                motion_planner
-                    .motion_driver
-                    .lock()
-                    .await
-                    .enable_steppers(StepperChannel::all());
-                STEP_DRIVER.reset();
-
                 if steppers_off {
+                    #[cfg(feature = "trace-commands")]
                     hwa::info!("\tPowering steppers on");
+                    unpark(&motion_planner, true).await;
+                    steppers_off = false;
                 }
-                steppers_off = false;
                 cfg_if::cfg_if! {
                     if #[cfg(feature="debug-skip-homing")] {
                         // Do nothing
@@ -577,4 +542,31 @@ pub async fn task_stepper(
             }
         }
     }
+}
+
+async fn park(motion_planner: &hwa::controllers::MotionPlannerRef) {
+    hwa::warn!("Stepping parked");
+    STEP_DRIVER.flush().await;
+    motion_planner
+        .motion_driver
+        .lock()
+        .await
+        .disable_steppers(StepperChannel::all());
+    STEP_DRIVER.reset();
+    hwa::pause_ticker();
+}
+
+async fn unpark(motion_planner: &hwa::controllers::MotionPlannerRef, enable_steppers: bool) {
+    hwa::resume_ticker();
+    if enable_steppers {
+        STEP_DRIVER.flush().await;
+        motion_planner
+            .motion_driver
+            .lock()
+            .await
+            .enable_steppers(StepperChannel::all());
+        STEP_DRIVER.reset();
+    }
+    #[cfg(feature="trace-commands")]
+    hwa::info!("[task_stepper] Stepping resumed");
 }

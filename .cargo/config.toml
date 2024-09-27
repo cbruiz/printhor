@@ -65,7 +65,7 @@ runner = "elf2uf2-rs --deploy --serial --verbose"
 [profile.dev.package."*"]
 codegen-units = 1
 incremental = false
-#opt-level = "z"
+#opt-level = "s" # Set to "s" or even disable to play with GDB
 debug = 2
 debug-assertions = true
 overflow-checks = true

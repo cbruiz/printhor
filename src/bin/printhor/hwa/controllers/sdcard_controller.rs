@@ -1,13 +1,10 @@
 //! TODO: This feature is still in incubation
 
 use crate::hwa;
-use core::pin::Pin;
 use embedded_sdmmc::{
     DirEntry, Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx,
     VolumeManager,
 };
-use futures::task::{Context, Poll};
-use futures::Stream;
 use printhor_hwa_common::ControllerMutex;
 use printhor_hwa_common::{StandardControllerMutex, TrackedStaticCell};
 
@@ -398,7 +395,7 @@ impl CardController {
         }
     }
 
-    pub(crate) async fn list_dir(
+    pub async fn list_dir(
         &self,
         full_path: &str,
     ) -> Result<CardAsyncDirIterator, SDCardError> {
@@ -442,7 +439,7 @@ impl CardController {
         Ok(CardAsyncDirIterator::new(self.instance, path))
     }
 
-    pub(crate) async fn new_stream(&self, file_path: &str) -> Result<SDCardStream, SDCardError> {
+    pub async fn new_stream(&self, file_path: &str) -> Result<SDCardStream, SDCardError> {
         let mut path: heapless::Vec<DirectoryRef, MAX_DIRS> = heapless::Vec::new();
         let mut card = self.instance.lock().await;
         card.retain().await;
@@ -503,8 +500,7 @@ impl CardController {
         }
     }
 
-    #[inline]
-    pub(crate) async fn read(
+    pub async fn read(
         &mut self,
         file: &mut RawFile,
         buffer: &mut [u8],
@@ -669,81 +665,39 @@ impl SDCardStream {
     }
 }
 
-use futures_util::Future;
-
-impl Stream for SDCardStream {
+impl async_gcode::ByteStream for SDCardStream {
     type Item = Result<u8, async_gcode::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-        if this.current_byte_index < this.bytes_read {
-            let byte = this.buffer[this.current_byte_index as usize];
-            this.current_byte_index += 1;
-            Poll::Ready(Some(Ok(byte)))
+    async fn next(&mut self) -> Option<Self::Item> {
+        if self.current_byte_index < self.bytes_read {
+            let byte = self.buffer[self.current_byte_index as usize];
+            self.current_byte_index += 1;
+            Some(Ok(byte))
         } else {
-            this.current_byte_index = 0;
-            this.bytes_read = 0;
-            let result = match this.file.as_mut() {
-                None => Poll::Ready(Err(SDCardError::NotFound)),
+            self.current_byte_index = 0;
+            self.bytes_read = 0;
+            let result = match self.file.as_mut() {
+                None => Err(SDCardError::NotFound),
                 Some(f) => {
-                    core::pin::pin!(this.card_controller.read(f, &mut this.buffer)).poll(ctx)
+                    self.card_controller.read(f, &mut self.buffer).await
                 }
             };
             match result {
-                Poll::Ready(rst) => {
-                    match rst {
-                        Ok(bytes_read) => {
-                            this.bytes_read = bytes_read as u8;
-                            if bytes_read > 0 {
-                                let byte = this.buffer[this.current_byte_index as usize];
-                                this.current_byte_index = 1;
-                                Poll::Ready(Some(Ok(byte)))
-                            } else {
-                                this.bytes_read = 0;
-                                this.current_byte_index = 0;
-                                Poll::Ready(None)
-                            }
-                        }
-                        Err(_) => {
-                            // FIXME: Propper error type and logic
-                            Poll::Ready(Some(Err(async_gcode::Error::NumberOverflow)))
-                        }
+                Ok(bytes_read) => {
+                    self.bytes_read = bytes_read as u8;
+                    if bytes_read > 0 {
+                        let byte = self.buffer[self.current_byte_index as usize];
+                        self.current_byte_index = 1;
+                        Some(Ok(byte))
+                    } else {
+                        // FIXME not correct
+                        self.bytes_read = 0;
+                        self.current_byte_index = 0;
+                        None
                     }
-                }
-                Poll::Pending => Poll::Pending,
+                },
+                Err(_) => Some(Err(async_gcode::Error::NumberOverflow)),
             }
         }
     }
 }
-
-/*
-impl async_gcode::AsyncRead for SDCardStream
-{
-    #[inline]
-    async fn read_byte(&mut self) -> Option<Result<u8, async_gcode::Error>> {
-
-    }
-
-    #[inline]
-    fn push_back(&mut self, _b: u8)  {
-        //crate::debug!("async stream push back");
-        if self.current_byte_index > 0 {
-            self.current_byte_index -= 1;
-        }
-    }
-
-    #[inline]
-    async fn close(&mut self) {
-        match self.file.take() {
-            Some(file) => {
-                let _ = self.card_controller.close_file(file).await;
-            }
-            None => {}
-        }
-        while let Some(d) = self.path.pop() {
-            self.card_controller.close_dir(d).await;
-        }
-    }
-}
-
-*/

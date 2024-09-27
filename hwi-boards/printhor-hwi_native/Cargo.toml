@@ -54,9 +54,9 @@ without-vref-int = []
 
 [dependencies]
 
-embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384", "integrated-timers"] }
+embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
 embassy-sync = { version = "*", features = ["std"] }
-embassy-time = { version = "*", features = ["std"] }
+embassy-time = { version = "*", features = ["std", "generic-queue-128"] }
 embassy-futures = { version = "*", features = [] }
 embassy-embedded-hal = { version = "*", features = [] }
 

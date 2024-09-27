@@ -214,7 +214,7 @@ pub async fn setup(_spawner: Spawner, p: embassy_stm32::Peripherals) -> printhor
         cfg.data_bits = DataBits::DataBits8;
         cfg.stop_bits = StopBits::STOP1;
         cfg.parity = Parity::ParityNone;
-        cfg.detect_previous_overrun = false;
+        cfg.detect_previous_overrun = true;
 
         let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(
             p.USART2, p.PA3, p.PA2, UartPort1Irqs, p.DMA1_CH6, p.DMA1_CH7, cfg

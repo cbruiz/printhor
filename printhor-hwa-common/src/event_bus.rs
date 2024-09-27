@@ -799,3 +799,19 @@ pub fn init_event_bus<const MAX_SIZE: usize>() -> EventBusRef {
         )
     )
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate as hwa;
+
+    #[test]
+    fn test_event_bus() {
+        let event_status = EventStatus::new()
+            .and_containing(EventFlags::SYS_ALARM)
+            .and_not_containing(EventFlags::SYS_BOOT_FAILURE);
+        hwa::info!("{}", event_status);
+        hwa::info!("{:?}", event_status);
+
+    }
+}

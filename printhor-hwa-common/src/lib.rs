@@ -17,7 +17,7 @@ cfg_if::cfg_if! {
 
     }
     else {
-        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
+        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
     }
 }
 
@@ -44,6 +44,9 @@ use bitflags::bitflags;
 
 
 use strum::EnumCount;
+
+mod persistent_state;
+pub use persistent_state::PersistentState;
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {

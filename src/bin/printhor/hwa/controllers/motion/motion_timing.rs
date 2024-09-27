@@ -1,5 +1,6 @@
 use crate::tgeo::{CoordSel, TVector};
-use printhor_hwa_common::StepperChannel;
+use crate::hwa;
+use hwa::StepperChannel;
 
 /// Represents the status of a stepper channel.
 /// This struct maintains the status for a specific stepper channel,
@@ -180,12 +181,12 @@ impl MultiTimer {
 ///
 /// It can distribute pulse trains uniformly over multiple channels, acting like reloading timers.
 /// When a specified width is reached in a channel, another width is added until the maximal width
-/// [`interval_width`](crate::control::motion_timing::MultiTimer::new()) is reached.
+/// [`interval_width`](MultiTimer) is reached.
 ///
 /// Assumptions for equidistant pulses within the same rate:
 /// - Each pulse period (`pulse width`) is **`t = T / x`**, where **`x`** is the number of pulses and **`T`** is the total period.
 /// - Pulse sequence follows **`t(i) = t / 2 + (i - 1) * t`**, with **`i`** starting at 1.
-/// - Iterator ceases when **`t(i)`** surpasses [`interval_width`](crate::control::motion_timing::MultiTimer::new()) for all channels.
+/// - Iterator ceases when **`t(i)`** surpasses [`interval_width`](MultiTimer) for all channels.
 ///
 #[derive(Clone, Copy)]
 pub struct StepPlanner {

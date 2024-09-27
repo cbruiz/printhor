@@ -2,33 +2,41 @@ use std::io::{stdout, Write};
 use embassy_executor::SendSpawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
-use futures::Stream;
-use core::pin::Pin;
+use embassy_time::{Duration, with_timeout};
 use async_std::io::ReadExt;
-use futures::task::Context;
-use futures::task::Poll;
-use futures::Future;
+use log::info;
+use crate::TERMINATION;
 
-pub(crate) static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
+pub static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
 
 #[embassy_executor::task(pool_size=1)]
-pub async fn processor() {
+pub async fn task_mocked_uart() {
+
+    info!("[task_mocked_uart] starting");
 
     // byte-to-byte reading is required for stdin for it to work unbuffered with simple I/O management.
     // Another solution could be leveraging a wrapper/crate on top of native select() with the proper ioctl on stdin, but is not worthy in this case.
     // Unbuffered I/O requirement for piping simulator with Universal Gcode Sender and others by socat.
-    loop {
-        let mut stream = async_std::io::stdin();
-        let mut buf = [0u8; 1];
 
-        loop {
-            match stream.read_exact(&mut buf).await {
-                Ok(_) => {
-                    SERIAL_PIPE.write(&buf[..1]).await;
+    let mut stream = async_std::io::stdin();
+    let mut buf = [0u8; 1];
+
+    loop {
+        match with_timeout(
+            Duration::from_secs(60),
+            stream.read_exact(&mut buf)
+        ).await {
+            Err(_) => {
+                if TERMINATION.signaled() {
+                    info!("[task_mocked_uart] Ending gracefully");
+                    return ();
                 }
-                Err(_e) => {
-                    break;
-                }
+            }
+            Ok(Ok(_)) => {
+                SERIAL_PIPE.write(&buf[..1]).await;
+            }
+            Ok(Err(_e)) => {
+                panic!("Serial EOF");
             }
         }
     }
@@ -41,7 +49,7 @@ pub struct MockedUart {
 impl MockedUart {
     pub(crate) fn new(spawner: SendSpawner) -> Self {
 
-        spawner.spawn(processor()).unwrap();
+        spawner.spawn(task_mocked_uart()).unwrap();
 
         Self {
             spawner,
@@ -102,49 +110,40 @@ impl MockedUartRxInputStream {
     }
 }
 
-impl Stream for MockedUartRxInputStream
+impl async_gcode::ByteStream for MockedUartRxInputStream
 {
     type Item = Result<u8, async_gcode::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
+    async fn next(&mut self) -> Option<Self::Item> {
 
-        let this = self.get_mut();
-
-        if this.current_byte_index < this.bytes_read {
-            let byte = this.buffer[this.current_byte_index as usize];
-            this.current_byte_index += 1;
-            Poll::Ready(Some(Ok(byte)))
+        if self.current_byte_index < self.bytes_read {
+            let byte = self.buffer[self.current_byte_index as usize];
+            self.current_byte_index += 1;
+            Some(Ok(byte))
         }
         else {
-            this.current_byte_index = 0;
-            this.bytes_read = 0;
-            let r = core::pin::pin!(
-                this.receiver.read_until_idle(&mut this.buffer)
-            ).poll(ctx);
+            self.current_byte_index = 0;
+            self.bytes_read = 0;
+            let r = self.receiver.read_until_idle(&mut self.buffer).await;
             match r {
-                Poll::Ready(rst) => {
-                    match rst {
-                        Ok(n) => {
-                            this.bytes_read = n as u8;
-                            if n > 0 {
-                                let byte = this.buffer[this.current_byte_index as usize];
-                                this.current_byte_index += 1;
-                                Poll::Ready(Some(Ok(byte)))
-                            }
-                            else {
-                                Poll::Ready(None)
-                            }
-                        }
-                        Err(_e) => {
-                            log::error!("Error: {:?}", _e);
-                            Poll::Ready(None)
-                        }
+                Ok(n) => {
+                    self.bytes_read = n as u8;
+                    if n > 0 {
+                        let byte = self.buffer[self.current_byte_index as usize];
+                        self.current_byte_index += 1;
+                        Some(Ok(byte))
+                    }
+                    else {
+                        log::error!("0 bytes read. EOF?");
+                        None
                     }
                 }
-                Poll::Pending => {
-                    Poll::Pending
+                Err(_e) => {
+                    log::error!("Error: {:?}", _e);
+                    None
                 }
             }
         }
     }
+
 }

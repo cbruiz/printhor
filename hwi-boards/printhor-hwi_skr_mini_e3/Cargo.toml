@@ -68,7 +68,7 @@ embassy-futures = { version = "*", features = [] }
 embassy-usb = { version = "*", features = [], optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = { version = "0.7.0", default-features = false, features = [] }
+cortex-m-rt = { version = "0.7.3", default-features = false, features = [] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }

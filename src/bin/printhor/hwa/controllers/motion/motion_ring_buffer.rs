@@ -42,11 +42,7 @@ impl RingBuffer {
     /// * `Err(())` - If the offset is greater than the number of used elements.
     ///
     /// # Examples
-    ///
-    /// ```
-    /// // index_from_tail(0) returns the index of tail position
-    /// // index_from_tail(1) returns the index of the last inserted element
-    /// ```
+    /// TBD
     pub fn index_from_tail(&self, offset: u8) -> Result<u8, ()> {
         if offset > self.used {
             Err(())
@@ -186,9 +182,10 @@ mod tests {
         rb.head = 1;
         rb.used = 3;
 
-        assert_eq!(rb.index_from_tail(0), Ok(3));
-        assert_eq!(rb.index_from_tail(1), Ok(2));
-        assert_eq!(rb.index_from_tail(3), Ok(0));
+        assert_eq!(rb.index_from_tail(0), Ok(4));
+        assert_eq!(rb.index_from_tail(1), Ok(3));
+        assert_eq!(rb.index_from_tail(2), Ok(2));
+        assert_eq!(rb.index_from_tail(3), Ok(1));
         assert_eq!(rb.index_from_tail(4), Err(()));
     }
 

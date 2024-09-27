@@ -193,6 +193,28 @@ cfg_if::cfg_if! {
 
         extern "Rust" {fn do_tick();}
 
+        #[no_mangle]
+        pub extern "Rust" fn pause_ticker() {
+            unsafe {
+                let p = cortex_m::Peripherals::steal();
+                let mut syst = p.SYST;
+                syst.disable_counter();
+                syst.disable_interrupt();
+            }
+            defmt::info!("Ticker Paused");
+        }
+        #[no_mangle]
+        pub extern "Rust" fn resume_ticker() {
+
+            unsafe {
+                let p = cortex_m::Peripherals::steal();
+                let mut syst = p.SYST;
+                syst.enable_interrupt();
+                syst.enable_counter();
+            }
+            defmt::info!("Ticker Resumed");
+        }
+
         use cortex_m_rt::exception;
         #[exception]
         fn SysTick() {

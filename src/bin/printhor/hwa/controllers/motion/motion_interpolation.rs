@@ -1,7 +1,8 @@
-use printhor_hwa_common::StepperChannel;
-use crate::hwa::controllers::MultiTimer;
+use crate::hwa;
+use hwa::StepperChannel;
+use hwa::controllers::MultiTimer;
 use crate::math;
-use crate::math::Real;
+use math::Real;
 use crate::tgeo::TVector;
 
 /// A struct for interpolating microsteps along linear trajectories.
@@ -20,7 +21,7 @@ pub struct LinearMicrosegmentStepInterpolator {
 
     multi_timer: MultiTimer,
     #[cfg(any(test, feature = "assert-motion"))]
-    pub(crate) delta: TVector<u32>,
+    pub delta: TVector<u32>,
 }
 
 impl LinearMicrosegmentStepInterpolator {
@@ -107,18 +108,19 @@ impl LinearMicrosegmentStepInterpolator {
 
         #[cfg(test)]
         {
-            std::println!("...");
-            std::println!(
+
+            hwa::trace!("...");
+            hwa::trace!(
                 "step_pos: {} steps_to_advance : {}",
                 step_pos,
                 steps_to_advance
             );
-            std::println!(
+            hwa::trace!(
                 "delta: {} steps_to_advance_precise : {}",
                 self.delta,
                 steps_to_advance_precise
             );
-            std::println!(
+            hwa::trace!(
                 "width: {} tick period by axis: {}",
                 numerator,
                 tick_period_by_axis
@@ -184,15 +186,15 @@ impl LinearMicrosegmentStepInterpolator {
 }
 
 #[cfg(test)]
-pub mod test {
-
+pub mod interpolation_test {
 
     #[cfg(feature = "wip-tests")]
     #[test]
     fn interpolation_test_1() {
-        use crate::hwa::controllers::LinearMicrosegmentStepInterpolator;
+        use crate::hwa;
+        use hwa::controllers::LinearMicrosegmentStepInterpolator;
         use crate::math;
-        use crate::math::Real;
+        use math::Real;
         use crate::tgeo::TVector;
 
         let mut lin = LinearMicrosegmentStepInterpolator::new(
@@ -203,6 +205,6 @@ pub mod test {
 
         lin.advance_to(Real::from_f32(100.0), Real::from_f32(100.0));
 
-        std::println!("xx");
+        hwa::info!("xx");
     }
 }

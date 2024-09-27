@@ -1,12 +1,11 @@
+use crate::{control, hwa, math, tgeo};
+use hwa::{EventFlags, EventStatus, PersistentState};
+use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
+use hwa::drivers::motion_driver::MotionDriverRef;
+use math::Real;
+use tgeo::{CoordSel, TVector};
 use embassy_sync::mutex::{Mutex, MutexGuard};
-use printhor_hwa_common::{EventFlags, EventStatus};
-use crate::{control, hwa, math};
-use crate::hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
-use crate::hwa::controllers::motion::motion_ring_buffer::RingBuffer;
-use crate::hwa::drivers::motion_driver::MotionDriverRef;
-use crate::math::Real;
-use crate::sync::config::Config;
-use crate::tgeo::{CoordSel, TVector};
 
 #[derive(Clone)]
 pub struct MotionPlannerRef {
@@ -47,8 +46,8 @@ pub struct MotionPlanner {
     pub defer_channel: hwa::DeferChannelRef,
 
     ringbuffer: Mutex<hwa::ControllerMutexType, RingBuffer>,
-    move_planned: Config<hwa::ControllerMutexType, bool>,
-    available: Config<hwa::ControllerMutexType, bool>,
+    move_planned: PersistentState<hwa::ControllerMutexType, bool>,
+    available: PersistentState<hwa::ControllerMutexType, bool>,
     motion_config: motion::MotionConfigRef,
     motion_st: Mutex<hwa::ControllerMutexType, motion::MotionStatus>,
     pub motion_driver: MotionDriverRef,
@@ -111,8 +110,8 @@ impl MotionPlanner {
             defer_channel,
             motion_config,
             ringbuffer: Mutex::new(RingBuffer::new()),
-            move_planned: Config::new(),
-            available: Config::new(),
+            move_planned: PersistentState::new(),
+            available: PersistentState::new(),
             motion_st: Mutex::new(motion::MotionStatus::new()),
             motion_driver,
         }
@@ -188,7 +187,6 @@ impl MotionPlanner {
         event_bus: &hwa::EventBusRef,
     ) -> Option<(motion::Segment, hwa::CommChannel)> {
         loop {
-            // FIXME: wrong with timeout
             let _ = self.move_planned.wait().await;
             let mut do_dwell = false;
             {
@@ -200,6 +198,7 @@ impl MotionPlanner {
                     }
                     PlanEntry::Dwell(channel, _deferred) => {
                         rb.data[head] = PlanEntry::Executing(MovType::Dwell(channel), true);
+                        // TODO: Need to revisit this logic
                         do_dwell = true;
                     }
                     PlanEntry::PlannedMove(planned_data, action, channel, deferred) => {
@@ -227,8 +226,8 @@ impl MotionPlanner {
                 }
             }
             if do_dwell {
-                unreachable!("suspecting not OK");
-                //self.consume_current_segment_data(&event_bus).await;
+                // Just consume. TODO: need to wait for some time as specified
+                self.consume_current_segment_data(&event_bus).await;
             }
         }
     }
@@ -364,11 +363,14 @@ impl MotionPlanner {
     ///
     async fn schedule_raw_move(
         &self,
+        _mnemonic: &'static str,
         channel: hwa::CommChannel,
         action: hwa::DeferAction,
         move_type: ScheduledMove,
         blocking: bool,
         event_bus: &hwa::EventBusRef,
+        num_order: u32,
+        line_tag: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
         hwa::debug!("schedule_raw_move() BEGIN");
         loop {
@@ -523,11 +525,15 @@ impl MotionPlanner {
                     return if is_defer {
                         // Shall wait for one de-allocation in order to enqueue more
                         hwa::debug!("schedule_raw_move() - Finally deferred");
+                        #[cfg(feature="trace-commands")]
+                        hwa::info!("Promised {} #order: {} line: {:?}", _mnemonic, num_order, line_tag);
                         self.defer_channel
                             .send(hwa::DeferEvent::AwaitRequested(action, channel))
                             .await;
                         Ok(control::CodeExecutionSuccess::DEFERRED(event))
                     } else {
+                        #[cfg(feature = "trace-commands")]
+                        hwa::info!("Commited #order: {} #line: {:?}", num_order, line_tag);
                         hwa::debug!("schedule_raw_move() END - Finally queued");
                         Ok(control::CodeExecutionSuccess::QUEUED)
                     }
@@ -743,13 +749,14 @@ impl MotionPlanner {
     pub async fn plan(
         &self,
         channel: hwa::CommChannel,
-        gc: &control::GCode,
+        gc: &control::GCodeCmd,
         blocking: bool,
         event_bus: &hwa::EventBusRef,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
-        match gc {
-            control::GCode::G0(t) => Ok(self
-                .schedule_move(
+        match &gc.value {
+            control::GCodeValue::G0(t) => Ok(
+                self.schedule_move(
+                    "G0",
                     channel,
                     hwa::DeferAction::RapidMove,
                     TVector {
@@ -761,10 +768,12 @@ impl MotionPlanner {
                     t.f,
                     blocking,
                     event_bus,
-                )
-                .await?),
-            control::GCode::G1(t) => Ok(self
-                .schedule_move(
+                    gc.order_num, gc.line_tag,
+                ).await?
+            ),
+            control::GCodeValue::G1(t) => Ok(
+                self.schedule_move(
+                    "G1",
                     channel,
                     hwa::DeferAction::LinearMove,
                     TVector {
@@ -776,47 +785,58 @@ impl MotionPlanner {
                     t.f,
                     blocking,
                     event_bus,
-                )
-                .await?),
-            control::GCode::G4 => Ok(self
-                .schedule_raw_move(
+                    gc.order_num, gc.line_tag,
+                ).await?
+            ),
+            control::GCodeValue::G4 => Ok(
+                self.schedule_raw_move(
+                    "G4",
                     channel,
                     hwa::DeferAction::Dwell,
                     ScheduledMove::Dwell,
                     blocking,
                     event_bus,
+                    gc.order_num, gc.line_tag,
                 )
-                .await?),
-            control::GCode::G28(_x) => {
+                .await?
+            ),
+            control::GCodeValue::G28(_x) => {
                 event_bus
                     .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                     .await;
                 Ok(self
                     .schedule_raw_move(
+                        "G28",
                         channel,
                         hwa::DeferAction::Homing,
                         ScheduledMove::Homing,
                         blocking,
                         event_bus,
+                        gc.order_num, gc.line_tag,
                     )
                     .await?)
             }
-            control::GCode::G29 => Ok(control::CodeExecutionSuccess::OK),
-            control::GCode::G29_1 => Ok(control::CodeExecutionSuccess::OK),
-            control::GCode::G29_2 => Ok(control::CodeExecutionSuccess::OK),
+            control::GCodeValue::G29 => Ok(control::CodeExecutionSuccess::OK),
+            control::GCodeValue::G29_1 => Ok(control::CodeExecutionSuccess::OK),
+            control::GCodeValue::G29_2 => Ok(control::CodeExecutionSuccess::OK),
             _ => Err(control::CodeExecutionFailure::NotYetImplemented),
         }
     }
 
     async fn schedule_move(
         &self,
+        mnemonic: &'static str,
         channel: hwa::CommChannel,
         action: hwa::DeferAction,
         p1_t: TVector<Real>,
         requested_motion_speed: Option<Real>,
         blocking: bool,
         event_bus: &hwa::EventBusRef,
+        num: u32,
+        line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
+
+        // TODO Reduce locks
         let p0 = self
             .get_last_planned_pos()
             .await
@@ -913,11 +933,13 @@ impl MotionPlanner {
 
             let r = self
                 .schedule_raw_move(
+                    mnemonic,
                     channel,
                     action,
                     ScheduledMove::Move(segment_data),
                     blocking,
                     event_bus,
+                    num, line,
                 )
                 .await?;
 
@@ -1138,7 +1160,7 @@ pub fn display_content(
 }
 
 #[cfg(test)]
-pub mod test {
+pub mod planner_test {
     use std::future::Future;
     use printhor_hwa_common::{DeferChannelRef, TrackedStaticCell};
     use crate::hwa::controllers::{LinearMicrosegmentStepInterpolator, MotionConfig, StepPlanner};

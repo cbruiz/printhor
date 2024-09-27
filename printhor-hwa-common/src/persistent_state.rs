@@ -7,7 +7,7 @@ use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::blocking_mutex::Mutex;
 
 #[allow(unused)]
-pub struct Config<M, T>
+pub struct PersistentState<M, T>
 where
     M: RawMutex,
     T: Send + Copy,
@@ -27,7 +27,7 @@ where
 }
 
 #[allow(unused)]
-impl<M, T> Config<M, T>
+impl<M, T> PersistentState<M, T>
 where
     M: RawMutex,
     T: Send + Copy,
@@ -41,7 +41,7 @@ where
 }
 
 #[allow(unused)]
-impl<M, T> Default for Config<M, T>
+impl<M, T> Default for PersistentState<M, T>
 where
     M: RawMutex,
     T: Send + Copy,
@@ -52,7 +52,7 @@ where
 }
 
 #[allow(unused)]
-impl<M, T> Config<M, T>
+impl<M, T> PersistentState<M, T>
 where
     M: RawMutex,
     T: Send + Copy,
@@ -60,7 +60,6 @@ where
     /// Mark this Signal as signaled.
     pub fn signal(&self, val: T) {
         self.state.lock(|cell| {
-            //info!("signal -> Replacing to {}", val);
             let state = cell.replace(State::Signaled(val));
             if let State::Waiting(waker) = state {
                 waker.wake();
