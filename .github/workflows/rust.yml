@@ -1,4 +1,4 @@
-name: Rust
+name: CI
 
 on:
   push:
@@ -15,16 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
+    - name: Checkout repository and submodules
       uses: actions/checkout@v2
-    - name: Checkout submodules
-      uses: textbook/git-checkout-submodule-action@master
       with:
-        remote: true
+        submodules: recursive
     - name: Build
-      run: cargo build --features native --package prinThor --bin printhor --verbose
+      run: cargo build --features native --package prinThor --bin printhor
     - name: Run tests
-      run: cargo test --features native --package prinThor --bin printhor --verbose
+      run: cargo test --features native --package prinThor --bin printhor
     - name: Run cargo-tarpaulin
       uses: actions-rs/tarpaulin@v0.1
       with:
