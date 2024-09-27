@@ -1,0 +1,29 @@
+name: Rust
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --features native --package prinThor --bin printhor --verbose
+    - name: Run tests
+      run: cargo test --features native --package prinThor --bin printhor --verbose
+    - name: Run cargo-tarpaulin
+      uses: actions-rs/tarpaulin@v0.1
+      with:
+        version: '0.15.0'
+        args: '--features native --exclude-files "libs/*" --exclude-files "hwi-boards/printhor-hwi_mks_robin_nano/*" --exclude-files "hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/*" --exclude-files "hwi-boards/printhor-hwi_rp_2040/*" --exclude-files "hwi-boards/printhor-hwi_skr_mini_e3/*" -- --test-threads 1'
+    - name: Coveralls
+      uses: coverallsapp/github-action@v2
