@@ -4,7 +4,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, with_timeout};
 use async_std::io::ReadExt;
-use log::info;
+use log::{trace, info};
 use crate::TERMINATION;
 
 pub static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
@@ -20,6 +20,7 @@ pub async fn task_mocked_uart() {
 
     let mut stream = async_std::io::stdin();
     let mut buf = [0u8; 1];
+    let mut error_reading = false;
 
     loop {
         match with_timeout(
@@ -33,10 +34,24 @@ pub async fn task_mocked_uart() {
                 }
             }
             Ok(Ok(_)) => {
+                error_reading = false; // Recovered
                 SERIAL_PIPE.write(&buf[..1]).await;
             }
-            Ok(Err(_e)) => {
-                panic!("Serial EOF");
+            Ok(Err(_e)) => { // Error reading from stdin: Closed or temporary unavailable
+                if !error_reading {
+                    trace!("[task_mocked_uart] Error reading from stdin {:?}", _e);
+                    error_reading = true;
+                    if TERMINATION.signaled() {
+                        info!("[task_mocked_uart] Ending gracefully");
+                        return ();
+                    }
+                }
+                else {
+                    // Could happen. For instance in CI.
+                    // In this case we will wait to avoid respawning fast and keep trying in case it
+                    // can be recovered (practically improbable)
+                    embassy_time::Timer::after(Duration::from_secs(10)).await;
+                }
             }
         }
     }
