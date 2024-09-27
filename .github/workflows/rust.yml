@@ -20,9 +20,9 @@ jobs:
       with:
         submodules: recursive
     - name: Build
-      run: cargo build --features native --package prinThor --bin printhor --verbose
+      run: cargo build --features native --package prinThor --bin printhor
     - name: Run tests
-      run: cargo test --features native --package prinThor --bin printhor --verbose
+      run: cargo test --features native --package prinThor --bin printhor
     - name: Run cargo-tarpaulin
       uses: actions-rs/tarpaulin@v0.1
       with:
