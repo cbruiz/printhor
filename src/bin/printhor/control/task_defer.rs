@@ -35,11 +35,9 @@ impl Subscriptions {
         if let Some(counts) = self.channel_counts.get_mut(CommChannel::index_of(channel)) {
             if increment == 1 {
                 self.total_counts += 1;
-            }
-            else if increment == -1 {
+            } else if increment == -1 {
                 self.total_counts -= 1;
-            }
-            else {
+            } else {
                 panic!("WTF AYD?");
             }
 
@@ -60,7 +58,7 @@ impl Subscriptions {
             } else {
                 *counter = new_value as u8;
                 true
-            }
+            };
         }
         false
     }
@@ -73,19 +71,22 @@ pub async fn task_defer(processor: hwa::GCodeProcessor) {
     let mut subscriptions = Subscriptions::new();
 
     loop {
-
         match with_timeout(
             Duration::from_secs(30),
             processor.motion_planner.defer_channel.receive(),
-        ).await {
-
+        )
+        .await
+        {
             Err(_) => {
                 #[cfg(feature = "trace-commands")]
-                hwa::info!("[task_defer] Timeout: counts: {}", subscriptions.total_counts);
+                hwa::info!(
+                    "[trace-commands] [task_defer] Timeout. Actual subscriptions count: {}",
+                    subscriptions.total_counts
+                );
                 #[cfg(test)]
                 if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_defer] Ending gracefully");
-                    return ()
+                    return ();
                 }
             }
 
@@ -99,7 +100,7 @@ pub async fn task_defer(processor: hwa::GCodeProcessor) {
                 if subscriptions.update(action, channel, -1) {
                     cfg_if::cfg_if! {
                         if #[cfg(feature="trace-commands")] {
-                            let msg = alloc::format!("ok; {:?} completed @{:?}\n", action, channel);
+                            let msg = alloc::format!("ok; [trace-commands] {:?} completed @{:?}\n", action, channel);
                             hwa::info!("{}", msg.trim_end());
                             processor.write(channel, msg.as_str()).await;
                         }

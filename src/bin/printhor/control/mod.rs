@@ -1,15 +1,12 @@
-use crate::math::Real;
 #[allow(unused)]
 use crate::hwa;
+use crate::math::Real;
 
 #[cfg(feature = "native")]
 use strum::Display;
 use strum::{AsRefStr, VariantNames};
 #[cfg(feature = "with-motion")]
 pub mod motion;
-
-#[cfg(feature = "with-defmt")]
-use crate::hwa::defmt;
 
 mod processing;
 pub use processing::*;
@@ -35,9 +32,7 @@ pub struct S {
 
 impl S {
     pub const fn new() -> Self {
-        Self {
-            s: None,
-        }
+        Self { s: None }
     }
 }
 
@@ -49,9 +44,7 @@ pub struct N {
 
 impl N {
     pub const fn new() -> Self {
-        Self {
-            n: None,
-        }
+        Self { n: None }
     }
 }
 
@@ -159,7 +152,7 @@ impl XYZEFS {
 
 #[cfg(feature = "with-defmt")]
 impl defmt::Format for XYZEFS {
-    fn format(&self, fmt: crate::hwa::defmt::Formatter) {
+    fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "XYZEFS")
     }
 }
@@ -168,10 +161,11 @@ impl defmt::Format for XYZEFS {
 pub struct GCodeCmd {
     /// The gcode sequential number as coming from parser
     pub order_num: u32,
-    /// The line number tagged in the gcode (if any)
+    /// The line number tagged in the gcode by NXX word (if any)
     pub line_tag: Option<u32>,
-    /// The gcode variant
-    pub value: GCodeValue
+    /// The gcode variant.
+    /// See [GCodeValue]
+    pub value: GCodeValue,
 }
 
 impl GCodeCmd {
@@ -186,7 +180,12 @@ impl GCodeCmd {
 
 impl core::fmt::Display for GCodeCmd {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(f, "{{ gcode: {}, order_num: {}, line_tag: ", self.value.as_ref(), self.order_num)?;
+        core::write!(
+            f,
+            "{{ gcode: {}, order_num: {}, line_tag: ",
+            self.value.as_ref(),
+            self.order_num
+        )?;
         match &self.line_tag {
             None => {
                 core::write!(f, "None }}")
@@ -197,7 +196,7 @@ impl core::fmt::Display for GCodeCmd {
         }
     }
 }
-
+/// The GCode Variants
 //noinspection SpellCheckingInspection
 #[derive(Clone, VariantNames, AsRefStr, Default, Debug)]
 #[cfg_attr(feature = "native", derive(Display))]

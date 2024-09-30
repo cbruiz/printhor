@@ -1,7 +1,7 @@
-use embassy_stm32::wdg;
 #[allow(unused)]
 use embassy_stm32::gpio::{Input, Output};
 use embassy_stm32::timer::simple_pwm::SimplePwm;
+use embassy_stm32::wdg;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-usb")] {
@@ -41,7 +41,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-spi")]
-pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static,embassy_stm32::mode::Async>;
+pub(crate) type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
 
 #[cfg(feature = "with-spi")]
 pub type SpiCardDevice = Spi1;
@@ -55,7 +55,6 @@ pub type SpiDeviceRef = printhor_hwa_common::InterruptControllerRef<Spi>;
 #[cfg(feature = "with-sdcard")]
 pub type SpiCardDeviceRef = printhor_hwa_common::InterruptControllerRef<Spi>;
 
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-sdcard")] {
         pub type SpiCardCSPin = Output<'static>;
@@ -63,9 +62,9 @@ cfg_if::cfg_if! {
 }
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-pub use embassy_stm32::adc::Instance as AdcTrait;
 pub use embassy_stm32::adc::AdcChannel as AdcPinTrait;
-pub use embassy_stm32::adc::VrefInt as VrefInt;
+pub use embassy_stm32::adc::Instance as AdcTrait;
+pub use embassy_stm32::adc::VrefInt;
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
 pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
@@ -87,10 +86,7 @@ pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM13>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
-pub type Watchdog = wdg::IndependentWatchdog<'static,
-    embassy_stm32::peripherals::IWDG
->;
-
+pub type Watchdog = wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {

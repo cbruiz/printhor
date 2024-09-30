@@ -43,22 +43,21 @@
 //!
 //! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core.
 
-use crate::control::{GCodeCmd, GCodeValue};
 use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
+use crate::control::{GCodeCmd, GCodeValue};
 use crate::hwa;
 use crate::machine::MACHINE_INFO;
 use crate::math;
 
-#[allow(unused)]
-use printhor_hwa_common::StepperChannel;
-
+#[cfg(feature = "with-motion")]
+use crate::tgeo::TVector;
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 #[allow(unused)]
-use hwa::{CommChannel, DeferAction, DeferEvent, EventBusRef, EventFlags, EventStatus};
+use hwa::StepperChannel;
+#[allow(unused)]
+use hwa::{CommChannel, DeferAction, DeferEvent, EventFlags, EventStatus};
 use strum::VariantNames;
-#[cfg(feature = "with-motion")]
-use crate::tgeo::TVector;
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
     {
@@ -70,14 +69,15 @@ cfg_if::cfg_if! {
 }
 
 pub struct GCodeProcessorParams {
-    pub event_bus: EventBusRef,
+    pub event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
 
     #[cfg(feature = "with-motion")]
-    pub motion_planner: hwa::controllers::MotionPlannerRef,
+    pub motion_planner: hwa::controllers::MotionPlanner,
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_tx: hwa::device::USBSerialTxControllerRef,
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: hwa::device::UartPort1TxControllerRef,
+    pub serial_port1_tx:
+        hwa::StaticController<hwa::SerialPort1MutexType, hwa::device::SerialPort1TxDevice>,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
     #[cfg(feature = "with-ps-on")]
@@ -85,9 +85,9 @@ pub struct GCodeProcessorParams {
     #[cfg(feature = "with-probe")]
     pub probe: hwa::controllers::ServoControllerRef,
     #[cfg(feature = "with-hot-end")]
-    pub hotend: hwa::controllers::HotendControllerRef,
+    pub hot_end: hwa::controllers::HotendControllerRef,
     #[cfg(feature = "with-hot-bed")]
-    pub hotbed: hwa::controllers::HotbedControllerRef,
+    pub hot_bed: hwa::controllers::HotbedControllerRef,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
     #[cfg(feature = "with-fan-extra-1")]
@@ -98,14 +98,15 @@ pub struct GCodeProcessorParams {
 
 #[derive(Clone)]
 pub struct GCodeProcessor {
-    pub event_bus: EventBusRef,
+    pub event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
 
     #[cfg(feature = "with-motion")]
-    pub motion_planner: hwa::controllers::MotionPlannerRef,
+    pub motion_planner: hwa::controllers::MotionPlanner,
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_tx: hwa::device::USBSerialTxControllerRef,
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: hwa::device::UartPort1TxControllerRef,
+    pub serial_port1_tx:
+        hwa::StaticController<hwa::SerialPort1MutexType, hwa::device::SerialPort1TxDevice>,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
     #[cfg(feature = "with-ps-on")]
@@ -128,7 +129,6 @@ pub struct GCodeProcessor {
 
 impl GCodeProcessor {
     pub fn new(params: GCodeProcessorParams) -> Self {
-
         Self {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx: params.serial_usb_tx,
@@ -143,9 +143,9 @@ impl GCodeProcessor {
             #[cfg(feature = "with-probe")]
             probe: params.probe,
             #[cfg(feature = "with-hot-end")]
-            hotend: params.hotend,
+            hotend: params.hot_end,
             #[cfg(feature = "with-hot-bed")]
-            hotbed: params.hotbed,
+            hotbed: params.hot_bed,
             #[cfg(feature = "with-fan-layer")]
             fan_layer: params.fan_layer,
             #[cfg(feature = "with-fan-extra-1")]
@@ -199,8 +199,6 @@ impl GCodeProcessor {
                         hwa::info!("[Internal] {}", _msg.trim_end());
                     }
                 }
-                //#[cfg(feature = "")]
-
             }
         }
     }
@@ -228,7 +226,6 @@ impl GCodeProcessor {
         }
     }
 
-
     /// Executes the given GCode command.
     ///
     /// # Arguments
@@ -243,13 +240,13 @@ impl GCodeProcessor {
     ///
     /// # Errors
     ///
-    /// This method may return `CodeExecutionFailure::PowerRequired` if the ATX power is not on 
-    /// and the command requires power. It may also return `CodeExecutionFailure::BUSY` if the 
+    /// This method may return `CodeExecutionFailure::PowerRequired` if the ATX power is not on
+    /// and the command requires power. It may also return `CodeExecutionFailure::BUSY` if the
     /// system is currently busy, for instance during homing or probing.
     ///
     /// # Features
     ///
-    /// This method supports conditional compilation flags such as `grbl-compat`, `with-motion`, 
+    /// This method supports conditional compilation flags such as `grbl-compat`, `with-motion`,
     /// and `with-probe`. Based on these features, the behavior and supported GCode commands
     /// will vary.
     ///
@@ -530,9 +527,7 @@ impl GCodeProcessor {
                     alloc::string::String::new()
                 };
 
-                let report = alloc::format!(
-                    "ok{}{}\n", hotend_temp_report, hotbed_temp_report
-                );
+                let report = alloc::format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }

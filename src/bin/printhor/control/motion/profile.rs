@@ -249,9 +249,9 @@ pub struct Times {
 
 /// Struct representing the S-curve motion profile with various parameters.
 ///
-/// The S-curve motion profile is used to define the motion of an object 
-/// where the transition of velocity includes a jerk phase, an acceleration 
-/// phase, a constant velocity phase, a deceleration phase, and a final jerk 
+/// The S-curve motion profile is used to define the motion of an object
+/// where the transition of velocity includes a jerk phase, an acceleration
+/// phase, a constant velocity phase, a deceleration phase, and a final jerk
 /// phase to achieve smooth motion.
 ///
 /// This profile is characterized by the following parameters:
@@ -342,7 +342,7 @@ impl SCurveMotionProfile {
     /// # Examples
     ///
     /// ```
-    /// let constraints = Constraints { 
+    /// let constraints = Constraints {
     ///     v_max: Real::from_f32(10.0),
     ///     a_max: Real::from_f32(2.0),
     ///     j_max: Real::from_f32(1.0),
@@ -738,7 +738,7 @@ impl SCurveMotionProfile {
                                             .map_err(|_| CodeExecutionFailure::ERR)?;
                                     }
                                     Ok(profile)
-                                }
+                                };
                             }
                             /*
                             let tv_excess = times.t_v.abs();

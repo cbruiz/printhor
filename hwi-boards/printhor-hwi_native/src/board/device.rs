@@ -1,10 +1,16 @@
+#[allow(unused)]
+use printhor_hwa_common as hwa;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
+
+        // The HWI Device types
         pub type UartPort1Device = crate::board::mocked_peripherals::MockedUart;
-        pub type UartPort1Tx = crate::board::mocked_peripherals::MockedUartTx;
-        pub type UartPort1Rx = crate::board::mocked_peripherals::MockedUartRx;
-        pub type UartPort1TxControllerRef = crate::board::StandardControllerRef<UartPort1Tx>;
+        pub type UartPort1TxDevice = crate::board::mocked_peripherals::MockedUartTx;
+        pub type UartPort1RxDevice = crate::board::mocked_peripherals::MockedUartRx;
         pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
+
+        // The device type exported to HWA
+        pub type SerialPort1TxDevice = UartPort1TxDevice;
     }
 }
 cfg_if::cfg_if! {
@@ -98,7 +104,7 @@ pub use crate::board::mocked_peripherals::PwmChannel;
 pub type SDCardBlockDevice = crate::board::mocked_peripherals::MockledSDCardBlockDevice;
 
 #[cfg(feature = "with-sdcard")]
-pub type SDCardBlockDeviceRef = crate::board::StandardControllerRef<SDCardBlockDevice>;
+pub type SDCardBlockDeviceRef = hwa::StaticController<hwa::SyncSendMutex, SDCardBlockDevice>;
 
 #[cfg(feature = "with-hot-end")]
 pub type AdcHotendPeripheral = u8;

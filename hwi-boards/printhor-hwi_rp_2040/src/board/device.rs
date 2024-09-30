@@ -57,12 +57,14 @@ pub struct WatchdogAdapter {
 impl WatchdogAdapter {
     pub fn new(peri: embassy_rp::peripherals::WATCHDOG) -> Self {
         Self {
-            inner: embassy_rp::watchdog::Watchdog::new(peri)
+            inner: embassy_rp::watchdog::Watchdog::new(peri),
         }
     }
     #[inline(always)]
     pub fn unleash(&mut self) {
-        self.inner.start(embassy_time::Duration::from_millis(crate::board::WATCHDOG_TIMEOUT_MS as u64))
+        self.inner.start(embassy_time::Duration::from_micros(
+            crate::board::WATCHDOG_TIMEOUT_US as u64,
+        ))
     }
     #[inline(always)]
     pub fn pet(&mut self) {

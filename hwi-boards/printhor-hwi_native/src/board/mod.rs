@@ -1,6 +1,8 @@
 ///  Native board implementation. For debugging/simulation purposes
+#[allow(unused)]
+use printhor_hwa_common as hwa;
+
 pub mod device;
-pub mod io;
 cfg_if::cfg_if!{
     if #[cfg(feature = "with-trinamic")] {
         pub mod comm;
@@ -16,10 +18,11 @@ cfg_if::cfg_if!{
 pub mod mocked_peripherals;
 
 use embassy_executor::Spawner;
-use printhor_hwa_common::{ControllerMutex, ControllerRef, TrackedStaticCell, MachineContext, StandardControllerRef};
 
 #[allow(unused)]
 use crate::board::mocked_peripherals::MockedIOPin;
+use crate::board::mocked_peripherals::{PinState, PinsCell};
+#[cfg(feature = "with-motion")]
 use crate::task_stepper_ticker;
 
 pub const MACHINE_TYPE: &str = "Simulator/debugger";
@@ -29,8 +32,6 @@ pub const MACHINE_PROCESSOR: &str = std::env::consts::ARCH;
 pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
 
-/// The maximum static memory expected/allowed, specified in bytes.
-pub const MAX_STATIC_MEMORY: usize = 32768;
 pub const VREF_SAMPLE: u16 = 1210u16;
 #[cfg(feature = "with-sdcard")]
 pub const SDCARD_PARTITION: usize = 0;
@@ -39,7 +40,7 @@ pub const SDCARD_PARTITION: usize = 0;
 pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
 
 
-/// Defines a timeout value for the watchdog timer in nanoseconds.
+/// Defines a timeout value for the watchdog timer in micro-seconds.
 /// This value is crucial for ensuring the system can recover from
 /// unexpected states by triggering a system reset or another defined
 /// recovery action if the system becomes unresponsive. The timeout value
@@ -54,9 +55,9 @@ pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
 ///    systems with limited processing power or more complex tasks.
 /// :
 ///
-/// Defaulting to 30,000,000 nanoseconds (or 30 milliseconds).
+/// Defaulting to 10,000,000 micro-seconds (or 10 secs).
 /// Modify this value as per the requirements of your specific application.
-pub const WATCHDOG_TIMEOUT: u32 = 30_000_000;
+pub const WATCHDOG_TIMEOUT_US: u32 = 10_000_000;
 
 pub const ADC_START_TIME_US: u16 = 10;
 pub const ADC_VREF_DEFAULT_MV: u16 = 1650;
@@ -101,9 +102,9 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: StandardControllerRef<device::Watchdog>,
+    pub sys_watchdog: hwa::StaticController<hwa::NoopMutex, device::Watchdog>,
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: device::UartPort1TxControllerRef,
+    pub serial_port1_tx: hwa::StaticController<hwa::SyncSendMutex, device::SerialPort1TxDevice>,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_tx: device::UartPort2TxControllerRef,
 }
@@ -121,8 +122,6 @@ pub struct IODevices {
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_rx_stream: device::UartPort2RxInputStream,
-    #[cfg(feature  ="with-display")]
-    pub display_device: device::DisplayDevice,
     #[cfg(feature = "with-sdcard")]
     pub sdcard_device: device::SDCardBlockDevice,
 }
@@ -153,9 +152,7 @@ pub fn heap_current_size() -> u32 {
 
 #[inline]
 pub fn stack_reservation_current_size() -> u32 {
-    unsafe {
-        core::ptr::read_volatile(core::ptr::addr_of!(printhor_hwa_common::COUNTER)) as u32
-    }
+    hwa::stack_allocation_get() as u32
 }
 
 pub struct HWIPeripherals {
@@ -163,25 +160,30 @@ pub struct HWIPeripherals {
 
 #[inline]
 pub fn init() -> HWIPeripherals {
-    log::debug!("native init");
     HWIPeripherals{}
 }
 
-pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
+pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext<Controllers, SysDevices, IODevices, MotionDevices, PwmDevices> {
 
+    #[cfg(feature = "with-motion")]
     let _ = _spawner.spawn(task_stepper_ticker());
 
-    let _pin_state = mocked_peripherals::init_pin_state();
+    let _pin_state = hwa::make_static_ref!(
+        "GlobalPinState",
+        PinsCell<PinState>,
+        PinsCell::new(PinState::new())
+    );
 
     cfg_if::cfg_if!{
         if #[cfg(all(feature = "with-serial-port-1"))] {
-            use printhor_hwa_common::StandardControllerMutex;
 
             let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
-            #[link_section = "__DATA,.bss"]
-            static UART_PORT1_INS: TrackedStaticCell<StandardControllerMutex<device::UartPort1Tx>> = TrackedStaticCell::new();
-            let serial_port1_tx = ControllerRef::new(
-                UART_PORT1_INS.init::<{MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port1_tx_device))
+
+            let serial_port1_tx = hwa::make_static_controller!(
+                "UartPort1Tx",
+                crate::SerialPort1MutexType,
+                device::SerialPort1TxDevice,
+                uart_port1_tx_device
             );
             let serial_port1_rx_stream = device::UartPort1RxInputStream::new(uart_port1_rx_device);
         }
@@ -248,7 +250,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
         ))
     };
     #[cfg(feature = "with-spi")]
-    log::debug!("SPI done");
+    hwa::debug!("SPI done");
 
     #[cfg(feature = "with-sdcard")]
     let sdcard_device = {
@@ -279,10 +281,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
         }
     };
     #[cfg(feature = "with-motion")]
-    log::debug!("motion_driver done");
-
-    #[cfg(feature = "with-display")]
-    let display_device = mocked_peripherals::SimulatorDisplayDevice::new();
+    hwa::debug!("motion_driver done");
 
     #[cfg(feature = "with-hot-end")]
     static HOT_END_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_END_THERM_PULL_UP_RESISTANCE, HOT_END_THERM_NOMINAL_RESISTANCE, HOT_END_THERM_BETA);
@@ -314,7 +313,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
     };
 
     #[cfg(feature = "with-motion")]
-    log::debug!("motion_planner done");
+    hwa::debug!("motion_planner done");
 
     #[cfg(feature = "with-ps-on")]
     let ps_on = {
@@ -325,10 +324,14 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
         )
     };
 
-    static WD: TrackedStaticCell<printhor_hwa_common::StandardControllerMutex<device::Watchdog>> = TrackedStaticCell::new();
-    let sys_watchdog = ControllerRef::new(WD.init::<{MAX_STATIC_MEMORY}>("watchdog", ControllerMutex::new(device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT))));
+    let sys_watchdog = hwa::make_static_controller!(
+        "WatchDog",
+        crate::WatchdogMutexType,
+        device::Watchdog,
+        device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT_US)
+    );
 
-    MachineContext {
+    hwa::MachineContext {
         controllers: Controllers {
             sys_watchdog,
             #[cfg(feature = "with-serial-port-1")]
@@ -347,8 +350,6 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> MachineContext<Cont
             serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_rx_stream,
-            #[cfg(feature = "with-display")]
-            display_device,
             #[cfg(feature = "with-sdcard")]
             sdcard_device,
         },

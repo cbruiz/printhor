@@ -1,35 +1,35 @@
 #![no_std]
 #![allow(stable_features)]
-pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
+pub use defmt::{debug, error, info, trace, warn};
 
 mod board_stm32f4;
 pub mod board {
-    pub use crate::board_stm32f4::SysDevices;
-    pub use crate::board_stm32f4::IODevices;
+    pub use crate::board_stm32f4::comm;
+    pub use crate::board_stm32f4::device;
+    pub use crate::board_stm32f4::heap_current_size;
+    pub use crate::board_stm32f4::init;
+    pub use crate::board_stm32f4::io;
+    pub use crate::board_stm32f4::setup;
+    pub use crate::board_stm32f4::stack_reservation_current_size;
     pub use crate::board_stm32f4::Controllers;
+    pub use crate::board_stm32f4::IODevices;
     pub use crate::board_stm32f4::MotionDevices;
     pub use crate::board_stm32f4::PwmDevices;
-    pub use crate::board_stm32f4::init;
-    pub use crate::board_stm32f4::setup;
-    pub use crate::board_stm32f4::heap_current_size;
-    pub use crate::board_stm32f4::stack_reservation_current_size;
-    pub use crate::board_stm32f4::MACHINE_BOARD;
-    pub use crate::board_stm32f4::MACHINE_TYPE;
-    pub use crate::board_stm32f4::MACHINE_PROCESSOR;
-    pub use crate::board_stm32f4::PROCESSOR_SYS_CK_MHZ;
+    pub use crate::board_stm32f4::SysDevices;
     pub use crate::board_stm32f4::HEAP_SIZE_BYTES;
+    pub use crate::board_stm32f4::MACHINE_BOARD;
+    pub use crate::board_stm32f4::MACHINE_PROCESSOR;
+    pub use crate::board_stm32f4::MACHINE_TYPE;
     pub use crate::board_stm32f4::MAX_STATIC_MEMORY;
-    pub use crate::board_stm32f4::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+    pub use crate::board_stm32f4::PROCESSOR_SYS_CK_MHZ;
     pub use crate::board_stm32f4::STEPPER_PLANNER_CLOCK_FREQUENCY;
-    pub use crate::board_stm32f4::io;
-    pub use crate::board_stm32f4::device;
-    pub use crate::board_stm32f4::comm;
+    pub use crate::board_stm32f4::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
     pub use embassy_executor::Spawner;
 }
-pub use board::*;
 pub use crate::board_stm32f4::ADC_START_TIME_US;
 pub use crate::board_stm32f4::ADC_VREF_DEFAULT_MV;
+pub use board::*;
 #[cfg(feature = "with-sdcard")]
 pub use board_stm32f4::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
@@ -49,8 +49,7 @@ cfg_if::cfg_if! {
 }
 
 #[inline]
-pub fn init_logger() {
-}
+pub fn init_logger() {}
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
@@ -60,7 +59,7 @@ cfg_if::cfg_if! {
                 let mut syst = p.SYST;
                 syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
                 let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
-                defmt::info!("SYST reload set to {}", reload);
+                hwa::info!("SYST reload set to {} ({} Hz)", reload, STEPPER_PLANNER_CLOCK_FREQUENCY);
                 syst.set_reload(reload);
                 syst.enable_counter();
                 syst.enable_interrupt();
@@ -110,9 +109,8 @@ pub fn sys_reset() {
 // Required to safety lock a resource that can be also requested by an ISR.
 // Such ISR, hence, won't miss its interrupt and won't be too much delayed
 pub fn interrupt_free<F, R>(f: F) -> R
-where F: FnOnce() -> R,
+where
+    F: FnOnce() -> R,
 {
-    cortex_m::interrupt::free(|_| {
-        f()
-    })
+    cortex_m::interrupt::free(|_| f())
 }

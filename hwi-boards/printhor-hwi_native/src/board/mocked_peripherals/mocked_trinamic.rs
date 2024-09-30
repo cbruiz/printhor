@@ -24,7 +24,7 @@ impl MockedTrinamicDriver {
 pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
 
     compile_error!("TODO");
-    log::info!("[task] Simulator stared");
+    hwa::info!("[task] Simulator stared");
 
     let mut ticker = embassy_time::Ticker::every(Duration::from_millis(100));
     let mut buff: [u8; 32] = [0; 32];
@@ -37,7 +37,7 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
             match driver.uart_trinamic.read_until_idle(&mut buff).await {
                 Ok(num_bytes_read) => {
                     buff[1] = 0xff;
-                    log::info!("Simulated Uart read {} bytes", num_bytes_read);
+                    hwa::info!("Simulated Uart read {} bytes", num_bytes_read);
 
                     if num_bytes_read > 0 {
 
@@ -45,7 +45,7 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
                             (_n, Some(response)) => {
                                 let ma = response.master_addr();
                                 let mm = response.reg_addr();
-                                log::info!("MA: {}, mm: {:?}", ma, mm)
+                                hwa::info!("MA: {}, mm: {:?}", ma, mm)
                                 /*
                                 return match response.register::<T>() {
                                     Ok(r) => {
@@ -62,7 +62,7 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
                             }
                             (n, None) => {
                                 let x = format!("{:?}", reader.awaiting());
-                                log::warn!("Uncompleted. (readed {}: {:?}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
+                                hwa::warn!("Uncompleted. (readed {}: {:?}) awaiting {}", n, &buff[0..num_bytes_read], x.as_str());
                             }
                         }
                     }

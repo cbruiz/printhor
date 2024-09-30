@@ -53,7 +53,7 @@ debug-signals = []
 pulsed = []
 sdcard-uses-spi = []
 debug-skip-homing = []
-with-display = []
+with-display = [] # Temporary dropped
 plot-timings = []
 with-spi = []
 skr_mini_e3 = []
@@ -91,10 +91,11 @@ num-traits = {version = "0.2.19", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = []}
 
 # Common base
-printhor-hwa-common = { version = "*", default-features = false, features = [] }
+printhor-hwa-common = { version = "*", default-features = false, features = [], path = "../printhor-hwa-common"}
+printhor-hwa-utils = { version = "*", default-features = false, features = [], path = "../printhor-hwa-utils"}
 
 # Boards
-printhor-hwi_native = { version = "*" }
+printhor-hwi_native = { version = "*", path = "../hwi-boards/printhor-hwi_native" }
 
 log = { version = "0.4.22", default-features = false, features = [] }
 env_logger = { version = "0.11.3", default-features = false, features = [] }

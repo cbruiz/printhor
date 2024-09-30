@@ -106,9 +106,11 @@ use crate::board::io::TrinamicUartWrapper;
 
 pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
 
-pub type PwmServo = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+pub type PwmServo =
+    embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
 
-pub type PwmFan0Fan1HotendHotbed = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+pub type PwmFan0Fan1HotendHotbed =
+    embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
 pub type PwmFanLayer = PwmFan0Fan1HotendHotbed;
 pub type PwmFanExtra1 = PwmFan0Fan1HotendHotbed;
@@ -117,9 +119,8 @@ pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
-pub type Watchdog = embassy_stm32::wdg::IndependentWatchdog<'static,
-    embassy_stm32::peripherals::IWDG
->;
+pub type Watchdog =
+    embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
@@ -226,7 +227,9 @@ impl MotionPins {
     }
     #[inline]
     #[cfg(feature = "with-hot-end")]
-    pub fn disable_e_stepper(&mut self) { self.e_enable_pin.set_high(); }
+    pub fn disable_e_stepper(&mut self) {
+        self.e_enable_pin.set_high();
+    }
     #[inline]
     pub fn disable_all_steppers(&mut self) {
         self.x_enable_pin.set_high();
@@ -244,104 +247,88 @@ impl MotionPins {
         self.e_enable_pin.set_low();
     }
 
-    pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_enable_pin.set_high();
-        }
-        else {
+        } else {
             self.x_enable_pin.set_low();
         }
         #[cfg(feature = "with-y-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::Y) {
             self.y_enable_pin.set_high();
-        }
-        else {
+        } else {
             self.y_enable_pin.set_low();
         }
         #[cfg(feature = "with-z-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::Z) {
             self.z_enable_pin.set_high();
-        }
-        else {
+        } else {
             self.z_enable_pin.set_low();
         }
         #[cfg(feature = "with-e-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::E) {
             self.e_enable_pin.set_high();
-        }
-        else {
+        } else {
             self.e_enable_pin.set_low();
         }
     }
 
-    pub fn enable(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn enable(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_enable_pin.set_low();
-        }
-        else {
+        } else {
             self.x_enable_pin.set_high();
         }
         #[cfg(feature = "with-y-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::Y) {
             self.y_enable_pin.set_low();
-        }
-        else {
+        } else {
             self.y_enable_pin.set_high();
         }
         #[cfg(feature = "with-z-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::Z) {
             self.z_enable_pin.set_low();
-        }
-        else {
+        } else {
             self.z_enable_pin.set_high();
         }
         #[cfg(feature = "with-e-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::E) {
             self.e_enable_pin.set_low();
-        }
-        else {
+        } else {
             self.e_enable_pin.set_high();
         }
     }
 
-    pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_dir_pin.set_high();
-        }
-        else {
+        } else {
             self.x_dir_pin.set_low();
         }
         #[cfg(feature = "with-y-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::Y) {
             self.y_dir_pin.set_high();
-        }
-        else {
+        } else {
             self.y_dir_pin.set_low();
         }
         #[cfg(feature = "with-z-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::Z) {
             self.z_dir_pin.set_high();
-        }
-        else {
+        } else {
             self.z_dir_pin.set_low();
         }
         #[cfg(feature = "with-e-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::E) {
             self.e_dir_pin.set_high();
-        }
-        else {
+        } else {
             self.e_dir_pin.set_low();
         }
     }
 
-    pub fn step_toggle(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn step_toggle(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_step_pin.toggle();
@@ -360,9 +347,7 @@ impl MotionPins {
         }
     }
 
-
-    pub fn step_high(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn step_high(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_step_pin.set_high();
@@ -381,9 +366,7 @@ impl MotionPins {
         }
     }
 
-    pub fn step_low(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
-
+    pub fn step_low(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_step_pin.set_low();
@@ -402,9 +385,7 @@ impl MotionPins {
         }
     }
 
-
-    pub fn endstop_triggered(&mut self, _channels: printhor_hwa_common::StepperChannel) -> bool
-    {
+    pub fn endstop_triggered(&mut self, _channels: printhor_hwa_common::StepperChannel) -> bool {
         #[allow(unused_mut)]
         let mut triggered = false;
         #[cfg(feature = "with-x-axis")]
@@ -424,9 +405,7 @@ impl MotionPins {
 }
 
 #[cfg(feature = "with-motion")]
-pub struct MotionDevice
-{
-
+pub struct MotionDevice {
     #[cfg(feature = "with-trinamic")]
     pub trinamic_uart: TrinamicUartWrapper,
 
@@ -435,10 +414,8 @@ pub struct MotionDevice
 
 #[cfg(feature = "with-sdcard")]
 pub struct CardDevice {
-
     pub card_spi: SpiCardDevice,
     pub card_cs: SpiCardCSPin,
-
 }
 
 pub struct MotionPinImpl {}

@@ -1,5 +1,5 @@
+//noinspection RsDetachedFile
 // Math module
-
 #[path = "../../src/bin/printhor/control/mod.rs"]
 pub mod control;
 
@@ -27,7 +27,7 @@ pub mod hwi {
     pub const MACHINE_PROCESSOR: &str = "native";
     pub const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
 
-    pub const SEGMENT_QUEUE_SIZE: u8 = 20;
+    pub const SEGMENT_QUEUE_SIZE: u8 = 10;
 
     pub const MAX_STATIC_MEMORY: usize = 16386;
     pub const HEAP_SIZE_BYTES: usize = 1024;
@@ -38,20 +38,15 @@ pub mod hwi {
     pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
     pub mod device {
-        use printhor_hwa_common::StepperChannel;
         use crate::prelude::tgeo::CoordSel;
+        use printhor_hwa_common::StepperChannel;
 
         #[derive(Clone)]
-        pub struct MotionPins {
-
-        }
+        pub struct MotionPins {}
 
         impl MotionPins {
-
             pub fn new() -> Self {
-                Self {
-
-                }
+                Self {}
             }
             pub fn enable(&mut self, channels: StepperChannel) {
                 todo!()
@@ -73,9 +68,7 @@ pub mod hwi {
                 todo!()
             }
 
-            pub fn step_toggle(&mut self, _channels: StepperChannel) {
-
-            }
+            pub fn step_toggle(&mut self, _channels: StepperChannel) {}
 
             pub fn endstop_triggered(&mut self, channels: StepperChannel) -> bool {
                 let mut triggered = false;
@@ -99,16 +92,10 @@ pub mod hwi {
             }
         }
 
-        pub struct MotionDevice
-        {
+        pub struct MotionDevice {
             pub motion_pins: MotionPins,
         }
 
-        pub struct Watchdog {
-
-        }
+        pub struct Watchdog {}
     }
-
 }
-
-

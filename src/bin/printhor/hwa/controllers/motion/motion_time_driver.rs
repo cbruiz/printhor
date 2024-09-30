@@ -1,12 +1,11 @@
+use crate::hwa;
+use crate::hwa::controllers::{MultiTimer, StepPlanner};
 use core::cell::RefCell;
 use core::future::{poll_fn, Future};
 use core::task::{Context, Poll};
+use critical_section::Mutex as CsMutex;
 use embassy_sync::waitqueue::WakerRegistration;
 use printhor_hwa_common::StepperChannel;
-use crate::hwa;
-use crate::hwa::controllers::{MultiTimer, StepPlanner};
-use crate::hwa::drivers::motion_driver::MotionDriverRef;
-use critical_section::Mutex as CsMutex;
 
 /// The size of the timer queue.
 const TIMER_QUEUE_SIZE: usize = 4;
@@ -42,7 +41,7 @@ pub struct SoftTimerDriver {
     num_queued: u8,
 
     /// Reference to the motion driver.
-    drv: Option<MotionDriverRef>,
+    drv: Option<hwa::StaticController<hwa::MotionDriverMutexType, hwa::drivers::MotionDriver>>,
 
     /// The waker registration for waking up tasks.
     waker: WakerRegistration,
@@ -137,10 +136,9 @@ impl SoftTimerDriver {
         }
     }
 
-    
     /// Notifies the system that there are queued items to process.
     ///
-    /// This method is typically called to wake up any tasks waiting on the 
+    /// This method is typically called to wake up any tasks waiting on the
     /// completion of the queue processing. It ensures that the system checks
     /// the queue for any new items to process.
     ///
@@ -158,11 +156,11 @@ impl SoftTimerDriver {
             self.waker.wake();
         }
     }
-    
+
     /// Handles the interrupt routine for the timer.
     ///
-    /// This method is called when a timer interrupt occurs. It processes the current state 
-    /// of the timer and steps through the queue of `StepPlanner` instances. The method 
+    /// This method is called when a timer interrupt occurs. It processes the current state
+    /// of the timer and steps through the queue of `StepPlanner` instances. The method
     /// performs the following steps:
     ///
     /// 1. If the current state is idle, it attempts to consume the next item in the queue.
@@ -194,7 +192,10 @@ impl SoftTimerDriver {
         self.tick_count += crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US;
 
         // In this point, state is either Duty or something were dequeued
-        match self.current.next(crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US) {
+        match self
+            .current
+            .next(crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US)
+        {
             None => {
                 panic!("Unexpected state");
             }
@@ -224,10 +225,9 @@ impl SoftTimerDriver {
         }
     }
 
-    
     /// Applies the current stepper channel.
     ///
-    /// This method is responsible for applying the changes to the stepper motor based on the given channel. 
+    /// This method is responsible for applying the changes to the stepper motor based on the given channel.
     /// It checks if the channel is empty and returns `true` if it is. If the channel is not empty, it attempts
     /// to lock the driver and apply the step through the configured stepper pins.
     ///
@@ -245,7 +245,7 @@ impl SoftTimerDriver {
     ///
     /// # Panics
     ///
-    /// This method will panic if the driver is set but cannot be locked or if the driver instance is not set when 
+    /// This method will panic if the driver is set but cannot be locked or if the driver instance is not set when
     /// the "debug-signals" feature is enabled.
     ///
     /// # Examples
@@ -274,6 +274,7 @@ impl SoftTimerDriver {
                             }
                         }
                         #[cfg(feature = "assert-motion")]
+                        #[allow(unreachable_code)]
                         {
                             if _channel.contains(StepperChannel::X) {
                                 self.pulses[0] += 1;
@@ -297,20 +298,19 @@ impl SoftTimerDriver {
     }
 }
 
-
-/// The `SoftTimer` struct encapsulates a timer mechanism that coordinates 
-/// stepper motor operations with various functional capabilities based 
-/// on associated feature flags. It uses a critical section for synchronization 
+/// The `SoftTimer` struct encapsulates a timer mechanism that coordinates
+/// stepper motor operations with various functional capabilities based
+/// on associated feature flags. It uses a critical section for synchronization
 /// of operations reactive to events.
 ///
-/// # Fields 
+/// # Fields
 ///
 /// - `0`: A mutex protected, reference-counted cell containing the soft timer driver.
 ///
 /// # Features
 ///
-/// - `assert-motion`: If enabled, exposes additional debugging capabilities 
-///   for motion and pulse counts. 
+/// - `assert-motion`: If enabled, exposes additional debugging capabilities
+///   for motion and pulse counts.
 /// - `test`: Enables testing mode for the struct.
 ///
 /// # Example
@@ -343,14 +343,14 @@ cfg_if::cfg_if! {
 impl SoftTimer {
     /// Creates a new instance of `SoftTimer`.
     ///
-    /// This constructor initializes a `SoftTimer` with a `SoftTimerDriver` 
-    /// containing default values for its fields. The `SoftTimerDriver` is 
-    /// encapsulated within a `CsMutex` and `RefCell` to ensure safe concurrent 
-    /// access. 
+    /// This constructor initializes a `SoftTimer` with a `SoftTimerDriver`
+    /// containing default values for its fields. The `SoftTimerDriver` is
+    /// encapsulated within a `CsMutex` and `RefCell` to ensure safe concurrent
+    /// access.
     ///
-    /// The `SoftTimer` struct coordinates stepper motor operations and ensures 
-    /// synchronization using critical sections. The fields within the `SoftTimerDriver` 
-    /// include attributes for step planning, state, queue management, pulse counting, 
+    /// The `SoftTimer` struct coordinates stepper motor operations and ensures
+    /// synchronization using critical sections. The fields within the `SoftTimerDriver`
+    /// include attributes for step planning, state, queue management, pulse counting,
     /// and driver configuration.
     ///
     /// # Return
@@ -381,7 +381,6 @@ impl SoftTimer {
         })))
     }
 
-    
     /// Sets up the `SoftTimer` instance with a motion driver reference.
     ///
     /// This method configures the `SoftTimer` by associating it with a provided
@@ -403,19 +402,21 @@ impl SoftTimer {
     /// let motion_driver_ref = ...; // Provide a motion driver reference
     /// timer.setup(motion_driver_ref);
     /// ```
-    pub fn setup(&self, _mp: MotionDriverRef) {
+    pub fn setup(
+        &self,
+        _mp: hwa::StaticController<hwa::MotionDriverMutexType, hwa::drivers::MotionDriver>,
+    ) {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
             r.drv.replace(_mp);
         })
     }
 
-    
     /// Pushes a multi-timer segment onto the internal queue.
     ///
-    /// This method enqueues a multi-timer segment, along with flags for stepper 
+    /// This method enqueues a multi-timer segment, along with flags for stepper
     /// motor channel enablement and direction, into the `SoftTimer` queue. The
-    /// `push` operation ensures that the stepper motor operations are managed 
+    /// `push` operation ensures that the stepper motor operations are managed
     /// in sequence with other queued segments.
     ///
     /// The method returns a future that resolves once the operation is completed.
@@ -454,12 +455,11 @@ impl SoftTimer {
         })
     }
 
-    
     /// Resets the internal state of the `SoftTimer`.
     ///
     /// This method clears the current stepper direction and enable flags, effectively
-    /// resetting the timer to its initial state. The operation is enclosed within a 
-    /// critical section to ensure safe concurrent access and modification of the 
+    /// resetting the timer to its initial state. The operation is enclosed within a
+    /// critical section to ensure safe concurrent access and modification of the
     /// internal state.
     ///
     /// # Example
@@ -499,7 +499,6 @@ impl SoftTimer {
         })
     }
 
-    
     /// Flushes the internal state of the `SoftTimer`, ensuring all queued operations
     /// are completed before future operations commence.
     ///
@@ -527,7 +526,6 @@ impl SoftTimer {
         poll_fn(move |cx| self.poll_flush(cx))
     }
 
-    
     ///
     /// Publishes a flush event to ensure all queued operations in the `SoftTimer`
     /// are performed before subsequent operations.
@@ -559,7 +557,7 @@ impl SoftTimer {
             r.current_stepper_dir_fwd_flags = StepperChannel::UNSET;
         });
     }
-    
+
     /// Polls the current state of the `SoftTimer` to determine if the flush operation
     /// can be completed.
     ///
@@ -609,19 +607,18 @@ impl SoftTimer {
     }
 }
 
-
 /// A global static instance of `SoftTimer` that is initialized and ready to be used.
 ///
 /// This instance is designed for managing and scheduling timed operations,
-/// particularly for controlling stepper motors. By using a static instance, 
-/// you can ensure that there is a single source of truth for the timer state, 
-/// reducing the complexity associated with managing multiple instances in 
+/// particularly for controlling stepper motors. By using a static instance,
+/// you can ensure that there is a single source of truth for the timer state,
+/// reducing the complexity associated with managing multiple instances in
 /// concurrent or asynchronous contexts.
 ///
 /// # Main Usage
 ///
 /// The `STEP_DRIVER` is primarily utilized by `task_stepper.rs` for coordinating
-/// and handling stepper motor tasks. It ensures thread-safe operations by 
+/// and handling stepper motor tasks. It ensures thread-safe operations by
 /// enclosing critical sections within the defined methods:
 ///
 /// ```rust
@@ -633,40 +630,39 @@ impl SoftTimer {
 /// }
 /// ```
 ///
-/// By leveraging this static instance, `task_stepper.rs` can streamline timing 
-/// operations across different parts of your application, ensuring efficient 
+/// By leveraging this static instance, `task_stepper.rs` can streamline timing
+/// operations across different parts of your application, ensuring efficient
 /// and synchronized stepper motor control.
 pub static STEP_DRIVER: SoftTimer = SoftTimer::new();
 
-
 /// Executes a tick operation for the `STEP_DRIVER` static instance.
 ///
-/// This function is marked as `#[no_mangle]` to ensure its symbol name 
+/// This function is marked as `#[no_mangle]` to ensure its symbol name
 /// remains unchanged during the compilation process, making it accessible
-/// from external code. It is called by the MCU's SysTick interrupt handler 
+/// from external code. It is called by the MCU's SysTick interrupt handler
 /// to manage timing operations for the `STEP_DRIVER`.
 ///
-/// The function operates within a critical section to safely access and 
-/// modify the internal state of the `STEP_DRIVER`, handling stepper motor 
+/// The function operates within a critical section to safely access and
+/// modify the internal state of the `STEP_DRIVER`, handling stepper motor
 /// control signals.
 ///
 /// # Features
 ///
-/// - If the `debug-signals` feature is enabled, this function will also 
-///   manage the state of the `x_dir_pin` by setting it high at the start 
+/// - If the `debug-signals` feature is enabled, this function will also
+///   manage the state of the `x_dir_pin` by setting it high at the start
 ///   and low at the end of the tick operation. This can be useful for debugging
 ///   stepper motor control signals by toggling an extra pin.
 ///
 /// # Safety
 ///
-/// This function uses critical sections to ensure thread-safe access to the 
-/// `STEP_DRIVER`'s internal state. Critical sections prevent race conditions 
+/// This function uses critical sections to ensure thread-safe access to the
+/// `STEP_DRIVER`'s internal state. Critical sections prevent race conditions
 /// and ensure that modifications to shared resources are safely managed.
 ///
 /// # Panics
 ///
-/// This function is expected to handle failure scenarios gracefully, such as 
-/// being unable to lock the driver instance, and does so by guarding the code 
+/// This function is expected to handle failure scenarios gracefully, such as
+/// being unable to lock the driver instance, and does so by guarding the code
 /// with `cfg` blocks and `match` constructs to handle different states.
 ///
 /// # Example

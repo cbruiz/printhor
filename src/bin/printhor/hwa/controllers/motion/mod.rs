@@ -22,14 +22,14 @@ mod motion_timing;
 /// The module for motion time driver functionalities.
 mod motion_time_driver;
 
+use crate::hwa;
 pub use motion_config::*;
-pub use motion_planner::*;
 pub use motion_interpolation::*;
+pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;
-pub use motion_timing::*;
 pub use motion_time_driver::*;
-use crate::hwa;
+pub use motion_timing::*;
 
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
@@ -89,5 +89,16 @@ pub enum PlanEntry {
 impl Default for PlanEntry {
     fn default() -> Self {
         PlanEntry::Empty
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::hwa::controllers::PlanEntry;
+
+    #[test]
+    fn plan_entry_test() {
+        let sz = size_of::<PlanEntry>();
+        assert!(sz < 256, "Plan entry is not very big");
     }
 }

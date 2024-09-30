@@ -1,3 +1,6 @@
+//noinspection RsDetachedFile
+//noinspection RsDetachedFile
+use printhor_hwa_common as hwa;
 //! This specialization exists because there are several ways to communicate with stepper's Trinamic UART
 
 use printhor_hwa_common as hwa;

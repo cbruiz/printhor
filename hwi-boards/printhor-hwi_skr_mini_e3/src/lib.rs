@@ -1,8 +1,5 @@
 #![no_std]
 
-pub use defmt::{trace, debug, info, warn, error};
-pub use defmt;
-
 cfg_if::cfg_if! {
     if #[cfg(feature="skr_mini_e3_v3")] {
         //#region SKR Mini E3 V3 (STM32G0 MCU) setup and reexports
@@ -46,7 +43,7 @@ cfg_if::cfg_if! {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
                 /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-                pub const SEGMENT_QUEUE_SIZE: u8 = 100;
+                pub const SEGMENT_QUEUE_SIZE: u8 = 10;
             }
         }
 
@@ -128,7 +125,7 @@ cfg_if::cfg_if! {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
                 /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-                pub const SEGMENT_QUEUE_SIZE: u8 = 100;
+                pub const SEGMENT_QUEUE_SIZE: u8 = 10;
             }
         }
 
@@ -171,10 +168,8 @@ cfg_if::cfg_if! {
     }
 }
 
-
 #[inline]
-pub fn init_logger() {
-}
+pub fn init_logger() {}
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
@@ -184,7 +179,7 @@ cfg_if::cfg_if! {
                 let mut syst = p.SYST;
                 syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
                 let reload: u32 = (board::PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY).max(1) - 1;
-                defmt::info!("SYST reload set to {}", reload);
+                hwa::info!("SYST reload set to {} ({} Hz)", reload, STEPPER_PLANNER_CLOCK_FREQUENCY);
                 syst.set_reload(reload);
                 syst.enable_counter();
                 syst.enable_interrupt();
@@ -234,9 +229,8 @@ pub fn sys_reset() {
 // Required to safety lock a resource that can be also requested by an ISR.
 // Such ISR, hence, won't miss its interrupt and won't be too much delayed
 pub fn interrupt_free<F, R>(f: F) -> R
-    where F: FnOnce() -> R,
+where
+    F: FnOnce() -> R,
 {
-    cortex_m::interrupt::free(|_| {
-        f()
-    })
+    cortex_m::interrupt::free(|_| f())
 }

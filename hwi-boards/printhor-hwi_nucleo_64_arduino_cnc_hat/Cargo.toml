@@ -14,7 +14,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-#default = ["nucleo64-f410rb"]
+default = ["nucleo64-f410rb", "with-serial-port-1"]
 # Board kind
 nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
 nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
@@ -33,7 +33,7 @@ with-sdcard = []
 with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = []
 with-laser = ["embedded-hal"]
-with-defmt = ["printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = []
 with-ps-on = []
 without-ringbuffer = []
@@ -53,28 +53,35 @@ ili9341_parallel = []
 ili9341_spi = ["with-spi"]
 
 [dependencies]
-defmt = { version = "0.3", default-features = false }
+defmt = { version = "0.3", default-features = false, optional = true }
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
 
 embassy-stm32 = { version = "*", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
 embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-cortex-m"] }
-embassy-sync = { version = "*", features = ["defmt"] }
-embassy-time = { version = "*", features = ["defmt"] }
-embassy-futures = { version = "*", features = ["defmt"] }
+embassy-sync = { version = "*", features = [] }
+embassy-time = { version = "*", features = [] }
+embassy-futures = { version = "*", features = [] }
 embassy-usb = { version = "*", features = [], optional = true }
 
-printhor-hwa-common = { version = "*", features = [] }
+printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-common" }
+printhor-hwa-utils = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-utils" }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.17", default-features = false, features = [] }
+futures = { version = "0.3", default-features = false, features = [] }
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
 embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
-embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
+embedded-io-async = { version = "0.6", default-features = false, optional = true, features = [] }
 
-cfg-if = { version = "1.0.0" }
+cfg-if = { version = "1.0" }
 const_env = { version = "0.1" }
-pin-project = "1.1.5"
+pin-project = "1.1"
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }
+embassy-stm32 = { path = "../../libs/embassy/embassy-stm32" }
+embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+embassy-time = { path = "../../libs/embassy/embassy-time" }
+embassy-futures = { path = "../../libs/embassy/embassy-futures" }
+embassy-usb = { path = "../../libs/embassy/embassy-usb" }

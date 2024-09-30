@@ -3,26 +3,26 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-pub use defmt::{trace,debug,info,warn, error};
 pub use defmt;
+pub use defmt::{debug, error, info, trace, warn};
 
 mod board;
 
 pub use board::device;
-pub use board::SysDevices;
-pub use board::IODevices;
 pub use board::Controllers;
+pub use board::IODevices;
 pub use board::MotionDevices;
 pub use board::PwmDevices;
+pub use board::SysDevices;
 
+pub use board::heap_current_size;
 pub use board::init;
 pub use board::setup;
-pub use board::heap_current_size;
 pub use board::stack_reservation_current_size;
-pub use board::MACHINE_BOARD;
-pub use board::MACHINE_TYPE;
-pub use board::MACHINE_PROCESSOR;
 pub use board::HEAP_SIZE_BYTES;
+pub use board::MACHINE_BOARD;
+pub use board::MACHINE_PROCESSOR;
+pub use board::MACHINE_TYPE;
 pub use board::MAX_STATIC_MEMORY;
 #[cfg(feature = "with-sdcard")]
 pub use board::SDCARD_PARTITION;
@@ -62,31 +62,31 @@ static CORE1_STACK: TrackedStaticCell<Stack<4096>> = TrackedStaticCell::new();
 static EXECUTOR_HIGH: TrackedStaticCell<Executor> = TrackedStaticCell::new();
 
 struct TokenHolder<S> {
-    token: embassy_executor::SpawnToken<S>
+    token: embassy_executor::SpawnToken<S>,
 }
 
 unsafe impl<S> Sync for TokenHolder<S> {}
 unsafe impl<S> Send for TokenHolder<S> {}
 
 #[inline]
-pub fn launch_high_priotity<S: 'static + Send>(core: device::TaskStepperCore, token: embassy_executor::SpawnToken<S>) -> Result<(),()> {
-
+pub fn launch_high_priotity<S: 'static + Send>(
+    core: device::TaskStepperCore,
+    token: embassy_executor::SpawnToken<S>,
+) -> Result<(), ()> {
     // TODO: There must be a better way to tackle this
-    let r = Box::new(TokenHolder {token});
-    let stack = CORE1_STACK.init::<{crate::MAX_STATIC_MEMORY}>("executor1::stack", Stack::new());
+    let r = Box::new(TokenHolder { token });
+    let stack = CORE1_STACK.init::<{ crate::MAX_STATIC_MEMORY }>("executor1::stack", Stack::new());
 
     spawn_core1(core, stack, || {
-        let executor1 = EXECUTOR_HIGH.init::<{crate::MAX_STATIC_MEMORY}>("executor1", Executor::new());
-        executor1.run(|spawner| {
-            unwrap!(spawner.spawn(r.token))
-        })
+        let executor1 =
+            EXECUTOR_HIGH.init::<{ crate::MAX_STATIC_MEMORY }>("executor1", Executor::new());
+        executor1.run(|spawner| unwrap!(spawner.spawn(r.token)))
     });
     Ok(())
 }
 
 #[inline]
-pub fn init_logger() {
-}
+pub fn init_logger() {}
 
 #[inline]
 pub fn sys_reset() {

@@ -1,9 +1,8 @@
 #![no_std]
 #![allow(stable_features)]
+#[allow(unused)]
+use printhor_hwa_common as hwa;
 extern crate alloc;
-
-pub use defmt::{trace, debug, info, warn, error};
-pub use defmt;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="nucleo64-l476rg")] {
@@ -49,6 +48,24 @@ cfg_if::cfg_if! {
         }
     }
     else if #[cfg(feature="nucleo64-f410rb")] {
+
+        //#region "Mutex types for this board"
+
+        pub type EventbusMutexType = hwa::NoopMutex;
+        pub type EventBusChannelMutexType = hwa::NoopMutex;
+        pub type DeferChannelMutexType = hwa::NoopMutex;
+        pub type WatchdogMutexType = hwa::NoopMutex;
+        pub type MotionDriverMutexType = hwa::SyncSendMutex;
+        pub type MotionPlannerMutexType = hwa::NoopMutex;
+        pub type MotionConfigMutexType = hwa::NoopMutex;
+        pub type MotionStatusMutexType = hwa::NoopMutex;
+        pub type MotionRingBufferMutexType = hwa::NoopMutex;
+        pub type MotionSignalMutexType = hwa::NoopMutex;
+
+        pub type SerialPort1MutexType = hwa::NoopMutex;
+
+        //#endregion
+
         mod board_stm32f4;
         pub mod board {
             pub use crate::board_stm32f4::SysDevices;
@@ -100,12 +117,10 @@ cfg_if::cfg_if! {
 // Required to safety lock a resource that can be also requested by an ISR.
 // Such ISR, hence, won't miss its interrupt and won't be too much delayed
 pub fn interrupt_free<F, R>(f: F) -> R
-    where
-        F: FnOnce() -> R,
+where
+    F: FnOnce() -> R,
 {
-    cortex_m::interrupt::free(|_| {
-        f()
-    })
+    cortex_m::interrupt::free(|_| f())
 }
 
 pub fn setup_timer() {
@@ -114,17 +129,25 @@ pub fn setup_timer() {
         let mut syst = p.SYST;
         syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
         // Target: 0.000010 seg (10us)
-        let reload: u32 = ((crate::board::PROCESSOR_SYS_CK_MHZ / crate::board::STEPPER_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
-        defmt::info!("SYST reload set to {}", reload);
+        let reload: u32 = ((PROCESSOR_SYS_CK_MHZ / STEPPER_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
+        hwa::info!(
+            "SYST reload set to {} ({} Hz)",
+            reload,
+            STEPPER_PLANNER_CLOCK_FREQUENCY
+        );
         syst.set_reload(reload);
     }
 }
 
-extern "Rust" {fn do_tick();}
+#[cfg(feature = "with-motion")]
+extern "Rust" {
+    fn do_tick();
+}
 
 use cortex_m_rt::exception;
 #[exception]
 fn SysTick() {
+    #[cfg(feature = "with-motion")]
     unsafe {
         do_tick();
     }
@@ -145,21 +168,19 @@ pub fn pause_ticker() {
         syst.disable_counter();
         syst.disable_interrupt();
     }
-    debug!("Ticker Paused");
+    hwa::debug!("Ticker Paused");
 }
 
 pub fn resume_ticker() {
-    printhor_hwa_common::debug!("Ticker Resumed");
+    hwa::debug!("Ticker Resumed");
     unsafe {
         let p = cortex_m::Peripherals::steal();
         let mut syst = p.SYST;
         syst.enable_interrupt();
         syst.enable_counter();
     }
-    debug!("Ticker Resumed");
+    hwa::debug!("Ticker Resumed");
 }
 
 #[inline]
-pub fn init_logger() {
-}
-
+pub fn init_logger() {}

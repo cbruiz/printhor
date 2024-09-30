@@ -36,7 +36,6 @@ where
             let d = embassy_time::Duration::from_ticks(
                 self.ticks_by_word * (self.last_write_len as u64),
             );
-            //defmt::info!("flushing, awaiting {} us", d.as_micros());
             embassy_time::Timer::after(d).await;
             self.last_write_len = 0;
         }

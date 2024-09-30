@@ -4,13 +4,10 @@ use crate::tgeo::TVector;
 /// Type alias for the motion configuration's mutex type.
 pub type MotionConfigMutexType = printhor_hwa_common::InterruptControllerMutexType;
 
-/// Type alias for a reference to the motion configuration.
-pub type MotionConfigRef = printhor_hwa_common::ControllerRef<MotionConfigMutexType, MotionConfig>;
-
 /// Configuration structure for motion parameters.
 ///
 /// This structure holds various configuration parameters for controlling motion in a system.
-/// It includes maximum acceleration, speed, jerk, travel speed, units per millimeter, 
+/// It includes maximum acceleration, speed, jerk, travel speed, units per millimeter,
 /// machine bounds, micro-stepping values, flow rate, and speed rate.
 ///
 /// # Fields
@@ -27,18 +24,17 @@ pub type MotionConfigRef = printhor_hwa_common::ControllerRef<MotionConfigMutexT
 ///
 /// # Example
 ///
-/// ```
+/// ```rust
 /// use printhor_hwa_common as hwa;
-/// use crate::tgeo::TVector;
-/// const MAX_STATIC_MEMORY: usize = 1024;
 ///
-/// let motion_config: hwa::InterruptControllerRef<MotionConfig> = {
-///     static MCS: hwa::TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> =
-///         hwa::TrackedStaticCell::new();
-///     hwa::ControllerRef::new(MCS. init::<{ MAX_STATIC_MEMORY }>(
-///         "MotionConfig", hwa::ControllerMutex::new(MotionConfig::new()),
-///     ))
-/// };
+/// type MotionConfigMutexType = hwa::NoopMutex;
+///
+/// let motion_config = hwa::make_static_controller!(
+///     "MotionConfig",
+///     MotionConfigMutexType,
+///     hwa::controllers::MotionConfig,
+///     hwa::controllers::MotionConfig::new()
+///  );
 /// ```
 pub struct MotionConfig {
     /// Maximum acceleration for the motion.

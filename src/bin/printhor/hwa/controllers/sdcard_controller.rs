@@ -395,10 +395,7 @@ impl CardController {
         }
     }
 
-    pub async fn list_dir(
-        &self,
-        full_path: &str,
-    ) -> Result<CardAsyncDirIterator, SDCardError> {
+    pub async fn list_dir(&self, full_path: &str) -> Result<CardAsyncDirIterator, SDCardError> {
         hwa::debug!("list_dir() called");
         let mut path: heapless::Vec<DirectoryRef, MAX_DIRS> = heapless::Vec::new();
         hwa::debug!("Locking card");
@@ -678,9 +675,7 @@ impl async_gcode::ByteStream for SDCardStream {
             self.bytes_read = 0;
             let result = match self.file.as_mut() {
                 None => Err(SDCardError::NotFound),
-                Some(f) => {
-                    self.card_controller.read(f, &mut self.buffer).await
-                }
+                Some(f) => self.card_controller.read(f, &mut self.buffer).await,
             };
             match result {
                 Ok(bytes_read) => {
@@ -695,7 +690,7 @@ impl async_gcode::ByteStream for SDCardStream {
                         self.current_byte_index = 0;
                         None
                     }
-                },
+                }
                 Err(_) => Some(Err(async_gcode::Error::NumberOverflow)),
             }
         }

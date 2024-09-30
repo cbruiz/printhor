@@ -15,18 +15,18 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-#with-ui = ["embedded-graphics-core"]
+std = []
+default = ["with-log", "std", "with-motion", "with-hot-end", "with-hot-bed", "embassy-time/std", "embassy-time/generic-queue-128"]
 nightly = []
 executor-interrupt = []
-with-log = ["log"]
-with-defmt = ["defmt"]
+with-log = ["log", "printhor-hwa-utils/with-log"]
+with-defmt = ["defmt", "printhor-hwa-utils/with-defmt"]
 with-serial-usb = []
 with-serial-port-1 = []
 with-serial-port-2 = []
 with-motion = []
 with-hot-end = []
 with-hot-bed = []
-with-display = [] # Broken
 
 with-x-axis = []
 with-y-axis = []
@@ -34,19 +34,26 @@ with-z-axis = []
 with-e-axis = []
 
 [dependencies]
-portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
-static_cell = { version = "2.1",  default-features = false, features = [] }
+printhor-hwa-common-macros = { version = "0", path = "../printhor-hwa-common-macros" }
+printhor-hwa-utils = { version = "0",  path = "../printhor-hwa-utils", default-features = false, features = [] }
+const_env = { version = "0.1.2"}
 
-embassy-sync = { version = "*", features = [] }
-embassy-time = { version = "*", features = [] }
+embassy-sync = { version = "0.6", features = [] }
+embassy-time = { version = "0.3", features = [] }
 
 embedded-hal = { version = "1.0.0", default-features = false }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
 embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 
-#embedded-graphics-core = {version = "0.4.0", optional = true }
 bitflags = { version = "2.6.0", default-features = false, features = ["bytemuck"] }
-cfg-if = { version = "1.0.0" }
+cfg-if = { version = "1.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }
 strum = { version = "0.26", default-features = false, features = ["derive"] }
+
+[dev-dependencies]
+futures-test = { version = "0.3"}
+
+[patch.crates-io]
+embassy-sync = { path = "../libs/embassy/embassy-sync" }
+embassy-time = { path = "../libs/embassy/embassy-time" }

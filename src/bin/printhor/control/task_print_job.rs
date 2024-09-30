@@ -1,18 +1,16 @@
 //! TODO: This feature is still incomplete
-use crate::control::{GCodeLineParser, GCodeLineParserError};
+use crate::control;
 use crate::hwa;
 use embassy_time::Duration;
 use embassy_time::{Instant, Timer};
 
-use crate::control::GCodeCmd;
-use crate::control::{CodeExecutionFailure, CodeExecutionSuccess};
+use control::GCodeCmd;
+use control::{CodeExecutionFailure, CodeExecutionSuccess};
 use hwa::controllers::sdcard_controller::SDCardError;
 use hwa::controllers::sdcard_controller::SDCardStream;
 use hwa::controllers::PrinterController;
 use hwa::controllers::PrinterControllerEvent;
-use printhor_hwa_common::EventBusSubscriber;
-use printhor_hwa_common::EventFlags;
-use printhor_hwa_common::{CommChannel, EventStatus};
+use hwa::{CommChannel, EventFlags, EventStatus};
 
 #[allow(unused_mut)]
 #[allow(unreachable_patterns)]
@@ -27,7 +25,9 @@ pub async fn task_print_job(
 
     hwa::info!("[task_print_job] Waiting for SYS_BOOTING");
     // Pauses this task until system is ready
-    match subscriber.ft_wait_for(EventStatus::not_containing(EventFlags::SYS_BOOTING)).await
+    match subscriber
+        .ft_wait_for(EventStatus::not_containing(EventFlags::SYS_BOOTING))
+        .await
     {
         Ok(_) => hwa::info!("[task_print_job] Got SYS_BOOTING. Continuing."),
         Err(_) => crate::initialization_error(),
@@ -46,51 +46,47 @@ pub async fn task_print_job(
             .ft_wait_for(EventStatus::not_containing(EventFlags::SYS_ALARM))
             .await;
 
-        match embassy_time::with_timeout(
-            Duration::from_secs(30),
-            printer_controller.consume(),
-        ).await {
+        match embassy_time::with_timeout(Duration::from_secs(30), printer_controller.consume())
+            .await
+        {
             Err(_) => {
                 #[cfg(feature = "trace-commands")]
-                hwa::info!("[task_print_job]] Timeout");
+                hwa::info!("[trace-commands] [task_print_job]] Timeout");
                 #[cfg(test)]
                 if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_print_job] Ending gracefully");
-                    return ()
+                    return ();
                 }
             }
             Ok(PrinterControllerEvent::SetFile(channel, file_path)) => {
                 #[cfg(feature = "trace-commands")]
-                hwa::info!("[task_print_job] SetFile: {}", file_path.as_str());
+                hwa::info!(
+                    "[trace-commands] [task_print_job] SetFile: {}",
+                    file_path.as_str()
+                );
                 job_time = Duration::from_ticks(0);
                 print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
                     Ok(stream) => {
                         let parser = GCodeLineParser::new(stream);
                         processor.write(channel, "ok\n").await;
                         Some(parser)
-                    },
+                    }
                     Err(_e) => {
                         let error_msg = match _e {
-                            SDCardError::NoSuchVolume => {
-                                "SetFile: Card not ready"
-                            }
-                            SDCardError::NotFound => {
-                                "SetFile: File not found"
-                            }
-                            _ => {
-                                "SetFile: Internal error"
-                            }
+                            SDCardError::NoSuchVolume => "SetFile: Card not ready",
+                            SDCardError::NotFound => "SetFile: File not found",
+                            _ => "SetFile: Internal error",
                         };
                         hwa::error!("{}", error_msg);
-                        processor.write(channel, alloc::format!("error; {}\n", error_msg).as_str()).await;
+                        processor
+                            .write(channel, alloc::format!("error; {}\n", error_msg).as_str())
+                            .await;
                         continue;
                     }
                 };
                 processor
                     .event_bus
-                    .publish_event(EventStatus::containing(
-                        EventFlags::JOB_PAUSED,
-                    ))
+                    .publish_event(EventStatus::containing(EventFlags::JOB_PAUSED))
                     .await;
             }
             Ok(PrinterControllerEvent::Resume(channel)) => {
@@ -100,8 +96,8 @@ pub async fn task_print_job(
                 loop {
                     match gcode_pull(&mut print_job_parser).await {
                         Ok(gcode) => {
-                            #[cfg(feature="trace-commands")]
-                            hwa::info!("Executing {}", gcode);
+                            #[cfg(feature = "trace-commands")]
+                            hwa::info!("[trace-commands] Executing {}", gcode);
                             match processor.execute(CommChannel::Internal, &gcode, true).await {
                                 Ok(CodeExecutionSuccess::OK) => {
                                     hwa::debug!("Response: OK {} (I)", gcode);
@@ -135,22 +131,16 @@ pub async fn task_print_job(
                                     break;
                                 }
                                 Err(CodeExecutionFailure::NotYetImplemented) => {
-                                    hwa::warn!(
-                                        "Ignoring GCode not implemented {}", gcode
-                                    );
+                                    hwa::warn!("Ignoring GCode not implemented {}", gcode);
                                 }
                                 Err(CodeExecutionFailure::HomingRequired) => {
                                     fatal_error = true;
-                                    hwa::error!(
-                                        "Unexpected HomingRequired before {}", gcode
-                                    );
+                                    hwa::error!("Unexpected HomingRequired before {}", gcode);
                                     break;
                                 }
                                 Err(CodeExecutionFailure::PowerRequired) => {
                                     fatal_error = true;
-                                    hwa::error!(
-                                        "Unexpected PowerRequired before {}", gcode
-                                    );
+                                    hwa::error!("Unexpected PowerRequired before {}", gcode);
                                     break;
                                 }
                             }
@@ -160,7 +150,7 @@ pub async fn task_print_job(
                                 .as_ref()
                                 .map_or(0, |parser| parser.get_line());
                             match error {
-                                GCodeLineParserError::EOF  => {
+                                GCodeLineParserError::EOF => {
                                     // EOF
                                     break;
                                 }
@@ -171,9 +161,21 @@ pub async fn task_print_job(
                                     break;
                                 }
                                 GCodeLineParserError::GCodeNotImplemented(_ln, _gcode) => {
-                                    processor.write(channel, alloc::format!("Ignoring gcode not supported: {} at {}\n", _gcode, current_line).as_str()).await;
+                                    processor
+                                        .write(
+                                            channel,
+                                            alloc::format!(
+                                                "Ignoring gcode not supported: {} at {}\n",
+                                                _gcode,
+                                                current_line
+                                            )
+                                            .as_str(),
+                                        )
+                                        .await;
                                     hwa::warn!(
-                                        "Ignoring GCode not supported {} at line {}", _gcode.as_str(), current_line
+                                        "Ignoring GCode not supported {} at line {}",
+                                        _gcode.as_str(),
+                                        current_line
                                     );
                                 }
                                 GCodeLineParserError::ParseError(_ln) => {
@@ -243,13 +245,10 @@ async fn gcode_pull(
     print_job_parser: &mut Option<GCodeLineParser<SDCardStream>>,
 ) -> Result<GCodeCmd, GCodeLineParserError> {
     match print_job_parser.as_mut() {
-        Some(parser) => {
-            parser.next_gcode().await.map(|mut gc| {
-                gc.order_num = parser.get_line();
-                gc
-            })
-        }
-        None => Err(GCodeLineParserError::FatalError)
+        Some(parser) => parser.next_gcode().await.map(|mut gc| {
+            gc.order_num = parser.get_line();
+            gc
+        }),
+        None => Err(GCodeLineParserError::FatalError),
     }
-
 }

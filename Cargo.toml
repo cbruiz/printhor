@@ -21,13 +21,15 @@ nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
-default = ["embassy-executor/executor-thread", "embassy-executor/arch-std"]
+# Highly convenient for development. Meaning any other build needs to be like: cargo [...] --no-default-features
+default = ["native"]
 
 # Hardware device features
 without-bootloader = []
 numerical-robusticity-check = []
 trace-commands = []
-with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwi_rp_2040?/with-defmt"]
+with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt"]
+with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log"]
 with-serial-usb = ["printhor-hwa-common/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1"]
 with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2"]
@@ -43,10 +45,7 @@ with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
 with-trinamic = ["tmc2209"]
-with-display = [] # Broken
-#with-display = [
-#    "embedded-graphics-core", "embedded-graphics", "printhor-hwa-common/with-ui"
-#]
+with-display = [] # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
 with-ps-on = []
 cornering = []
 # Incomplete
@@ -150,16 +149,18 @@ native = [
     "with-motion", "printhor-hwi_native/with-motion",
     "with-serial-port-1", "printhor-hwi_native/with-serial-port-1",
     #"with-serial-port-2", "printhor-hwi_native/with-serial-port-2",
-    "with-sdcard", "printhor-hwi_native/with-sdcard",
-    "with-printjob", "printhor-hwi_native/with-printjob",
-    "with-probe", "printhor-hwi_native/with-probe",
+    #"with-sdcard", "printhor-hwi_native/with-sdcard",
+    #"with-printjob", "printhor-hwi_native/with-printjob",
+    #"with-probe", "printhor-hwi_native/with-probe",
     #"with-hot-end", "printhor-hwi_native/with-hot-end",
     #"with-hot-bed", "printhor-hwi_native/with-hot-bed",
-    "with-fan-layer", "printhor-hwi_native/with-fan-layer",
-    "with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
+    #"with-fan-layer", "printhor-hwi_native/with-fan-layer",
+    #"with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
     #"with-laser", "printhor-hwi_native/with-laser",
-    "with-ps-on", "printhor-hwi_native/with-ps-on",
+    #"with-ps-on", "printhor-hwi_native/with-ps-on",
     #"with-display", "printhor-hwi_native/with-display",
+
+    "with-log",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -167,12 +168,11 @@ native = [
 
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
 
-    "plot-motion-plan",
+    #"plot-motion-plan",
     #"itertools",
     #"embassy-sync/log",
     #"with-lvgl",
-
-    "printhor-hwi_native/with-log",
+    "printhor-hwi_native",
     "embassy-executor/arch-std", "embassy-sync/std", "embassy-time/std",
 ]
 
@@ -220,7 +220,7 @@ nucleo64-l476rg = [
     #"executor-interrupt",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
+    "with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     "with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
@@ -245,26 +245,25 @@ nucleo64-l476rg = [
 
 nucleo64-f410rb = [
     "cornering",
-    #"nightly",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
     "debug-signals",
     "trace-commands",
 
     #"verbose-timings",
-    "with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-defmt",
+    "with-defmt",
     "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2. Broken nevertheless
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
     #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
-    "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
+    #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
     #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
     #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
-    "with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
-    "with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
+    #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
+    #"with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -413,10 +412,6 @@ embassy-usb = { version = "*", features = [], optional = true }
 embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven", ] }
-#embedded-graphics = { version = "0.8.1", optional = true}
-
-#display-interface-parallel-gpio = {version = "0.6.0", default-features = false, optional = true}
-#ili9341 = {version = "0.5.0", default-features = false, optional = true}
 
 futures = { version = "0.3.17", default-features = false, features = [] }
 futures-util = { version = "0.3", default-features = false, features = [] }
@@ -437,14 +432,15 @@ embedded-io-async = {version = "0.6.1", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
 
 # Common base
-printhor-hwa-common = { version = "*", default-features = false, features = [] }
+printhor-hwa-common = { version = "0.0", default-features = false, features = [] }
+printhor-hwa-utils = { version = "0.0", default-features = false, features = [] }
 
 # Boards
-printhor-hwi_native = { version = "*", optional = true }
-printhor-hwi_skr_mini_e3 = { version = "*", optional = true }
-printhor-hwi_mks_robin_nano = { version = "*", optional = true }
-printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "*", optional = true }
-printhor-hwi_rp_2040 = { version = "*", optional = true }
+printhor-hwi_native = { version = "*", default-features = false, optional = true }
+printhor-hwi_skr_mini_e3 = { version = "*", default-features = false, optional = true }
+printhor-hwi_mks_robin_nano = { version = "*", default-features = false, optional = true }
+printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "*", default-features = false, optional = true }
+printhor-hwi_rp_2040 = { version = "*", default-features = false, optional = true }
 
 gnuplot = {version = "0.0.43", default-features = false, features=[], optional = true}
 # Display
@@ -468,8 +464,8 @@ lexical-core = {version = "1.0.1", default-features = false, features = ["write-
 #proc-macro2 = "1.0."
 cfg-if = "1.0.0"
 
-[dev-dependencies.futures-test]
-version = "0.3.17"
+[dev-dependencies]
+futures-test = { version = "0.3"}
 
 [profile.dev]
 codegen-units = 1
@@ -509,9 +505,9 @@ panic = "abort"
 
 #async-gcode = { git = "https://github.com/cbruiz/async-gcode.git", branch = "feature/embedded-productivization" }
 async-gcode = { path = "libs/async-gcode" }
-#lvgl = { git = "https://github.com/nviennot/lvgl-rs.git" }
 
 printhor-hwa-common = { path = "printhor-hwa-common" }
+printhor-hwa-utils = { path = "printhor-hwa-utils" }
 printhor-hwi_native = { path = "hwi-boards/printhor-hwi_native" }
 printhor-hwi_skr_mini_e3 = { path = "hwi-boards/printhor-hwi_skr_mini_e3" }
 printhor-hwi_mks_robin_nano = { path = "hwi-boards/printhor-hwi_mks_robin_nano" }
@@ -529,3 +525,6 @@ embassy-usb = { path = "libs/embassy/embassy-usb" }
 
 #[workspace.vars]
 # TBD
+
+#[workspace]
+#members = ["printhor-hwa-common", "printhor-hwa-utils", "s-plot"]

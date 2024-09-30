@@ -86,7 +86,6 @@ use hwa::{EventFlags, EventStatus};
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
 
-
 /// The `State` enum represents the different states in which the HeaterStateMachine can be during its execution.
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
@@ -131,7 +130,6 @@ impl HeaterStateMachine {
         }
     }
 
-    
     /// Updates the state machine with the current temperature readings and
     /// performs the required actions based on the new temperature state.
     ///

@@ -934,18 +934,18 @@ where
 }
 
 #[cfg(feature = "with-defmt")]
-impl<T> hwa::defmt::Format for TVector<T>
+impl<T> defmt::Format for TVector<T>
 where
     T: ArithmeticOps + ToString,
 {
-    fn format(&self, fmt: hwa::defmt::Formatter) {
+    fn format(&self, fmt: defmt::Formatter) {
         let mut spacing = false;
         if let Some(v) = &self.x {
-            hwa::defmt::write!(fmt, "X {}", v.to_string().as_str());
+            defmt::write!(fmt, "X {}", v.to_string().as_str());
             spacing = true;
         }
         if let Some(v) = &self.y {
-            hwa::defmt::write!(
+            defmt::write!(
                 fmt,
                 "{}Y {}",
                 if spacing { " " } else { "" },
@@ -954,7 +954,7 @@ where
             spacing = true;
         }
         if let Some(v) = &self.z {
-            hwa::defmt::write!(
+            defmt::write!(
                 fmt,
                 "{}Z {}",
                 if spacing { " " } else { "" },
@@ -963,7 +963,7 @@ where
             spacing = true;
         }
         if let Some(v) = &self.e {
-            hwa::defmt::write!(
+            defmt::write!(
                 fmt,
                 "{}E {}",
                 if spacing { " " } else { "" },

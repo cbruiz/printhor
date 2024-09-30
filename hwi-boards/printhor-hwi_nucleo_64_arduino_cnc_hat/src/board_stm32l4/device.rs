@@ -1,9 +1,9 @@
 #[allow(unused)]
 use embassy_stm32::{
-    wdg,
-    gpio::{Input, Output},
     exti::ExtiInput,
-    timer::simple_pwm::SimplePwm
+    gpio::{Input, Output},
+    timer::simple_pwm::SimplePwm,
+    wdg,
 };
 
 cfg_if::cfg_if! {
@@ -51,8 +51,6 @@ cfg_if::cfg_if! {
     }
 }
 
-
-
 #[cfg(feature = "with-sdcard")]
 pub type SpiCardDevice = Spi1;
 
@@ -71,9 +69,9 @@ cfg_if::cfg_if! {
 }
 
 pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-pub use embassy_stm32::adc::Instance as AdcTrait;
 pub use embassy_stm32::adc::AdcChannel as AdcPinTrait;
-pub use embassy_stm32::adc::VrefInt as VrefInt;
+pub use embassy_stm32::adc::Instance as AdcTrait;
+pub use embassy_stm32::adc::VrefInt;
 
 pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
 pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
@@ -98,10 +96,7 @@ pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM8>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
-pub type Watchdog = wdg::IndependentWatchdog<'static,
-    embassy_stm32::peripherals::IWDG
->;
-
+pub type Watchdog = wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
@@ -173,19 +168,15 @@ cfg_if::cfg_if! {
 
 #[cfg(feature = "with-motion")]
 impl MotionPins {
-
-    pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         self.all_enable_pin.set_high();
     }
 
-    pub fn enable(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn enable(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         self.all_enable_pin.set_low();
     }
 
-    pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         cfg_if::cfg_if! {
             if #[cfg(not(feature="debug-signals"))] {
                 #[cfg(feature = "with-x-axis")]
@@ -220,8 +211,7 @@ impl MotionPins {
         }
     }
 
-    pub fn step_toggle(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn step_toggle(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_step_pin.toggle();
@@ -240,9 +230,7 @@ impl MotionPins {
         }
     }
 
-
-    pub fn step_high(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
+    pub fn step_high(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_step_pin.set_high();
@@ -261,9 +249,7 @@ impl MotionPins {
         }
     }
 
-    pub fn step_low(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
-
+    pub fn step_low(&mut self, _channels: printhor_hwa_common::StepperChannel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(printhor_hwa_common::StepperChannel::X) {
             self.x_step_pin.set_low();
@@ -282,9 +268,7 @@ impl MotionPins {
         }
     }
 
-
-    pub fn endstop_triggered(&mut self, _channels: printhor_hwa_common::StepperChannel) -> bool
-    {
+    pub fn endstop_triggered(&mut self, _channels: printhor_hwa_common::StepperChannel) -> bool {
         #[allow(unused_mut)]
         let mut triggered = false;
         #[cfg(feature = "with-x-axis")]
@@ -305,18 +289,14 @@ impl MotionPins {
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDevice {
-
     #[cfg(feature = "with-trinamic")]
     pub trinamic_uart: UartTrinamic,
 
     pub motion_pins: MotionPins,
 }
 
-
 #[cfg(feature = "with-sdcard")]
 pub struct CardDevice {
-
     pub card_spi: SpiCardDevice,
     pub card_cs: SpiCardCSPin,
-
 }

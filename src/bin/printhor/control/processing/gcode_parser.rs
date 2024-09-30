@@ -1,4 +1,4 @@
-use crate::control::{GCodeCmd, GCodeValue, N, S, XYZF, XYZE, XYZEFS};
+use crate::control::{GCodeCmd, GCodeValue, N, S, XYZE, XYZEFS, XYZF};
 use crate::helpers;
 use crate::hwa;
 
@@ -47,15 +47,14 @@ pub struct RawGCodeSpec {
 }
 
 impl RawGCodeSpec {
+    #[allow(unused)]
     pub fn from(code: char, spec: Option<(i32, u8)>) -> Self {
         match spec {
-            None => {
-                Self {
-                    code,
-                    spec: None,
-                    sub: None,
-                }
-            }
+            None => Self {
+                code,
+                spec: None,
+                sub: None,
+            },
             Some((_num, _scale)) => {
                 if _scale == 0 {
                     Self {
@@ -63,15 +62,14 @@ impl RawGCodeSpec {
                         spec: Some(_num),
                         sub: None,
                     }
-                }
-                else {
+                } else {
                     let sc = 10_i32.pow(_scale as u32);
                     let sp = _num / sc;
                     let ss = _num % sc;
                     Self {
                         code,
                         spec: Some(sp),
-                        sub: Some(ss)
+                        sub: Some(ss),
                     }
                 }
             }
@@ -88,12 +86,11 @@ impl core::fmt::Debug for RawGCodeSpec {
                     Some(_sub) => {
                         core::write!(f, ".{}", _sub)
                     }
-                    _ => Ok(())
+                    _ => Ok(()),
                 }
             }
-            _ => Ok(())
+            _ => Ok(()),
         }
-
     }
 }
 
@@ -110,6 +107,7 @@ impl<STREAM> GCodeLineParser<STREAM>
 where
     STREAM: async_gcode::ByteStream<Item = Result<u8, async_gcode::Error>>,
 {
+    #[allow(unused)]
     pub fn new(stream: STREAM) -> Self {
         Self {
             raw_parser: async_gcode::Parser::new(stream),
@@ -122,8 +120,8 @@ where
         self.gcode_line
     }
 
+    #[allow(unused)]
     pub async fn next_gcode(&mut self) -> Result<GCodeCmd, GCodeLineParserError> {
-
         // The GcodeCmd being constructed.
         // * Initially set to none
         // * Reset back to None when built, updated and returned
@@ -131,9 +129,8 @@ where
         // Same as previous but unparsed
         let mut raw_gcode_spec: Option<RawGCodeSpec> = None;
 
-        let mut line_num = None;
+        let mut tagged_line_num = None;
         let mut skip_gcode = false;
-
 
         loop {
             match self.raw_parser.next().await {
@@ -151,8 +148,8 @@ where
                                 async_gcode::GCode::StatusCommand => {
                                     return Ok(GCodeCmd::new(
                                         self.raw_parser.get_current_line(),
-                                        line_num,
-                                        GCodeValue::Status
+                                        tagged_line_num,
+                                        GCodeValue::Status,
                                     ))
                                 }
                                 async_gcode::GCode::BlockDelete => {
@@ -160,7 +157,7 @@ where
                                     //crate::debug!("BlockDelete");
                                 }
                                 async_gcode::GCode::LineNumber(n) => {
-                                    line_num = Some(n);
+                                    tagged_line_num = Some(n);
                                 }
                                 async_gcode::GCode::Word(ch, fv) => {
                                     if skip_gcode {
@@ -175,9 +172,7 @@ where
                                     if let Some(current_gcode) = &mut current_gcode {
                                         // We already are building a GCodeCmd, so we update its fields
                                         update_current(current_gcode, ch, frx, fv)
-                                    }
-                                    else {
-                                        hwa::debug!("Initializing: {} {:?}", ch, frx);
+                                    } else {
                                         raw_gcode_spec.replace(RawGCodeSpec::from(ch, frx));
                                         // We need to start building the current GCodeCmd that is being parsed
                                         match init_current(ch, frx) {
@@ -187,12 +182,11 @@ where
                                                 skip_gcode = true;
                                             }
                                             Some(gcode_value) => {
-                                                current_gcode.replace(
-                                                    GCodeCmd::new(
-                                                        0, // Will update later at [async_gcode::GCode::Execute]
-                                                        line_num,
-                                                        gcode_value)
-                                                );
+                                                current_gcode.replace(GCodeCmd::new(
+                                                    0, // Will update later at [async_gcode::GCode::Execute]
+                                                    tagged_line_num,
+                                                    gcode_value,
+                                                ));
                                             }
                                         }
                                     }
@@ -200,25 +194,28 @@ where
                                 async_gcode::GCode::Execute => {
                                     // Reset skip_gcode status
                                     skip_gcode = false;
-                                    self.gcode_line = line_num;
+                                    self.gcode_line = tagged_line_num;
                                     match current_gcode.take() {
                                         None => {
                                             match raw_gcode_spec.take() {
                                                 None => {
                                                     hwa::warn!("Ignoring empty line");
-                                                    continue
-                                                }, // Empty line. Just ignore
+                                                    continue;
+                                                } // Empty line. Just ignore
                                                 Some(rgs) => {
-                                                    return Err(GCodeLineParserError::GCodeNotImplemented(
-                                                        self.raw_parser.get_current_line(),
-                                                        alloc::format!("{:?}", rgs),
-                                                    ));
+                                                    return Err(
+                                                        GCodeLineParserError::GCodeNotImplemented(
+                                                            self.raw_parser.get_current_line(),
+                                                            alloc::format!("{:?}", rgs),
+                                                        ),
+                                                    );
                                                 }
                                             }
                                         }
-                                        Some(cgv) => {
-                                            return Ok(cgv)
-                                        },
+                                        Some(mut cgv) => {
+                                            cgv.order_num = self.raw_parser.get_current_line();
+                                            return Ok(cgv);
+                                        }
                                     }
                                 }
                                 _ => {
@@ -231,8 +228,8 @@ where
                         }
                         Err(error) => {
                             match error {
-                                async_gcode::Error::UnexpectedByte(b) => {
-                                    hwa::warn!("Unexpected byte: {} ({})", b, char::from(b));
+                                async_gcode::Error::UnexpectedByte(_b) => {
+                                    hwa::warn!("Unexpected byte: {} ({})", _b, char::from(_b));
                                 }
                                 async_gcode::Error::NumberOverflow => {
                                     hwa::warn!("Number overflow");
@@ -246,7 +243,9 @@ where
                                     hwa::error!("Parse error");
                                 }
                             }
-                            return Err(GCodeLineParserError::ParseError(self.raw_parser.get_current_line()));
+                            return Err(GCodeLineParserError::ParseError(
+                                self.raw_parser.get_current_line(),
+                            ));
                         }
                     }
                 }
@@ -254,24 +253,27 @@ where
         }
     }
 
+    #[allow(unused)]
     pub fn reset(&mut self) {
         hwa::warn!("AsyncGcodeParser reset");
         self.raw_parser.reset();
     }
 
+    #[allow(unused)]
     pub fn reset_current_line(&mut self) {
         hwa::warn!("AsyncGcodeParser reset_current_line");
         self.raw_parser.update_current_line(0);
     }
 
+    #[allow(unused)]
     pub fn get_state(&self) -> async_gcode::AsyncParserState {
         self.raw_parser.get_state()
     }
 
+    #[allow(unused)]
     pub fn get_line(&self) -> u32 {
         self.raw_parser.get_current_line()
     }
-
 
     #[allow(unused)]
     pub async fn close(&mut self) {
@@ -299,6 +301,7 @@ impl FixedAdaptor for f64 {
 }
 
 /// Initialize and EMPTY GCodeValue variant from ch, frx spec coming from parser
+#[allow(unused)]
 fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
     match (ch, frx) {
         #[cfg(feature = "grbl-compat")]
@@ -359,13 +362,17 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((8623, 1))) => Some(GCodeValue::M862_3),
         ('m', Some((900, 0))) => Some(GCodeValue::M900),
         ('m', Some((907, 0))) => Some(GCodeValue::M907),
-        _ => {
-            None
-        }
+        _ => None,
     }
 }
 
-fn update_current(gcode_cmd: &mut GCodeCmd, ch: char, frx: Option<(i32, u8)>, fv: async_gcode::RealValue) {
+#[allow(unused)]
+fn update_current(
+    gcode_cmd: &mut GCodeCmd,
+    ch: char,
+    frx: Option<(i32, u8)>,
+    fv: async_gcode::RealValue,
+) {
     match &mut gcode_cmd.value {
         #[cfg(feature = "grbl-compat")]
         GCodeValue::Status => match (ch, frx) {
@@ -390,6 +397,7 @@ fn update_current(gcode_cmd: &mut GCodeCmd, ch: char, frx: Option<(i32, u8)>, fv
             _ => {}
         },
 
+        //noinspection Code
         GCodeValue::G1(coord) => match (ch, frx) {
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
@@ -434,19 +442,14 @@ fn update_current(gcode_cmd: &mut GCodeCmd, ch: char, frx: Option<(i32, u8)>, fv
         },
         GCodeValue::M20(path) => {
             if ch == 'f' {
-                if let async_gcode::RealValue::Literal(
-                    async_gcode::Literal::String(mstr),
-                ) = fv {
+                if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
                     path.replace(mstr);
                 }
             }
         }
         GCodeValue::M23(file) => {
             if ch == 'f' {
-                if let async_gcode::RealValue::Literal(
-                    async_gcode::Literal::String(mstr),
-                ) = fv
-                {
+                if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
                     file.replace(mstr);
                 }
             }
@@ -454,7 +457,7 @@ fn update_current(gcode_cmd: &mut GCodeCmd, ch: char, frx: Option<(i32, u8)>, fv
         GCodeValue::M104(coord)
         | GCodeValue::M109(coord)
         | GCodeValue::M140(coord)
-        | GCodeValue::M220(coord)  => match (ch, frx) {
+        | GCodeValue::M220(coord) => match (ch, frx) {
             ('s', Some(val)) => {
                 coord.s.replace(helpers::to_fixed(val));
             }

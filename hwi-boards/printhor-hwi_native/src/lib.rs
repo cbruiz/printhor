@@ -1,8 +1,25 @@
 #![allow(stable_features)]
-pub use printhor_hwa_common as hwa;
+#[allow(unused)]
+use printhor_hwa_common as hwa;
 mod board;
 
-pub use log::{trace, debug, info, warn, error};
+//#region "Mutex types for this board"
+
+pub type EventbusMutexType = hwa::SyncSendMutex;
+pub type EventBusChannelMutexType = hwa::NoopMutex;
+pub type DeferChannelMutexType = hwa::NoopMutex;
+pub type WatchdogMutexType = hwa::NoopMutex;
+pub type MotionDriverMutexType = hwa::SyncSendMutex;
+pub type MotionPlannerMutexType = hwa::NoopMutex;
+pub type MotionConfigMutexType = hwa::SyncSendMutex;
+pub type MotionStatusMutexType = hwa::NoopMutex;
+pub type MotionRingBufferMutexType = hwa::NoopMutex;
+pub type MotionSignalMutexType = hwa::NoopMutex;
+
+
+pub type SerialPort1MutexType = hwa::SyncSendMutex;
+
+//#endregion
 
 pub use board::device;
 pub use board::SysDevices;
@@ -18,7 +35,6 @@ pub use board::MACHINE_BOARD;
 pub use board::MACHINE_TYPE;
 pub use board::MACHINE_PROCESSOR;
 pub use board::HEAP_SIZE_BYTES;
-pub use board::MAX_STATIC_MEMORY;
 pub use board::VREF_SAMPLE;
 pub use board::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
 pub use board::STEPPER_PLANNER_CLOCK_FREQUENCY;
@@ -35,17 +51,11 @@ cfg_if::cfg_if! {
 pub use board::ADC_START_TIME_US;
 pub use board::ADC_VREF_DEFAULT_MV;
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex};
-use embassy_time::Duration;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 cfg_if::cfg_if!{
     if #[cfg(feature="without-vref-int")] {
         pub use board::ADC_VREF_DEFAULT_SAMPLE;
     }
-}
-
-#[inline]
-pub fn is_log_debug_enabled() -> bool {
-    log::log_enabled!(log::Level::Debug)
 }
 
 #[inline]
@@ -68,14 +78,18 @@ pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDev
     }
 }
 
-#[inline]
 pub fn init_logger() {
-    use std::io::Write;
-    env_logger::builder()
-        .format(|buf, record| {
-            writeln!(buf, "{}: {}", record.level(), record.args())
-        })
-        .init();
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-log")] {
+            use std::io::Write;
+            env_logger::builder()
+                .format(|buf, record| {
+                    writeln!(buf, "{}: {}", record.level(), record.args())
+                })
+                .init();
+        }
+    }
+
 }
 
 
@@ -90,21 +104,23 @@ pub fn interrupt_free<F, R>(f: F) -> R
     f()
 }
 
+#[cfg(feature = "with-motion")]
 extern "Rust" {fn do_tick();}
 
 static TICKER_SIGNAL: hwa::PersistentState<CriticalSectionRawMutex, bool> = hwa::PersistentState::new();
 
 static TERMINATION: hwa::PersistentState<CriticalSectionRawMutex, bool> = hwa::PersistentState::new();
 
+#[cfg(feature = "with-motion")]
 #[embassy_executor::task]
 pub async fn task_stepper_ticker()
 {
-    info!("[task_stepper_ticker] starting");
-    let mut t = embassy_time::Ticker::every(Duration::from_micros((1_000_000 / board::STEPPER_PLANNER_CLOCK_FREQUENCY) as u64));
+    hwa::info!("[task_stepper_ticker] starting");
+    let mut t = embassy_time::Ticker::every(embassy_time::Duration::from_micros((1_000_000 / board::STEPPER_PLANNER_CLOCK_FREQUENCY) as u64));
     loop {
-        if embassy_time::with_timeout(Duration::from_secs(5), TICKER_SIGNAL.wait()).await.is_err() {
+        if embassy_time::with_timeout(embassy_time::Duration::from_secs(5), TICKER_SIGNAL.wait()).await.is_err() {
             if TERMINATION.signaled() {
-                info!("[task_stepper_ticker] Ending gracefully");
+                hwa::info!("[task_stepper_ticker] Ending gracefully");
                 return ();
             }
             continue;
@@ -121,16 +137,16 @@ pub fn sys_reset() {
 }
 
 pub fn sys_stop() {
-    info!("Sending terminate signal");
+    hwa::info!("Sending terminate signal");
     TERMINATION.signal(true);
 }
 
 pub fn pause_ticker() {
-    info!("Ticker Paused");
+    hwa::info!("Ticker Paused");
     TICKER_SIGNAL.reset();
 }
 
 pub fn resume_ticker() {
-    debug!("Ticker Resumed");
+    hwa::debug!("Ticker Resumed");
     TICKER_SIGNAL.signal(true);
 }

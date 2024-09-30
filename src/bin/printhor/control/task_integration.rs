@@ -1,15 +1,15 @@
 #[allow(unused)]
+use crate::control;
+#[allow(unused)]
 use crate::hwa;
 #[allow(unused)]
 use crate::math;
-#[allow(unused)]
-use math::Real;
-#[allow(unused)]
-use crate::control;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use hwa::PersistentState;
 #[allow(unused)]
 use hwa::{CommChannel, EventBusSubscriber, EventFlags, EventStatus};
-use hwa::PersistentState;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+#[allow(unused)]
+use math::Real;
 
 pub struct IntegrationaskParams {
     pub processor: hwa::GCodeProcessor,
@@ -21,31 +21,38 @@ pub struct IntegrationaskParams {
 
 // A global static notifier to indicate when task_integration is completed
 #[cfg(any(test, feature = "integration-test"))]
-pub static INTEGRATION_STATUS: PersistentState<CriticalSectionRawMutex, bool> = PersistentState::new();
+pub static INTEGRATION_STATUS: PersistentState<CriticalSectionRawMutex, bool> =
+    PersistentState::new();
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_integration(mut params: IntegrationaskParams) {
     #[allow(unused)]
     let expect_immediate = |res| match res {
-        control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => Ok(control::CodeExecutionSuccess::OK),
+        control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => {
+            Ok(control::CodeExecutionSuccess::OK)
+        }
         control::CodeExecutionSuccess::QUEUED => Ok(control::CodeExecutionSuccess::OK),
         control::CodeExecutionSuccess::DEFERRED(_) => Err(control::CodeExecutionFailure::ERR),
     };
     #[allow(unused)]
     let expect_deferred = |res| match res {
-        control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => Err(control::CodeExecutionFailure::ERR),
+        control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => {
+            Err(control::CodeExecutionFailure::ERR)
+        }
         control::CodeExecutionSuccess::QUEUED => Err(control::CodeExecutionFailure::ERR),
         control::CodeExecutionSuccess::DEFERRED(evt) => Ok(evt),
     };
 
     let event_bus = params.processor.event_bus.clone();
-    let mut subscriber: EventBusSubscriber<'static> =
-        hwa::task_allocations::init_integration_subscriber(event_bus).await;
+
+    let mut subscriber = event_bus.subscriber().await;
 
     hwa::info!("[task_integration] Waiting for SYS_READY");
     if subscriber
         .ft_wait_until(EventFlags::SYS_READY)
-        .await.is_err() {
+        .await
+        .is_err()
+    {
         finish_task(Err("T0 [Task integration startup]"));
         return;
     }
@@ -72,7 +79,11 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("## {} - BEGIN", test_name);
         if let Some(_result) = params
             .processor
-            .execute(CommChannel::Internal, &control::GCodeCmd::new(0, None, control::GCodeValue::M100), true)
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M100),
+                true,
+            )
             .await
             .and_then(expect_immediate)
             .ok()
@@ -94,7 +105,11 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("## {} - BEGIN", test_name);
         if let Some(_result) = params
             .processor
-            .execute(CommChannel::Internal, &control::GCodeCmd::new(0, None, control::GCodeValue::M80), false)
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M80),
+                false,
+            )
             .await
             .and_then(expect_immediate)
             .ok()
@@ -103,14 +118,15 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             if embassy_time::with_timeout(
                 embassy_time::Duration::from_secs(2),
                 subscriber.ft_wait_until(EventFlags::ATX_ON),
-            ).await.is_ok() {
+            )
+            .await
+            .is_ok()
+            {
                 hwa::info!("## {} - END", test_name);
-            }
-            else {
+            } else {
                 finish_task(Err(test_name));
                 return;
             }
-
         } else {
             finish_task(Err(test_name));
             return;
@@ -126,7 +142,11 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         hwa::info!("## {} - BEGIN", test_name);
         if params
             .processor
-            .execute(CommChannel::Internal, &control::GCodeCmd::new(0, None, control::GCodeValue::M502), false)
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M502),
+                false,
+            )
             .await
             .and_then(expect_immediate)
             .is_ok()
@@ -144,13 +164,14 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     {
         let test_name = "T4 [G28 (Homming)]";
         let homing_gcode = control::GCodeCmd::new(
-            0, None,
+            0,
+            None,
             control::GCodeValue::G28(control::XYZE {
                 x: None,
                 y: None,
                 z: None,
                 e: None,
-            })
+            }),
         );
 
         hwa::info!("## {} - BEGIN", test_name);
@@ -165,8 +186,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             if subscriber.ft_wait_for(evt).await.is_err() {
                 finish_task(Err(test_name));
                 return;
-            }
-            else {
+            } else {
                 hwa::info!("## {} - END", test_name);
             }
             //hwa::info!("-- G28 OK (took: {} ms)", _t0.elapsed().as_millis());
@@ -183,13 +203,14 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     {
         let test_name = "T5 [G92 (Reset Position)]";
         let set_pos_gcode = control::GCodeCmd::new(
-            5, Some(5),
+            5,
+            Some(5),
             control::GCodeValue::G92(control::XYZE {
                 x: Some(math::ZERO),
                 y: Some(math::ZERO),
                 z: Some(math::ZERO),
                 e: Some(math::ZERO),
-            })
+            }),
         );
 
         hwa::info!("## {} - BEGIN", test_name);
@@ -213,10 +234,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     //#[cfg(feature = "integration-test-reset-pos")]
     {
         let test_name = "T6 [G4 (Dwell)]";
-        let set_pos_gcode = control::GCodeCmd::new(
-            6, Some(6),
-            control::GCodeValue::G4
-        );
+        let set_pos_gcode = control::GCodeCmd::new(6, Some(6), control::GCodeValue::G4);
 
         hwa::info!("## {} - BEGIN", test_name);
         if let Some(evt) = params
@@ -228,8 +246,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         {
             if subscriber.ft_wait_for(evt).await.is_ok() {
                 hwa::info!("## {} - END", test_name);
-            }
-            else {
+            } else {
                 finish_task(Err(test_name));
                 return;
             }
@@ -246,20 +263,19 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     #[cfg(feature = "with-sdcard")]
     {
         let test_name = "T7 [M20 (List SDCard)]";
-        let gcode = control::GCodeCmd::new(
-            7, Some(7),
-            control::GCodeValue::M20(None)
-        );
+        let gcode = control::GCodeCmd::new(7, Some(7), control::GCodeValue::M20(None));
 
         hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
             &mut params.processor,
-            CommChannel::Internal, &gcode,
+            CommChannel::Internal,
+            &gcode,
             #[cfg(feature = "with-sdcard")]
             &mut params.card_controller,
             #[cfg(feature = "with-printjob")]
             &mut params.printer_controller,
-        ).await;
+        )
+        .await;
         if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
@@ -275,19 +291,22 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     {
         let test_name = "T8 [M20 (List SDCard)]";
         let gcode = control::GCodeCmd::new(
-            8, Some(8),
-            control::GCodeValue::M20(Some("/dir/".to_string()))
+            8,
+            Some(8),
+            control::GCodeValue::M20(Some("/dir/".to_string())),
         );
 
         hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
             &mut params.processor,
-            CommChannel::Internal, &gcode,
+            CommChannel::Internal,
+            &gcode,
             #[cfg(feature = "with-sdcard")]
             &mut params.card_controller,
             #[cfg(feature = "with-printjob")]
             &mut params.printer_controller,
-        ).await;
+        )
+        .await;
         if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
@@ -574,18 +593,21 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         let test_name = "T14 [Plotting)]";
 
         let gcode = control::GCodeCmd::new(
-            8, Some(8),
-            control::GCodeValue::M23(Some("dir/laser.g".to_string()))
+            8,
+            Some(8),
+            control::GCodeValue::M23(Some("dir/laser.g".to_string())),
         );
         hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
             &mut params.processor,
-            CommChannel::Internal, &gcode,
+            CommChannel::Internal,
+            &gcode,
             #[cfg(feature = "with-sdcard")]
             &mut params.card_controller,
             #[cfg(feature = "with-printjob")]
             &mut params.printer_controller,
-        ).await;
+        )
+        .await;
         if resp.and_then(expect_deferred).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
@@ -595,31 +617,32 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
 
         match embassy_time::with_timeout(
             embassy_time::Duration::from_secs(5),
-            subscriber.ft_wait_for(
-                EventStatus::containing(EventFlags::JOB_PAUSED),
-            )
-        ).await {
+            subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_PAUSED)),
+        )
+        .await
+        {
             Ok(_) => {
                 // command resume (eq: M24)
 
-                let gcode = control::GCodeCmd::new(
-                    8, Some(8),
-                    control::GCodeValue::M24
-                );
+                let gcode = control::GCodeCmd::new(8, Some(8), control::GCodeValue::M24);
 
                 let resp = control::task_control::execute(
                     &mut params.processor,
-                    CommChannel::Internal, &gcode,
+                    CommChannel::Internal,
+                    &gcode,
                     #[cfg(feature = "with-sdcard")]
                     &mut params.card_controller,
                     #[cfg(feature = "with-printjob")]
                     &mut params.printer_controller,
-                ).await;
+                )
+                .await;
                 if resp.and_then(expect_immediate).is_ok() {
                     match embassy_time::with_timeout(
                         embassy_time::Duration::from_secs(1200),
-                        subscriber.ft_wait_until(EventFlags::JOB_COMPLETED)
-                    ).await {
+                        subscriber.ft_wait_until(EventFlags::JOB_COMPLETED),
+                    )
+                    .await
+                    {
                         Ok(_r) => {
                             hwa::info!("## {} - END", test_name);
                         }
@@ -646,7 +669,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     embassy_time::Timer::after(embassy_time::Duration::from_millis(100)).await;
     hwa::info!("# Integration_task END.");
     finish_task(Ok(()));
-    cfg_if::cfg_if!{
+    cfg_if::cfg_if! {
         if #[cfg(test)] {
         }
         else if #[cfg(feature = "native")] {
@@ -658,13 +681,12 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             // just let the task passing away
         }
     }
-
 }
 
 fn finish_task(success: Result<(), &'static str>) {
     INTEGRATION_STATUS.signal(success.is_err());
     if let Some(msg) = success.err() {
-        cfg_if::cfg_if!{
+        cfg_if::cfg_if! {
             if #[cfg(all(not(test), feature = "native"))] {
                 panic!("Test {} failed", msg);
             }
@@ -672,20 +694,18 @@ fn finish_task(success: Result<(), &'static str>) {
                 hwa::error!("Test {} failed", msg);
             }
         }
-
     }
     #[cfg(test)]
     hwa::sys_stop();
     // In native simulator, we need to exit
-
 }
 
 #[cfg(test)]
 mod integration_test {
+    use crate::control::task_integration::INTEGRATION_STATUS;
+    use crate::hwa;
     use std::marker::PhantomData;
     use std::sync::{Condvar, Mutex};
-    use crate::hwa;
-    use crate::control::task_integration::INTEGRATION_STATUS;
 
     struct Signaler {
         mutex: Mutex<bool>,
@@ -739,38 +759,32 @@ mod integration_test {
             loop {
                 unsafe { self.inner.poll() };
                 if INTEGRATION_STATUS.signaled() {
-                    break
+                    break;
                 }
                 self.signaler.wait()
             }
         }
     }
 
+    /// The integration test entry-point
     #[embassy_executor::task(pool_size = 1)]
     async fn mocked_main(spawner: embassy_executor::Spawner) {
         crate::printhor_main(spawner, false).await;
         if INTEGRATION_STATUS.wait().await {
             hwa::info!("Integration task Succeeded");
-        }
-        else {
+        } else {
             panic!("Integration task Failed");
         }
     }
 
     #[test]
     fn do_integration_test() {
-
         // 1. Init embassy runtime
+        let executor = hwa::make_static_ref!("Executor", MockedExecutor, MockedExecutor::new());
 
-        static STATIC_EXECUTOR: hwa::TrackedStaticCell<MockedExecutor> = hwa::TrackedStaticCell::new();
-
-        // 3. Spawn the task
-        let executor_instance = MockedExecutor::new();
-        let executor = STATIC_EXECUTOR.init::<{hwa::MAX_STATIC_MEMORY}>("MainExecutor", executor_instance);
+        // 2. Spawn the [mocked_main] task
         executor.run(|spawner| {
-            let _tk = spawner.must_spawn(
-                mocked_main(spawner)
-            );
+            let _tk = spawner.must_spawn(mocked_main(spawner));
         });
         hwa::info!("executor gone...");
     }

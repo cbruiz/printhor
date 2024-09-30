@@ -1,7 +1,7 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::{CommChannel, EventBusRef, PersistentState};
 use hwa::TrackedStaticCell;
+use hwa::{CommChannel, EventBusRef, PersistentState};
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
@@ -38,15 +38,15 @@ pub enum PrinterControllerStatus {
 ///
 /// Variants:
 ///
-/// - `AlreadyPrinting`: 
+/// - `AlreadyPrinting`:
 ///     Occurs when attempting to start a new print job while another job is already in progress.
 ///     To start a new job, the ongoing job must be stopped first.
 ///
-/// - `NotPrinting`: 
+/// - `NotPrinting`:
 ///     Occurs when attempting to stop a print job when no job is currently running. This generally happens when the printer is in a `Ready` state.
 ///
-/// - `NoEffect`: 
-///     Occurs when the requested operation has no effect. 
+/// - `NoEffect`:
+///     Occurs when the requested operation has no effect.
 ///     For example, trying to start a job that is already started, or stop a job that is already stopped.
 #[derive(Debug)]
 pub enum PrinterControllerError {
@@ -141,13 +141,16 @@ impl PrinterController {
                 match &self.status.wait().await {
                     PrinterControllerStatus::Ready(channel) => {
                         hwa::debug!("Ready -> Paused");
-                        self.status.signal(PrinterControllerStatus::Paused(*channel));
+                        self.status
+                            .signal(PrinterControllerStatus::Paused(*channel));
                         Ok(())
                     }
                     PrinterControllerStatus::Printing(_channel) => {
                         Err(PrinterControllerError::AlreadyPrinting)
                     }
-                    PrinterControllerStatus::Paused(_channel) => Err(PrinterControllerError::NoEffect),
+                    PrinterControllerStatus::Paused(_channel) => {
+                        Err(PrinterControllerError::NoEffect)
+                    }
                 }
             }
             PrinterControllerEvent::Resume(_channel) => {
@@ -155,13 +158,17 @@ impl PrinterController {
                 match &self.status.wait().await {
                     PrinterControllerStatus::Ready(channel) => {
                         hwa::debug!("Ready -> Printing");
-                        self.status.signal(PrinterControllerStatus::Printing(*channel));
+                        self.status
+                            .signal(PrinterControllerStatus::Printing(*channel));
                         Ok(())
                     }
-                    PrinterControllerStatus::Printing(_channel) => Err(PrinterControllerError::NoEffect),
+                    PrinterControllerStatus::Printing(_channel) => {
+                        Err(PrinterControllerError::NoEffect)
+                    }
                     PrinterControllerStatus::Paused(channel) => {
                         hwa::debug!("Paused -> Printing");
-                        self.status.signal(PrinterControllerStatus::Printing(*channel));
+                        self.status
+                            .signal(PrinterControllerStatus::Printing(*channel));
                         Ok(())
                     }
                 }
@@ -175,10 +182,13 @@ impl PrinterController {
                     }
                     PrinterControllerStatus::Printing(channel) => {
                         hwa::debug!("Printing -> Paused");
-                        self.status.signal(PrinterControllerStatus::Paused(*channel));
+                        self.status
+                            .signal(PrinterControllerStatus::Paused(*channel));
                         Ok(())
                     }
-                    PrinterControllerStatus::Paused(_channel) => Err(PrinterControllerError::NoEffect),
+                    PrinterControllerStatus::Paused(_channel) => {
+                        Err(PrinterControllerError::NoEffect)
+                    }
                 }
             }
             PrinterControllerEvent::Abort(channel) => {
@@ -205,7 +215,7 @@ impl PrinterController {
             Ok(()) => {
                 self.channel.signal(event);
                 Ok(())
-            },
+            }
             Err(_any) => Err(_any),
         }
     }

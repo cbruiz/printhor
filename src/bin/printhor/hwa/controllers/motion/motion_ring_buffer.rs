@@ -169,13 +169,12 @@ impl RingBuffer {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use printhor_hwa_common::CommChannel;
-    use crate::hwa::controllers::MovType;
     use super::*;
-    
+    use crate::hwa::controllers::MovType;
+    use printhor_hwa_common::CommChannel;
+
     #[test]
     fn test_index_from_tail() {
         let mut rb = RingBuffer::new();
@@ -191,7 +190,6 @@ mod tests {
 
     #[test]
     fn test_entry_from_tail() {
-
         let mut rb = RingBuffer::new();
         rb.head = 1;
         rb.used = 1;
@@ -221,5 +219,4 @@ mod tests {
 
          */
     }
-    
 }

@@ -15,7 +15,8 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 # Hardware device features
-with-log = ["printhor-hwa-common/with-log"]
+with-defmt = [] # Just ignore
+with-log = ["printhor-hwa-common/with-log", "env_logger"]
 with-serial-port-1 = ["async-std"]
 with-serial-port-2 = []
 with-serial-port-usb = []
@@ -35,7 +36,6 @@ with-spi = []
 
 with-display = []
 
-
 with-x-axis = []
 with-y-axis = []
 with-z-axis = []
@@ -47,49 +47,42 @@ verbose-timings = []
 sdcard-uses-spi = []
 without-vref-int = []
 
-#with-display = [
-#    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
-#    "printhor-hwa-common/with-ui",
-#]
-
 [dependencies]
 
-embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
-embassy-sync = { version = "*", features = ["std"] }
-embassy-time = { version = "*", features = ["std", "generic-queue-128"] }
-embassy-futures = { version = "*", features = [] }
-embassy-embedded-hal = { version = "*", features = [] }
+embassy-executor = { version = "0.6", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
+embassy-sync = { version = "0.6", features = ["std"] }
+embassy-time = { version = "0.3", features = ["std", "generic-queue-128"] }
+embassy-futures = { version = "0.1", features = [] }
+embassy-embedded-hal = { version = "0.2", features = [] }
 
 embedded-io-async = { version = "0.6.0", optional = true }
 embedded-io = { version = "0.6.1", optional = true }
 
 async-std = { version = "1.12.0", optional = true}
 gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
-#embedded-graphics-simulator = { version = "0.4.1", optional = true }
-log = { version = "0.4.20" }
-env_logger = { version = "0.10.1" }
-printhor-hwa-common = { version = "0.0"}
+env_logger = { version = "0.10.1", optional = true }
+printhor-hwa-common = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
+printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
-embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ] }
-futures = { version = "0.3.30", default-features = false, features = [] }
-embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
+embedded-hal = { version = "1.0", default-features = false, optional = true }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven" ] }
+futures = { version = "0.3", default-features = false, features = [] }
+embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 
 lvgl = { version="0", default-features = false, features =[], optional = true }
-#embedded-graphics = { version = "0.8.1", optional = true}
-#embedded-graphics-core = {version = "0.4.0", optional = true }
 nb = {version = "1.1.0", default-features = false, features = []}
-tmc2209 = { version = "0.2.2", optional = true }
+tmc2209 = { version = "0.2", optional = true }
 thread-priority = { version = "0.15"}
 
 cfg-if = {version = "1.0.0"}
 const_env = { version = "0.1" }
 
 [patch.crates-io]
-#embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-#embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-#embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
+printhor-hwa-common = { path = "../../printhor-hwa-common" }
+printhor-hwa-utils = { path = "../../printhor-hwa-utils" }
+embassy-executor = { path = "../../libs/embassy" }
+embassy-sync = { path = "../../libs/embassy" }
+embassy-time = { path = "../../libs/embassy" }
+embassy-futures = { path = "../../libs/embassy" }
+embassy-embedded-hal = { path = "../../libs/embassy" }
 async-gcode = { path = "../../libs/async-gcode" }

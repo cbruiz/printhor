@@ -1,40 +1,19 @@
 use crate::{control, hwa, math, tgeo};
-use hwa::{EventFlags, EventStatus, PersistentState};
-use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use embassy_sync::mutex::MutexGuard;
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
-use hwa::drivers::motion_driver::MotionDriverRef;
+use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
 use tgeo::{CoordSel, TVector};
-use embassy_sync::mutex::{Mutex, MutexGuard};
 
-#[derive(Clone)]
-pub struct MotionPlannerRef {
-    inner: &'static MotionPlanner,
-}
-
-impl MotionPlannerRef {
-    pub const fn new(inner: &'static MotionPlanner) -> Self {
-        Self { inner }
-    }
-}
-
-impl core::ops::Deref for MotionPlannerRef {
-    type Target = MotionPlanner;
-
-    fn deref(&self) -> &Self::Target {
-        self.inner
-    }
-}
-
-
-/// The `MotionPlanner` struct is responsible for handling the motion planning logic 
-/// within the system. It encompasses the mechanisms for buffering motion plans, 
+/// The `MotionPlanner` struct is responsible for handling the motion planning logic
+/// within the system. It encompasses the mechanisms for buffering motion plans,
 /// signaling motion states, and interacting with the associated motion driver.
 ///
 /// # Fields
 ///
 /// * `defer_channel` - A reference to the channel used for sending deferred events.
-/// * `ringbuffer` - A `Mutex` guarding the ring buffer that stores motion plans.
+/// * `ring_buffer` - A `Mutex` guarding the ring buffer that stores motion plans.
 /// * `move_planned` - Configuration state indicating whether a move is planned.
 /// * `available` - Configuration state indicating availability for new motion plans.
 /// * `motion_config` - Reference to the configuration settings for the motion control.
@@ -43,14 +22,15 @@ impl core::ops::Deref for MotionPlannerRef {
 pub struct MotionPlanner {
     //pub event_bus: EventBusRef,
     // The channel to send deferred events
-    pub defer_channel: hwa::DeferChannelRef,
+    pub defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
 
-    ringbuffer: Mutex<hwa::ControllerMutexType, RingBuffer>,
-    move_planned: PersistentState<hwa::ControllerMutexType, bool>,
-    available: PersistentState<hwa::ControllerMutexType, bool>,
-    motion_config: motion::MotionConfigRef,
-    motion_st: Mutex<hwa::ControllerMutexType, motion::MotionStatus>,
-    pub motion_driver: MotionDriverRef,
+    ring_buffer: hwa::StaticController<hwa::MotionRingBufferMutexType, RingBuffer>,
+    move_planned: &'static PersistentState<hwa::MotionSignalMutexType, bool>,
+    available: &'static PersistentState<hwa::MotionSignalMutexType, bool>,
+    motion_config: hwa::StaticController<hwa::MotionConfigMutexType, motion::MotionConfig>,
+    motion_st: hwa::StaticController<hwa::MotionStatusMutexType, motion::MotionStatus>,
+    pub motion_driver:
+        hwa::StaticController<hwa::MotionDriverMutexType, hwa::drivers::MotionDriver>,
 }
 
 // TODO: Refactor in progress
@@ -60,6 +40,9 @@ impl MotionPlanner {
     /// necessary components such as the `defer_channel`, `motion_config`, and `motion_driver`.
     /// It also initializes internal fields such as the motion plan ring buffer, motion status,
     /// and various configuration states.
+    ///
+    /// # Warning
+    /// A motion planner can only be instantiated once
     ///
     /// # Arguments
     ///
@@ -100,23 +83,44 @@ impl MotionPlanner {
     ///
     /// // Now the motion_planner is ready to be used
     /// ```
-    pub const fn new(
-        defer_channel: hwa::DeferChannelRef,
-        motion_config: motion::MotionConfigRef,
-        motion_driver: MotionDriverRef,
+    pub fn new(
+        defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
+        motion_config: hwa::StaticController<hwa::MotionConfigMutexType, motion::MotionConfig>,
+        motion_driver: hwa::StaticController<
+            hwa::MotionDriverMutexType,
+            hwa::drivers::MotionDriver,
+        >,
     ) -> Self {
+        type PersistentStateType<M> = hwa::PersistentState<M, bool>;
+
         Self {
-            //event_bus,
             defer_channel,
             motion_config,
-            ringbuffer: Mutex::new(RingBuffer::new()),
-            move_planned: PersistentState::new(),
-            available: PersistentState::new(),
-            motion_st: Mutex::new(motion::MotionStatus::new()),
+            ring_buffer: hwa::make_static_controller!(
+                "MotionRingBuffer",
+                hwa::MotionRingBufferMutexType,
+                RingBuffer,
+                RingBuffer::new()
+            ),
+            move_planned: hwa::make_static_ref!(
+                "MovePlannedSignal",
+                PersistentStateType<hwa::MotionSignalMutexType>,
+                PersistentState::new()
+            ),
+            available: hwa::make_static_ref!(
+                "MoveAvailableSignal",
+                PersistentStateType<hwa::MotionSignalMutexType>,
+                PersistentState::new()
+            ),
+            motion_st: hwa::make_static_controller!(
+                "MotionStatus",
+                hwa::MotionStatusMutexType,
+                hwa::controllers::MotionStatus,
+                hwa::controllers::MotionStatus::new()
+            ),
             motion_driver,
         }
     }
-
 
     /// Starts the motion planner and publishes an event indicating that the motion queue is empty.
     ///
@@ -129,7 +133,7 @@ impl MotionPlanner {
     ///
     /// # Explanation
     ///
-    /// This method is essential for initializing the motion planner's state and 
+    /// This method is essential for initializing the motion planner's state and
     /// ensuring it starts from a clean slate. By resetting the `move_planned` configuration,
     /// the method ensures that any previous move plans are discarded,
     /// preventing unintended motions. The `available` configuration is set to `true` to
@@ -137,23 +141,27 @@ impl MotionPlanner {
     ///
     /// Publishing an event indicating that the motion queue is empty is crucial for
     /// other components of the system to recognize that the motion planner is in an idle state
-    /// and ready for new instructions. This helps in maintaining synchronization across 
+    /// and ready for new instructions. This helps in maintaining synchronization across
     /// different parts of the system and ensuring smooth operation.
     ///
     /// It is important to note that the motion planner will remain idle and not execute any movements until this `start` method is called.
     /// This ensures that no motion-related activities commence before the system is fully set up and ready, preventing any accidental or unplanned actions.
-    pub async fn start(&self, event_bus: &hwa::EventBusRef) {
+    pub async fn start(
+        &self,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    ) {
         self.move_planned.reset();
         self.available.signal(true);
         event_bus
-            .publish_event(hwa::EventStatus::containing(
-                EventFlags::MOV_QUEUE_EMPTY,
-            ).and_not_containing(EventFlags::MOV_QUEUE_FULL))
+            .publish_event(
+                hwa::EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)
+                    .and_not_containing(EventFlags::MOV_QUEUE_FULL),
+            )
             .await;
     }
 
     // Dequeues actual velocity plan
-    
+
     /// Dequeues the current velocity plan segment.
     ///
     /// This method is used to retrieve the current segment of the motion plan and its associated communication channel.
@@ -184,13 +192,13 @@ impl MotionPlanner {
     /// bus, which is important for maintaining the overall system's consistency and reliability.
     pub async fn get_current_segment_data(
         &self,
-        event_bus: &hwa::EventBusRef,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
     ) -> Option<(motion::Segment, hwa::CommChannel)> {
         loop {
             let _ = self.move_planned.wait().await;
             let mut do_dwell = false;
             {
-                let mut rb = self.ringbuffer.lock().await;
+                let mut rb = self.ring_buffer.lock().await;
                 let head = rb.head as usize;
                 match rb.data[head] {
                     PlanEntry::Empty => {
@@ -232,7 +240,6 @@ impl MotionPlanner {
         }
     }
 
-    
     /// Consumes the current segment data from the ring buffer.
     ///
     /// # Description
@@ -259,8 +266,11 @@ impl MotionPlanner {
     /// This function is typically called after the execution of a movement has been completed to update the state
     /// of the ring buffer and signal the availability of slots for new commands. It is an integral part of the system
     /// to ensure that the motion planner operates smoothly and consistently by managing the state of planned and executed movements.
-    pub async fn consume_current_segment_data(&self, event_bus: &hwa::EventBusRef) -> u8 {
-        let mut rb = self.ringbuffer.lock().await;
+    pub async fn consume_current_segment_data(
+        &self,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    ) -> u8 {
+        let mut rb = self.ring_buffer.lock().await;
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
         match &rb.data[head as usize] {
@@ -302,17 +312,16 @@ impl MotionPlanner {
         rb.used -= 1;
         hwa::debug!("- used={}, h={} ", rb.used, head);
         let mut queue_status_event = EventStatus::not_containing(EventFlags::MOV_QUEUE_FULL);
-        event_bus.publish_event(
-            match rb.used == 0 {
+        event_bus
+            .publish_event(match rb.used == 0 {
                 true => queue_status_event.and_containing(EventFlags::MOV_QUEUE_EMPTY),
                 false => queue_status_event,
-            }
-        ).await;
+            })
+            .await;
         self.available.signal(true);
         rb.used
     }
 
-    
     /// Schedules a raw movement operation for the motion planner.
     ///
     /// # Description
@@ -368,7 +377,7 @@ impl MotionPlanner {
         action: hwa::DeferAction,
         move_type: ScheduledMove,
         blocking: bool,
-        event_bus: &hwa::EventBusRef,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
         num_order: u32,
         line_tag: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
@@ -376,7 +385,7 @@ impl MotionPlanner {
         loop {
             self.available.wait().await;
             {
-                let mut rb = self.ringbuffer.lock().await;
+                let mut rb = self.ring_buffer.lock().await;
                 let mut is_defer = rb.used == hwa::SEGMENT_QUEUE_SIZE - 1;
 
                 if rb.used < hwa::SEGMENT_QUEUE_SIZE {
@@ -410,15 +419,15 @@ impl MotionPlanner {
                                             .sqrt(),
                                         Some(t_jmax),
                                     )
-                                        .unwrap_or(math::ZERO);
+                                    .unwrap_or(math::ZERO);
 
                                     let q_lim = if t_jstar < t_jmax {
                                         t_jstar * (v_0 + curr_vmax)
                                     } else {
                                         ((v_0 + curr_vmax) / math::TWO)
                                             * (t_jstar
-                                            + ((curr_vmax - v_0).abs()
-                                            / curr_segment.segment_data.constraints.a_max))
+                                                + ((curr_vmax - v_0).abs()
+                                                    / curr_segment.segment_data.constraints.a_max))
                                     };
 
                                     if q_1 >= q_lim {
@@ -456,7 +465,9 @@ impl MotionPlanner {
                                         let proj: Real = prev_segment
                                             .segment_data
                                             .unit_vector_dir
-                                            .orthogonal_projection(curr_segment.segment_data.unit_vector_dir);
+                                            .orthogonal_projection(
+                                                curr_segment.segment_data.unit_vector_dir,
+                                            );
                                         if proj.is_defined_positive() {
                                             hwa::debug!("RingBuffer [{}, {}] chained: ({}) proj ({}) = ({})", prev_index, curr_insert_index,
                                                 prev_segment.segment_data.unit_vector_dir, curr_segment.segment_data.unit_vector_dir, proj
@@ -483,7 +494,7 @@ impl MotionPlanner {
                                 .await;
                             (
                                 PlanEntry::PlannedMove(curr_segment, action, channel, is_defer),
-                                hwa::EventStatus::containing(EventFlags::NOTHING)
+                                hwa::EventStatus::containing(EventFlags::NOTHING),
                             )
                         }
                         ScheduledMove::Homing => {
@@ -525,21 +536,32 @@ impl MotionPlanner {
                     return if is_defer {
                         // Shall wait for one de-allocation in order to enqueue more
                         hwa::debug!("schedule_raw_move() - Finally deferred");
-                        #[cfg(feature="trace-commands")]
-                        hwa::info!("Promised {} #order: {} line: {:?}", _mnemonic, num_order, line_tag);
+                        #[cfg(feature = "trace-commands")]
+                        hwa::info!(
+                            "[trace-commands] Promised {} #order: {} line: {:?}",
+                            _mnemonic,
+                            num_order,
+                            line_tag
+                        );
                         self.defer_channel
                             .send(hwa::DeferEvent::AwaitRequested(action, channel))
                             .await;
                         Ok(control::CodeExecutionSuccess::DEFERRED(event))
                     } else {
                         #[cfg(feature = "trace-commands")]
-                        hwa::info!("Commited #order: {} #line: {:?}", num_order, line_tag);
+                        hwa::info!(
+                            "[trace-commands] Commited #order: {} #line: {:?}",
+                            num_order,
+                            line_tag
+                        );
                         hwa::debug!("schedule_raw_move() END - Finally queued");
                         Ok(control::CodeExecutionSuccess::QUEUED)
-                    }
+                    };
                 } else {
                     self.available.reset();
-                    event_bus.publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_FULL)).await;
+                    event_bus
+                        .publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_FULL))
+                        .await;
                     if !blocking {
                         hwa::warn!(
                             "Mov rejected: {} / {} h={}",
@@ -556,11 +578,15 @@ impl MotionPlanner {
         }
     }
 
-    pub fn motion_cfg(&self) -> motion::MotionConfigRef {
+    pub fn motion_cfg(
+        &self,
+    ) -> hwa::StaticController<hwa::MotionConfigMutexType, hwa::controllers::MotionConfig> {
         self.motion_config.clone()
     }
 
-    pub fn motion_driver(&self) -> MotionDriverRef {
+    pub fn motion_driver(
+        &self,
+    ) -> hwa::StaticController<hwa::MotionDriverMutexType, hwa::drivers::MotionDriver> {
         self.motion_driver.clone()
     }
 
@@ -721,12 +747,11 @@ impl MotionPlanner {
             .assign(CoordSel::all(), &jerk);
     }
 
-
     /// Plans and schedules a series of motion commands based on the given GCode.
     ///
-    /// Depending on the provided GCode, this method performs different motion planning 
-    /// and scheduling actions. It supports G0 (rapid move), G1 (linear move), G4 (dwell), 
-    /// G28 (homing), G29 (leveling), G29_1, and G29_2 commands. Any unsupported GCodes 
+    /// Depending on the provided GCode, this method performs different motion planning
+    /// and scheduling actions. It supports G0 (rapid move), G1 (linear move), G4 (dwell),
+    /// G28 (homing), G29 (leveling), G29_1, and G29_2 commands. Any unsupported GCodes
     /// will yield an error.
     ///
     /// # Parameters
@@ -741,21 +766,21 @@ impl MotionPlanner {
     /// - `Err` if the command was not yet implemented or other execution failures occurred.
     ///
     /// # Usage
-    /// This method is integral to motion control systems where precise planning and 
-    /// execution of motion commands are required. It ensures that various types of 
-    /// motion commands from GCode are handled correctly and appropriately scheduled 
-    /// to execute in an asynchronous manner. This helps in maintaining smooth and 
+    /// This method is integral to motion control systems where precise planning and
+    /// execution of motion commands are required. It ensures that various types of
+    /// motion commands from GCode are handled correctly and appropriately scheduled
+    /// to execute in an asynchronous manner. This helps in maintaining smooth and
     /// coordinated movements for CNC machines or 3D printers.
     pub async fn plan(
         &self,
         channel: hwa::CommChannel,
         gc: &control::GCodeCmd,
         blocking: bool,
-        event_bus: &hwa::EventBusRef,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
         match &gc.value {
-            control::GCodeValue::G0(t) => Ok(
-                self.schedule_move(
+            control::GCodeValue::G0(t) => Ok(self
+                .schedule_move(
                     "G0",
                     channel,
                     hwa::DeferAction::RapidMove,
@@ -768,11 +793,12 @@ impl MotionPlanner {
                     t.f,
                     blocking,
                     event_bus,
-                    gc.order_num, gc.line_tag,
-                ).await?
-            ),
-            control::GCodeValue::G1(t) => Ok(
-                self.schedule_move(
+                    gc.order_num,
+                    gc.line_tag,
+                )
+                .await?),
+            control::GCodeValue::G1(t) => Ok(self
+                .schedule_move(
                     "G1",
                     channel,
                     hwa::DeferAction::LinearMove,
@@ -785,21 +811,22 @@ impl MotionPlanner {
                     t.f,
                     blocking,
                     event_bus,
-                    gc.order_num, gc.line_tag,
-                ).await?
-            ),
-            control::GCodeValue::G4 => Ok(
-                self.schedule_raw_move(
+                    gc.order_num,
+                    gc.line_tag,
+                )
+                .await?),
+            control::GCodeValue::G4 => Ok(self
+                .schedule_raw_move(
                     "G4",
                     channel,
                     hwa::DeferAction::Dwell,
                     ScheduledMove::Dwell,
                     blocking,
                     event_bus,
-                    gc.order_num, gc.line_tag,
+                    gc.order_num,
+                    gc.line_tag,
                 )
-                .await?
-            ),
+                .await?),
             control::GCodeValue::G28(_x) => {
                 event_bus
                     .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
@@ -812,7 +839,8 @@ impl MotionPlanner {
                         ScheduledMove::Homing,
                         blocking,
                         event_bus,
-                        gc.order_num, gc.line_tag,
+                        gc.order_num,
+                        gc.line_tag,
                     )
                     .await?)
             }
@@ -831,11 +859,10 @@ impl MotionPlanner {
         p1_t: TVector<Real>,
         requested_motion_speed: Option<Real>,
         blocking: bool,
-        event_bus: &hwa::EventBusRef,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
         num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
-
         // TODO Reduce locks
         let p0 = self
             .get_last_planned_pos()
@@ -902,8 +929,12 @@ impl MotionPlanner {
         let speed_vector = clamped_speed * speed_rate;
 
         let module_target_speed = speed_vector.norm2().unwrap_or(math::ZERO);
-        let module_target_accel = (unit_vector_dir.abs() * max_accel).norm2().unwrap_or(math::ZERO);
-        let module_target_jerk = (unit_vector_dir.abs() * max_jerk).norm2().unwrap_or(math::ZERO);
+        let module_target_accel = (unit_vector_dir.abs() * max_accel)
+            .norm2()
+            .unwrap_or(math::ZERO);
+        let module_target_jerk = (unit_vector_dir.abs() * max_jerk)
+            .norm2()
+            .unwrap_or(math::ZERO);
 
         let move_result = if module_target_distance.is_negligible() {
             Ok(control::CodeExecutionSuccess::OK)
@@ -939,7 +970,8 @@ impl MotionPlanner {
                     ScheduledMove::Move(segment_data),
                     blocking,
                     event_bus,
-                    num, line,
+                    num,
+                    line,
                 )
                 .await?;
 
@@ -969,7 +1001,10 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn do_homing(&self, event_bus: &hwa::EventBusRef) -> Result<(), ()> {
+    pub async fn do_homing(
+        &self,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    ) -> Result<(), ()> {
         match self
             .motion_driver
             .lock()
@@ -981,7 +1016,6 @@ impl MotionPlanner {
                 self.set_last_planned_pos(&_pos).await;
             }
             Err(_pos) => {
-
                 self.set_last_planned_pos(&_pos).await;
                 // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
                 // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
@@ -1017,6 +1051,19 @@ impl MotionPlanner {
     }
 }
 
+impl Clone for MotionPlanner {
+    fn clone(&self) -> Self {
+        Self {
+            defer_channel: self.defer_channel.clone(),
+            ring_buffer: self.ring_buffer.clone(),
+            move_planned: self.move_planned,
+            available: self.available,
+            motion_config: self.motion_config.clone(),
+            motion_st: self.motion_st.clone(),
+            motion_driver: self.motion_driver.clone(),
+        }
+    }
+}
 
 /// This method performs the cornering optimization algorithm on the given `RingBuffer`.
 ///
@@ -1042,7 +1089,9 @@ impl MotionPlanner {
 /// segments are queued, and the goal is to optimize the entire motion path by smoothing out the
 /// corners, hence enhancing overall motion performance.
 #[cfg(feature = "cornering")]
-fn perform_cornering(mut rb: MutexGuard<hwa::ControllerMutexType, RingBuffer>) -> Result<(), ()> {
+fn perform_cornering(
+    mut rb: MutexGuard<hwa::MotionRingBufferMutexType, RingBuffer>,
+) -> Result<(), ()> {
     let mut left_offset = 2;
     let mut left_watermark = math::ZERO;
     let mut right_watermark = math::ZERO;
@@ -1132,17 +1181,16 @@ fn perform_cornering(mut rb: MutexGuard<hwa::ControllerMutexType, RingBuffer>) -
         }
     }
     #[cfg(feature = "native")]
-    if hwa::is_log_debug_enabled() {
-        display_content(&rb, from_offset, to_offset)?;
-        hwa::debug!("Cornering algorithm END");
-    }
+    display_content(&rb, from_offset, to_offset)?;
+
+    hwa::debug!("Cornering algorithm END");
     Ok(())
 }
 
 #[cfg(feature = "native")]
 #[allow(unused)]
 pub fn display_content(
-    rb: &MutexGuard<hwa::ControllerMutexType, RingBuffer>,
+    rb: &MutexGuard<hwa::MotionRingBufferMutexType, RingBuffer>,
     left_offset: u8,
     right_offset: u8,
 ) -> Result<(), ()> {
@@ -1161,10 +1209,9 @@ pub fn display_content(
 
 #[cfg(test)]
 pub mod planner_test {
-    use std::future::Future;
-    use printhor_hwa_common::{DeferChannelRef, TrackedStaticCell};
-    use crate::hwa::controllers::{LinearMicrosegmentStepInterpolator, MotionConfig, StepPlanner};
     use crate::hwa;
+    use hwa::controllers::{LinearMicrosegmentStepInterpolator, StepPlanner};
+    use printhor_hwa_common::{CommChannel, DeferAction, DeferEvent};
 
     //#[cfg(feature = "wip-tests")]
     #[test]
@@ -1236,7 +1283,7 @@ pub mod planner_test {
             &segment.segment_data.constraints,
             false,
         )
-            .unwrap();
+        .unwrap();
 
         let units_per_mm = neutral_element + units_per_mm;
         let steps_per_mm = units_per_mm * usteps;
@@ -1393,7 +1440,7 @@ pub mod planner_test {
             &segment.segment_data.constraints,
             false,
         )
-            .unwrap();
+        .unwrap();
 
         let units_per_mm = neutral_element + units_per_mm;
         let steps_per_mm = units_per_mm * usteps;
@@ -1548,7 +1595,7 @@ pub mod planner_test {
             &segment.segment_data.constraints,
             false,
         )
-            .unwrap();
+        .unwrap();
 
         let units_per_mm = neutral_element + units_per_mm;
         let steps_per_mm = units_per_mm * usteps;
@@ -1634,89 +1681,46 @@ pub mod planner_test {
         )
     }
 
-    #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-    #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-    static STACK: embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex,heapless::FnvIndexMap<&'static str, bool, 16>> = embassy_sync::mutex::Mutex::new(heapless::FnvIndexMap::<_, _, 16>::new());
-
     #[futures_test::test]
     async fn receiver_receives_given_try_send_async() {
+        type MutexType = hwa::NoopMutex;
 
-        const MAX_STATIC_MEMORY: usize = 1024;
-
-        let event_bus = {
-            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-            static EVT_BUS: hwa::TrackedStaticCell<hwa::EventBusPubSubType> = hwa::TrackedStaticCell::new();
-            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-            static EVT_CTRL_BUS: hwa::TrackedStaticCell<hwa::ControllerMutex<hwa::InterruptControllerMutexType, hwa::EventBus>> = hwa::TrackedStaticCell::new();
-            let bus = EVT_BUS.init::<MAX_STATIC_MEMORY>("EventBusChannel", hwa::EventBusPubSubType::new());
-            let publisher: hwa::EventBusPublisherType = bus. publisher().expect("publisher exausted");
-            hwa::EventBusRef::new(
-                hwa::ControllerRef::new(
-                    EVT_CTRL_BUS. init::<MAX_STATIC_MEMORY>("EventBus", hwa::ControllerMutex::new(
-                        hwa::EventBus::new( bus, publisher, hwa::EventFlags::empty())
-                    ))
-                )
-            )
-        };
-
-        let _defer_channel: DeferChannelRef = {
-            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-            static MDC: TrackedStaticCell<hwa::DeferChannelChannelType> = TrackedStaticCell::new();
-            DeferChannelRef::new(
-                MDC.init::<{ hwa::MAX_STATIC_MEMORY }>("defer_channel", hwa::DeferChannelChannelType::new())
-            )
-        };
-
-        let _motion_config: hwa::InterruptControllerRef<MotionConfig> = {
-            #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-            #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-            static MCS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionConfig>> =
-                TrackedStaticCell::new();
-            hwa::ControllerRef::new(MCS.init::<{ hwa::MAX_STATIC_MEMORY }>(
-                "MotionConfig",
-                hwa::ControllerMutex::new(MotionConfig::new()),
+        let event_bus = hwa::EventBusController::new(hwa::make_static_controller!(
+            "EventBusChannelController",
+            MutexType,
+            hwa::EventBusChannelController<MutexType>,
+            hwa::EventBusChannelController::new(hwa::make_static_ref!(
+                "EventBusChannel",
+                hwa::EventBusPubSubType<MutexType>,
+                hwa::EventBusPubSubType::new()
             ))
-        };
-        let _ = _motion_config.lock().await;
+        ));
 
-        async fn run_for_me<F,T>(_future: F, _from: &'static str) -> T
-        where F: Future<Output=T>
-        {
-            let mut mg = STACK.lock().await;
+        let defer_channel: hwa::DeferChannel<MutexType> =
+            hwa::DeferChannel::new(hwa::make_static_ref!(
+                "DeferChannel",
+                hwa::DeferChannelChannelType<MutexType>,
+                hwa::DeferChannelChannelType::new()
+            ));
 
-            if mg.contains_key(_from) {
-                hwa::info!("Big mistake");
-            }
-            else {
-                let _ = mg.insert(_from, false);
-            }
-            let result = _future.await;
-            if !mg.contains_key(_from) {
-                hwa::info!("Big mistake");
-            }
-            else {
-                let _ = mg.remove(_from);
-            }
-
-            result
-        }
-
+        let motion_config = hwa::make_static_controller!(
+            "MotionConfig",
+            hwa::NoopMutex,
+            hwa::controllers::MotionConfig,
+            hwa::controllers::MotionConfig::new()
+        );
+        let _ = motion_config.lock().await;
 
         let _st = event_bus.get_status().await;
-        let _s2 = event_bus.get_status().await;
-        let _x = event_bus.get_status();
-        run_for_me(_x, "here").await;
-        let _x = event_bus.get_status();
-        run_for_me(_x, "here").await;
 
+        defer_channel
+            .send(DeferEvent::Completed(
+                DeferAction::Homing,
+                CommChannel::Internal,
+            ))
+            .await;
         /*
-
         Work in progress
-
         */
-
     }
 }

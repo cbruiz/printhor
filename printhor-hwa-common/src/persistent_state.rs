@@ -120,3 +120,21 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate as hwa;
+    #[futures_test::test]
+    async fn foundation_test() {
+        type MutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
+
+        let persistent_state: hwa::PersistentState<MutexType, bool> = hwa::PersistentState::new();
+        assert_eq!(persistent_state.signaled(), false);
+        persistent_state.signal(true);
+        assert_eq!(persistent_state.signaled(), true);
+        // The value stored is `true`
+        assert_eq!(persistent_state.wait().await, true);
+        // The value stored is still `true`
+        assert_eq!(persistent_state.wait().await, true);
+    }
+}

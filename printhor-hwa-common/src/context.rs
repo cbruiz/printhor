@@ -19,3 +19,19 @@ pub struct MachineContext<C, S, I, M, P> {
     /// Holds the Pulse Width Modulation (PWM) components for controlling signal output.
     pub pwm: P,
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::MachineContext;
+
+    #[test]
+    fn dummy() {
+        let _context = MachineContext {
+            controllers: (),
+            sys_devices: (),
+            io_devices: (),
+            motion: (),
+            pwm: (),
+        };
+    }
+}

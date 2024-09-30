@@ -48,8 +48,8 @@ pub trait ProbeTrait {
     async fn probe_test_mode(&mut self, sleep_us: u64);
 }
 
-/// The `ServoController` structure is responsible for managing a servo motor 
-/// using an interrupt-controlled PWM (Pulse Width Modulation) channel. 
+/// The `ServoController` structure is responsible for managing a servo motor
+/// using an interrupt-controlled PWM (Pulse Width Modulation) channel.
 /// It provides methods to control the angle of the servo and implements the `ProbeTrait` for additional probe-related actions.
 ///
 /// # Fields

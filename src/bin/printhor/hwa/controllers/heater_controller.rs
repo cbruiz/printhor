@@ -1,18 +1,17 @@
 //! Mostly functional
 use crate::hwa;
 use crate::hwa::controllers::pwm_controller::PwmController;
+use crate::math::Real;
 #[allow(unused)]
 use crate::tgeo::ArithmeticOps;
 use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
 use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
-use crate::math::Real;
 
 type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
 
-
 /// A controller struct for managing a heater device.
 ///
-/// This controller interacts with both an ADC (Analog-Digital Converter) 
+/// This controller interacts with both an ADC (Analog-Digital Converter)
 /// and a PWM (Pulse-Width Modulation) controller to measure and regulate the temperature.
 ///
 /// # Generics
@@ -36,7 +35,7 @@ pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
 where
     AdcPeri: crate::hwa::device::AdcTrait + 'static,
     AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal_02::Pwm<Duty=u32> + 'static,
+    PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
 {
     /// Shared Analog-Digital Converter (ADC) controller used to measure temperature.
@@ -123,7 +122,7 @@ where
             Real::from_f32(self.v_ratio),
         );
     }
-    
+
     /// Reads the current temperature in Celsius degrees.
     ///
     /// # Returns
@@ -132,11 +131,11 @@ where
     ///
     /// # Implementation Note
     ///
-    /// This asynchronous function locks the ADC bus to perform a temperature 
-    /// measurement. Depending on the feature configuration, the measurement 
-    /// can be performed asynchronously or synchronously. The raw ADC value read 
-    /// from the ADC pin is then converted to a temperature value, using the 
-    /// `convert_to_celsius` method, which is also responsible for updating the 
+    /// This asynchronous function locks the ADC bus to perform a temperature
+    /// measurement. Depending on the feature configuration, the measurement
+    /// can be performed asynchronously or synchronously. The raw ADC value read
+    /// from the ADC pin is then converted to a temperature value, using the
+    /// `convert_to_celsius` method, which is also responsible for updating the
     /// cached temperature and resistance values.
     ///
     /// # Examples

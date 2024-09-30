@@ -1,5 +1,5 @@
-use crate::tgeo::{CoordSel, TVector};
 use crate::hwa;
+use crate::tgeo::{CoordSel, TVector};
 use hwa::StepperChannel;
 
 /// Represents the status of a stepper channel.
@@ -301,7 +301,6 @@ impl StepPlanner {
         Some(triggered_channels)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

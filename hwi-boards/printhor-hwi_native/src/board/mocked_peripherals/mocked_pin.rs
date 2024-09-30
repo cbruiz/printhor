@@ -1,9 +1,8 @@
 use embassy_time::{Duration, Timer};
-use printhor_hwa_common::TrackedStaticCell;
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 use crate::device::AdcPinTrait;
 
-type PinsCell<T> = std::sync::Mutex<T>;
+pub(crate) type PinsCell<T> = std::sync::Mutex<T>;
 
 pub type PinStateRef = &'static PinsCell<PinState>;
 
@@ -14,7 +13,7 @@ pub(crate) struct PinState {
     digital: [bool; NUM_PINS],
 }
 impl PinState {
-    const fn new() -> Self {
+   pub(crate)  const fn new() -> Self {
         Self {
             digital: [false; NUM_PINS]
         }
@@ -29,13 +28,6 @@ impl PinState {
     pub(crate) fn get(&self, id: u8) -> bool {
         self.digital[id as usize]
     }
-}
-#[link_section = "__DATA,.bss"]
-static GLOBAL_PIN_STATE: TrackedStaticCell<PinsCell<PinState>> = TrackedStaticCell::new();
-
-#[inline]
-pub(crate) fn init_pin_state() -> PinStateRef {
-    GLOBAL_PIN_STATE.init::<{crate::MAX_STATIC_MEMORY}>("GlobaPinState", PinsCell::new(PinState::new()))
 }
 
 pub struct MockedIOPin {
