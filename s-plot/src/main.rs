@@ -4,11 +4,12 @@ extern crate alloc;
 extern crate core;
 
 mod prelude;
-pub use prelude::*;
+use prelude::*;
 
 use math::Real;
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
+use printhor_hwa_common::EventBusController;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
@@ -201,27 +202,46 @@ async fn main(spawner: embassy_executor::Spawner) {
     let mut data_points = DataPoints::new(Real::zero(), Real::zero(), Real::zero(), Real::zero());
     let mut ref_time = Real::zero();
 
-    let event_bus: EventBusRef =
-        printhor_hwa_common::init_event_bus::<{ hwa::MAX_STATIC_MEMORY }>();
-    let defer_channel: DeferChannelRef =
-        printhor_hwa_common::init_defer_channel::<{ hwa::MAX_STATIC_MEMORY }>();
+    let event_bus = EventBusController::new(
+        hwa::make_static_controller!(
+            "EventBusChannelController",
+            hwa::EventbusMutexType,
+            hwa::EventBusChannelController<hwa::EventBusChannelMutexType>,
+            hwa::EventBusChannelController::new(
+                hwa::make_static_ref!(
+                    "EventBusChannel",
+                    hwa::EventBusPubSubType<hwa::EventBusChannelMutexType>,
+                    hwa::EventBusPubSubType::new()
+                )
+            )
+        )
+    );
+    let defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType> = hwa::DeferChannel::new(
+        hwa::make_static_ref!(
+            "DeferChannel",
+            hwa::DeferChannelChannelType<hwa::DeferChannelMutexType>,
+            hwa::DeferChannelChannelType::new()
+        )
+    );
 
     let motion_config = hwa::make_static_controller!(
         "MotionConfig",
-        MotionConfigMutexType,
+        hwa::MotionConfigMutexType,
         hwa::controllers::MotionConfig,
         hwa::controllers::MotionConfig::new()
     );
-    let motion_driver = {
-        static MDS: TrackedStaticCell<hwa::InterruptControllerMutex<MotionDriver>> =
-            TrackedStaticCell::new();
-        hwa::ControllerRef::new(MDS.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "MotionDriver",
-            hwa::InterruptControllerMutex::new(MotionDriver {
-                pins: hwa::device::MotionPins::new(),
-            }),
-        ))
+
+    let driver_device = hwa::drivers::MotionDriver{
+        pins: hwa::device::MotionPins::new(),
     };
+
+    let motion_driver = hwa::make_static_controller!(
+            "MotionDriver",
+            hwa::MotionDriverMutexType,
+            hwa::drivers::MotionDriver,
+            driver_device
+        );
+
     let soft_timer = SoftTimer::new();
     soft_timer.setup(motion_driver.clone());
     let mut motion_planner =
@@ -538,8 +558,8 @@ async fn main(spawner: embassy_executor::Spawner) {
 
                                 let mut step_planner = StepPlanner::from(
                                     microsegment_interpolator.state().clone(),
-                                    StepperChannel::empty(),
-                                    StepperChannel::empty(),
+                                    hwa::StepperChannel::empty(),
+                                    hwa::StepperChannel::empty(),
                                 );
 
                                 let mut pulse_offset = math::ZERO;
@@ -549,8 +569,8 @@ async fn main(spawner: embassy_executor::Spawner) {
                                 soft_timer
                                     .push(
                                         microsegment_interpolator.state().clone(),
-                                        StepperChannel::empty(),
-                                        StepperChannel::empty(),
+                                        hwa::StepperChannel::empty(),
+                                        hwa::StepperChannel::empty(),
                                     )
                                     .await;
 

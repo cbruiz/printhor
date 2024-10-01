@@ -19,14 +19,14 @@ struct SubscriptionCounting {
 }
 
 struct Subscriptions {
-    channel_counts: [SubscriptionCounting; CommChannel::count() - 1],
+    channel_counts: [SubscriptionCounting; CommChannel::count()],
     total_counts: i32,
 }
 
 impl Subscriptions {
     fn new() -> Self {
         Self {
-            channel_counts: [SubscriptionCounting::default(); CommChannel::count() - 1],
+            channel_counts: [SubscriptionCounting::default(); CommChannel::count()],
             total_counts: 0,
         }
     }

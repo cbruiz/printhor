@@ -10,7 +10,7 @@ pub mod tgeo;
 pub mod math;
 
 #[path = "../../src/bin/printhor/hwa/mod.rs"]
-pub mod hwa;
+mod hwa_core;
 
 #[path = "../../src/bin/printhor/helpers/mod.rs"]
 pub mod helpers;
@@ -36,6 +36,20 @@ pub mod hwi {
     pub const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 100;
     /// Micro-segment clock frequency in Hz
     pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
+
+    use super::hwa_core as hwa;
+    pub type EventbusMutexType = hwa::SyncSendMutex;
+    pub type EventBusChannelMutexType = hwa::NoopMutex;
+    pub type DeferChannelMutexType = hwa::NoopMutex;
+    pub type WatchdogMutexType = hwa::NoopMutex;
+    pub type MotionDriverMutexType = hwa::SyncSendMutex;
+    pub type MotionPlannerMutexType = hwa::NoopMutex;
+    pub type MotionConfigMutexType = hwa::SyncSendMutex;
+    pub type MotionStatusMutexType = hwa::NoopMutex;
+    pub type MotionRingBufferMutexType = hwa::NoopMutex;
+    pub type MotionSignalMutexType = hwa::NoopMutex;
+    pub type SerialPort1MutexType = hwa::SyncSendMutex;
 
     pub mod device {
         use crate::prelude::tgeo::CoordSel;
@@ -98,4 +112,13 @@ pub mod hwi {
 
         pub struct Watchdog {}
     }
+}
+
+pub mod hwa {
+    pub use super::hwa_core::*;
+    pub use crate::hwi::*;
+
+    //#region "Mutex types for this board"
+
+    //#endregion
 }
