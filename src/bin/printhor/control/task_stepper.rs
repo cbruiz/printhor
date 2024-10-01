@@ -18,14 +18,14 @@ use crate::math;
 use crate::math::Real;
 use crate::tgeo::{CoordSel, TVector};
 use control::motion::SCurveMotionProfile;
+use embassy_time::Duration;
 use hwa::controllers::motion::SegmentIterator;
 use hwa::controllers::motion::STEP_DRIVER;
+use hwa::controllers::ExecPlan;
 use hwa::controllers::LinearMicrosegmentStepInterpolator;
 use hwa::StepperChannel;
 use hwa::{DeferAction, DeferEvent, EventFlags, EventStatus};
 use num_traits::ToPrimitive;
-
-const DO_NOTHING: bool = false;
 
 ///
 /// This constant defines the duration of inactivity after which the stepper motors
@@ -177,27 +177,33 @@ pub async fn task_stepper(
     }
 
     loop {
-        match embassy_time::with_timeout(
+        let moves_left = match embassy_time::with_timeout(
             STEPPER_INACTIVITY_TIMEOUT,
-            motion_planner.get_current_segment_data(&event_bus),
+            motion_planner.next_plan(&event_bus),
         )
         .await
         {
-            // Timeout
             Err(_) => {
-                hwa::trace!("stepper_task timeout");
+                // Timeout
+                let moves_left = motion_planner.num_queued().await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!(
+                    "[trace-commands] [task_stepper] Timeout. Queue size: {}",
+                    moves_left
+                );
                 if !steppers_off {
                     park(&motion_planner).await;
                     steppers_off = true;
                 }
                 #[cfg(test)]
-                if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+                if control::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_stepper] Ending gracefully");
                     return ();
                 }
+                moves_left
             }
-            // Process segment plan
-            Ok(Some((segment, channel))) => {
+            Ok(ExecPlan::Segment(segment, channel)) => {
+                // Process segment plan
                 match s
                     .ft_wait_for(EventStatus::containing(EventFlags::ATX_ON))
                     .await
@@ -320,7 +326,8 @@ pub async fn task_stepper(
                         loop {
                             // Microsegment start
 
-                            if DO_NOTHING {
+                            if event_bus.has_flags(EventFlags::DRY_RUN).await {
+                                hwa::debug!("dry_run: Skipping move");
                                 break;
                             }
                             hwa::trace!("Micro-segment START");
@@ -482,7 +489,7 @@ pub async fn task_stepper(
                         }
 
                         hwa::debug!(" + POS: {}", real_steppper_pos);
-                        let _moves_left = motion_planner
+                        let moves_left = motion_planner
                             .consume_current_segment_data(&event_bus)
                             .await;
                         motion_planner
@@ -506,13 +513,14 @@ pub async fn task_stepper(
                                     microsegment_interpolator.advanced_mm(),
                                     microsegment_interpolator.advanced_mm().norm2().unwrap(),
                                     microsegment_interpolator.advanced_steps(),
-                                    _moves_left,
+                                    moves_left,
                                 );
                                 let t_tot = t0.elapsed().as_micros() as f32 / 1000000.0;
                                 let t_qw = tq as f32 / 1000000.0;
                                 hwa::debug!("SEGMENT END in {} s : {} - {}", t_tot - t_qw, t_tot, t_qw);
                             }
                         }
+                        moves_left
                         // segment end
                     }
                     Err(_) => {
@@ -520,33 +528,60 @@ pub async fn task_stepper(
                     }
                 }
             }
-            // Homing
-            Ok(None) => {
-                hwa::debug!("Homing init");
-
-                if steppers_off {
-                    #[cfg(feature = "trace-commands")]
-                    hwa::info!("[trace-commands] Powering steppers on");
-                    unpark(&motion_planner, true).await;
-                    steppers_off = false;
+            Ok(ExecPlan::Dwell(sleep_ms, channel)) => {
+                // Dwell
+                if let Some(millis) = sleep_ms {
+                    hwa::info!("G4: Sleeping {} millis", millis);
+                    embassy_time::Timer::after(Duration::from_millis(millis.into())).await;
+                } else {
+                    hwa::info!("G4 Not sleeping");
                 }
-                cfg_if::cfg_if! {
-                    if #[cfg(feature="debug-skip-homing")] {
-                        // Do nothing
-                    }
-                    else {
-                        if !motion_planner.do_homing(&event_bus).await.is_ok() {
-                            // TODO
-                        }
-                    }
-                }
-                motion_planner
+                let moves_left = motion_planner
                     .consume_current_segment_data(&event_bus)
                     .await;
-                real_steppper_pos.set_coord(CoordSel::all(), Some(0));
-                hwa::debug!("Homing done");
+                motion_planner
+                    .defer_channel
+                    .send(DeferEvent::Completed(DeferAction::Dwell, channel))
+                    .await;
+                event_bus
+                    .publish_event(EventStatus::not_containing(EventFlags::MOVING))
+                    .await;
+                moves_left
             }
-        }
+            Ok(ExecPlan::Homing(_channel)) => {
+                // Homing
+                hwa::debug!("Homing init");
+
+                if !event_bus.has_flags(EventFlags::DRY_RUN).await {
+                    if steppers_off {
+                        #[cfg(feature = "trace-commands")]
+                        hwa::info!("[trace-commands] Powering steppers on");
+                        unpark(&motion_planner, true).await;
+                        steppers_off = false;
+                    }
+                    cfg_if::cfg_if! {
+                        if #[cfg(feature="debug-skip-homing")] {
+                            // Do nothing
+                        }
+                        else {
+                            if !motion_planner.do_homing(&event_bus).await.is_ok() {
+                                // TODO
+                            }
+                        }
+                    }
+                } else {
+                    hwa::debug!("dry_run: Skipping homing");
+                    break;
+                }
+                real_steppper_pos.set_coord(CoordSel::all(), Some(0));
+                let moves_left = motion_planner
+                    .consume_current_segment_data(&event_bus)
+                    .await;
+                hwa::debug!("Homing done");
+                moves_left
+            }
+        };
+        hwa::debug!("Moves left: {}", moves_left);
     }
 }
 

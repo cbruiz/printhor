@@ -1,3 +1,4 @@
+use crate::hwa::controllers::ExecPlan::Homing;
 use crate::{control, hwa, math, tgeo};
 use embassy_sync::mutex::MutexGuard;
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
@@ -5,6 +6,13 @@ use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
 use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
 use tgeo::{CoordSel, TVector};
+
+/// The execution plan action dequeued from the buffer
+pub enum ExecPlan {
+    Segment(motion::Segment, hwa::CommChannel),
+    Dwell(Option<u32>, hwa::CommChannel),
+    Homing(hwa::CommChannel),
+}
 
 /// The `MotionPlanner` struct is responsible for handling the motion planning logic
 /// within the system. It encompasses the mechanisms for buffering motion plans,
@@ -190,13 +198,12 @@ impl MotionPlanner {
     ///
     /// The method ensures that the motion planner's state is correctly updated and synchronized with the event
     /// bus, which is important for maintaining the overall system's consistency and reliability.
-    pub async fn get_current_segment_data(
+    pub async fn next_plan(
         &self,
         event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
-    ) -> Option<(motion::Segment, hwa::CommChannel)> {
+    ) -> ExecPlan {
         loop {
             let _ = self.move_planned.wait().await;
-            let mut do_dwell = false;
             {
                 let mut rb = self.ring_buffer.lock().await;
                 let head = rb.head as usize;
@@ -204,28 +211,27 @@ impl MotionPlanner {
                     PlanEntry::Empty => {
                         self.move_planned.reset();
                     }
-                    PlanEntry::Dwell(channel, _deferred) => {
+                    PlanEntry::Dwell(channel, sleep, _deferred) => {
                         rb.data[head] = PlanEntry::Executing(MovType::Dwell(channel), true);
-                        // TODO: Need to revisit this logic
-                        do_dwell = true;
+                        return ExecPlan::Dwell(sleep, channel);
                     }
                     PlanEntry::PlannedMove(planned_data, action, channel, deferred) => {
                         hwa::debug!(
-                            "Exec starting: {} / {} h={}",
+                            "PlannedMove starting: {} / {} h={}",
                             rb.used,
                             hwa::SEGMENT_QUEUE_SIZE,
                             head
                         );
                         rb.data[head] =
                             PlanEntry::Executing(MovType::Move(action, channel), deferred);
-                        return Some((planned_data, channel));
+                        return ExecPlan::Segment(planned_data, channel);
                     }
                     PlanEntry::Homing(channel, _deferred) => {
                         event_bus
                             .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                             .await;
                         rb.data[head] = PlanEntry::Executing(MovType::Homing(channel), true);
-                        return None;
+                        return Homing(channel);
                     }
                     PlanEntry::Executing(_, _) => {
                         self.move_planned.reset();
@@ -233,11 +239,12 @@ impl MotionPlanner {
                     }
                 }
             }
-            if do_dwell {
-                // Just consume. TODO: need to wait for some time as specified
-                self.consume_current_segment_data(&event_bus).await;
-            }
         }
+    }
+
+    pub async fn num_queued(&self) -> u8 {
+        let mut rb = self.ring_buffer.lock().await;
+        rb.used
     }
 
     /// Consumes the current segment data from the ring buffer.
@@ -504,10 +511,10 @@ impl MotionPlanner {
                                 hwa::EventStatus::not_containing(hwa::EventFlags::HOMING),
                             )
                         }
-                        ScheduledMove::Dwell => {
+                        ScheduledMove::Dwell(sleep) => {
                             is_defer = true;
                             (
-                                PlanEntry::Dwell(channel, is_defer),
+                                PlanEntry::Dwell(channel, sleep, is_defer),
                                 hwa::EventStatus::containing(hwa::EventFlags::MOV_QUEUE_EMPTY),
                             )
                         }
@@ -815,12 +822,12 @@ impl MotionPlanner {
                     gc.line_tag,
                 )
                 .await?),
-            control::GCodeValue::G4 => Ok(self
+            control::GCodeValue::G4(t) => Ok(self
                 .schedule_raw_move(
                     "G4",
                     channel,
                     hwa::DeferAction::Dwell,
-                    ScheduledMove::Dwell,
+                    ScheduledMove::Dwell(t.s.map(|v| v.int() as u32)),
                     blocking,
                     event_bus,
                     gc.order_num,

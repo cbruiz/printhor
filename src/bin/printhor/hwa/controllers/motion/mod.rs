@@ -38,7 +38,7 @@ pub enum ScheduledMove {
     /// A homing action.
     Homing,
     /// A dwell action.
-    Dwell,
+    Dwell(Option<u32>),
 }
 
 /// Types of movements in the motion system.
@@ -75,8 +75,10 @@ pub enum PlanEntry {
     ///
     /// *_1: CommChannel* - The input channel requesting the move.
     ///
-    /// *_2: bool* - Indicates if motion is deferred or not.
-    Dwell(hwa::CommChannel, bool),
+    /// *_2: Option<u32>* - The number of milliseconds to delay.
+    ///
+    /// *_3: bool* - Indicates if motion is deferred or not.
+    Dwell(hwa::CommChannel, Option<u32>, bool),
     /// An executing move.
     ///
     /// *_1: MovType* - The type of the move.

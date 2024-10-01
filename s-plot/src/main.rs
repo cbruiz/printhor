@@ -25,6 +25,7 @@ use crate::hwa::device::MotionDevice;
 use crate::hwa::drivers::{MotionDriver, MotionDriverParams};
 use crate::hwa::CommChannel;
 use crate::math::{RealInclusiveRange, TWO, ZERO};
+use crate::prelude::hwa::controllers::ExecPlan;
 use crate::tgeo::{CoordSel, TVector};
 
 const STEPPER_PLANNER_MICROSEGMENT_FREQUENCY: u32 = 500; // hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
@@ -449,8 +450,8 @@ async fn main(spawner: embassy_executor::Spawner) {
     let mut total_disp_discrete = Real::zero();
     let mut s_id = 0;
     loop {
-        match motion_planner.get_current_segment_data(&event_bus).await {
-            Some((segment, _)) => {
+        match motion_planner.next_plan(&event_bus).await {
+            ExecPlan::Segment(segment, _) => {
                 s_id += 1;
                 hwa::debug!("Dequeuing move at t_ref={}", ref_time);
                 data_points.seg_start(ref_time, total_disp, segment.segment_data.speed_enter_mms);
@@ -640,9 +641,9 @@ async fn main(spawner: embassy_executor::Spawner) {
                     break;
                 }
             }
-            None => {
-                // No more segments queued
-
+            _ => {
+                // Homing and dwell not expected to be handled
+                // Hence, that means there is no more segments queued
                 break;
             }
         }

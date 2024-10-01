@@ -309,7 +309,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('g', None) => Some(GCodeValue::G),
         ('g', Some((0, 0))) => Some(GCodeValue::G0(XYZF::new())),
         ('g', Some((1, 0))) => Some(GCodeValue::G1(XYZEFS::new())),
-        ('g', Some((4, 0))) => Some(GCodeValue::G4),
+        ('g', Some((4, 0))) => Some(GCodeValue::G4(S::new())),
         ('g', Some((10, 0))) => Some(GCodeValue::G10),
         ('g', Some((17, 0))) => Some(GCodeValue::G17),
         ('g', Some((21, 0))) => Some(GCodeValue::G21),
@@ -331,6 +331,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((23, 0))) => Some(GCodeValue::M23(None)),
         ('m', Some((24, 0))) => Some(GCodeValue::M24),
         ('m', Some((25, 0))) => Some(GCodeValue::M25),
+        ('m', Some((37, 0))) => Some(GCodeValue::M37(S::new())),
         ('m', Some((73, 0))) => Some(GCodeValue::M73),
         ('m', Some((79, 0))) => Some(GCodeValue::M79),
         ('m', Some((80, 0))) => Some(GCodeValue::M80),
@@ -413,6 +414,12 @@ fn update_current(
             }
             _ => {}
         },
+        GCodeValue::G4(param) => match (ch, frx) {
+            ('s', Some(val)) => {
+                param.s.replace(helpers::to_fixed(val).abs());
+            }
+            _ => {}
+        },
         GCodeValue::G28(coord) => match (ch, frx) {
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
@@ -454,6 +461,12 @@ fn update_current(
                 }
             }
         }
+        GCodeValue::M37(coord) => match (ch, frx) {
+            ('s', Some(val)) => {
+                coord.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
         GCodeValue::M104(coord)
         | GCodeValue::M109(coord)
         | GCodeValue::M140(coord)

@@ -434,8 +434,8 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">M37</td>
         <td>*</td>
-        <td>Simulation mode</td>
-        <td>WIP</td>
+        <td>Simulation mode (Dry run mode)</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M73</td>

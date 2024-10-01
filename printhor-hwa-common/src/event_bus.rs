@@ -40,6 +40,7 @@ bitflags::bitflags! {
     /// - `JOB_PRINTING`: Job printing in progress.
     /// - `JOB_PAUSED`: Job is paused.
     /// - `JOB_COMPLETED`: Job completed.
+    /// - `DRY_RUN`: Do nothing. Just interpret.
     /// - `HOT_BED_TEMP_OK`: HotBed temperature is okay.
     /// - `HOT_END_TEMP_OK`: HotEnd temperature is okay.
     ///
@@ -67,35 +68,37 @@ bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq)]
     pub struct EventFlags: u16 {
         /// Special flag meaning no expectations
-        const NOTHING          = 0b0000000000000000;
+        const NOTHING          =  0b0000000000000000;
         /// System alarm flag
-        const SYS_ALARM        = 0b1000000000000000;
+        const SYS_ALARM        =  0b1000000000000000;
         /// System is booting
-        const SYS_BOOTING      = 0b0100000000000000;
+        const SYS_BOOTING      =  0b0100000000000000;
         /// System boot failure
-        const SYS_BOOT_FAILURE = 0b0010000000000000;
+        const SYS_BOOT_FAILURE =  0b0010000000000000;
         /// System is ready
-        const SYS_READY        = 0b0001000000000000;
+        const SYS_READY        =  0b0001000000000000;
         /// ATX power is on
-        const ATX_ON           = 0b0000100000000000;
+        const ATX_ON           =  0b0000100000000000;
         /// Homing operation in progress
-        const HOMING          = 0b0000010000000000;
+        const HOMING          =   0b0000010000000000;
         /// System is moving
-        const MOVING           = 0b0000001000000000;
+        const MOVING           =  0b0000001000000000;
         /// Movement queue is empty
-        const MOV_QUEUE_EMPTY  = 0b0000000100000000;
+        const MOV_QUEUE_EMPTY  =  0b0000000100000000;
         /// Movement queue is full
-        const MOV_QUEUE_FULL   = 0b0000000010000000;
+        const MOV_QUEUE_FULL   =  0b0000000010000000;
         /// Job printing in progress
-        const JOB_PRINTING     = 0b0000000001000000;
+        const JOB_PRINTING     =  0b0000000001000000;
         /// Job is paused
-        const JOB_PAUSED       = 0b0000000000100000;
+        const JOB_PAUSED       =  0b0000000000100000;
         /// Job completed
-        const JOB_COMPLETED    = 0b0000000000010000;
+        const JOB_COMPLETED    =  0b0000000000010000;
+        /// Dry Run (do nothing. Just interpret)
+        const DRY_RUN          =  0b0000000000001000;
         /// HotBed temperature is okay
-        const HOT_BED_TEMP_OK   = 0b0000000000001000;
+        const HOT_BED_TEMP_OK   = 0b0000000000000100;
         /// HotEnd temperature is okay
-        const HOT_END_TEMP_OK   = 0b0000000000000100;
+        const HOT_END_TEMP_OK   = 0b0000000000000010;
     }
 }
 

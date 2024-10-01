@@ -234,7 +234,8 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     //#[cfg(feature = "integration-test-reset-pos")]
     {
         let test_name = "T6 [G4 (Dwell)]";
-        let set_pos_gcode = control::GCodeCmd::new(6, Some(6), control::GCodeValue::G4);
+        let set_pos_gcode =
+            control::GCodeCmd::new(6, Some(6), control::GCodeValue::G4(control::S { s: None }));
 
         hwa::info!("## {} - BEGIN", test_name);
         if let Some(evt) = params

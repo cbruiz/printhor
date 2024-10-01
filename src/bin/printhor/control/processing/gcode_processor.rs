@@ -297,7 +297,7 @@ impl GCodeProcessor {
                     .await?)
             }
             #[cfg(feature = "with-motion")]
-            GCodeValue::G4 => {
+            GCodeValue::G4(_) => {
                 if !blocking {
                     self.motion_planner
                         .defer_channel
@@ -407,6 +407,17 @@ impl GCodeProcessor {
             }
             GCodeValue::M3 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M5 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M37(t) => {
+                let _ = self
+                    .event_bus
+                    .publish_event(if t.s.unwrap_or(math::ZERO).is_zero() {
+                        EventStatus::not_containing(EventFlags::DRY_RUN)
+                    } else {
+                        EventStatus::containing(EventFlags::DRY_RUN)
+                    })
+                    .await;
+                Ok(CodeExecutionSuccess::OK)
+            }
             GCodeValue::M73 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M79 => {
                 let _ = self.write(channel, "echo: Software reset\n").await;

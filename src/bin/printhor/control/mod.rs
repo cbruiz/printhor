@@ -221,7 +221,7 @@ pub enum GCodeValue {
     G1(XYZEFS),
 
     /// Dwell
-    G4,
+    G4(S),
     /// Set coordinate system data
     G10,
     G11, // retraction
@@ -306,8 +306,8 @@ pub enum GCodeValue {
     M30,
     M31,
     M32,
-    M33, // SD
-    M37, // Simulation mode
+    M33,    // SD
+    M37(S), // Simulation mode (Dry run mode)
     /// Set Print Progress
     M73,
     /// Soft reset
