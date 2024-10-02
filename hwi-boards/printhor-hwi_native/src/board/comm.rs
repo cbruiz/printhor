@@ -1,6 +1,3 @@
-//noinspection RsDetachedFile
-//noinspection RsDetachedFile
-use printhor_hwa_common as hwa;
 //! This specialization exists because there are several ways to communicate with stepper's Trinamic UART
 
 use printhor_hwa_common as hwa;
@@ -18,7 +15,7 @@ pub enum Error {
 use crate::board::MockedIOPin;
 
 /// Software UART channel
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum AxisChannel {
     TMCUartX,
     TMCUartY,
@@ -88,7 +85,7 @@ impl SingleWireSoftwareUart {
         }
     }
 
-    /// "Low level" speciallization with channel semantics
+    /// "Low level" specialization with channel semantics
     pub fn set_axis_channel(&mut self, axis_channel: Option<AxisChannel>) {
         self.set_channel(axis_channel.and_then(|ac| Some(ac.into())));
     }

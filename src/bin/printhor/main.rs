@@ -21,7 +21,7 @@ use crate::hwa::controllers::CardController;
 use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-hot-end")]
 use crate::hwa::controllers::HotendPwmController;
-#[cfg(feature = "with-printjob")]
+#[cfg(feature = "with-print-job")]
 use crate::hwa::controllers::PrinterController;
 #[cfg(feature = "with-motion")]
 use crate::hwa::drivers::MotionDriver;
@@ -174,7 +174,7 @@ async fn spawn_tasks(
     #[cfg(feature = "with-sdcard")]
     let sdcard_controller = CardController::new(sdcard_adapter).await;
 
-    #[cfg(feature = "with-printjob")]
+    #[cfg(feature = "with-print-job")]
     let printer_controller = PrinterController::new(event_bus.clone());
 
     #[cfg(feature = "with-hot-end")]
@@ -429,7 +429,7 @@ async fn spawn_tasks(
                 processor: processor.clone(),
                 #[cfg(feature = "with-sdcard")]
                 card_controller: sdcard_controller.clone(),
-                #[cfg(feature = "with-printjob")]
+                #[cfg(feature = "with-print-job")]
                 printer_controller: printer_controller.clone(),
             },
         ))
@@ -447,7 +447,7 @@ async fn spawn_tasks(
                 _io_devices.serial_port2_rx_stream,
             ),
             ControlTaskControllers {
-                #[cfg(feature = "with-printjob")]
+                #[cfg(feature = "with-print-job")]
                 printer_controller: printer_controller.clone(),
                 #[cfg(feature = "with-sdcard")]
                 card_controller: sdcard_controller.clone(),
@@ -455,7 +455,7 @@ async fn spawn_tasks(
         ))
         .map_err(|_| ())?;
 
-    #[cfg(feature = "with-printjob")]
+    #[cfg(feature = "with-print-job")]
     spawner
         .spawn(control::task_print_job::task_print_job(
             processor.clone(),

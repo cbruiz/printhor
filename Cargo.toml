@@ -25,28 +25,31 @@ assert-motion = []
 default = ["native"]
 
 # Hardware device features
+
+with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt"]
+with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log"]
+with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwa-common/with-serial-usb"]
+with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1"]
+with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2"]
+with-print-job = ["printhor-hwi_native?/with-serial-port-2"]
+with-spi = ["embedded-hal", "printhor-hwi_native?/with-spi"]
+with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end"]
+with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed"]
+with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion"]
+with-probe = ["embedded-hal", "printhor-hwi_native?/with-probe"]
+with-endstops = []
+with-sdcard = ["embedded-sdmmc", "printhor-hwi_native?/with-sdcard"]
+with-fan-layer = ["embedded-hal", "printhor-hwi_native?/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal", "printhor-hwi_native?/with-fan-extra-1"]
+with-laser = ["embedded-hal", "printhor-hwi_native?/with-laser"]
+with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic"]
+with-display = [] # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
+with-ps-on = ["printhor-hwi_native?/with-ps-on"]
+
 without-bootloader = []
 numerical-robusticity-check = []
 trace-commands = []
-with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt"]
-with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log"]
-with-serial-usb = ["printhor-hwa-common/with-serial-usb"]
-with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1"]
-with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2"]
-with-printjob = []
-with-spi = ["embedded-hal"]
-with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
-with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
-with-motion = ["printhor-hwa-common/with-motion"]
-with-probe = ["embedded-hal"]
-with-endstops = []
-with-sdcard = ["embedded-sdmmc"]
-with-fan-layer = ["embedded-hal"]
-with-fan-extra-1 = ["embedded-hal"]
-with-laser = ["embedded-hal"]
-with-trinamic = ["tmc2209"]
-with-display = [] # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
-with-ps-on = []
+
 cornering = []
 # Incomplete
 pulsed = []
@@ -145,12 +148,12 @@ plot-motion-plan = ["gnuplot"]
 #################
 
 native = [
-    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
+    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
     "with-motion", "printhor-hwi_native/with-motion",
     "with-serial-port-1", "printhor-hwi_native/with-serial-port-1",
     #"with-serial-port-2", "printhor-hwi_native/with-serial-port-2",
     #"with-sdcard", "printhor-hwi_native/with-sdcard",
-    #"with-printjob", "printhor-hwi_native/with-printjob",
+    #"with-print-job", "printhor-hwi_native/with-print-job",
     #"with-probe", "printhor-hwi_native/with-probe",
     #"with-hot-end", "printhor-hwi_native/with-hot-end",
     #"with-hot-bed", "printhor-hwi_native/with-hot-bed",
@@ -195,7 +198,7 @@ mks_robin_nano = [
     #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2", # Not implemented
     "with-spi", "printhor-hwi_mks_robin_nano/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
-    "with-printjob", "printhor-hwi_mks_robin_nano/with-printjob",
+    "with-print-job", "printhor-hwi_mks_robin_nano/with-print-job",
     "with-probe", "printhor-hwi_mks_robin_nano/with-probe",
     "with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end",
     "with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed",
@@ -226,7 +229,7 @@ nucleo64-l476rg = [
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
+    #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
     "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
     "with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
@@ -257,7 +260,7 @@ nucleo64-f410rb = [
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-printjob",
+    #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
     #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
     #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
@@ -292,7 +295,7 @@ skr_mini_e3_v2 = [
     "printhor-hwi_skr_mini_e3/without-ringbuffer",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
-    "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
+    "with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
     #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
     "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
@@ -324,7 +327,7 @@ skr_mini_e3_v3 = [
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
     "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
-    "with-printjob", "printhor-hwi_skr_mini_e3/with-printjob",
+    "with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
     #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", # Broken with bootloader?
     #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", # Broken
     "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
@@ -364,7 +367,7 @@ tst-rp2040 = [
     #"with-serial-port-2", "printhor-hwi_rp_2040/with-serial-port-2",
     #"with-spi", "printhor-hwi_rp_2040/with-spi",
     #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_rp_2040/with-sdcard", "printhor-hwi_rp_2040/sdcard-uses-spi",
-    #"with-printjob", "printhor-hwi_rp_2040/with-printjob",
+    #"with-print-job", "printhor-hwi_rp_2040/with-print-job",
     #"with-probe", "printhor-hwi_rp_2040/with-probe",
     #"with-hot-end", "printhor-hwi_rp_2040/with-hot-end",
     #"with-hot-bed", "printhor-hwi_rp_2040/with-hot-bed",
@@ -466,6 +469,7 @@ cfg-if = "1.0.0"
 
 [dev-dependencies]
 futures-test = { version = "0.3"}
+tmc2209 = { version = "0.2"}
 
 [profile.dev]
 codegen-units = 1

@@ -18,7 +18,7 @@ homepage = "https://github.com/cbruiz/printhor"
 tst-rp2040 = ["embassy-executor/task-arena-size-16384"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
-with-printjob = []
+with-print-job = []
 with-serial-port-1 = ["embedded-io-async"]
 with-serial-port-2 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]

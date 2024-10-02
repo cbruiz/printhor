@@ -37,7 +37,7 @@ pub const VREF_SAMPLE: u16 = 1210u16;
 pub const SDCARD_PARTITION: usize = 0;
 // The bit-banging uart in native simulator is set to ultra low speed for obvious reasons
 #[cfg(feature = "with-trinamic")]
-pub(crate) const TRINAMIC_UART_BAUD_RATE: u32 = 8;
+pub const TRINAMIC_UART_BAUD_RATE: u32 = 100;
 
 
 /// Defines a timeout value for the watchdog timer in micro-seconds.
@@ -214,26 +214,16 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
 
     #[cfg(all(feature = "with-trinamic"))]
     {
-        #[link_section = "__DATA,.bss"]
-        static EXECUTOR: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
-
-        let builder = std::thread::Builder::new()
-            .name("trinamic-uart-driver-sym".into());
-        let _ = builder.spawn(move || {
-            let executor: &'static mut embassy_executor::Executor = EXECUTOR.init("X", embassy_executor::Executor::new());
-            executor.run(move |s| {
-                s.spawn(
-                    device::trinamic_driver_simulator(
-                        device::MockedTrinamicDriver::new(
-                            MockedIOPin::new(0, _pin_state),
-                            MockedIOPin::new(1, _pin_state),
-                            MockedIOPin::new(2, _pin_state),
-                            MockedIOPin::new(3, _pin_state),
-                        )
-                    )
-                ).unwrap();
-            });
-        });
+        _spawner.spawn(
+            device::trinamic_driver_simulator(
+                device::MockedTrinamicDriver::new(
+                    MockedIOPin::new(0, _pin_state),
+                    MockedIOPin::new(1, _pin_state),
+                    MockedIOPin::new(2, _pin_state),
+                    MockedIOPin::new(3, _pin_state),
+                )
+            )
+        ).unwrap();
     }
 
 

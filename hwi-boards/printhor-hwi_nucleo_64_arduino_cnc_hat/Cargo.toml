@@ -20,7 +20,7 @@ nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-aren
 nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
-with-printjob = []
+with-print-job = []
 with-serial-port-1 = ["embedded-io-async"]
 with-serial-port-2 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]

@@ -4,17 +4,17 @@ use async_gcode::AsyncParserState;
 use embassy_time::{with_timeout, Duration};
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-printjob")] {
+    if #[cfg(feature = "with-print-job")] {
         cfg_if::cfg_if! {
             if #[cfg(not(feature = "with-sdcard"))] {
-                compiler_error("Feature with-printjob requires with-sdcard")
+                compiler_error("Feature with-print-job requires with-sdcard")
             }
         }
     }
 }
 
 pub struct ControlTaskControllers {
-    #[cfg(feature = "with-printjob")]
+    #[cfg(feature = "with-print-job")]
     pub printer_controller: hwa::controllers::PrinterController,
     #[cfg(feature = "with-sdcard")]
     pub card_controller: hwa::controllers::CardController,
@@ -99,7 +99,7 @@ pub async fn task_control(
                     &gc,
                     #[cfg(feature = "with-sdcard")]
                     &mut _controllers.card_controller,
-                    #[cfg(feature = "with-printjob")]
+                    #[cfg(feature = "with-print-job")]
                     &mut _controllers.printer_controller,
                 )
                 .await;
@@ -169,7 +169,7 @@ pub(super) async fn execute(
     channel: hwa::CommChannel,
     gc: &control::GCodeCmd,
     #[cfg(feature = "with-sdcard")] _card_controller: &mut hwa::controllers::CardController,
-    #[cfg(feature = "with-printjob")] _printer_controller: &mut hwa::controllers::PrinterController,
+    #[cfg(feature = "with-print-job")] _printer_controller: &mut hwa::controllers::PrinterController,
 ) -> control::CodeExecutionResult {
     match &gc.value {
         control::GCodeValue::Nop => {
@@ -234,7 +234,7 @@ pub(super) async fn execute(
                 }
             }
         }
-        #[cfg(feature = "with-printjob")]
+        #[cfg(feature = "with-print-job")]
         control::GCodeValue::M23(f) => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::SetFile(
@@ -260,7 +260,7 @@ pub(super) async fn execute(
                 }
             }
         }
-        #[cfg(feature = "with-printjob")]
+        #[cfg(feature = "with-print-job")]
         control::GCodeValue::M24 => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::Resume(channel))
@@ -277,7 +277,7 @@ pub(super) async fn execute(
                 }
             }
         }
-        #[cfg(feature = "with-printjob")]
+        #[cfg(feature = "with-print-job")]
         control::GCodeValue::M25 => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::Pause(channel))

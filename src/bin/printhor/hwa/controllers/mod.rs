@@ -5,10 +5,10 @@ pub mod sdcard_controller;
 use printhor_hwa_common::ControllerMutexType;
 #[cfg(feature = "with-sdcard")]
 pub use sdcard_controller::CardController;
-#[cfg(feature = "with-printjob")]
+#[cfg(feature = "with-print-job")]
 mod printer_controller;
 
-#[cfg(feature = "with-printjob")]
+#[cfg(feature = "with-print-job")]
 pub use printer_controller::*;
 
 #[cfg(feature = "with-motion")]

@@ -109,7 +109,7 @@ async fn usage() {
 ```
 "]
 //! TODO: [Work In progress] Software serial communication (UART)
-
+use crate as hwa;
 use embassy_time::Duration;
 use embassy_time::Timer;
 
@@ -192,10 +192,8 @@ where
     RXTX: IOPin,
 {
     pub fn new(mut rxtx: RXTX, baud_rate: u32) -> Self {
-        #[cfg(feature = "with-log")]
-        crate::debug!("HalfDuplexSerial init at {} baud rate", baud_rate);
+        hwa::debug!("HalfDuplexSerial init at {} baud rate", baud_rate);
         rxtx.set_output();
-        //rxtx.set_open_drain();
         rxtx.set_high();
 
         Self {
@@ -216,13 +214,13 @@ where
     }
 
     pub async fn set_write_mode(&mut self) {
-        #[cfg(feature = "with-log")]
-        crate::info!("set write mode()");
+        hwa::debug!("[soft_uart] set write mode()");
         self.rxtx.set_output();
         self.rxtx.set_high();
     }
 
     pub async fn set_read_mode(&mut self) {
+        hwa::debug!("[soft_uart] set read mode()");
         self.rxtx.set_input();
     }
 }
@@ -236,29 +234,27 @@ where
     async fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         let mut data_out = byte;
 
-        #[cfg(feature = "with-log")]
-        crate::info!(">: {:08b}", byte);
-
+        hwa::trace!("[soft_uart] Send word: {:08b} at {} ms period by bit", byte, self.bit_period.as_millis());
+        let mut _reference_instant = embassy_time::Instant::now();
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
-        #[cfg(feature = "with-log")]
-        crate::trace!("TX: Start bit");
+        hwa::trace!("[soft_uart] TX: Start bit [at +{} ms] [global_time: {} ms]", _reference_instant.elapsed().as_millis(), embassy_time::Instant::now().as_millis());
         ticker.next().await;
         for _bit in 0..8 {
             if data_out & 1 == 1 {
-                #[cfg(feature = "with-log")]
-                log::trace!("W {:08b} [1]", data_out);
                 self.rxtx.set_high();
+                hwa::trace!("[soft_uart] TX: W {:08b} [1] [at +{} ms]", data_out, _reference_instant.elapsed().as_millis());
             } else {
-                #[cfg(feature = "with-log")]
-                log::trace!("W {:08b} [0]", data_out);
                 self.rxtx.set_low();
+                hwa::trace!("[soft_uart] TX: W {:08b} [0] [at +{} ms]", data_out, _reference_instant.elapsed().as_millis());
             }
             data_out >>= 1;
             ticker.next().await;
         }
         self.rxtx.set_high(); // stop bit
+        hwa::trace!("[soft_uart] TX: Stop bit [at +{} ms]", _reference_instant.elapsed().as_millis());
         ticker.next().await;
+        hwa::trace!("[soft_uart] TX: End [at +{} ]", _reference_instant.elapsed().as_millis());
         Ok(())
     }
 }
@@ -272,45 +268,46 @@ where
     async fn read(&mut self) -> Result<u8, Self::Error> {
         let mut data_in = 0;
 
-        let t0 = embassy_time::Instant::now();
+        let mut _reference_instant = embassy_time::Instant::now();
 
         // wait for start bit
         while self.rxtx.is_high() {
-            Timer::after_ticks(self.bit_period.as_ticks() >> 16).await;
+
+            Timer::after_ticks(self.bit_period.as_ticks() >> 4).await;
             match &self.timeout_ms {
                 Some(timeout_ms) => {
-                    if t0.elapsed() > *timeout_ms {
+                    if _reference_instant.elapsed() > *timeout_ms {
                         return Err(Self::Error::Timeout);
                     }
                 }
                 None => {}
             }
         }
-        //crate::trace!("RX: Start bit got");
-        // Align to pulse center assuming start bit is detected closely after rising edge
+        _reference_instant = embassy_time::Instant::now();
+
+        hwa::trace!("[soft_uart] RX: Start bit detected at [at +{}] [global_time: {} ms]", _reference_instant.as_millis(), embassy_time::Instant::now().as_millis());
+        // Aditional wait: Align to pulse center assuming start bit is detected closely after rising edge
         Timer::after_ticks(self.bit_period.as_ticks() + (self.bit_period.as_ticks() >> 1)).await;
-        // Read 8 bits
+        let mut ticker = embassy_time::Ticker::every(self.bit_period);
+        // Sample 8 bits
         for _bit in 0..8 {
             data_in >>= 1;
             if self.rxtx.is_high() {
                 data_in |= 0b10000000;
-                #[cfg(feature = "with-log")]
-                log::trace!("R {:08b} [1]", data_in);
+                hwa::trace!("[soft_uart] RX: R {:08b} [1] [at +{} ms]", data_in, _reference_instant.elapsed().as_millis());
             } else {
-                #[cfg(feature = "with-log")]
-                log::trace!("R {:08b} [0]", data_in);
+                hwa::trace!("[soft_uart] RX: R {:08b} [0] [at +{} ms]", data_in, _reference_instant.elapsed().as_millis());
             }
-
-            Timer::after_ticks(self.bit_period.as_ticks()).await;
+            ticker.next().await;
         }
-        // wait for stop bit
+        // Expect stop bit
         if self.rxtx.is_high() {
-            #[cfg(feature = "with-log")]
-            log::trace!("R {:08b}", data_in);
+            hwa::trace!("[soft_uart] RX: Stop bit [at +{} ms]", _reference_instant.elapsed().as_millis());
+            hwa::trace!("[soft_uart] RX: Got: {:08b}", data_in);
             Ok(data_in)
         } else {
-            //#[cfg(feature = "with-log")]
-            //log::error!("Missed stop bit. Got: {:08b}", data_in);
+            hwa::error!("[soft_uart] RX: Stop bit missing [at +{} ms]", _reference_instant.elapsed().as_millis());
+            hwa::trace!("[soft_uart] RX: Getting so far: {:08b}", data_in);
             Err(Self::Error::Framing)
         }
     }

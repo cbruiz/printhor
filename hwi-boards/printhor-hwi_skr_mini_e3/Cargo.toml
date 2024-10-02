@@ -20,7 +20,7 @@ skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena
 with-defmt = ["printhor-hwa-common/defmt", "embassy-stm32/defmt"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
-with-printjob = []
+with-print-job = []
 with-serial-port-1 = []
 with-serial-port-2 = []
 with-spi = ["embedded-hal"]

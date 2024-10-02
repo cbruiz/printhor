@@ -15,7 +15,7 @@ pub struct IntegrationaskParams {
     pub processor: hwa::GCodeProcessor,
     #[cfg(feature = "with-sdcard")]
     pub card_controller: hwa::controllers::CardController,
-    #[cfg(feature = "with-printjob")]
+    #[cfg(feature = "with-print-job")]
     pub printer_controller: hwa::controllers::PrinterController,
 }
 
@@ -273,7 +273,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             &gcode,
             #[cfg(feature = "with-sdcard")]
             &mut params.card_controller,
-            #[cfg(feature = "with-printjob")]
+            #[cfg(feature = "with-print-job")]
             &mut params.printer_controller,
         )
         .await;
@@ -304,7 +304,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             &gcode,
             #[cfg(feature = "with-sdcard")]
             &mut params.card_controller,
-            #[cfg(feature = "with-printjob")]
+            #[cfg(feature = "with-print-job")]
             &mut params.printer_controller,
         )
         .await;
@@ -605,7 +605,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
             &gcode,
             #[cfg(feature = "with-sdcard")]
             &mut params.card_controller,
-            #[cfg(feature = "with-printjob")]
+            #[cfg(feature = "with-print-job")]
             &mut params.printer_controller,
         )
         .await;
@@ -633,7 +633,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
                     &gcode,
                     #[cfg(feature = "with-sdcard")]
                     &mut params.card_controller,
-                    #[cfg(feature = "with-printjob")]
+                    #[cfg(feature = "with-print-job")]
                     &mut params.printer_controller,
                 )
                 .await;

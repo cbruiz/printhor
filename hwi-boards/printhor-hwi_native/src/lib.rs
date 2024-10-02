@@ -52,6 +52,9 @@ pub use board::ADC_START_TIME_US;
 pub use board::ADC_VREF_DEFAULT_MV;
 use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+#[cfg(feature = "with-trinamic")]
+use crate::board::mocked_peripherals::TRINAMIC_SIMULATOR_PARK_SIGNAL;
+
 cfg_if::cfg_if!{
     if #[cfg(feature="without-vref-int")] {
         pub use board::ADC_VREF_DEFAULT_SAMPLE;
@@ -149,4 +152,14 @@ pub fn pause_ticker() {
 pub fn resume_ticker() {
     hwa::debug!("Ticker Resumed");
     TICKER_SIGNAL.signal(true);
+}
+
+#[cfg(feature = "with-trinamic")]
+pub fn pause_trinamic() {
+    TRINAMIC_SIMULATOR_PARK_SIGNAL.reset();
+}
+
+#[cfg(feature = "with-trinamic")]
+pub fn resume_trinamic(channel: device::AxisChannel) {
+    TRINAMIC_SIMULATOR_PARK_SIGNAL.signal(channel);
 }

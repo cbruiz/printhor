@@ -17,7 +17,7 @@ pub mod task_control;
 pub mod task_defer;
 #[cfg(any(test, feature = "integration-test"))]
 pub mod task_integration;
-#[cfg(feature = "with-printjob")]
+#[cfg(feature = "with-print-job")]
 pub mod task_print_job;
 #[cfg(feature = "with-motion")]
 pub mod task_stepper;
