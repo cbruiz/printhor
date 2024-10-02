@@ -4,7 +4,7 @@ use crate::hwa;
 use embassy_time::Duration;
 use embassy_time::{Instant, Timer};
 
-use control::GCodeCmd;
+use control::{GCodeCmd, GCodeLineParser, GCodeLineParserError};
 use control::{CodeExecutionFailure, CodeExecutionSuccess};
 use hwa::controllers::sdcard_controller::SDCardError;
 use hwa::controllers::sdcard_controller::SDCardStream;
@@ -20,8 +20,8 @@ pub async fn task_print_job(
     mut printer_controller: PrinterController,
     mut card_controller: hwa::controllers::CardController,
 ) {
-    let mut subscriber: EventBusSubscriber<'static> =
-        hwa::task_allocations::init_printer_subscriber(processor.event_bus.clone()).await;
+    let event_bus = processor.event_bus.clone();
+    let mut subscriber = event_bus.subscriber().await;
 
     hwa::info!("[task_print_job] Waiting for SYS_BOOTING");
     // Pauses this task until system is ready

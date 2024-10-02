@@ -25,7 +25,7 @@ pub static INTEGRATION_STATUS: PersistentState<CriticalSectionRawMutex, bool> =
     PersistentState::new();
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_integration(mut params: IntegrationaskParams) {
+pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskParams) {
     #[allow(unused)]
     let expect_immediate = |res| match res {
         control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => {
@@ -65,6 +65,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     hwa::info!("##");
 
     // Set endstops up for simulation for homing to be completed properly
+    #[cfg(feature = "with-motion")]
     {
         let mut dg = params.processor.motion_planner.motion_driver.lock().await;
         dg.pins.x_endstop_pin.set_high();
@@ -72,7 +73,6 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         dg.pins.z_endstop_pin.set_high();
     }
 
-    //#[cfg(feature = "integration-test-m100")]
     {
         let test_name = "T1 [M100 (Machine info)]";
 
@@ -98,7 +98,6 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     // Separator
     hwa::info!("##");
 
-    //#[cfg(feature = "integration-test-power-on")]
     {
         let test_name = "T2 [M80 (Power On)]";
 
@@ -136,7 +135,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     // Separator
     hwa::info!("##");
 
-    //#[cfg(all(feature = "integration-test-trinamic", feature = "with-trinamic"))]
+    #[cfg(feature = "with-trinamic")]
     {
         let test_name = "T3 [M502 (Trinamic set)]";
         hwa::info!("## {} - BEGIN", test_name);
@@ -160,7 +159,6 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
         }
     }
 
-    #[cfg(feature = "integration-test-homing")]
     {
         let test_name = "T4 [G28 (Homming)]";
         let homing_gcode = control::GCodeCmd::new(
@@ -199,7 +197,6 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     // Separator
     hwa::info!("##");
 
-    //#[cfg(feature = "integration-test-reset-pos")]
     {
         let test_name = "T5 [G92 (Reset Position)]";
         let set_pos_gcode = control::GCodeCmd::new(
@@ -231,7 +228,6 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     // Separator
     hwa::info!("##");
 
-    //#[cfg(feature = "integration-test-reset-pos")]
     {
         let test_name = "T6 [G4 (Dwell)]";
         let set_pos_gcode =
@@ -589,7 +585,7 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
     }
     */
 
-    //#[cfg(feature = "integration-test-pen")]
+    #[cfg(feature = "with-print-job")]
     {
         let test_name = "T14 [Plotting)]";
 
@@ -686,13 +682,13 @@ pub async fn task_integration(mut params: IntegrationaskParams) {
 
 fn finish_task(success: Result<(), &'static str>) {
     INTEGRATION_STATUS.signal(success.is_err());
-    if let Some(msg) = success.err() {
+    if let Some(_msg) = success.err() {
         cfg_if::cfg_if! {
             if #[cfg(all(not(test), feature = "native"))] {
-                panic!("Test {} failed", msg);
+                panic!("Test {} failed", _msg);
             }
             else {
-                hwa::error!("Test {} failed", msg);
+                hwa::error!("Test {} failed", _msg);
             }
         }
     }

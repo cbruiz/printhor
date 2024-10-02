@@ -42,9 +42,8 @@ impl Pwm for MockedPwm {
     fn get_max_duty(&self) -> <Self as Pwm>::Duty { 16384u32  }
     fn set_duty(&mut self, channel: <Self as Pwm>::Channel, duty: <Self as Pwm>::Duty) {
         let clamped_duty = duty.min(self.get_max_duty());
-        let duty_of_channel = *self.duty_map.get(&channel).unwrap_or(&0);
         hwa::trace!("set_duty: curr: {}, max: {}, next: {}",
-            duty_of_channel,
+            *self.duty_map.get(&channel).unwrap_or(&0),
             self.get_max_duty(),
             clamped_duty,
         );

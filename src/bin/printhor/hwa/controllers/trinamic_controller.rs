@@ -147,8 +147,8 @@ impl TrinamicController {
                     #[cfg(feature = "trace-commands")]
                     hwa::info!("[trace-commands] [TrinamicController] {} initialized", channel);
                     Ok(())},
-                Err(err) => {
-                    hwa::error!("[TrinamicController] Unable to initialize stepper: {:?}: {:?}", channel, err);
+                Err(_err) => {
+                    hwa::error!("[TrinamicController] Unable to initialize stepper: {:?}: {:?}", channel, _err);
                     Err(())
                 }
             }

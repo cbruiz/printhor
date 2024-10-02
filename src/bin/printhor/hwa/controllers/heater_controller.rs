@@ -2,6 +2,7 @@
 
 use crate::hwa;
 use crate::hwa::controllers::pwm_controller::PwmController;
+#[allow(unused)]
 use crate::math::Real;
 #[allow(unused)]
 use crate::tgeo::ArithmeticOps;

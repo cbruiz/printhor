@@ -31,7 +31,7 @@ with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "prin
 with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwa-common/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1"]
 with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2"]
-with-print-job = ["printhor-hwi_native?/with-serial-port-2"]
+with-print-job = ["printhor-hwi_native?/with-print-job"]
 with-spi = ["embedded-hal", "printhor-hwi_native?/with-spi"]
 with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end"]
 with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed"]
@@ -100,7 +100,7 @@ integration-test = [
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
     "integration-test-trinamic",
-    "integration-test-benchy",
+    #"integration-test-benchy",
     "integration-test-pen",
     "integration-test-laser-engrave",
     #"plot-timings",
@@ -135,12 +135,6 @@ std = []
 arch-std = []
 _arch = []
 
-# no-real-time is a technical development feature uses a non-monotonic timming to facilitate debugging
-#with-lvgl = [
-#    "with-display",
-#    "lvgl",
-#    #"lvgl/logger",
-#]
 plot-timings = []
 plot-motion-plan = ["gnuplot"]
 
@@ -156,8 +150,9 @@ native = [
     "with-motion",
     "with-serial-port-1",
     "with-serial-port-2",
-    #"with-sdcard", "printhor-hwi_native/with-sdcard",
-    #"with-print-job", "printhor-hwi_native/with-print-job",
+    #"with-spi", #WIP
+    "with-sdcard",
+    "with-print-job",
     "with-probe",
     "with-hot-end",
     "with-hot-bed",
@@ -165,8 +160,6 @@ native = [
     "with-fan-extra-1",
     "with-laser",
     "with-ps-on",
-
-
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -176,8 +169,6 @@ native = [
 
     #"plot-motion-plan",
     #"itertools",
-    #"embassy-sync/log",
-    #"with-lvgl",
     "printhor-hwi_native",
     "embassy-executor/arch-std", "embassy-sync/std", "embassy-time/std",
 ]

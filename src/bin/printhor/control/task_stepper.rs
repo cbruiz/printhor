@@ -177,7 +177,7 @@ pub async fn task_stepper(
     }
 
     loop {
-        let moves_left = match embassy_time::with_timeout(
+        let _moves_left = match embassy_time::with_timeout(
             STEPPER_INACTIVITY_TIMEOUT,
             motion_planner.next_plan(&event_bus),
         )
@@ -338,14 +338,14 @@ pub async fn task_stepper(
                                 let ds = estimated_position - p0;
                                 let tprev = micro_segment_real_time_rel - prev_time;
                                 let tmax = motion_profile.i7_end() - prev_time;
-                                let dt = tmax.min(tprev);
+                                let _dt = tmax.min(tprev);
 
                                 hwa::trace!(
                                     "at [{}] dt = {} ds = {} v = {}",
                                     micro_segment_real_time_rel.rdp(4),
-                                    dt.rdp(4),
+                                    _dt.rdp(4),
                                     ds.rdp(4),
-                                    (ds / dt).rdp(4)
+                                    (ds / _dt).rdp(4)
                                 );
 
                                 p0 = estimated_position;
@@ -581,7 +581,7 @@ pub async fn task_stepper(
                 moves_left
             }
         };
-        hwa::debug!("Moves left: {}", moves_left);
+        hwa::debug!("Moves left: {}", _moves_left);
     }
 }
 

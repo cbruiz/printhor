@@ -34,6 +34,9 @@ pub type LaserControllerMutexType = hwa::SyncSendMutex;
 pub type HotEndControllerMutexType = hwa::SyncSendMutex;
 pub type HotBedControllerMutexType = hwa::SyncSendMutex;
 
+pub type SDCardMutexType = hwa::NoopMutex;
+pub type SPIControllerMutexType = hwa::NoopMutex;
+
 
 pub type SerialPort1MutexType = hwa::SyncSendMutex;
 pub type SerialPort2MutexType = hwa::SyncSendMutex;

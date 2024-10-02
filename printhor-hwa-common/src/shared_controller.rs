@@ -4,12 +4,6 @@
 //! access to shared resources, as well as traits and helper structures that facilitate the controlled
 //! acquisition and release of locks.
 //!
-//! # Types
-//!
-//! - `StandardControllerMutex<D>`: A standard mutex for controllers using the `ControllerMutexType`.
-//! - `InterruptControllerMutex<D>`: A mutex for controllers in interrupt handlers using the `InterruptControllerMutexType`.
-//! - `ControllerMutex<M, D>`: A generic mutex usable in various contexts.
-//!
 //! # Traits
 //!
 //! - `ControllerKind<M, T>`: A trait defining the types for different controller kinds.
@@ -32,12 +26,7 @@
 //! - `ControllerRef::release()`: Releases the retained mutex lock.
 //! - `ControllerRef::apply()`: Applies a function to the locked controller, providing a result.
 //! - `ControllerRef::apply_result()`: Applies a function to the locked controller, providing a custom result.
-use crate::{ControllerMutexType, InterruptControllerMutexType};
 use core::cell::RefCell;
-
-pub type StandardControllerMutex<D> = embassy_sync::mutex::Mutex<ControllerMutexType, D>;
-pub type InterruptControllerMutex<D> = embassy_sync::mutex::Mutex<InterruptControllerMutexType, D>;
-pub type ControllerMutex<M, D> = embassy_sync::mutex::Mutex<M, D>;
 
 pub trait ControllerKind<M: 'static, T: 'static> {
     type Type;

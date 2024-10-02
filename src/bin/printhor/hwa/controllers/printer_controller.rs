@@ -1,7 +1,6 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::TrackedStaticCell;
-use hwa::{CommChannel, EventBusRef, PersistentState};
+use hwa::{CommChannel, EventBusController, PersistentState};
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
@@ -88,36 +87,31 @@ pub struct PrinterController {
     channel: &'static PrinterControllerSignalType,
 
     /// The event bus for broadcasting events.
-    event_bus: EventBusRef,
+    event_bus: EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
 
     /// The current status of the printer controller.
     status: &'static PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>,
 }
 
 impl PrinterController {
-    pub fn new(event_bus: EventBusRef) -> PrinterController {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static SIGNAL_CHANNEL_INST: TrackedStaticCell<PrinterControllerSignalType> =
-            TrackedStaticCell::new();
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static STATUS_INST: TrackedStaticCell<
-            PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>,
-        > = TrackedStaticCell::new();
+    pub fn new(event_bus: EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>) -> PrinterController {
 
-        let channel = SIGNAL_CHANNEL_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "PrinterController::channel",
-            PrinterControllerSignalType::new(),
-        );
-        let status_cfg = PersistentState::new();
+        type StatusType = PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>;
+        let status_cfg = StatusType::new();
         status_cfg.signal(PrinterControllerStatus::Ready(CommChannel::Internal));
-        let status =
-            STATUS_INST.init::<{ hwa::MAX_STATIC_MEMORY }>("PrinterController::state", status_cfg);
-        PrinterController {
+        let channel = hwa::make_static_ref!(
+            "PrinterControllerChannelSignal",
+            PrinterControllerSignalType,
+            PrinterControllerSignalType::new()
+        );
+        Self {
             channel,
             event_bus,
-            status,
+            status: hwa::make_static_ref!(
+                "PrinterControllerStatus",
+                StatusType,
+                status_cfg
+            ),
         }
     }
 

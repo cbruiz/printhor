@@ -147,14 +147,18 @@ where PIN: embedded_hal_02::adc::Channel<ADC>
 }
 
 
-#[cfg(feature = "with-spi")]
-impl<T> embedded_hal::digital::v2::OutputPin for MockedIOPin<'_, T> {
-    type Error = core::convert::Infallible;
-    fn set_low(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-spi")] {
+        use embedded_hal_02::digital::v2;
+        impl<T> v2::OutputPin for MockedIOPin {
+            type Error = core::convert::Infallible;
+            fn set_low(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
 
-    fn set_high(&mut self) -> Result<(), Self::Error> {
-        Ok(())
+            fn set_high(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
     }
 }

@@ -306,7 +306,7 @@ where
             hwa::trace!("[soft_uart] RX: Got: {:08b}", data_in);
             Ok(data_in)
         } else {
-            hwa::error!("[soft_uart] RX: Stop bit missing [at +{} ms]", _reference_instant.elapsed().as_millis());
+            hwa::debug!("[soft_uart] RX: Stop bit missing [at +{} ms]", _reference_instant.elapsed().as_millis());
             hwa::trace!("[soft_uart] RX: Getting so far: {:08b}", data_in);
             Err(Self::Error::Framing)
         }
