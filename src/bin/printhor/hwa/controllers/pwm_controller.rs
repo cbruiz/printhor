@@ -1,7 +1,7 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
+use hwa::StaticController;
 use embedded_hal_02::Pwm;
-use printhor_hwa_common::InterruptControllerRef;
 
 /// A controller for managing PWM (Pulse-Width Modulation).
 ///
@@ -13,20 +13,22 @@ use printhor_hwa_common::InterruptControllerRef;
 ///
 /// * `pwm` - A reference to an interrupt controller managing the PWM peripheral.
 /// * `pwm_chan` - The specific PWM channel being controlled.
-pub struct PwmController<TimPeri>
+pub struct PwmController<PwmMutex, TimPeri>
 where
+    PwmMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
     TimPeri: Pwm + 'static,
 {
-    pwm: InterruptControllerRef<TimPeri>,
+    pwm: StaticController<PwmMutex, TimPeri>,
     pwm_chan: <TimPeri as Pwm>::Channel,
 }
 
-impl<TimPeri> PwmController<TimPeri>
+impl<PwmMutex, TimPeri> PwmController<PwmMutex, TimPeri>
 where
+    PwmMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
     TimPeri: Pwm<Duty = u32> + 'static,
     <TimPeri as Pwm>::Channel: Copy,
 {
-    pub fn new(pwm: InterruptControllerRef<TimPeri>, pwm_chan: <TimPeri as Pwm>::Channel) -> Self {
+    pub fn new(pwm: StaticController<PwmMutex, TimPeri>, pwm_chan: <TimPeri as Pwm>::Channel) -> Self {
         Self { pwm, pwm_chan }
     }
 

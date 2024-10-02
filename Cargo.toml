@@ -43,7 +43,8 @@ with-fan-layer = ["embedded-hal", "printhor-hwi_native?/with-fan-layer"]
 with-fan-extra-1 = ["embedded-hal", "printhor-hwi_native?/with-fan-extra-1"]
 with-laser = ["embedded-hal", "printhor-hwi_native?/with-laser"]
 with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic"]
-with-display = [] # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
+# Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
+with-display = ["printhor-hwi_native?/with-display"]
 with-ps-on = ["printhor-hwi_native?/with-ps-on"]
 
 without-bootloader = []
@@ -93,7 +94,7 @@ integration-test = [
     "cornering",
     "integration-test-m100",
     "integration-test-power-on",
-    #"integration-test-homing",
+    "integration-test-homing",
     "integration-test-reset-pos",
     "integration-test-move-ortho",
     "integration-test-move-oblique",
@@ -106,7 +107,7 @@ integration-test = [
     #"debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
-    #"trace-commands",
+    "trace-commands",
     #"assert-motion",
     "native",
 ]
@@ -148,22 +149,24 @@ plot-motion-plan = ["gnuplot"]
 #################
 
 native = [
-    "with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_native/with-trinamic",
-    "with-motion", "printhor-hwi_native/with-motion",
-    "with-serial-port-1", "printhor-hwi_native/with-serial-port-1",
-    #"with-serial-port-2", "printhor-hwi_native/with-serial-port-2",
-    #"with-sdcard", "printhor-hwi_native/with-sdcard",
-    #"with-print-job", "printhor-hwi_native/with-print-job",
-    #"with-probe", "printhor-hwi_native/with-probe",
-    #"with-hot-end", "printhor-hwi_native/with-hot-end",
-    #"with-hot-bed", "printhor-hwi_native/with-hot-bed",
-    #"with-fan-layer", "printhor-hwi_native/with-fan-layer",
-    #"with-fan-extra-1", "printhor-hwi_native/with-fan-extra-1",
-    #"with-laser", "printhor-hwi_native/with-laser",
-    #"with-ps-on", "printhor-hwi_native/with-ps-on",
-    #"with-display", "printhor-hwi_native/with-display",
 
     "with-log",
+
+    "with-trinamic", "trinamic-uart-multi-channel",
+    "with-motion",
+    "with-serial-port-1",
+    "with-serial-port-2",
+    #"with-sdcard", "printhor-hwi_native/with-sdcard",
+    #"with-print-job", "printhor-hwi_native/with-print-job",
+    "with-probe",
+    "with-hot-end",
+    "with-hot-bed",
+    "with-fan-layer",
+    "with-fan-extra-1",
+    "with-laser",
+    "with-ps-on",
+
+
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -461,7 +464,7 @@ const_env = { version = "0.1" }
 # For light and fast float parsing
 #fast-float = { version = "0.2", default-features = false, features = [], path = "libs/fast-float"}
 # For light and fast float formatting
-lexical-core = {version = "1.0.1", default-features = false, features = ["write-floats"]}
+lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
 
 [build-dependencies]
 #proc-macro2 = "1.0."

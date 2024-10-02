@@ -15,9 +15,29 @@ pub type MotionConfigMutexType = hwa::SyncSendMutex;
 pub type MotionStatusMutexType = hwa::NoopMutex;
 pub type MotionRingBufferMutexType = hwa::NoopMutex;
 pub type MotionSignalMutexType = hwa::NoopMutex;
+pub type Pwm1MutexType = hwa::SyncSendMutex;
+pub type Pwm2MutexType = hwa::SyncSendMutex;
+pub type ProbeMutexType = hwa::SyncSendMutex;
+pub type PwmHotEndMutexType = hwa::SyncSendMutex;
+pub type AdcHotEndMutexType = hwa::NoopMutex;
+pub type PwmHotBedMutexType = hwa::SyncSendMutex;
+pub type AdcHotBedMutexType = hwa::NoopMutex;
+pub type PwmFanLayerMutexType = hwa::SyncSendMutex;
+pub type PwmFanExtra1MutexType = hwa::SyncSendMutex;
+pub type PwmLaserMutexType = hwa::SyncSendMutex;
+pub type PSOnMutexType = hwa::NoopMutex;
+
+pub type ServoControllerMutexType = hwa::SyncSendMutex;
+pub type FanLayerControllerMutexType = hwa::SyncSendMutex;
+pub type FanExtra1ControllerMutexType = hwa::SyncSendMutex;
+pub type LaserControllerMutexType = hwa::SyncSendMutex;
+pub type HotEndControllerMutexType = hwa::SyncSendMutex;
+pub type HotBedControllerMutexType = hwa::SyncSendMutex;
 
 
 pub type SerialPort1MutexType = hwa::SyncSendMutex;
+pub type SerialPort2MutexType = hwa::SyncSendMutex;
+pub type SerialUsbMutexType = hwa::NoopMutex;
 
 //#endregion
 

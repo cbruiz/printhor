@@ -1,13 +1,12 @@
 //! Mostly functional
+
 use crate::hwa;
 use crate::hwa::controllers::pwm_controller::PwmController;
 use crate::math::Real;
 #[allow(unused)]
 use crate::tgeo::ArithmeticOps;
-use printhor_hwa_common::DeferEvent::{AwaitRequested, Completed};
-use printhor_hwa_common::{CommChannel, DeferAction, DeferChannelRef};
-
-type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>;
+use hwa::DeferEvent::{AwaitRequested, Completed};
+use hwa::{CommChannel, DeferAction};
 
 /// A controller struct for managing a heater device.
 ///
@@ -31,23 +30,25 @@ type AdcControllerRef<AdcPeri> = hwa::InterruptControllerRef<crate::hwa::device:
 /// * `commander_channel`: The communication channel that sent the current request.
 /// * `on`: A boolean indicating whether the heater is currently on.
 /// * `thermistor_properties`: Properties of the thermistor including its resistance and beta coefficient.
-pub struct HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
+pub struct HeaterController<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
 where
-    AdcPeri: crate::hwa::device::AdcTrait + 'static,
-    AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
+    MutexAdc: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    MutexPwm: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    AdcPeri: hwa::device::AdcTrait + 'static,
+    AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
     PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
 {
     /// Shared Analog-Digital Converter (ADC) controller used to measure temperature.
-    adc: hwa::InterruptControllerRef<crate::hwa::device::AdcImpl<AdcPeri>>,
+    adc: hwa::StaticController<MutexAdc, hwa::device::AdcImpl<AdcPeri>>,
     /// The specific pin used by the ADC.
     adc_pin: AdcPin,
     /// Precomputed ratio of volts per ADC unit, used for voltage to temperature conversion.
     v_ratio: f32,
     /// Shared Pulse-Width Modulation (PWM) controller used to apply heating power.
-    pwm: PwmController<PwmHwaDevice>,
+    pwm: PwmController<MutexPwm, PwmHwaDevice>,
     /// The defer channel to submit status changes for deferred processing.
-    defer_channel: DeferChannelRef,
+    defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
     /// The target or expected temperature value in Celsius.
     target_temp: f32,
     /// Last measured temperature value in Celsius, cached for quick access.
@@ -62,19 +63,21 @@ where
     thermistor_properties: &'static hwa::ThermistorProperties,
 }
 #[allow(dead_code)]
-impl<AdcPeri, AdcPin, PwmHwaDevice> HeaterController<AdcPeri, AdcPin, PwmHwaDevice>
+impl<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice> HeaterController<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
 where
-    AdcPeri: crate::hwa::device::AdcTrait + 'static,
-    AdcPin: crate::hwa::device::AdcPinTrait<AdcPeri>,
+    MutexAdc: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    MutexPwm: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    AdcPeri: hwa::device::AdcTrait + 'static,
+    AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
     PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
     <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
-    crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>,
+    hwa::device::VrefInt: hwa::device::AdcPinTrait<AdcPeri>,
 {
     pub fn new(
-        adc: AdcControllerRef<AdcPeri>,
+        adc: hwa::StaticController<MutexAdc, hwa::device::AdcImpl<AdcPeri>>,
         adc_pin: AdcPin,
-        pwm: PwmController<PwmHwaDevice>,
-        defer_channel: DeferChannelRef,
+        pwm: PwmController<MutexPwm, PwmHwaDevice>,
+        defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
         thermistor_properties: &'static hwa::ThermistorProperties,
     ) -> Self {
         Self {
@@ -110,7 +113,7 @@ where
                     }
                 }
                 let vref_default = f32::from(hwa::ADC_VREF_DEFAULT_MV);
-                let vref_sample = f32::from(bus.blocking_read(&mut vref_int));
+                let vref_sample = f32::from(bus.read(&mut vref_int));
             }
         }
         self.v_ratio = vref_default / (vref_sample * 1000.0f32);
@@ -152,7 +155,7 @@ where
                 let value = bus.read(&mut self.adc_pin).await;
             }
             else {
-                let value = bus.blocking_read(&mut self.adc_pin);
+                let value = bus.read(&mut self.adc_pin);
             }
         }
         (self.current_temp, self.current_resistance) = self.convert_to_celcius(value.into());

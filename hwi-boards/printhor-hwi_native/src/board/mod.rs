@@ -1,6 +1,7 @@
 ///  Native board implementation. For debugging/simulation purposes
 #[allow(unused)]
 use printhor_hwa_common as hwa;
+use embassy_executor::Spawner;
 
 pub mod device;
 cfg_if::cfg_if!{
@@ -17,11 +18,7 @@ cfg_if::cfg_if!{
 
 pub mod mocked_peripherals;
 
-use embassy_executor::Spawner;
 
-#[allow(unused)]
-use crate::board::mocked_peripherals::MockedIOPin;
-use crate::board::mocked_peripherals::{PinState, PinsCell};
 #[cfg(feature = "with-motion")]
 use crate::task_stepper_ticker;
 
@@ -102,18 +99,18 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: hwa::StaticController<hwa::NoopMutex, device::Watchdog>,
+    pub sys_watchdog: hwa::StaticController<crate::WatchdogMutexType, device::Watchdog>,
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: hwa::StaticController<hwa::SyncSendMutex, device::SerialPort1TxDevice>,
+    pub serial_port1_tx: hwa::StaticController<crate::SerialPort1MutexType, device::SerialPort1TxDevice>,
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx: device::UartPort2TxControllerRef,
+    pub serial_port2_tx: hwa::StaticController<crate::SerialPort2MutexType, device::SerialPort2TxDevice>,
 }
 
 pub struct SysDevices {
     #[cfg(all(feature = "with-motion", feature="executor-interrupt"))]
     pub task_stepper_core: printhor_hwa_common::NoDevice,
     #[cfg(feature = "with-ps-on")]
-    pub ps_on: device::PsOnRef,
+    pub ps_on: hwa::StaticController<crate::PSOnMutexType, device::PsOnPin>,
 }
 
 pub struct IODevices {
@@ -130,9 +127,9 @@ pub struct PwmDevices {
     #[cfg(feature = "with-probe")]
     pub probe: device::ProbePeripherals,
     #[cfg(feature = "with-hot-end")]
-    pub hotend: device::HotendPeripherals,
+    pub hot_end: device::HotendPeripherals,
     #[cfg(feature = "with-hot-bed")]
-    pub hotbed: device::HotbedPeripherals,
+    pub hot_bed: device::HotbedPeripherals,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: device::FanLayerPeripherals,
     #[cfg(feature = "with-fan-extra-1")]
@@ -170,15 +167,13 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
 
     let _pin_state = hwa::make_static_ref!(
         "GlobalPinState",
-        PinsCell<PinState>,
-        PinsCell::new(PinState::new())
+        mocked_peripherals::PinsCell<mocked_peripherals::PinState>,
+        mocked_peripherals::PinsCell::new(mocked_peripherals::PinState::new())
     );
 
     cfg_if::cfg_if!{
         if #[cfg(all(feature = "with-serial-port-1"))] {
-
             let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
-
             let serial_port1_tx = hwa::make_static_controller!(
                 "UartPort1Tx",
                 crate::SerialPort1MutexType,
@@ -192,10 +187,11 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
     cfg_if::cfg_if!{
         if #[cfg(all(feature = "with-serial-port-2"))] {
             let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new().split();
-            #[link_section = "__DATA,.bss"]
-            static UART_PORT2_INS: TrackedStaticCell<ControllerMutex<device::UartPort2Tx>> = TrackedStaticCell::new();
-            let serial_port2_tx = ControllerRef::new(
-                UART_PORT2_INS.init::<{self::MAX_STATIC_MEMORY}>("UartPort1Tx", ControllerMutex::new(uart_port2_tx_device))
+            let serial_port2_tx = hwa::make_static_controller!(
+                "UartPort2Tx",
+                crate::SerialPort2MutexType,
+                device::SerialPort2TxDevice,
+                uart_port2_tx_device
             );
             let serial_port2_rx_stream = device::UartPort2RxInputStream::new(uart_port2_rx_device);
         }
@@ -205,10 +201,10 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
         let trinamic_uart = {
         device::TrinamicUart::new(
             TRINAMIC_UART_BAUD_RATE,
-            MockedIOPin::new(0, _pin_state),
-            MockedIOPin::new(1, _pin_state),
-            MockedIOPin::new(2, _pin_state),
-            MockedIOPin::new(3, _pin_state),
+            mocked_peripherals::MockedIOPin::new(0, _pin_state),
+            mocked_peripherals::MockedIOPin::new(1, _pin_state),
+            mocked_peripherals::MockedIOPin::new(2, _pin_state),
+            mocked_peripherals::MockedIOPin::new(3, _pin_state),
         )
     };
 
@@ -217,10 +213,10 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
         _spawner.spawn(
             device::trinamic_driver_simulator(
                 device::MockedTrinamicDriver::new(
-                    MockedIOPin::new(0, _pin_state),
-                    MockedIOPin::new(1, _pin_state),
-                    MockedIOPin::new(2, _pin_state),
-                    MockedIOPin::new(3, _pin_state),
+                    mocked_peripherals::MockedIOPin::new(0, _pin_state),
+                    mocked_peripherals::MockedIOPin::new(1, _pin_state),
+                    mocked_peripherals::MockedIOPin::new(2, _pin_state),
+                    mocked_peripherals::MockedIOPin::new(3, _pin_state),
                 )
             )
         ).unwrap();
@@ -252,22 +248,22 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
         #[cfg(feature = "with-trinamic")]
         trinamic_uart,
         motion_pins: device::MotionPins {
-            x_enable_pin: MockedIOPin::new(4, _pin_state),
-            y_enable_pin: MockedIOPin::new(5, _pin_state),
-            z_enable_pin: MockedIOPin::new(6, _pin_state),
-            e_enable_pin: MockedIOPin::new(7, _pin_state),
-            x_endstop_pin: MockedIOPin::new(8, _pin_state),
-            y_endstop_pin: MockedIOPin::new(9, _pin_state),
-            z_endstop_pin: MockedIOPin::new(10, _pin_state),
-            e_endstop_pin: MockedIOPin::new(11, _pin_state),
-            x_step_pin: MockedIOPin::new(12, _pin_state),
-            y_step_pin: MockedIOPin::new(13, _pin_state),
-            z_step_pin: MockedIOPin::new(14, _pin_state),
-            e_step_pin: MockedIOPin::new(15, _pin_state),
-            x_dir_pin: MockedIOPin::new(16, _pin_state),
-            y_dir_pin: MockedIOPin::new(17, _pin_state),
-            z_dir_pin: MockedIOPin::new(18, _pin_state),
-            e_dir_pin: MockedIOPin::new(19, _pin_state),
+            x_enable_pin: mocked_peripherals::MockedIOPin::new(4, _pin_state),
+            y_enable_pin: mocked_peripherals::MockedIOPin::new(5, _pin_state),
+            z_enable_pin: mocked_peripherals::MockedIOPin::new(6, _pin_state),
+            e_enable_pin: mocked_peripherals::MockedIOPin::new(7, _pin_state),
+            x_endstop_pin: mocked_peripherals::MockedIOPin::new(8, _pin_state),
+            y_endstop_pin: mocked_peripherals::MockedIOPin::new(9, _pin_state),
+            z_endstop_pin: mocked_peripherals::MockedIOPin::new(10, _pin_state),
+            e_endstop_pin: mocked_peripherals::MockedIOPin::new(11, _pin_state),
+            x_step_pin: mocked_peripherals::MockedIOPin::new(12, _pin_state),
+            y_step_pin: mocked_peripherals::MockedIOPin::new(13, _pin_state),
+            z_step_pin: mocked_peripherals::MockedIOPin::new(14, _pin_state),
+            e_step_pin: mocked_peripherals::MockedIOPin::new(15, _pin_state),
+            x_dir_pin: mocked_peripherals::MockedIOPin::new(16, _pin_state),
+            y_dir_pin: mocked_peripherals::MockedIOPin::new(17, _pin_state),
+            z_dir_pin: mocked_peripherals::MockedIOPin::new(18, _pin_state),
+            e_dir_pin: mocked_peripherals::MockedIOPin::new(19, _pin_state),
         }
     };
     #[cfg(feature = "with-motion")]
@@ -280,39 +276,31 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
     static HOT_BED_THERMISTOR_PROPERTIES: printhor_hwa_common::ThermistorProperties = printhor_hwa_common::ThermistorProperties::new(HOT_BED_THERM_PULL_UP_RESISTANCE, HOT_BED_THERM_NOMINAL_RESISTANCE, HOT_BED_THERM_BETA);
 
     #[cfg(any(feature = "with-probe", feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
-    let pwm_any = {
-        let pwm_any = mocked_peripherals::MockedPwm::new(20, _pin_state);
-        #[link_section = "__DATA,.bss"]
-        static PWM_INST: TrackedStaticCell<printhor_hwa_common::InterruptControllerMutex<device::PwmAny>> = TrackedStaticCell::new();
-        printhor_hwa_common::InterruptControllerRef::new(PWM_INST.init::<{MAX_STATIC_MEMORY}>(
-            "PwmAny",
-            printhor_hwa_common::InterruptControllerMutex::new(pwm_any)
-        ))
-    };
+    let pwm_any = hwa::make_static_controller!(
+        "PwmController",
+        crate::CriticalSectionRawMutex,
+        mocked_peripherals::MockedPwm,
+        mocked_peripherals::MockedPwm::new(20, _pin_state)
+    );
 
     #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-    let adc_hotend_hotbed = {
-        let adc_hotend_hotbed = device::AdcHotendHotbed::new(0);
-        #[link_section = "__DATA,.bss"]
-        static ADC_INST: TrackedStaticCell<ControllerMutex<device::AdcHotendHotbed>> = TrackedStaticCell::new();
-
-        ControllerRef::new(ADC_INST.init(
-            "HotendHotbedAdc",
-            ControllerMutex::new(adc_hotend_hotbed)
-        ))
-    };
+    let adc_hotend_hotbed = hwa::make_static_controller!(
+        "AdcHotendHotbed",
+        crate::AdcHotEndMutexType,
+        device::AdcHotendHotbed,
+        device::AdcHotendHotbed::new(0)
+    );
 
     #[cfg(feature = "with-motion")]
     hwa::debug!("motion_planner done");
 
     #[cfg(feature = "with-ps-on")]
-    let ps_on = {
-        #[link_section = "__DATA,.bss"]
-        static PS_ON: TrackedStaticCell<StandardControllerMutex<device::PsOnPin>> = TrackedStaticCell::new();
-        ControllerRef::new(
-            PS_ON.init::<{MAX_STATIC_MEMORY}>("PSOn", ControllerMutex::new(MockedIOPin::new(21, _pin_state)))
-        )
-    };
+    let ps_on = hwa::make_static_controller!(
+        "PSOn",
+        crate::PSOnMutexType,
+        device::PsOnPin,
+        mocked_peripherals::MockedIOPin::new(21, _pin_state)
+    );
 
     let sys_watchdog = hwa::make_static_controller!(
         "WatchDog",
@@ -354,19 +342,19 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
                 power_channel: 0,
             },
             #[cfg(feature = "with-hot-end")]
-            hotend: device::HotendPeripherals {
+            hot_end: device::HotendPeripherals {
                 power_pwm: pwm_any.clone(),
                 power_channel: 1,
                 temp_adc: adc_hotend_hotbed.clone(),
-                temp_pin: MockedIOPin::new(23, _pin_state),
+                temp_pin: mocked_peripherals::MockedIOPin::new(23, _pin_state),
                 thermistor_properties: &HOT_END_THERMISTOR_PROPERTIES,
             },
             #[cfg(feature = "with-hot-bed")]
-            hotbed: device::HotbedPeripherals {
+            hot_bed: device::HotbedPeripherals {
                 power_pwm: pwm_any.clone(),
                 power_channel: 2,
                 temp_adc: adc_hotend_hotbed.clone(),
-                temp_pin: MockedIOPin::new(24, _pin_state),
+                temp_pin: mocked_peripherals::MockedIOPin::new(24, _pin_state),
                 thermistor_properties: &HOT_BED_THERMISTOR_PROPERTIES,
             },
             #[cfg(feature = "with-fan-layer")]

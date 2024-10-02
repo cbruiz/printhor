@@ -3,16 +3,14 @@
 use printhor_hwa_common as hwa;
 use hwa::soft_uart;
 use hwa::soft_uart::{AsyncRead, MultiChannel, UartChannel};
-use printhor_hwa_common::soft_uart::{AsyncWrite, SerialError};
-use crate::device;
+use hwa::soft_uart::{AsyncWrite, SerialError};
+use crate::{board, device};
 
 #[derive(Debug)]
 pub enum Error {
     Uninit,
     Timeout,
 }
-#[allow(unused)]
-use crate::board::MockedIOPin;
 
 /// Software UART channel
 #[derive(Debug, Clone, Copy)]
@@ -34,7 +32,7 @@ impl Into<UartChannel> for AxisChannel {
     }
 }
 
-pub struct AnyPinWrapper(MockedIOPin);
+pub struct AnyPinWrapper(board::mocked_peripherals::MockedIOPin);
 
 impl soft_uart::IOPin for AnyPinWrapper
 {

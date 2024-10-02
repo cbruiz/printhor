@@ -20,7 +20,7 @@ use crate::hwa::controllers::CardController;
 #[cfg(feature = "with-hot-bed")]
 use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-hot-end")]
-use crate::hwa::controllers::HotendPwmController;
+use crate::hwa::controllers::HotEndPwmController;
 #[cfg(feature = "with-print-job")]
 use crate::hwa::controllers::PrinterController;
 #[cfg(feature = "with-motion")]
@@ -178,127 +178,97 @@ async fn spawn_tasks(
     let printer_controller = PrinterController::new(event_bus.clone());
 
     #[cfg(feature = "with-hot-end")]
-    let hotend_pwm = HotendPwmController::new(
-        _pwm_devices.hotend.power_pwm.clone(),
-        _pwm_devices.hotend.power_channel,
+    let hot_end_pwm = HotEndPwmController::new(
+        _pwm_devices.hot_end.power_pwm.clone(),
+        _pwm_devices.hot_end.power_channel,
     );
     #[cfg(feature = "with-hot-bed")]
-    let hotbed_pwm = HotbedPwmController::new(
-        _pwm_devices.hotbed.power_pwm.clone(),
-        _pwm_devices.hotbed.power_channel,
+    let hot_bed_pwm = HotbedPwmController::new(
+        _pwm_devices.hot_bed.power_pwm.clone(),
+        _pwm_devices.hot_bed.power_channel,
     );
 
     #[cfg(feature = "with-probe")]
-    let probe_controller = {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static PROBE_CONTROLLER_INST: hwa::TrackedStaticCell<
-            printhor_hwa_common::InterruptControllerMutex<hwa::controllers::ServoController>,
-        > = hwa::TrackedStaticCell::new();
-        hwa::ControllerRef::new(PROBE_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "ProbeServoController",
-            printhor_hwa_common::InterruptControllerMutex::new(
-                hwa::controllers::ServoController::new(
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-probe")] {
+            type ServoControllerType = hwa::controllers::ServoController<hwa::ProbeMutexType>;
+            let probe_controller = hwa::make_static_controller!(
+                "ProbeServoController",
+                hwa::ServoControllerMutexType,
+                ServoControllerType,
+                ServoControllerType::new(
                     _pwm_devices.probe.power_pwm,
                     _pwm_devices.probe.power_channel,
-                ),
-            ),
-        ))
-    };
+                )
+            );
+        }
+    }
+
 
     #[cfg(feature = "with-fan-layer")]
-    let fan_layer_controller = {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static LAYER_CONTROLLER_INST: hwa::TrackedStaticCell<
-            printhor_hwa_common::InterruptControllerMutex<hwa::controllers::FanLayerPwmController>,
-        > = hwa::TrackedStaticCell::new();
-        hwa::ControllerRef::new(LAYER_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "FanLayerController",
-            printhor_hwa_common::ControllerMutex::new(
-                hwa::controllers::FanLayerPwmController::new(
-                    _pwm_devices.fan_layer.power_pwm,
-                    _pwm_devices.fan_layer.power_channel,
-                ),
-            ),
-        ))
-    };
+    let fan_layer_controller = hwa::make_static_controller!(
+        "FanLayerController",
+        hwa::FanLayerControllerMutexType,
+        hwa::controllers::FanLayerPwmController,
+        hwa::controllers::FanLayerPwmController::new(
+            _pwm_devices.fan_layer.power_pwm,
+            _pwm_devices.fan_layer.power_channel,
+        )
+    );
 
     #[cfg(feature = "with-fan-extra-1")]
-    let fan_extra_1_controller = {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static FAN_EXTRA_1_CONTROLLER_INST: hwa::TrackedStaticCell<
-            printhor_hwa_common::InterruptControllerMutex<hwa::controllers::FanExtra1PwmController>,
-        > = hwa::TrackedStaticCell::new();
-        hwa::ControllerRef::new(
-            FAN_EXTRA_1_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-                "FanExtra1Controller",
-                hwa::ControllerMutex::new(hwa::controllers::FanExtra1PwmController::new(
-                    _pwm_devices.fan_extra_1.power_pwm,
-                    _pwm_devices.fan_extra_1.power_channel,
-                )),
-            ),
+    let fan_extra_1_controller = hwa::make_static_controller!(
+        "FanExtra1Controller",
+        hwa::FanExtra1ControllerMutexType,
+        hwa::controllers::FanExtra1PwmController,
+        hwa::controllers::FanExtra1PwmController::new(
+            _pwm_devices.fan_extra_1.power_pwm,
+            _pwm_devices.fan_extra_1.power_channel,
         )
-    };
+    );
 
     #[cfg(feature = "with-laser")]
-    let laser_controller = {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static LASER_CONTROLLER_INST: hwa::TrackedStaticCell<
-            hwa::InterruptControllerMutex<hwa::controllers::LaserPwmController>,
-        > = hwa::TrackedStaticCell::new();
-        hwa::ControllerRef::new(LASER_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "LaserController",
-            hwa::ControllerMutex::new(hwa::controllers::LaserPwmController::new(
-                _pwm_devices.laser.power_pwm,
+    let laser_controller = hwa::make_static_controller!(
+        "LaserController",
+        hwa::LaserControllerMutexType,
+        hwa::controllers::LaserPwmController,
+        hwa::controllers::LaserPwmController::new(
+            _pwm_devices.laser.power_pwm,
                 _pwm_devices.laser.power_channel,
-            )),
-        ))
-    };
+        )
+    );
 
     #[cfg(feature = "with-hot-end")]
-    let hotend_controller = {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static HOTEND_CONTROLLER_INST: hwa::TrackedStaticCell<
-            hwa::InterruptControllerMutex<hwa::controllers::HotendController>,
-        > = hwa::TrackedStaticCell::new();
-        hwa::ControllerRef::new(HOTEND_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "HotEndController",
-            hwa::ControllerMutex::new(hwa::controllers::HotendController::new(
-                _pwm_devices.hotend.temp_adc.clone(),
-                _pwm_devices.hotend.temp_pin,
-                hotend_pwm,
-                _defer_channel.clone(),
-                _pwm_devices.hotend.thermistor_properties,
-            )),
-        ))
-    };
+    let hot_end_controller = hwa::make_static_controller!(
+        "HotEndController",
+        hwa::HotEndControllerMutexType,
+        hwa::controllers::HotEndController,
+        hwa::controllers::HotEndController::new(
+            _pwm_devices.hot_end.temp_adc.clone(),
+            _pwm_devices.hot_end.temp_pin,
+            hot_end_pwm,
+            _defer_channel.clone(),
+            _pwm_devices.hot_end.thermistor_properties,
+        )
+    );
     #[cfg(feature = "with-hot-end")]
-    hotend_controller.lock().await.init().await;
+    hot_end_controller.lock().await.init().await;
 
     #[cfg(feature = "with-hot-bed")]
-    let hotbed_controller = {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static HOTBED_CONTROLLER_INST: hwa::TrackedStaticCell<
-            hwa::InterruptControllerMutex<hwa::controllers::HotbedController>,
-        > = hwa::TrackedStaticCell::new();
-        hwa::ControllerRef::new(HOTBED_CONTROLLER_INST.init::<{ hwa::MAX_STATIC_MEMORY }>(
-            "HotbedController",
-            hwa::ControllerMutex::new(hwa::controllers::HotbedController::new(
-                _pwm_devices.hotbed.temp_adc,
-                _pwm_devices.hotbed.temp_pin,
-                hotbed_pwm,
-                _defer_channel.clone(),
-                _pwm_devices.hotbed.thermistor_properties,
-            )),
-        ))
-    };
+    let hot_bed_controller = hwa::make_static_controller!(
+        "HotBedController",
+        hwa::HotBedControllerMutexType,
+        hwa::controllers::HotBedController,
+        hwa::controllers::HotBedController::new(
+            _pwm_devices.hot_bed.temp_adc.clone(),
+            _pwm_devices.hot_bed.temp_pin,
+            hot_bed_pwm,
+            _defer_channel.clone(),
+            _pwm_devices.hot_bed.thermistor_properties,
+        )
+    );
     #[cfg(feature = "with-hot-bed")]
-    hotbed_controller.lock().await.init().await;
+    hot_bed_controller.lock().await.init().await;
 
     #[cfg(feature = "with-motion")]
     let motion_planner = {
@@ -346,9 +316,9 @@ async fn spawn_tasks(
         #[cfg(feature = "with-probe")]
         probe: probe_controller,
         #[cfg(feature = "with-hot-end")]
-        hot_end: hotend_controller.clone(),
+        hot_end: hot_end_controller.clone(),
         #[cfg(feature = "with-hot-bed")]
-        hot_bed: hotbed_controller.clone(),
+        hot_bed: hot_bed_controller.clone(),
         #[cfg(feature = "with-fan-layer")]
         fan_layer: fan_layer_controller.clone(),
         #[cfg(feature = "with-fan-extra-1")]
@@ -469,9 +439,9 @@ async fn spawn_tasks(
         .spawn(control::task_temperature::task_temperature(
             event_bus.clone(),
             #[cfg(feature = "with-hot-end")]
-            hotend_controller,
+            hot_end_controller,
             #[cfg(feature = "with-hot-bed")]
-            hotbed_controller,
+            hot_bed_controller,
         ))
         .map_err(|_| ())?;
 

@@ -80,11 +80,12 @@
 use crate::hwa;
 use crate::hwa::controllers::HeaterController;
 use embassy_time::{Duration, Ticker};
-use hwa::{DeferAction, EventBusRef};
+use hwa::{DeferAction};
 use hwa::{EventFlags, EventStatus};
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
 use num_traits::ToPrimitive;
+use printhor_hwa_utils::StaticController;
 
 /// The `State` enum represents the different states in which the HeaterStateMachine can be during its execution.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -158,19 +159,22 @@ impl HeaterStateMachine {
     /// 5. Updates the current state of the state machine if it has changed.
     /// 6. Publishes events to the event bus based on the new state.
     ///
-    /// This method requires the `AdcPeri`, `AdcPin`, and `PwmHwaDevice` types to implement specific traits as shown in the where clause.
-    async fn update<AdcPeri, AdcPin, PwmHwaDevice>(
+    /// This method requires the `ControllerMutex`, `AdcMutex`, `PwmMutex`, `AdcPeri`, `AdcPin`, and `PwmHwaDevice` types to implement specific traits as shown in the where clause.
+    async fn update<ControllerMutex, AdcMutex, PwmMutex, AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self,
-        ctrl: &hwa::InterruptControllerRef<HeaterController<AdcPeri, AdcPin, PwmHwaDevice>>,
-        event_bus: &EventBusRef,
+        ctrl: &hwa::StaticController<ControllerMutex, HeaterController<AdcMutex, PwmMutex, AdcPeri, AdcPin, PwmHwaDevice>>,
+        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
         temperature_flag: EventFlags,
         action: DeferAction,
     ) where
+        ControllerMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+        AdcMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+        PwmMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
         AdcPeri: hwa::device::AdcTrait + 'static,
         AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
         PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
         <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
-        crate::hwa::device::VrefInt: crate::hwa::device::AdcPinTrait<AdcPeri>,
+        hwa::device::VrefInt: hwa::device::AdcPinTrait<AdcPeri>,
     {
         let mut m = ctrl.lock().await;
 
@@ -293,18 +297,20 @@ impl HeaterStateMachine {
 /// Note that this function uses async/await to coordinate asynchronous operations.
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_temperature(
-    event_bus: EventBusRef,
-    #[cfg(feature = "with-hot-end")] hotend_controller: hwa::controllers::HotendControllerRef,
-    #[cfg(feature = "with-hot-bed")] hotbed_controller: hwa::controllers::HotbedControllerRef,
+    event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    #[cfg(feature = "with-hot-end")]
+    hot_end_controller: StaticController<hwa::HotEndControllerMutexType, hwa::controllers::HotEndController>,
+    #[cfg(feature = "with-hot-bed")]
+    hot_bed_controller: StaticController<hwa::HotBedControllerMutexType, hwa::controllers::HotBedController>,
 ) {
     hwa::info!("[task_temperature] Started");
 
     let mut ticker = Ticker::every(Duration::from_secs(2));
 
     #[cfg(feature = "with-hot-end")]
-    let mut hotend_sm = HeaterStateMachine::new();
+    let mut hot_end_sm = HeaterStateMachine::new();
     #[cfg(feature = "with-hot-bed")]
-    let mut hotbed_sm = HeaterStateMachine::new();
+    let mut hot_bed_sm = HeaterStateMachine::new();
 
     loop {
         // TODO: Park on SYS_ALARM
@@ -317,18 +323,18 @@ pub async fn task_temperature(
         }
 
         #[cfg(feature = "with-hot-end")]
-        hotend_sm
+        hot_end_sm
             .update(
-                &hotend_controller,
+                &hot_end_controller,
                 &event_bus,
                 EventFlags::HOT_END_TEMP_OK,
                 DeferAction::HotEndTemperature,
             )
             .await;
         #[cfg(feature = "with-hot-bed")]
-        hotbed_sm
+        hot_bed_sm
             .update(
-                &hotbed_controller,
+                &hot_bed_controller,
                 &event_bus,
                 EventFlags::HOT_BED_TEMP_OK,
                 DeferAction::HotbedTemperature,

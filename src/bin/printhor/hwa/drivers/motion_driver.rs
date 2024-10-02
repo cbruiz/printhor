@@ -19,13 +19,17 @@ pub struct MotionDriverParams {
     pub motion_config:
         hwa::StaticController<hwa::MotionConfigMutexType, hwa::controllers::MotionConfig>,
     #[cfg(feature = "with-probe")]
-    pub probe_controller: InterruptControllerRef<hwa::controllers::ServoController>,
-    #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1_controller: InterruptControllerRef<hwa::controllers::FanExtra1PwmController>,
+    pub probe_controller:
+        hwa::StaticController<hwa::ServoControllerMutexType, hwa::controllers::ServoController<hwa::ProbeMutexType>>,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_controller: InterruptControllerRef<hwa::controllers::FanLayerPwmController>,
+    pub fan_layer_controller:
+        hwa::StaticController<hwa::FanLayerControllerMutexType, hwa::controllers::FanLayerPwmController>,
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra_1_controller:
+        hwa::StaticController<hwa::FanExtra1ControllerMutexType, hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-laser")]
-    pub laser_controller: InterruptControllerRef<hwa::controllers::LaserPwmController>,
+    pub laser_controller:
+        hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
 }
 
 pub struct MotionDriver {
@@ -34,15 +38,17 @@ pub struct MotionDriver {
     #[cfg(feature = "with-trinamic")]
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
-    pub probe_controller: InterruptControllerRef<hwa::controllers::ServoController>,
+    pub probe_controller:
+        hwa::StaticController<hwa::ServoControllerMutexType, hwa::controllers::ServoController<hwa::ProbeMutexType>>,
     #[cfg(feature = "with-fan-layer")]
-    #[allow(unused)]
-    pub fan_layer_controller: InterruptControllerRef<hwa::controllers::FanLayerPwmController>,
+    pub fan_layer_controller:
+        hwa::StaticController<hwa::FanLayerControllerMutexType, hwa::controllers::FanLayerPwmController>,
     #[cfg(feature = "with-fan-extra-1")]
-    #[allow(unused)]
-    pub fan_extra_1_controller: InterruptControllerRef<hwa::controllers::FanExtra1PwmController>,
+    pub fan_extra_1_controller:
+        hwa::StaticController<hwa::FanExtra1ControllerMutexType, hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-laser")]
-    pub _laser_controller: InterruptControllerRef<hwa::controllers::LaserPwmController>,
+    pub _laser_controller:
+        hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
     #[cfg(all(feature = "native", feature = "plot-timings"))]
     tmon: TimingsMonitor,
 }

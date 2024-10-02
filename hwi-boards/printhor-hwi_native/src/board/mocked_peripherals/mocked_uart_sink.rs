@@ -1,7 +1,4 @@
-use futures::Stream;
-use core::pin::Pin;
-use futures::task::Context;
-use futures::task::Poll;
+use futures::future;
 
 // A mocked Uart which does nothing
 pub struct MockedUartSink {
@@ -37,6 +34,9 @@ impl MockedUartSinkTx {
     pub fn blocking_flush(&mut self) {}
 
     pub async fn write(&mut self, _b: &[u8]) {}
+
+    pub async fn wrapped_flush(&mut self) {}
+    pub async fn wrapped_write(&mut self, _b: &[u8]) {}
 }
 
 pub struct MockedUartSinkRxInputStream {
@@ -51,11 +51,12 @@ impl MockedUartSinkRxInputStream {
     }
 }
 
-impl Stream for MockedUartSinkRxInputStream
+impl async_gcode::ByteStream for MockedUartSinkRxInputStream
 {
     type Item = Result<u8, async_gcode::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Option<<Self as futures::Stream>::Item>> {
-        Poll::Pending
+
+    async fn next(&mut self) -> Option<Self::Item> {
+        future::pending().await
     }
 }

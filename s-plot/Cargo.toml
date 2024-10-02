@@ -112,9 +112,9 @@ async-gcode = {version = "0.3", default-features = false, features = ["parse-tra
 cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
 bitflags = { version = "2.6.0", default-features = false, features = [] }
 
-lexical-core = {version = "1.0.1", default-features = false, features = ["write-floats"]}
+lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
 
-cfg-if = { version = "1.0.0", features = [] }
+cfg-if = { version = "1.0", features = [] }
 const_env = { version = "0.1" }
 
 [build-dependencies]

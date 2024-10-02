@@ -1,3 +1,6 @@
+#[allow(unused)]
+use crate::hwa;
+
 #[cfg(feature = "with-sdcard")]
 pub mod sdcard_controller;
 
@@ -42,13 +45,6 @@ pub use motion::*;
 #[cfg(feature = "with-probe")]
 pub use servo_controller::ServoController;
 
-#[cfg(feature = "with-ps-on")]
-pub type PsOnRef =
-    printhor_hwa_common::ControllerRef<ControllerMutexType, crate::hwa::device::PsOnPin>;
-
-#[cfg(feature = "with-probe")]
-pub type ServoControllerRef = printhor_hwa_common::InterruptControllerRef<ServoController>;
-
 #[cfg(feature = "with-probe")]
 pub use servo_controller::ProbeTrait;
 
@@ -58,49 +54,36 @@ pub use heater_controller::HeaterController;
 ////
 
 #[cfg(any(feature = "with-hot-end"))]
-pub type HotendController = HeaterController<
-    crate::hwa::device::AdcHotendPeripheral,
-    crate::hwa::device::AdcHotendPin,
-    crate::hwa::device::PwmHotend,
+pub type HotEndController = HeaterController<
+    hwa::AdcHotEndMutexType,
+    hwa::HotEndControllerMutexType,
+    hwa::device::AdcHotEndPeripheral,
+    hwa::device::AdcHotEndPin,
+    hwa::device::PwmHotEnd,
 >;
 
 #[cfg(any(feature = "with-hot-end"))]
-pub type HotendControllerRef = printhor_hwa_common::InterruptControllerRef<HotendController>;
-
-#[cfg(any(feature = "with-hot-end"))]
-pub type HotendPwmController = pwm_controller::PwmController<crate::hwa::device::PwmHotend>;
+pub type HotEndPwmController = pwm_controller::PwmController<hwa::PwmHotEndMutexType, hwa::device::PwmHotEnd>;
 
 ////
 
 #[cfg(any(feature = "with-hot-bed"))]
-pub type HotbedController = HeaterController<
-    crate::hwa::device::AdcHotbedPeripheral,
-    crate::hwa::device::AdcHotbedPin,
-    crate::hwa::device::PwmHotbed,
+pub type HotBedController = HeaterController<
+    hwa::AdcHotBedMutexType,
+    hwa::PwmHotBedMutexType,
+    hwa::device::AdcHotBedPeripheral,
+    hwa::device::AdcHotBedPin,
+    hwa::device::PwmHotBed,
 >;
 
 #[cfg(any(feature = "with-hot-bed"))]
-pub type HotbedControllerRef = printhor_hwa_common::InterruptControllerRef<HotbedController>;
-
-#[cfg(any(feature = "with-hot-bed"))]
-pub type HotbedPwmController = pwm_controller::PwmController<crate::hwa::device::PwmHotbed>;
+pub type HotbedPwmController = pwm_controller::PwmController<hwa::PwmHotBedMutexType, hwa::device::PwmHotBed>;
 
 #[cfg(any(feature = "with-fan-layer"))]
-pub type FanLayerPwmController = pwm_controller::PwmController<crate::hwa::device::PwmFanLayer>;
-
-#[cfg(any(feature = "with-fan-layer"))]
-pub type FanLayerPwmControllerRef =
-    printhor_hwa_common::InterruptControllerRef<FanLayerPwmController>;
+pub type FanLayerPwmController = pwm_controller::PwmController<hwa::PwmFanLayerMutexType, hwa::device::PwmFanLayer>;
 
 #[cfg(any(feature = "with-fan-extra-1"))]
-pub type FanExtra1PwmController = pwm_controller::PwmController<crate::hwa::device::PwmFanExtra1>;
-
-#[cfg(any(feature = "with-fan-extra-1"))]
-pub type FanExtra1PwmControllerRef =
-    printhor_hwa_common::InterruptControllerRef<FanExtra1PwmController>;
+pub type FanExtra1PwmController = pwm_controller::PwmController<hwa::FanExtra1ControllerMutexType, hwa::device::PwmFanExtra1>;
 
 #[cfg(any(feature = "with-laser"))]
-pub type LaserPwmController = pwm_controller::PwmController<crate::hwa::device::PwmLaser>;
-
-#[cfg(any(feature = "with-laser"))]
-pub type LaserPwmControllerRef = printhor_hwa_common::InterruptControllerRef<LaserPwmController>;
+pub type LaserPwmController = pwm_controller::PwmController<hwa::PwmLaserMutexType, hwa::device::PwmLaser>;

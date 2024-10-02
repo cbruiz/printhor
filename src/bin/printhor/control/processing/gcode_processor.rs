@@ -74,26 +74,34 @@ pub struct GCodeProcessorParams {
     #[cfg(feature = "with-motion")]
     pub motion_planner: hwa::controllers::MotionPlanner,
     #[cfg(feature = "with-serial-usb")]
-    pub serial_usb_tx: hwa::device::USBSerialTxControllerRef,
+    pub serial_usb_tx:
+        hwa::StaticController<hwa::SerialUsbMutexType, hwa::device::SerialUsbTxDevice>,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_tx:
         hwa::StaticController<hwa::SerialPort1MutexType, hwa::device::SerialPort1TxDevice>,
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
+    pub serial_port2_tx:
+        hwa::StaticController<hwa::SerialPort2MutexType, hwa::device::SerialPort2TxDevice>,
     #[cfg(feature = "with-ps-on")]
-    pub ps_on: hwa::controllers::PsOnRef,
+    pub ps_on: hwa::StaticController<hwa::PSOnMutexType, hwa::device::PsOnPin>,
     #[cfg(feature = "with-probe")]
-    pub probe: hwa::controllers::ServoControllerRef,
+    pub probe:
+        hwa::StaticController<hwa::ServoControllerMutexType, hwa::controllers::ServoController<hwa::ProbeMutexType>>,
     #[cfg(feature = "with-hot-end")]
-    pub hot_end: hwa::controllers::HotendControllerRef,
+    pub hot_end:
+        hwa::StaticController<hwa::HotEndControllerMutexType, hwa::controllers::HotEndController>,
     #[cfg(feature = "with-hot-bed")]
-    pub hot_bed: hwa::controllers::HotbedControllerRef,
+    pub hot_bed:
+        hwa::StaticController<hwa::HotBedControllerMutexType, hwa::controllers::HotBedController>,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
+    pub fan_layer:
+        hwa::StaticController<hwa::FanLayerControllerMutexType, hwa::controllers::FanLayerPwmController>,
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
+    pub fan_extra_1:
+        hwa::StaticController<hwa::FanExtra1ControllerMutexType, hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-laser")]
-    pub laser: hwa::controllers::LaserPwmControllerRef,
+    pub laser:
+        hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
 }
 
 #[derive(Clone)]
@@ -103,28 +111,28 @@ pub struct GCodeProcessor {
     #[cfg(feature = "with-motion")]
     pub motion_planner: hwa::controllers::MotionPlanner,
     #[cfg(feature = "with-serial-usb")]
-    pub serial_usb_tx: hwa::device::USBSerialTxControllerRef,
+    pub serial_usb_tx:
+        hwa::StaticController<hwa::SerialUsbMutexType, hwa::device::SerialUsbTxDevice>,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_tx:
         hwa::StaticController<hwa::SerialPort1MutexType, hwa::device::SerialPort1TxDevice>,
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx: hwa::device::UartPort2TxControllerRef,
+    pub serial_port2_tx:
+        hwa::StaticController<hwa::SerialPort2MutexType, hwa::device::SerialPort2TxDevice>,
     #[cfg(feature = "with-ps-on")]
-    pub ps_on: hwa::controllers::PsOnRef,
+    pub ps_on: hwa::StaticController<hwa::PSOnMutexType, hwa::device::PsOnPin>,
     #[cfg(feature = "with-probe")]
-    #[allow(unused)]
-    pub probe: hwa::controllers::ServoControllerRef,
+    pub probe: hwa::StaticController<hwa::ServoControllerMutexType, hwa::controllers::ServoController<hwa::ProbeMutexType>>,
     #[cfg(feature = "with-hot-end")]
-    pub hotend: hwa::controllers::HotendControllerRef,
+    pub hot_end: hwa::StaticController<hwa::HotEndControllerMutexType, hwa::controllers::HotEndController>,
     #[cfg(feature = "with-hot-bed")]
-    pub hotbed: hwa::controllers::HotbedControllerRef,
+    pub hot_bed: hwa::StaticController<hwa::HotBedControllerMutexType, hwa::controllers::HotBedController>,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer: hwa::controllers::FanLayerPwmControllerRef,
+    pub fan_layer: hwa::StaticController<hwa::FanLayerControllerMutexType, hwa::controllers::FanLayerPwmController>,
     #[cfg(feature = "with-fan-extra-1")]
-    #[allow(unused)]
-    pub fan_extra_1: hwa::controllers::FanExtra1PwmControllerRef,
+    pub fan_extra_1: hwa::StaticController<hwa::FanExtra1ControllerMutexType, hwa::controllers::FanExtra1PwmController>,
     #[cfg(feature = "with-laser")]
-    pub _laser: hwa::controllers::LaserPwmControllerRef,
+    pub _laser: hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
 }
 
 impl GCodeProcessor {
@@ -143,9 +151,9 @@ impl GCodeProcessor {
             #[cfg(feature = "with-probe")]
             probe: params.probe,
             #[cfg(feature = "with-hot-end")]
-            hotend: params.hot_end,
+            hot_end: params.hot_end,
             #[cfg(feature = "with-hot-bed")]
-            hotbed: params.hot_bed,
+            hot_bed: params.hot_bed,
             #[cfg(feature = "with-fan-layer")]
             fan_layer: params.fan_layer,
             #[cfg(feature = "with-fan-extra-1")]
@@ -497,7 +505,7 @@ impl GCodeProcessor {
                     return Err(CodeExecutionFailure::PowerRequired);
                 }
                 let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
-                let mut h = self.hotend.lock().await;
+                let mut h = self.hot_end.lock().await;
                 h.set_target_temp(
                     CommChannel::Internal,
                     DeferAction::HotEndTemperature,
@@ -510,7 +518,7 @@ impl GCodeProcessor {
                 let hotend_temp_report = {
                     #[cfg(feature = "with-hot-end")]
                     {
-                        let mut h = self.hotend.lock().await;
+                        let mut h = self.hot_end.lock().await;
                         alloc::format!(
                             " T:{} /{} T@:{} TZ:{}",
                             math::Real::from_f32(h.get_current_temp()),
@@ -525,7 +533,7 @@ impl GCodeProcessor {
                 let hotbed_temp_report = {
                     #[cfg(feature = "with-hot-bed")]
                     {
-                        let mut h = self.hotbed.lock().await;
+                        let mut h = self.hot_bed.lock().await;
                         alloc::format!(
                             " B:{} /{} B@:{} BZ:{}",
                             math::Real::from_f32(h.get_current_temp()),
@@ -575,7 +583,7 @@ impl GCodeProcessor {
                     return Err(CodeExecutionFailure::PowerRequired);
                 }
                 let deferred = {
-                    let mut he = self.hotend.lock().await;
+                    let mut he = self.hot_end.lock().await;
                     let value = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
                     let was_deferred = he
                         .set_target_temp(channel, DeferAction::HotEndTemperature, value as f32)
@@ -683,7 +691,7 @@ impl GCodeProcessor {
                     return Err(CodeExecutionFailure::PowerRequired);
                 }
                 let val = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
-                let mut h = self.hotbed.lock().await;
+                let mut h = self.hot_bed.lock().await;
                 h.set_target_temp(
                     CommChannel::Internal,
                     DeferAction::HotbedTemperature,
@@ -705,7 +713,7 @@ impl GCodeProcessor {
                     return Err(CodeExecutionFailure::PowerRequired);
                 }
                 let deferred = {
-                    let mut he = self.hotbed.lock().await;
+                    let mut he = self.hot_bed.lock().await;
                     he.ping_subscribe(channel, DeferAction::HotbedTemperature)
                         .await
                 };

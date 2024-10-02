@@ -1,4 +1,5 @@
-use crate::control::{GCodeCmd, GCodeLineParserError};
+use crate::control;
+use control::{GCodeCmd, GCodeLineParserError};
 ///! Input Multiplexer
 ///!
 ///! This feature is a bit inefficient and could be improved leveraging macros
@@ -12,11 +13,11 @@ use futures_util::future;
 pub struct GCodeMultiplexedInputStream {
     #[cfg(feature = "with-serial-usb")]
     serial_usb_line_parser:
-        crate::control::GCodeLineParser<hwa::device::USBSerialDeviceInputStream>,
+        control::GCodeLineParser<hwa::device::USBSerialDeviceInputStream>,
     #[cfg(feature = "with-serial-port-1")]
-    serial_port1_line_parser: crate::control::GCodeLineParser<hwa::device::UartPort1RxInputStream>,
+    serial_port1_line_parser: control::GCodeLineParser<hwa::device::UartPort1RxInputStream>,
     #[cfg(feature = "with-serial-port-2")]
-    serial_port2_line_parser: crate::control::GCodeLineParser<hwa::device::UartPort2RxInputStream>,
+    serial_port2_line_parser: control::GCodeLineParser<hwa::device::UartPort2RxInputStream>,
 }
 
 impl GCodeMultiplexedInputStream {
@@ -30,11 +31,11 @@ impl GCodeMultiplexedInputStream {
     ) -> Self {
         Self {
             #[cfg(feature = "with-serial-usb")]
-            serial_usb_line_parser: crate::control::GCodeLineParser::new(serial_usb_rx_stream),
+            serial_usb_line_parser: control::GCodeLineParser::new(serial_usb_rx_stream),
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_line_parser: crate::control::GCodeLineParser::new(serial_port1_rx_stream),
+            serial_port1_line_parser: control::GCodeLineParser::new(serial_port1_rx_stream),
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_line_parser: crate::control::GCodeLineParser::new(serial_port2_rx_stream),
+            serial_port2_line_parser: control::GCodeLineParser::new(serial_port2_rx_stream),
         }
     }
 
