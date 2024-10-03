@@ -101,6 +101,10 @@ mod test {
     #[test]
     fn plan_entry_test() {
         let sz = size_of::<PlanEntry>();
-        assert!(sz < 512, "Plan entry is not so big ({} bytes. max: 512)", sz);
+        assert!(
+            sz < 512,
+            "Plan entry is not so big ({} bytes. max: 512)",
+            sz
+        );
     }
 }

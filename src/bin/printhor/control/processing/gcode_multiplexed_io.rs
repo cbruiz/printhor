@@ -1,10 +1,10 @@
 use crate::control;
-use control::{GCodeCmd, GCodeLineParserError};
 ///! Input Multiplexer
 ///!
 ///! This feature is a bit inefficient and could be improved leveraging macros
 ///! because currently useless polls are performed in disabled channels
 use crate::hwa;
+use control::{GCodeCmd, GCodeLineParserError};
 use embassy_futures::select::Either3;
 #[allow(unused)]
 use futures_util::future;
@@ -12,8 +12,7 @@ use futures_util::future;
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
     #[cfg(feature = "with-serial-usb")]
-    serial_usb_line_parser:
-        control::GCodeLineParser<hwa::device::USBSerialDeviceInputStream>,
+    serial_usb_line_parser: control::GCodeLineParser<hwa::device::USBSerialDeviceInputStream>,
     #[cfg(feature = "with-serial-port-1")]
     serial_port1_line_parser: control::GCodeLineParser<hwa::device::UartPort1RxInputStream>,
     #[cfg(feature = "with-serial-port-2")]

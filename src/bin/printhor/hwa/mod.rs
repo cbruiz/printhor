@@ -36,10 +36,10 @@ pub mod mem {
     }
 }
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub struct DummyTimeSource {}
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 impl embedded_sdmmc::TimeSource for DummyTimeSource {
     fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
         embedded_sdmmc::Timestamp {

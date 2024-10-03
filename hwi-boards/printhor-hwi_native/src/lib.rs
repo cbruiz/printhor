@@ -5,42 +5,52 @@ mod board;
 
 //#region "Mutex types for this board"
 
-pub type EventbusMutexType = hwa::SyncSendMutex;
-pub type EventBusChannelMutexType = hwa::NoopMutex;
+pub type EventBusPubSubMutexType = hwa::SyncSendMutex;
+pub type EventBusHolderType = hwa::NotHoldable<hwa::SyncSendMutex, hwa::EventBusChannelController<EventBusPubSubMutexType>>;
+pub type EventBusChannelHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
 pub type DeferChannelMutexType = hwa::NoopMutex;
-pub type WatchdogMutexType = hwa::NoopMutex;
-pub type MotionDriverMutexType = hwa::SyncSendMutex;
-pub type MotionPlannerMutexType = hwa::NoopMutex;
-pub type MotionConfigMutexType = hwa::SyncSendMutex;
-pub type MotionStatusMutexType = hwa::NoopMutex;
-pub type MotionRingBufferMutexType = hwa::NoopMutex;
+pub type WatchDogHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
+pub type MotionDriverHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type MotionPlannerHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
+pub type MotionConfigHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type MotionStatusHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
+pub type MotionRingBufferHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
 pub type MotionSignalMutexType = hwa::NoopMutex;
+
 pub type Pwm1MutexType = hwa::SyncSendMutex;
 pub type Pwm2MutexType = hwa::SyncSendMutex;
-pub type ProbeMutexType = hwa::SyncSendMutex;
-pub type PwmHotEndMutexType = hwa::SyncSendMutex;
-pub type AdcHotEndMutexType = hwa::NoopMutex;
-pub type PwmHotBedMutexType = hwa::SyncSendMutex;
-pub type AdcHotBedMutexType = hwa::NoopMutex;
-pub type PwmFanLayerMutexType = hwa::SyncSendMutex;
-pub type PwmFanExtra1MutexType = hwa::SyncSendMutex;
-pub type PwmLaserMutexType = hwa::SyncSendMutex;
-pub type PSOnMutexType = hwa::NoopMutex;
+pub type Pwm2ControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type Pwm1ControllerHolderType<D> = hwa::NotHoldable<Pwm1MutexType, D>;
+pub type Adc1ControllerHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
+pub type AdcHotEndHolderType<D> = Adc1ControllerHolderType<D>;
+pub type AdcHotBedHolderType<D> = Adc1ControllerHolderType<D>;
+pub type Adc2ControllerHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
 
-pub type ServoControllerMutexType = hwa::SyncSendMutex;
-pub type FanLayerControllerMutexType = hwa::SyncSendMutex;
-pub type FanExtra1ControllerMutexType = hwa::SyncSendMutex;
-pub type LaserControllerMutexType = hwa::SyncSendMutex;
-pub type HotEndControllerMutexType = hwa::SyncSendMutex;
-pub type HotBedControllerMutexType = hwa::SyncSendMutex;
+pub type PwmProbeHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type PwmHotEndHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type PwmHotBedHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type PwmFanLayerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type PwmFanExtra1HolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type PwmLaserHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type PSOnHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
 
-pub type SDCardMutexType = hwa::NoopMutex;
-pub type SPIControllerMutexType = hwa::NoopMutex;
+pub type PrinterControllerSignalMutexType = hwa::NoopMutex;
+
+pub type ServoControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type FanLayerControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type FanExtra1ControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type LaserControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type HotEndControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type HotBedControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+
+pub type Spi1HolderType<D> = hwa::Holdable<hwa::SyncSendMutex, D>;
+pub type SDCardHolderType<D> = hwa::Holdable<hwa::SyncSendMutex, D>;
+pub type SPIControllerHolderType<D> = hwa::Holdable<hwa::SyncSendMutex, D>;
 
 
-pub type SerialPort1MutexType = hwa::SyncSendMutex;
-pub type SerialPort2MutexType = hwa::SyncSendMutex;
-pub type SerialUsbMutexType = hwa::NoopMutex;
+pub type SerialPort1HolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type SerialPort2HolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+pub type SerialUsbHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
 
 //#endregion
 
@@ -61,7 +71,7 @@ pub use board::HEAP_SIZE_BYTES;
 pub use board::VREF_SAMPLE;
 pub use board::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
 pub use board::STEPPER_PLANNER_CLOCK_FREQUENCY;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-port-1")]
 const UART_PORT1_BUFFER_SIZE: usize = 32;

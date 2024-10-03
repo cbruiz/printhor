@@ -1,6 +1,7 @@
 use crate::hwa::controllers::ExecPlan::Homing;
 use crate::{control, hwa, math, tgeo};
 use embassy_sync::mutex::MutexGuard;
+use printhor_hwa_utils::MaybeHoldable;
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
 use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
 use hwa::{EventFlags, EventStatus, PersistentState};
@@ -32,13 +33,13 @@ pub struct MotionPlanner {
     // The channel to send deferred events
     pub defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
 
-    ring_buffer: hwa::StaticController<hwa::MotionRingBufferMutexType, RingBuffer>,
+    ring_buffer: hwa::StaticController<hwa::MotionRingBufferHolderType<RingBuffer>>,
     move_planned: &'static PersistentState<hwa::MotionSignalMutexType, bool>,
     available: &'static PersistentState<hwa::MotionSignalMutexType, bool>,
-    motion_config: hwa::StaticController<hwa::MotionConfigMutexType, motion::MotionConfig>,
-    motion_st: hwa::StaticController<hwa::MotionStatusMutexType, motion::MotionStatus>,
+    motion_config: hwa::StaticController<hwa::MotionConfigHolderType<motion::MotionConfig>>,
+    motion_st: hwa::StaticController<hwa::MotionStatusHolderType<motion::MotionStatus>>,
     pub motion_driver:
-        hwa::StaticController<hwa::MotionDriverMutexType, hwa::drivers::MotionDriver>,
+        hwa::StaticController<hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>>,
 }
 
 // TODO: Refactor in progress
@@ -93,11 +94,8 @@ impl MotionPlanner {
     /// ```
     pub fn new(
         defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
-        motion_config: hwa::StaticController<hwa::MotionConfigMutexType, motion::MotionConfig>,
-        motion_driver: hwa::StaticController<
-            hwa::MotionDriverMutexType,
-            hwa::drivers::MotionDriver,
-        >,
+        motion_config: hwa::StaticController<hwa::MotionConfigHolderType<motion::MotionConfig>>,
+        motion_driver: hwa::StaticController<hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>>,
     ) -> Self {
         type PersistentStateType<M> = hwa::PersistentState<M, bool>;
 
@@ -106,8 +104,7 @@ impl MotionPlanner {
             motion_config,
             ring_buffer: hwa::make_static_controller!(
                 "MotionRingBuffer",
-                hwa::MotionRingBufferMutexType,
-                RingBuffer,
+                hwa::MotionRingBufferHolderType<RingBuffer>,
                 RingBuffer::new()
             ),
             move_planned: hwa::make_static_ref!(
@@ -122,8 +119,7 @@ impl MotionPlanner {
             ),
             motion_st: hwa::make_static_controller!(
                 "MotionStatus",
-                hwa::MotionStatusMutexType,
-                hwa::controllers::MotionStatus,
+                hwa::MotionStatusHolderType<motion::MotionStatus>,
                 hwa::controllers::MotionStatus::new()
             ),
             motion_driver,
@@ -156,7 +152,7 @@ impl MotionPlanner {
     /// This ensures that no motion-related activities commence before the system is fully set up and ready, preventing any accidental or unplanned actions.
     pub async fn start(
         &self,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     ) {
         self.move_planned.reset();
         self.available.signal(true);
@@ -200,7 +196,7 @@ impl MotionPlanner {
     /// bus, which is important for maintaining the overall system's consistency and reliability.
     pub async fn next_plan(
         &self,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     ) -> ExecPlan {
         loop {
             let _ = self.move_planned.wait().await;
@@ -275,7 +271,7 @@ impl MotionPlanner {
     /// to ensure that the motion planner operates smoothly and consistently by managing the state of planned and executed movements.
     pub async fn consume_current_segment_data(
         &self,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     ) -> u8 {
         let mut rb = self.ring_buffer.lock().await;
         let head = rb.head;
@@ -384,7 +380,7 @@ impl MotionPlanner {
         action: hwa::DeferAction,
         move_type: ScheduledMove,
         blocking: bool,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
         num_order: u32,
         line_tag: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
@@ -587,13 +583,13 @@ impl MotionPlanner {
 
     pub fn motion_cfg(
         &self,
-    ) -> hwa::StaticController<hwa::MotionConfigMutexType, hwa::controllers::MotionConfig> {
+    ) -> hwa::StaticController<hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>> {
         self.motion_config.clone()
     }
 
     pub fn motion_driver(
         &self,
-    ) -> hwa::StaticController<hwa::MotionDriverMutexType, hwa::drivers::MotionDriver> {
+    ) -> hwa::StaticController<hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>> {
         self.motion_driver.clone()
     }
 
@@ -716,7 +712,7 @@ impl MotionPlanner {
 
     pub fn mc_set_max_speed(
         &self,
-        mutex_guard: &mut MutexGuard<motion::MotionConfigMutexType, motion::MotionConfig>,
+        mutex_guard: &mut MutexGuard<<hwa::MotionDriverHolderType<motion::MotionConfig> as MaybeHoldable>::MutexType, motion::MotionConfig>,
         speed: TVector<u32>,
     ) {
         mutex_guard.max_speed.assign(CoordSel::all(), &speed);
@@ -783,7 +779,7 @@ impl MotionPlanner {
         channel: hwa::CommChannel,
         gc: &control::GCodeCmd,
         blocking: bool,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
         match &gc.value {
             control::GCodeValue::G0(t) => Ok(self
@@ -834,6 +830,7 @@ impl MotionPlanner {
                     gc.line_tag,
                 )
                 .await?),
+            #[cfg(feature = "with-motion")]
             control::GCodeValue::G28(_x) => {
                 event_bus
                     .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
@@ -866,7 +863,7 @@ impl MotionPlanner {
         p1_t: TVector<Real>,
         requested_motion_speed: Option<Real>,
         blocking: bool,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
         num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
@@ -1010,7 +1007,7 @@ impl MotionPlanner {
 
     pub async fn do_homing(
         &self,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     ) -> Result<(), ()> {
         match self
             .motion_driver
@@ -1197,7 +1194,7 @@ fn perform_cornering(
 #[cfg(feature = "native")]
 #[allow(unused)]
 pub fn display_content(
-    rb: &MutexGuard<hwa::MotionRingBufferMutexType, RingBuffer>,
+    rb: &MutexGuard<<hwa::MotionRingBufferHolderType<RingBuffer> as MaybeHoldable>::MutexType, RingBuffer>,
     left_offset: u8,
     right_offset: u8,
 ) -> Result<(), ()> {
@@ -1692,13 +1689,12 @@ pub mod planner_test {
     async fn receiver_receives_given_try_send_async() {
         type MutexType = hwa::NoopMutex;
 
-        let event_bus = hwa::EventBusController::new(hwa::make_static_controller!(
+        let event_bus = hwa::EventBus::new(hwa::make_static_controller!(
             "EventBusChannelController",
-            MutexType,
-            hwa::EventBusChannelController<MutexType>,
+            hwa::EventBusHolderType,
             hwa::EventBusChannelController::new(hwa::make_static_ref!(
                 "EventBusChannel",
-                hwa::EventBusPubSubType<MutexType>,
+                hwa::EventBusPubSubType<hwa::EventBusPubSubMutexType>,
                 hwa::EventBusPubSubType::new()
             ))
         ));
@@ -1712,8 +1708,7 @@ pub mod planner_test {
 
         let motion_config = hwa::make_static_controller!(
             "MotionConfig",
-            hwa::NoopMutex,
-            hwa::controllers::MotionConfig,
+            hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>,
             hwa::controllers::MotionConfig::new()
         );
         let _ = motion_config.lock().await;

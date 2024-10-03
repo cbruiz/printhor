@@ -16,7 +16,13 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 std = []
-default = ["with-log", "std", "with-motion", "with-hot-end", "with-hot-bed", "embassy-time/std", "embassy-time/generic-queue-128"]
+default = [
+    "std", "embassy-time/std", "embassy-time/generic-queue-128",
+    "with-log",
+    "with-serial-usb", "with-serial-port-1", "with-serial-port-2",
+    "with-motion", "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
+    "with-hot-end", "with-hot-bed"
+]
 nightly = []
 executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]

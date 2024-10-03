@@ -2,29 +2,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-pub type InterruptControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "executor-interrupt")] {
-        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
-    }
-    else {
-        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    }
-}
+pub use printhor_hwa_common_macros::*;
+pub use printhor_hwa_utils::*;
 
 mod event_bus;
 pub use event_bus::*;
 
 mod defer_channel;
 pub use defer_channel::*;
-
-mod shared_controller;
-pub use shared_controller::*;
-
-pub use printhor_hwa_common_macros::*;
-pub use printhor_hwa_utils::*;
 
 mod context;
 pub use context::*;
@@ -45,7 +30,9 @@ cfg_if::cfg_if! {
     }
 }
 
+mod event_bus_channel;
 pub mod soft_uart;
+pub use event_bus_channel::*;
 
 /// Represents a logical channel where the request(s) come from
 #[derive(strum::EnumCount, Clone, Copy, PartialEq, Debug)]
@@ -147,12 +134,16 @@ impl CommChannel {
                     return CommChannel::SerialUsb
                 }
             }
-            else if #[cfg(feature = "with-serial-port-1")] {
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-serial-port-1")] {
                 if _idx == SERIAL_USB_OFFSET {
                     return CommChannel::SerialPort1
                 }
             }
-            else if #[cfg(feature = "with-serial-port-2")] {
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-serial-port-2")] {
                 if _idx == SERIAL_PORT1_OFFSET {
                     return CommChannel::SerialPort2
                 }
@@ -232,7 +223,6 @@ impl CommChannel {
 
 // A dummy empty structure to model whether a device is not necessary.
 // This is zero-cost in memory but useful to maintain a common method signature across boards
-#[allow(unused)]
 pub struct NoDevice;
 impl NoDevice {
     #[allow(unused)]
@@ -298,5 +288,42 @@ bitflags! {
         const E    = 0b00001000;
         /// Represents an unset or undefined channel. This flag is always available.
         const UNSET  = 0b10000000;
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate as hwa;
+    use crate::StepperChannel;
+
+    #[test]
+    fn test_some_objects() {
+        let _nd = hwa::NoDevice::new();
+        let ch1 = StepperChannel::E;
+        hwa::info!("{:?}", ch1);
+        let mut ch2 = ch1.clone();
+        assert_eq!(ch1, ch2);
+        let ch3 = ch2;
+        assert_eq!(ch2, ch3);
+        ch2.set(StepperChannel::Y, true);
+        hwa::info!("{:?}", ch2);
+        assert_ne!(ch2, ch3);
+
+        assert_eq!(hwa::CommChannel::count(), 4);
+
+        let c0 = hwa::CommChannel::SerialUsb;
+        let c1 = hwa::CommChannel::SerialPort1;
+        let c2 = hwa::CommChannel::SerialPort2;
+        let c3 = hwa::CommChannel::Internal;
+
+        assert_eq!(c0, hwa::CommChannel::index(0));
+        assert_eq!(c1, hwa::CommChannel::index(1));
+        assert_eq!(c2, hwa::CommChannel::index(2));
+        assert_eq!(c3, hwa::CommChannel::index(3));
+
+        assert_eq!(0, hwa::CommChannel::index_of(c0));
+        assert_eq!(1, hwa::CommChannel::index_of(c1));
+        assert_eq!(2, hwa::CommChannel::index_of(c2));
+        assert_eq!(3, hwa::CommChannel::index_of(c3));
     }
 }

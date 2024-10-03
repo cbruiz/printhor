@@ -13,7 +13,7 @@ use math::Real;
 
 pub struct IntegrationaskParams {
     pub processor: hwa::GCodeProcessor,
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     pub card_controller: hwa::controllers::CardController,
     #[cfg(feature = "with-print-job")]
     pub printer_controller: hwa::controllers::PrinterController,
@@ -98,6 +98,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
     // Separator
     hwa::info!("##");
 
+    #[cfg(feature = "with-ps-on")]
     {
         let test_name = "T2 [M80 (Power On)]";
 
@@ -159,6 +160,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
         }
     }
 
+    #[cfg(feature = "with-motion")]
     {
         let test_name = "T4 [G28 (Homming)]";
         let homing_gcode = control::GCodeCmd::new(
@@ -196,7 +198,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
 
     // Separator
     hwa::info!("##");
-
+    #[cfg(feature = "with-motion")]
     {
         let test_name = "T5 [G92 (Reset Position)]";
         let set_pos_gcode = control::GCodeCmd::new(
@@ -227,7 +229,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
 
     // Separator
     hwa::info!("##");
-
+    #[cfg(feature = "with-motion")]
     {
         let test_name = "T6 [G4 (Dwell)]";
         let set_pos_gcode =
@@ -257,7 +259,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
     // Separator
     hwa::info!("##");
 
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     {
         let test_name = "T7 [M20 (List SDCard)]";
         let gcode = control::GCodeCmd::new(7, Some(7), control::GCodeValue::M20(None));
@@ -267,7 +269,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
             &mut params.processor,
             CommChannel::Internal,
             &gcode,
-            #[cfg(feature = "with-sdcard")]
+            #[cfg(feature = "with-sd-card")]
             &mut params.card_controller,
             #[cfg(feature = "with-print-job")]
             &mut params.printer_controller,
@@ -284,7 +286,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
     // Separator
     hwa::info!("##");
 
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     {
         let test_name = "T8 [M20 (List SDCard)]";
         let gcode = control::GCodeCmd::new(
@@ -298,7 +300,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
             &mut params.processor,
             CommChannel::Internal,
             &gcode,
-            #[cfg(feature = "with-sdcard")]
+            #[cfg(feature = "with-sd-card")]
             &mut params.card_controller,
             #[cfg(feature = "with-print-job")]
             &mut params.printer_controller,
@@ -599,7 +601,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
             &mut params.processor,
             CommChannel::Internal,
             &gcode,
-            #[cfg(feature = "with-sdcard")]
+            #[cfg(feature = "with-sd-card")]
             &mut params.card_controller,
             #[cfg(feature = "with-print-job")]
             &mut params.printer_controller,
@@ -627,7 +629,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
                     &mut params.processor,
                     CommChannel::Internal,
                     &gcode,
-                    #[cfg(feature = "with-sdcard")]
+                    #[cfg(feature = "with-sd-card")]
                     &mut params.card_controller,
                     #[cfg(feature = "with-print-job")]
                     &mut params.printer_controller,

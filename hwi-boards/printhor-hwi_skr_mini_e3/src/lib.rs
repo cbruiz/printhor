@@ -27,7 +27,7 @@ cfg_if::cfg_if! {
             pub use crate::board_stm32g0::Spawner;
         }
         pub use board::*;
-        #[cfg(feature = "with-sdcard")]
+        #[cfg(feature = "with-sd-card")]
         pub use crate::board_stm32g0::SDCARD_PARTITION;
         #[cfg(feature = "with-serial-usb")]
         const USBSERIAL_BUFFER_SIZE: usize = 32;
@@ -109,7 +109,7 @@ cfg_if::cfg_if! {
             pub use crate::board_stm32f1::Spawner;
         }
         pub use board::*;
-        #[cfg(feature = "with-sdcard")]
+        #[cfg(feature = "with-sd-card")]
         pub use crate::board_stm32f1::SDCARD_PARTITION;
         #[cfg(feature = "with-serial-usb")]
         const USBSERIAL_BUFFER_SIZE: usize = 32;

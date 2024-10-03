@@ -10,9 +10,9 @@ use printhor_hwa_utils::StaticController;
 const MAX_DIRS: usize = 3usize;
 const MAX_FILES: usize = 1usize;
 
-#[cfg(feature = "sdcard-uses-spi")]
+#[cfg(feature = "sd-card-uses-spi")]
 pub type SDCardBlockDevice = hwa::adapters::SPIAdapter<hwa::device::SpiCardCSPin>;
-#[cfg(not(feature = "sdcard-uses-spi"))]
+#[cfg(not(feature = "sd-card-uses-spi"))]
 pub type SDCardBlockDevice = hwa::device::SDCardBlockDevice;
 
 #[allow(unused)]
@@ -69,12 +69,12 @@ pub struct DirectoryRef {
 #[allow(unused)]
 impl SDCard {
     pub(crate) async fn retain(&mut self) {
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         self.mgr.device().retain().await;
     }
 
     pub(crate) async fn release(&mut self) {
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         self.mgr.device().release().await;
     }
 
@@ -354,19 +354,18 @@ impl TimeSource for DummyTimeSource {
 }
 
 pub struct CardController {
-    instance: StaticController<hwa::SDCardMutexType, SDCard>,
+    instance: StaticController<hwa::SDCardHolderType<SDCard>>,
 }
 
 #[allow(unused)]
 impl CardController {
     pub async fn new(device: SDCardBlockDevice) -> Self {
-
         let mut card =
             SDCardVolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         card.device().retain().await;
         let vol = card.open_raw_volume(VolumeIdx(hwa::SDCARD_PARTITION));
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         card.device().release().await;
         let mut opened_dir_slots = heapless::Vec::new();
         let mut opened_dir_refcount = heapless::Vec::new();
@@ -380,8 +379,7 @@ impl CardController {
         Self {
             instance: hwa::make_static_controller!(
                 "SDCardSharedState",
-                hwa::SDCardMutexType,
-                SDCard,
+                hwa::SDCardHolderType<SDCard>,
                 SDCard {
                     mgr: card,
                     vol: vol.ok(),
@@ -545,14 +543,14 @@ pub struct SDDirEntry {
 }
 
 pub struct CardAsyncDirIterator {
-    instance: StaticController<hwa::SDCardMutexType, SDCard>,
+    instance: StaticController<hwa::SDCardHolderType<SDCard>>,
     path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     current_index: usize,
 }
 
 impl CardAsyncDirIterator {
     pub fn new(
-        instance: StaticController<hwa::SDCardMutexType, SDCard>,
+        instance: StaticController<hwa::SDCardHolderType<SDCard>>,
         path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     ) -> Self {
         Self {

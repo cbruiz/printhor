@@ -1,6 +1,6 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::{CommChannel, EventBusController, PersistentState};
+use hwa::{EventBus, CommChannel, PersistentState};
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
@@ -63,7 +63,7 @@ pub enum PrinterControllerError {
 }
 
 pub type PrinterControllerSignalType =
-    embassy_sync::signal::Signal<hwa::ControllerMutexType, PrinterControllerEvent>;
+    embassy_sync::signal::Signal<hwa::PrinterControllerSignalMutexType, PrinterControllerEvent>;
 
 /// The `PrinterController` struct represents the controller for managing printer operations.
 ///
@@ -87,16 +87,17 @@ pub struct PrinterController {
     channel: &'static PrinterControllerSignalType,
 
     /// The event bus for broadcasting events.
-    event_bus: EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    event_bus: EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
 
     /// The current status of the printer controller.
-    status: &'static PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>,
+    status: &'static PersistentState<hwa::PrinterControllerSignalMutexType, PrinterControllerStatus>,
 }
 
 impl PrinterController {
-    pub fn new(event_bus: EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>) -> PrinterController {
-
-        type StatusType = PersistentState<hwa::ControllerMutexType, PrinterControllerStatus>;
+    pub fn new(
+        event_bus: EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
+    ) -> PrinterController {
+        type StatusType = PersistentState<hwa::PrinterControllerSignalMutexType, PrinterControllerStatus>;
         let status_cfg = StatusType::new();
         status_cfg.signal(PrinterControllerStatus::Ready(CommChannel::Internal));
         let channel = hwa::make_static_ref!(
@@ -107,11 +108,7 @@ impl PrinterController {
         Self {
             channel,
             event_bus,
-            status: hwa::make_static_ref!(
-                "PrinterControllerStatus",
-                StatusType,
-                status_cfg
-            ),
+            status: hwa::make_static_ref!("PrinterControllerStatus", StatusType, status_cfg),
         }
     }
 

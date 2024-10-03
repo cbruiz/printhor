@@ -1,3 +1,4 @@
+#[allow(unused)]
 use crate::control::{GCodeCmd, GCodeValue, N, S, XYZE, XYZEFS, XYZF};
 use crate::helpers;
 use crate::hwa;
@@ -307,61 +308,100 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(feature = "grbl-compat")]
         ('$', None) => Some(GCodeValue::GRBLCmd),
         ('g', None) => Some(GCodeValue::G),
+        #[cfg(feature = "with-motion")]
         ('g', Some((0, 0))) => Some(GCodeValue::G0(XYZF::new())),
+        #[cfg(feature = "with-motion")]
         ('g', Some((1, 0))) => Some(GCodeValue::G1(XYZEFS::new())),
+        #[cfg(feature = "with-motion")]
         ('g', Some((4, 0))) => Some(GCodeValue::G4(S::new())),
+        #[cfg(feature = "with-motion")]
         ('g', Some((10, 0))) => Some(GCodeValue::G10),
+        #[cfg(feature = "with-motion")]
         ('g', Some((17, 0))) => Some(GCodeValue::G17),
+        #[cfg(feature = "with-motion")]
         ('g', Some((21, 0))) => Some(GCodeValue::G21),
+        #[cfg(feature = "with-motion")]
         ('g', Some((28, 0))) => Some(GCodeValue::G28(XYZE::new())),
+        #[cfg(feature = "with-motion")]
         ('g', Some((29, 0))) => Some(GCodeValue::G29),
+        #[cfg(feature = "with-probe")]
         ('g', Some((31, 0))) => Some(GCodeValue::G31),
+        #[cfg(feature = "with-probe")]
         ('g', Some((32, 0))) => Some(GCodeValue::G32),
         ('g', Some((80, 0))) => Some(GCodeValue::G80),
+        #[cfg(feature = "with-motion")]
         ('g', Some((90, 0))) => Some(GCodeValue::G90),
+        #[cfg(feature = "with-motion")]
         ('g', Some((91, 0))) => Some(GCodeValue::G91),
+        #[cfg(feature = "with-motion")]
         ('g', Some((92, 0))) => Some(GCodeValue::G92(XYZE::new())),
+        #[cfg(feature = "with-motion")]
         ('g', Some((94, 0))) => Some(GCodeValue::G94),
+        #[cfg(feature = "with-motion")]
         ('g', Some((291, 1))) => Some(GCodeValue::G29_1),
+        #[cfg(feature = "with-motion")]
         ('g', Some((292, 1))) => Some(GCodeValue::G29_2),
         ('m', None) => Some(GCodeValue::M),
         ('m', Some((3, 0))) => Some(GCodeValue::M3),
         ('m', Some((5, 0))) => Some(GCodeValue::M5),
+        #[cfg(feature = "with-sd-card")]
         ('m', Some((20, 0))) => Some(GCodeValue::M20(None)),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((23, 0))) => Some(GCodeValue::M23(None)),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((24, 0))) => Some(GCodeValue::M24),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((25, 0))) => Some(GCodeValue::M25),
         ('m', Some((37, 0))) => Some(GCodeValue::M37(S::new())),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((73, 0))) => Some(GCodeValue::M73),
         ('m', Some((79, 0))) => Some(GCodeValue::M79),
+        #[cfg(feature = "with-ps-on")]
         ('m', Some((80, 0))) => Some(GCodeValue::M80),
+        #[cfg(feature = "with-ps-on")]
         ('m', Some((81, 0))) => Some(GCodeValue::M81),
         ('m', Some((83, 0))) => Some(GCodeValue::M83),
+        #[cfg(feature = "with-motion")]
         ('m', Some((84, 0))) => Some(GCodeValue::M84),
         ('m', Some((100, 0))) => Some(GCodeValue::M100),
+        #[cfg(feature = "with-hot-end")]
         ('m', Some((104, 0))) => Some(GCodeValue::M104(S::new())),
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         ('m', Some((105, 0))) => Some(GCodeValue::M105),
+        #[cfg(feature = "with-fan-layer")]
         ('m', Some((106, 0))) => Some(GCodeValue::M106),
+        #[cfg(feature = "with-fan-layer")]
         ('m', Some((107, 0))) => Some(GCodeValue::M107),
+        #[cfg(feature = "with-hot-end")]
         ('m', Some((109, 0))) => Some(GCodeValue::M109(S::new())),
         ('m', Some((110, 0))) => Some(GCodeValue::M110(N::new())),
+        #[cfg(feature = "with-motion")]
         ('m', Some((114, 0))) => Some(GCodeValue::M114),
         ('m', Some((115, 0))) => Some(GCodeValue::M115),
         ('m', Some((117, 0))) => Some(GCodeValue::M117),
         ('m', Some((119, 0))) => Some(GCodeValue::M119),
+        #[cfg(feature = "with-hot-bed")]
         ('m', Some((140, 0))) => Some(GCodeValue::M140(S::new())),
+        #[cfg(feature = "with-hot-bed")]
         ('m', Some((190, 0))) => Some(GCodeValue::M190),
+        #[cfg(feature = "with-motion")]
         ('m', Some((201, 0))) => Some(GCodeValue::M201),
+        #[cfg(feature = "with-motion")]
         ('m', Some((203, 0))) => Some(GCodeValue::M203),
         ('m', Some((204, 0))) => Some(GCodeValue::M204),
         ('m', Some((205, 0))) => Some(GCodeValue::M205),
+        #[cfg(feature = "with-motion")]
         ('m', Some((206, 0))) => Some(GCodeValue::M206),
         ('m', Some((220, 0))) => Some(GCodeValue::M220(S::new())),
         ('m', Some((221, 0))) => Some(GCodeValue::M221(S::new())),
         ('m', Some((502, 0))) => Some(GCodeValue::M502),
+        #[cfg(feature = "with-motion")]
         ('m', Some((8621, 1))) => Some(GCodeValue::M862_1),
+        #[cfg(feature = "with-motion")]
         ('m', Some((8623, 1))) => Some(GCodeValue::M862_3),
+        #[cfg(feature = "with-motion")]
         ('m', Some((900, 0))) => Some(GCodeValue::M900),
+        #[cfg(feature = "with-motion")]
         ('m', Some((907, 0))) => Some(GCodeValue::M907),
         _ => None,
     }
@@ -382,6 +422,7 @@ fn update_current(
             }
             _ => {}
         },
+        #[cfg(feature = "with-motion")]
         GCodeValue::G0(coord) => match (ch, frx) {
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
@@ -398,7 +439,7 @@ fn update_current(
             _ => {}
         },
 
-        //noinspection Code
+        #[cfg(feature = "with-motion")]
         GCodeValue::G1(coord) => match (ch, frx) {
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
@@ -414,12 +455,14 @@ fn update_current(
             }
             _ => {}
         },
+        #[cfg(feature = "with-motion")]
         GCodeValue::G4(param) => match (ch, frx) {
             ('s', Some(val)) => {
                 param.s.replace(helpers::to_fixed(val).abs());
             }
             _ => {}
         },
+        #[cfg(feature = "with-motion")]
         GCodeValue::G28(coord) => match (ch, frx) {
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
@@ -432,6 +475,7 @@ fn update_current(
             }
             _ => {}
         },
+        #[cfg(feature = "with-motion")]
         GCodeValue::G92(coord) => match (ch, frx) {
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
@@ -447,6 +491,7 @@ fn update_current(
             }
             _ => {}
         },
+        #[cfg(feature = "with-sd-card")]
         GCodeValue::M20(path) => {
             if ch == 'f' {
                 if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
@@ -454,6 +499,7 @@ fn update_current(
                 }
             }
         }
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         GCodeValue::M23(file) => {
             if ch == 'f' {
                 if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
@@ -467,10 +513,28 @@ fn update_current(
             }
             _ => {}
         },
-        GCodeValue::M104(coord)
-        | GCodeValue::M109(coord)
-        | GCodeValue::M140(coord)
-        | GCodeValue::M220(coord) => match (ch, frx) {
+        #[cfg(feature = "with-hot-end")]
+        GCodeValue::M104(coord) => match (ch, frx) {
+            ('s', Some(val)) => {
+                coord.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
+        #[cfg(feature = "with-hot-end")]
+        GCodeValue::M109(coord) => match (ch, frx) {
+            ('s', Some(val)) => {
+                coord.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
+        #[cfg(feature = "with-hot-bed")]
+        GCodeValue::M140(coord) => match (ch, frx) {
+            ('s', Some(val)) => {
+                coord.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
+        GCodeValue::M220(coord) => match (ch, frx) {
             ('s', Some(val)) => {
                 coord.s.replace(helpers::to_fixed(val));
             }

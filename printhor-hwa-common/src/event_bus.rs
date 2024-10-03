@@ -1,10 +1,11 @@
 //! The state manager controller.
 //!
 //! This module provides a global asynchronous event bus.
-
+use crate as hwa;
 use core::fmt::Formatter;
-use core::ops::{BitAnd, BitOr, BitXor};
-use printhor_hwa_utils::StaticController;
+use core::ops::{BitAnd, BitOr};
+use hwa::event_bus_channel::{EventBusChannelController, EventBusSubscriber};
+use printhor_hwa_utils::*;
 
 #[const_env::from_env("EVENT_BUS_NUM_SUBSCRIBERS")]
 const EVENT_BUS_NUM_SUBSCRIBERS: usize = 6;
@@ -376,117 +377,38 @@ impl core::fmt::Debug for EventStatus {
 
 //#region "Event Bus"
 
-/// Represents the EventBus responsible for managing and
-/// publishing events within the system. The `EventBus`
-/// structure holds a reference to the event bus, a publisher
-/// for sending events, and the current status flags.
+/// A struct representing a reference to the `Event Bus`.
 ///
-/// This structure ensures thread-safe operations through
-/// asynchronous event handling and allows the system to
-/// broadcast state changes and other relevant events globally.
-///
-/// # Fields
-///
-/// * `bus` - A static reference to the Pub/Sub event bus channel.
-/// * `publisher` - A publisher that can send events immediately to the bus.
-/// * `status` - Flags representing the current status of the system,
-///              managed and updated by the event bus.
-///
-/// # Examples
-///
-/// See [EventBusController]
-pub struct EventBusChannelController<M>
-where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-{
-    channel: &'static EventBusPubSubType<M>,
-    publisher: EventBusPublisherType<M>,
-    status: EventFlags,
-}
-
-impl<M> EventBusChannelController<M>
-where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-{
-    pub fn new(channel: &'static EventBusPubSubType<M>) -> Self {
-        let publisher = channel.publisher().unwrap();
-        EventBusChannelController {
-            channel,
-            publisher,
-            status: EventFlags::empty(),
-        }
-    }
-
-    /// Publishes an event to the event bus, updating the status flags if there are changes.
-    ///
-    /// The method takes an `EventStatus` struct which contains the event flags and a mask.
-    /// It computes the incoming bits, identifies changes against the current status, and
-    /// updates the status flags accordingly. If there are changes, it publishes the new status
-    /// immediately using the publisher.
-    ///
-    /// # Arguments
-    ///
-    /// * `event` - An `EventStatus` instance containing the event flags and mask.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    ///
-    /// TBD
-    ///
-    pub fn publish_event(&mut self, event: EventStatus) {
-        let incoming_bits = event.flags.bitand(event.mask);
-        let changed_bits = incoming_bits.bitxor(self.status).bitand(event.mask);
-        if !changed_bits.is_empty() {
-            //crate::trace!("There is a change");
-            let new_status = self
-                .status
-                .bitand(changed_bits.complement())
-                .bitor(incoming_bits.bitand(changed_bits));
-            self.status = new_status;
-            self.publisher.publish_immediate(new_status);
-        } else {
-            //crate::trace!("No change, no update");
-        }
-    }
-
-    pub(crate) fn get_status(&self) -> EventFlags {
-        self.status
-    }
-}
-
-//#endregion
-
-//#region "Event Bus Channel Controller"
-
-/// A struct representing a reference to the `EventBus`.
-///
-/// The `EventBusRef` provides various methods to interact with the event bus,
+/// The [EventBus] provides various methods to interact with the internal pub-sub channel,
 /// including publishing events, getting the current status, checking specific flags,
 /// and subscribing to event notifications.
+///
+/// # Generics
+///
+/// * `H` is the Holder (an instance of the trait [MaybeHoldable]) to choose the locking strategy.
+/// * `M` is the MutexType (an instance of the trait [hwa::RawMutex]) of the inner pub-sub mechanism.
 ///
 /// # Examples
 ///
 /// ```rust
 /// use printhor_hwa_common as hwa;
-/// use hwa::{EventBusController, EventBusChannelController, EventBusPubSubType};
-/// use hwa::{make_static_controller, make_static_ref};
 ///
-/// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-/// type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+/// type ChannelControllerMutexType = hwa::SyncSendMutex;
+/// type PubSubMutexType = hwa::SyncSendMutex;
+/// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
+/// type HolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
 ///
-/// let _event_bus = EventBusController::new(
-///     make_static_controller!(
-///         "EventBusChannelController",
-///         BusMutexType,
-///         EventBusChannelController<ChannelMutexType>,
-///         EventBusChannelController::new(
-///             make_static_ref!(
+/// let _controller = hwa::EventBus::new(
+///     hwa::make_static_controller!(
+///         "EventBus",
+///         HolderType,
+///         hwa::EventBusChannelController::new(
+///             hwa::make_static_ref!(
 ///                 "EventBusChannel",
-///                 EventBusPubSubType<ChannelMutexType>,
-///                 EventBusPubSubType::new()
+///                 hwa::EventBusPubSubType<PubSubMutexType>,
+///                 hwa::EventBusPubSubType::new(),
 ///             )
-///         )
+///         ),
 ///     )
 /// );
 /// ```
@@ -494,32 +416,30 @@ where
 /// # Fields
 ///
 /// * `instance` - A reference to the controller wrapping the `EventBus`.
-pub struct EventBusController<M, CM>
+pub struct EventBus<H, M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    CM: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    H: MaybeHoldable<Resource = EventBusChannelController<M>> + 'static,
+    M: hwa::RawMutex + 'static,
 {
-    channel_controller: StaticController<M, EventBusChannelController<CM>>,
+    channel_controller: StaticController<H>,
 }
 
-impl<M, CM> Clone for EventBusController<M, CM>
+impl<H, M> Clone for EventBus<H, M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    CM: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    H: MaybeHoldable<Resource= EventBusChannelController<M>> + 'static,
+    M: hwa::RawMutex + 'static,
 {
     fn clone(&self) -> Self {
-        EventBusController::new(self.channel_controller.clone())
+        EventBus::new(self.channel_controller.clone())
     }
 }
 
-impl<M, CM> EventBusController<M, CM>
+impl<H, M> EventBus<H, M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    CM: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    H: MaybeHoldable<Resource= EventBusChannelController<M>> + 'static,
+    M: hwa::RawMutex + 'static,
 {
-    pub const fn new(
-        channel_controller: StaticController<M, EventBusChannelController<CM>>,
-    ) -> Self {
+    pub const fn new( channel_controller: StaticController<H>) -> Self {
         Self { channel_controller }
     }
 
@@ -539,16 +459,18 @@ where
     ///
     /// ```rust
     /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBusController, EventFlags, EventStatus};
+    /// use hwa::{EventBus, EventFlags, EventStatus};
     ///
-    /// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    /// type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
+    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
+    /// type EventBusHolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
     ///
-    /// async fn assumed_initialization(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
+    /// async fn assumed_initialization(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
     ///     event_bus.publish_event(EventStatus::not_containing(EventFlags::SYS_READY)).await
     /// }
     /// // [...]
-    /// async fn event_routine(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
+    /// async fn event_routine(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
     ///     // Update the event bus notifying that System is NOW ready
     ///     event_bus.publish_event(EventStatus::containing(EventFlags::SYS_READY)).await;
     /// }
@@ -583,16 +505,19 @@ where
     ///
     /// ```rust
     /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBusController, EventFlags, EventStatus};
+    /// use hwa::{EventBus, EventFlags, EventStatus};    ///
     ///
-    /// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    /// type ChannelMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
+    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
+    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
+    /// type EventBusHolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
     ///
-    /// async fn assumed_initialization(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
+    ///
+    /// async fn assumed_initialization(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
     ///     event_bus.publish_event(EventStatus::not_containing(EventFlags::SYS_READY)).await
     /// }
     ///
-    /// async fn checking_routine(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
+    /// async fn checking_routine(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
     ///     if event_bus.has_flags(EventFlags::SYS_READY).await {
     ///         // System is ready
     ///         // ...
@@ -609,302 +534,75 @@ where
         req.get_status().bitand(flags).eq(&flags)
     }
 
-    pub async fn subscriber(&self) -> EventBusSubscriber<CM> {
-        let req = self.channel_controller.lock().await;
-        let inner = req.channel.subscriber().expect("Exceeded");
-        EventBusSubscriber {
-            inner,
-            last_status: req.get_status(),
-        }
+    pub async fn subscriber(&self) -> EventBusSubscriber<'static, M> {
+        let mut req = self.channel_controller.lock().await;
+        let inner = req.subscriber().expect("Exceeded");
+        EventBusSubscriber::new(inner, req.get_status())
     }
 }
-
-//#endregion
-
-//#region "Event Bus Subscriber"
-
-pub struct EventBusSubscriber<'a, M>
-where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-{
-    inner: EventBusSubscriberType<'a, M>,
-    last_status: EventFlags,
-}
-
-impl<M> EventBusSubscriber<'_, M>
-where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-{
-    #[allow(unused)]
-    pub async fn get_status(&mut self) -> EventFlags {
-        let mut status = self.last_status;
-        loop {
-            match self.inner.try_next_message_pure() {
-                None => {
-                    self.last_status = status;
-                    break;
-                }
-                Some(s) => {
-                    status = s;
-                }
-            }
-        }
-        status
-    }
-
-    /// Waits until desired event(s) occur or SYS_ALARM is triggered. ft stands for fault tolerant.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` when the desired event(s) occur.
-    /// * `Err(())` when SYS_ALARM is set, unless SYS_ALARM is explicitly mentioned in the expected event.
-    ///
-    /// # Arguments
-    ///
-    /// * `what` - An `EventStatus` instance containing the event flags and mask indicating the desired event(s).
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBusController, EventFlags, EventStatus};
-    ///
-    /// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    /// type ChannelMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
-    ///
-    /// // See [EventBusController]
-    /// // let event_bus: EventBusController<BusMutexType, ChannelMutexType> = {
-    /// // [...]
-    /// // };
-    ///
-    /// async fn any_sample_task(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
-    ///     let mut subscriber = event_bus.subscriber().await;
-    ///     // [...]
-    ///     match subscriber.ft_wait_for(EventStatus::containing(EventFlags::SYS_READY)).await {
-    ///         Ok(_) => {
-    ///             // Desired event occurred, handle success
-    ///         },
-    ///         Err(_) => {
-    ///             // SYS_ALARM was set, handle error
-    ///         },
-    ///     }
-    /// }
-    /// ```
-    pub async fn ft_wait_for(&mut self, what: EventStatus) -> Result<(), ()> {
-        if what.flags.is_empty() {
-            Ok(())
-        } else {
-            #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-            let t0 = embassy_time::Instant::now();
-            let wanted = what.flags.bitand(what.mask);
-
-            #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-            crate::debug!("ft_wait_for [{:?}]...", what);
-            if let Some(msg) = self.inner.try_next_message_pure() {
-                //crate::trace!("last_status = {:?}", msg);
-                self.last_status = msg;
-            }
-            loop {
-                // Check SYS_ALARM condition unless SYS_ALARM is explicitly mentioned
-                if !what.mask.contains(EventFlags::SYS_ALARM)
-                    && self.last_status.contains(EventFlags::SYS_ALARM)
-                {
-                    #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-                    crate::debug!(
-                        "ft_wait_for [{:?}] -> ERR (took: {} us)",
-                        what,
-                        t0.elapsed().as_micros()
-                    );
-                    return Err(());
-                }
-                let relevant_bits = self.last_status.bitand(what.mask);
-                if wanted.eq(&relevant_bits) {
-                    #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-                    crate::debug!(
-                        "ft_wait_for [{:?}] -> DONE (took: {} us)",
-                        what,
-                        t0.elapsed().as_micros()
-                    );
-                    return Ok(());
-                }
-                self.last_status = self.inner.next_message_pure().await;
-            }
-        }
-    }
-
-    /// Waits until the desired flags are set or SYS_ALARM is triggered. ft stands for fault tolerant.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` when the desired flags are set.
-    /// * `Err(())` when SYS_ALARM is set, unless SYS_ALARM is explicitly mentioned in the expected flags.
-    ///
-    /// # Arguments
-    ///
-    /// * `flags` - An `EventFlags` instance indicating the desired flags.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBusController, EventFlags, EventStatus};
-    ///
-    /// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    /// type ChannelMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
-    ///
-    /// // See [EventBusController]
-    /// // let event_bus: EventBusController<BusMutexType, ChannelMutexType> = {
-    /// // [...]
-    /// // };
-    ///
-    /// async fn any_sample_task(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
-    ///     let mut subscriber = event_bus.subscriber().await;
-    ///     // [...]
-    ///     match subscriber.ft_wait_until(EventFlags::SYS_BOOTING).await {
-    ///         Ok(_) => {
-    ///             // Desired event occurred, handle success
-    ///         },
-    ///         Err(_) => {
-    ///             // SYS_ALARM was set, handle error
-    ///         },
-    ///     }
-    /// }
-    /// ```
-    pub async fn ft_wait_until(&mut self, flags: EventFlags) -> Result<(), ()> {
-        self.ft_wait_for(EventStatus::containing(flags)).await
-    }
-
-    /// Waits until the specified flags are reset.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the specified flags are reset.
-    /// * `Err(())` if SYS_ALARM is set, unless SYS_ALARM is explicitly mentioned in the expected flags.
-    ///
-    /// # Arguments
-    ///
-    /// * `flags` - An `EventFlags` instance indicating the flags to wait until they are reset.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBusController, EventFlags, EventStatus};
-    ///
-    /// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    /// type ChannelMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
-    ///
-    /// // See [EventBusController]
-    /// // let event_bus: EventBusController<BusMutexType, ChannelMutexType> = {
-    /// // [...]
-    /// // };
-    ///
-    /// async fn any_sample_task(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
-    ///     let mut subscriber = event_bus.subscriber().await;
-    ///     // [...]
-    ///     match subscriber.ft_wait_until_reset(EventFlags::SYS_BOOTING).await {
-    ///         Ok(_) => {
-    ///             // Specified flag(s) is/are reset, handle success
-    ///         },
-    ///         Err(_) => {
-    ///             // SYS_ALARM was set, handle error
-    ///         },
-    ///     }
-    /// }
-    /// ```
-    pub async fn ft_wait_until_reset(&mut self, flags: EventFlags) -> Result<(), ()> {
-        self.ft_wait_for(EventStatus::not_containing(flags)).await
-    }
-
-    /// Waits while the specified flags are set.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` if the specified flags are set.
-    /// * `Err(())` if SYS_ALARM is set, unless SYS_ALARM is explicitly mentioned in the expected flags.
-    ///
-    /// # Arguments
-    ///
-    /// * `flags` - An `EventFlags` instance indicating the flags to wait while they are set.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBusController, EventFlags, EventStatus};
-    ///
-    /// type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    /// type ChannelMutexType = embassy_sync::blocking_mutex::raw::NoopRawMutex;
-    ///
-    /// // See [EventBusController]
-    /// // let event_bus: EventBusController<BusMutexType, ChannelMutexType> = {
-    /// // [...]
-    /// // };
-    ///
-    /// async fn any_sample_task(event_bus: EventBusController<BusMutexType, ChannelMutexType>) {
-    ///     let mut subscriber = event_bus.subscriber().await;
-    ///     // [...]
-    ///     match subscriber.ft_wait_while(EventFlags::SYS_BOOTING).await {
-    ///         Ok(_) => {
-    ///             // Specified flag(s) is/are reset, handle success
-    ///         },
-    ///         Err(_) => {
-    ///             // SYS_ALARM was set, handle error
-    ///         },
-    ///     }
-    /// }
-    /// ```
-    pub async fn ft_wait_while(&mut self, flags: EventFlags) -> Result<(), ()> {
-        self.ft_wait_for(EventStatus::not_containing(flags)).await
-    }
-}
-/*
-impl Clone for EventBusRef {
-    fn clone(&self) -> Self {
-        let pusher = self.instance.clone();
-
-        EventBusRef { instance: pusher }
-    }
-}
-*/
-
-//#endregion
-
-/// A [core::marker::Sync] and [core::marker::Send] mutex type. Thread-safe even between cores.
-/// A shortcut for [embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex]
-pub type SyncSendMutex = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-
-/// A NOT [core::marker::Sync] but [core::marker::Send] mutex type. Safe in single thread async runtime only.
-/// A shortcut for [embassy_sync::blocking_mutex::raw::NoopRawMutex]
-pub type NoopMutex = embassy_sync::blocking_mutex::raw::NoopRawMutex;
 
 #[cfg(test)]
 mod test {
+
     use crate as hwa;
-    use crate::{EventBusChannelController, EventBusController, EventBusPubSubType};
+    use core::future;
+    use core::future::Future;
     use hwa::{EventFlags, EventStatus};
-    use printhor_hwa_common_macros::{make_static_controller, make_static_ref};
     use std::sync::RwLock;
+    use std::task::Poll;
 
-    type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+    #[test]
+    fn test_flags() {
+        let flags = EventFlags::all();
+        hwa::info!("all flags: {:?}", flags);
+        let event_status = EventStatus::not_containing(EventFlags::SYS_BOOTING);
+        hwa::info!("event status: {:?}", event_status);
+    }
 
-    type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+    type ChannelControllerMutexType = hwa::SyncSendMutex;
+    type PubSubMutexType = hwa::SyncSendMutex;
+    type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
+    type HolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
 
-    static EVENT_BUS: RwLock<Option<EventBusController<ControllerMutexType, ChannelMutexType>>> =
+    #[futures_test::test]
+    async fn test_manual() {
+        use crate as printhor_hwa_utils;
+
+        let controller = hwa::EventBus::new(hwa::make_static_controller!(
+            "EventBus",
+            HolderType,
+            hwa::EventBusChannelController::new(hwa::make_static_ref!(
+                "EventBusChannel",
+                hwa::EventBusPubSubType<PubSubMutexType>,
+                hwa::EventBusPubSubType::new(),
+            )),
+        ));
+
+        let cloned_controller = controller.clone();
+
+        controller
+            .publish_event(EventStatus::containing(EventFlags::SYS_ALARM))
+            .await;
+        let st1 = controller.get_status().await;
+        let st2 = cloned_controller.get_status().await;
+        assert_eq!(st1, st2, "State is common across EventBus cloned instance");
+    }
+
+    static EVENT_BUS: RwLock<Option<hwa::EventBus<HolderType, PubSubMutexType>>> =
         RwLock::new(None);
+
     fn initialize() {
         let mut global = EVENT_BUS.write().unwrap();
 
         if global.is_none() {
-            global.replace(EventBusController::new(make_static_controller!(
-                "EventBusChannelController",
-                ControllerMutexType,
-                EventBusChannelController<ChannelMutexType>,
-                EventBusChannelController::new(make_static_ref!(
+            global.replace(hwa::EventBus::new(hwa::make_static_controller!(
+                "EventBus",
+                HolderType,
+                hwa::EventBusChannelController::new(hwa::make_static_ref!(
                     "EventBusChannel",
-                    EventBusPubSubType<ChannelMutexType>,
-                    EventBusPubSubType::new()
-                ))
+                    hwa::EventBusPubSubType<PubSubMutexType>,
+                    hwa::EventBusPubSubType::new(),
+                )),
             )));
         }
     }
@@ -915,34 +613,98 @@ mod test {
         let mg = EVENT_BUS.read().unwrap();
         let event_bus = mg.as_ref().unwrap();
 
-        let _event_status = EventStatus::new()
-            .and_containing(EventFlags::SYS_ALARM)
+        let event_status = EventStatus::new()
+            .and_containing(EventFlags::SYS_BOOTING)
             .and_not_containing(EventFlags::SYS_BOOT_FAILURE);
-        printhor_hwa_utils::info!("{:?}", _event_status);
-        printhor_hwa_utils::info!("{:?}", _event_status);
-        event_bus.publish_event(_event_status).await;
-    }
-}
-#[cfg(test)]
-mod test2 {
-    #[test]
-    fn runme() {
-        use crate as hwa;
-        use hwa::{make_static_controller, make_static_ref};
-        use hwa::{EventBusChannelController, EventBusController, EventBusPubSubType};
+        hwa::info!("{:?}", event_status);
+        hwa::info!("{:?}", event_status);
+        event_bus.publish_event(event_status).await;
 
-        type BusMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-        type ChannelMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+        assert!(
+            event_bus.has_flags(EventFlags::SYS_BOOTING).await,
+            "StateChecks [1]: Initially, flag SYS_BOOTING is set"
+        );
+        assert!(
+            !event_bus.has_flags(EventFlags::SYS_BOOT_FAILURE).await,
+            "StateChecks [1]: Initially, flag SYS_BOOT_FAILURE is not set"
+        );
+        let mut subscriber = event_bus.subscriber().await;
 
-        let _event_bus = EventBusController::new(make_static_controller!(
-            "EventBusChannelController",
-            BusMutexType,
-            EventBusChannelController<ChannelMutexType>,
-            EventBusChannelController::new(make_static_ref!(
-                "EventBusChannel",
-                EventBusPubSubType<ChannelMutexType>,
-                EventBusPubSubType::new()
-            ))
-        ));
+        let the_flags = subscriber.get_status().await;
+        assert_eq!(
+            the_flags,
+            EventFlags::SYS_BOOTING,
+            "StateChecks [1]: flag SYS_BOOTING read from a lately created subscriber"
+        );
+
+        let the_flags = subscriber.get_status().await;
+        assert_eq!(the_flags, EventFlags::SYS_BOOTING, "StateChecks [1]: Again, flag SYS_BOOTING read from a lately created subscriber (idempotence test)");
+
+        future::poll_fn(|cx| {
+            {
+                let pinned_subscriber_future1 =
+                    core::pin::pin!(subscriber.ft_wait_while(EventFlags::SYS_BOOTING));
+                let p1 = pinned_subscriber_future1.poll(cx);
+                assert_eq!(
+                    p1,
+                    Poll::Pending,
+                    "StateChecks [1]: Subscriber would wait WHILE SYS_BOOTING"
+                );
+            }
+
+            {
+                let pinned_subscriber_future2 =
+                    core::pin::pin!(subscriber.ft_wait_until_reset(EventFlags::SYS_BOOTING));
+                let p2 = pinned_subscriber_future2.poll(cx);
+                assert_eq!(
+                    p2,
+                    Poll::Pending,
+                    "StateChecks [1]: Subscriber would wait UNTIL SYS_BOOTING is reset"
+                );
+            }
+            {
+                let pinned_subscriber_future3 =
+                    core::pin::pin!(subscriber.ft_wait_until(EventFlags::SYS_READY));
+                let p3 = pinned_subscriber_future3.poll(cx);
+                assert_eq!(
+                    p3,
+                    Poll::Pending,
+                    "StateChecks [1]: Subscriber would wait UNTIL SYS_READY"
+                );
+                Poll::Ready(())
+            }
+        })
+        .await;
+
+        future::poll_fn(|cx| {
+            let status = EventStatus::not_containing(EventFlags::SYS_BOOTING);
+            let mut pinned_subscriber_future = core::pin::pin!(subscriber.ft_wait_for(status));
+            let p1 = pinned_subscriber_future.as_mut().poll(cx);
+            assert_eq!(
+                p1,
+                Poll::Pending,
+                "StateChecks [1]: Subscriber would wait FOR !SYS_BOOTING"
+            );
+
+            {
+                let mut pinned_publisher_future = core::pin::pin!(event_bus.publish_event(status));
+                let p2 = pinned_publisher_future.as_mut().poll(cx);
+                assert_ne!(
+                    p2,
+                    Poll::Pending,
+                    "StateChecks [2]: Publisher allows to publish immediately !SYS_BOOTING"
+                );
+            }
+
+            let p3 = pinned_subscriber_future.as_mut().poll(cx);
+            assert_ne!(
+                p3,
+                Poll::Pending,
+                "StateChecks [3]: Subscriber now does NOT wait FOR !SYS_BOOTING"
+            );
+
+            Poll::Ready(())
+        })
+        .await;
     }
 }

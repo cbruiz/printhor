@@ -234,27 +234,49 @@ where
     async fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         let mut data_out = byte;
 
-        hwa::trace!("[soft_uart] Send word: {:08b} at {} ms period by bit", byte, self.bit_period.as_millis());
+        hwa::trace!(
+            "[soft_uart] Send word: {:08b} at {} ms period by bit",
+            byte,
+            self.bit_period.as_millis()
+        );
         let mut _reference_instant = embassy_time::Instant::now();
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
         self.rxtx.set_low(); // start bit
-        hwa::trace!("[soft_uart] TX: Start bit [at +{} ms] [global_time: {} ms]", _reference_instant.elapsed().as_millis(), embassy_time::Instant::now().as_millis());
+        hwa::trace!(
+            "[soft_uart] TX: Start bit [at +{} ms] [global_time: {} ms]",
+            _reference_instant.elapsed().as_millis(),
+            embassy_time::Instant::now().as_millis()
+        );
         ticker.next().await;
         for _bit in 0..8 {
             if data_out & 1 == 1 {
                 self.rxtx.set_high();
-                hwa::trace!("[soft_uart] TX: W {:08b} [1] [at +{} ms]", data_out, _reference_instant.elapsed().as_millis());
+                hwa::trace!(
+                    "[soft_uart] TX: W {:08b} [1] [at +{} ms]",
+                    data_out,
+                    _reference_instant.elapsed().as_millis()
+                );
             } else {
                 self.rxtx.set_low();
-                hwa::trace!("[soft_uart] TX: W {:08b} [0] [at +{} ms]", data_out, _reference_instant.elapsed().as_millis());
+                hwa::trace!(
+                    "[soft_uart] TX: W {:08b} [0] [at +{} ms]",
+                    data_out,
+                    _reference_instant.elapsed().as_millis()
+                );
             }
             data_out >>= 1;
             ticker.next().await;
         }
         self.rxtx.set_high(); // stop bit
-        hwa::trace!("[soft_uart] TX: Stop bit [at +{} ms]", _reference_instant.elapsed().as_millis());
+        hwa::trace!(
+            "[soft_uart] TX: Stop bit [at +{} ms]",
+            _reference_instant.elapsed().as_millis()
+        );
         ticker.next().await;
-        hwa::trace!("[soft_uart] TX: End [at +{} ]", _reference_instant.elapsed().as_millis());
+        hwa::trace!(
+            "[soft_uart] TX: End [at +{} ]",
+            _reference_instant.elapsed().as_millis()
+        );
         Ok(())
     }
 }
@@ -272,7 +294,6 @@ where
 
         // wait for start bit
         while self.rxtx.is_high() {
-
             Timer::after_ticks(self.bit_period.as_ticks() >> 4).await;
             match &self.timeout_ms {
                 Some(timeout_ms) => {
@@ -285,7 +306,11 @@ where
         }
         _reference_instant = embassy_time::Instant::now();
 
-        hwa::trace!("[soft_uart] RX: Start bit detected at [at +{}] [global_time: {} ms]", _reference_instant.as_millis(), embassy_time::Instant::now().as_millis());
+        hwa::trace!(
+            "[soft_uart] RX: Start bit detected at [at +{}] [global_time: {} ms]",
+            _reference_instant.as_millis(),
+            embassy_time::Instant::now().as_millis()
+        );
         // Aditional wait: Align to pulse center assuming start bit is detected closely after rising edge
         Timer::after_ticks(self.bit_period.as_ticks() + (self.bit_period.as_ticks() >> 1)).await;
         let mut ticker = embassy_time::Ticker::every(self.bit_period);
@@ -294,19 +319,33 @@ where
             data_in >>= 1;
             if self.rxtx.is_high() {
                 data_in |= 0b10000000;
-                hwa::trace!("[soft_uart] RX: R {:08b} [1] [at +{} ms]", data_in, _reference_instant.elapsed().as_millis());
+                hwa::trace!(
+                    "[soft_uart] RX: R {:08b} [1] [at +{} ms]",
+                    data_in,
+                    _reference_instant.elapsed().as_millis()
+                );
             } else {
-                hwa::trace!("[soft_uart] RX: R {:08b} [0] [at +{} ms]", data_in, _reference_instant.elapsed().as_millis());
+                hwa::trace!(
+                    "[soft_uart] RX: R {:08b} [0] [at +{} ms]",
+                    data_in,
+                    _reference_instant.elapsed().as_millis()
+                );
             }
             ticker.next().await;
         }
         // Expect stop bit
         if self.rxtx.is_high() {
-            hwa::trace!("[soft_uart] RX: Stop bit [at +{} ms]", _reference_instant.elapsed().as_millis());
+            hwa::trace!(
+                "[soft_uart] RX: Stop bit [at +{} ms]",
+                _reference_instant.elapsed().as_millis()
+            );
             hwa::trace!("[soft_uart] RX: Got: {:08b}", data_in);
             Ok(data_in)
         } else {
-            hwa::debug!("[soft_uart] RX: Stop bit missing [at +{} ms]", _reference_instant.elapsed().as_millis());
+            hwa::debug!(
+                "[soft_uart] RX: Stop bit missing [at +{} ms]",
+                _reference_instant.elapsed().as_millis()
+            );
             hwa::trace!("[soft_uart] RX: Getting so far: {:08b}", data_in);
             Err(Self::Error::Framing)
         }
@@ -316,53 +355,84 @@ where
 #[cfg(test)]
 mod tests {
     use crate as hwa;
-    use crate::soft_uart::AsyncWrite;
+    use crate::soft_uart::{AsyncRead, AsyncWrite, IOPin};
     use hwa::soft_uart::HalfDuplexSerial;
 
     /// A custom Pin actor implementation
     struct MyPinImpl {
-        // Fill me
+        state: Option<bool>,
     }
 
     impl MyPinImpl {
         const fn new() -> Self {
-            Self {}
+            Self { state: None }
         }
     }
     // Implement IOPin trait for your concrete Pin actor
     impl hwa::soft_uart::IOPin for MyPinImpl {
         fn set_output(&mut self) {
-            // Fill me
+            // No action
         }
 
         fn set_input(&mut self) {
-            // Fill me
+            // No action
         }
 
         fn is_high(&mut self) -> bool {
-            // Fill me
-            false
+            self.state.unwrap() == true
         }
 
         fn set_high(&mut self) {
-            // Fill me
+            self.state.replace(true);
         }
 
         fn set_low(&mut self) {
-            // Fill me
+            self.state.replace(false);
         }
 
         fn set_open_drain(&mut self) {
-            // Fill me
+            // No action
         }
+    }
+
+    #[test]
+    fn pin_tests() {
+        let mut pin = MyPinImpl::new();
+        pin.set_output();
+        pin.set_high();
+        assert_eq!(pin.is_high(), true);
+        assert_eq!(pin.is_low(), false);
+
+        pin.set_low();
+        assert_eq!(pin.is_high(), false);
+        assert_eq!(pin.is_low(), true);
+
+        pin.set_input();
+        assert_eq!(pin.is_high(), false);
+        assert_eq!(pin.is_low(), true);
+
+        pin.set_output();
+        pin.set_high();
+
+        pin.set_open_drain();
+        assert_eq!(pin.is_high(), true);
+        assert_eq!(pin.is_low(), false);
     }
 
     #[futures_test::test]
     async fn half_duplex_serial_mock_test() {
-        let mut _my_serial = HalfDuplexSerial::new(MyPinImpl::new(), 115200);
+        let mut serial = HalfDuplexSerial::new(MyPinImpl::new(), 115200);
 
+        let _ = serial.word_transfer_duration();
+        serial.set_timeout(None);
+        serial.set_timeout(Some(embassy_time::Duration::from_secs(2)));
+
+        let _ = serial.set_write_mode().await;
         // Use it ...
-        let a_byte = '?' as u8;
-        let _result = _my_serial.write(a_byte).await;
+        let _w_res = serial.write('?' as u8).await;
+
+        let _ = serial.set_read_mode().await;
+
+        let _r_res = serial.read().await;
     }
 }

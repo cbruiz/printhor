@@ -12,7 +12,7 @@
 The framework with a set of mocked peripherals (most of them without any logic).
 Provides a commandline GCode prompt on standard input
 
-__Note__: A SDCard image in ./data/ is required to be open if sdcard feature is enabled in native simulator :)
+__Note__: A SDCard image in ./data/ is required to be open if sd-card feature is enabled in native simulator :)
 
 ```shell
 RUST_LOG=info cargo run --bin printhor

@@ -1,5 +1,5 @@
-#[cfg(all(feature = "with-spi", feature = "sdcard-uses-spi"))]
+#[cfg(all(feature = "with-spi", feature = "sd-card-uses-spi"))]
 mod spi;
 
-#[cfg(all(feature = "with-spi", feature = "sdcard-uses-spi"))]
+#[cfg(all(feature = "with-spi", feature = "sd-card-uses-spi"))]
 pub use spi::SPIAdapter;

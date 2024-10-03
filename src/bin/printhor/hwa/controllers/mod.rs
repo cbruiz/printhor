@@ -1,13 +1,11 @@
 #[allow(unused)]
 use crate::hwa;
 
-#[cfg(feature = "with-sdcard")]
-pub mod sdcard_controller;
+#[cfg(feature = "with-sd-card")]
+pub mod sd_card_controller;
 
-#[allow(unused)]
-use printhor_hwa_common::ControllerMutexType;
-#[cfg(feature = "with-sdcard")]
-pub use sdcard_controller::CardController;
+#[cfg(feature = "with-sd-card")]
+pub use sd_card_controller::CardController;
 #[cfg(feature = "with-print-job")]
 mod printer_controller;
 
@@ -63,7 +61,8 @@ pub type HotEndController = HeaterController<
 >;
 
 #[cfg(any(feature = "with-hot-end"))]
-pub type HotEndPwmController = pwm_controller::PwmController<hwa::PwmHotEndMutexType, hwa::device::PwmHotEnd>;
+pub type HotEndPwmController =
+    pwm_controller::PwmController<hwa::HotEndControllerHolderType<hwa::device::PwmHotEnd>,>;
 
 ////
 
@@ -77,13 +76,17 @@ pub type HotBedController = HeaterController<
 >;
 
 #[cfg(any(feature = "with-hot-bed"))]
-pub type HotbedPwmController = pwm_controller::PwmController<hwa::PwmHotBedMutexType, hwa::device::PwmHotBed>;
+pub type HotbedPwmController =
+    pwm_controller::PwmController<hwa::PwmHotBedMutexType, hwa::device::PwmHotBed>;
 
 #[cfg(any(feature = "with-fan-layer"))]
-pub type FanLayerPwmController = pwm_controller::PwmController<hwa::PwmFanLayerMutexType, hwa::device::PwmFanLayer>;
+pub type FanLayerPwmController =
+    pwm_controller::PwmController<hwa::PwmFanLayerMutexType, hwa::device::PwmFanLayer>;
 
 #[cfg(any(feature = "with-fan-extra-1"))]
-pub type FanExtra1PwmController = pwm_controller::PwmController<hwa::FanExtra1ControllerMutexType, hwa::device::PwmFanExtra1>;
+pub type FanExtra1PwmController =
+    pwm_controller::PwmController<hwa::FanExtra1ControllerMutexType, hwa::device::PwmFanExtra1>;
 
 #[cfg(any(feature = "with-laser"))]
-pub type LaserPwmController = pwm_controller::PwmController<hwa::PwmLaserMutexType, hwa::device::PwmLaser>;
+pub type LaserPwmController =
+    pwm_controller::PwmController<hwa::PwmLaserMutexType, hwa::device::PwmLaser>;

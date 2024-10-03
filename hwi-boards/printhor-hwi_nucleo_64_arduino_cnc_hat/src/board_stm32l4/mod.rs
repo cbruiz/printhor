@@ -40,7 +40,7 @@ pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: usize = 4096;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub const SDCARD_PARTITION: usize = 0;
 pub const WATCHDOG_TIMEOUT_US: u32 = 10_000_000;
 #[cfg(feature = "with-spi")]
@@ -98,10 +98,10 @@ pub struct IODevices {
     pub serial_usb_rx_stream: device::USBSerialDeviceInputStream,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_device: device::SpiCardDeviceRef,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_cs_pin: device::SpiCardCSPin,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_device: device::SpiCardDeviceRef,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_cs_pin: device::SpiCardCSPin,
 }
 
 pub struct PwmDevices {
@@ -332,14 +332,14 @@ pub async fn setup(
         ))
     };
 
-    #[cfg(feature = "with-sdcard")]
-    let (sdcard_device, sdcard_cs_pin) = {
+    #[cfg(feature = "with-sd-card")]
+    let (sd_card_device, sd_card_cs_pin) = {
         (
             spi1_device.clone(),
             Output::new(p.PC4, Level::High, Speed::VeryHigh),
         )
     };
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     defmt::info!("card_controller done");
 
     #[cfg(feature = "with-motion")]
@@ -565,10 +565,10 @@ pub async fn setup(
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_rx_stream,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_device,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_cs_pin,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_device,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_cs_pin,
         },
         motion: MotionDevices {
             #[cfg(feature = "with-motion")]

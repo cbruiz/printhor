@@ -30,7 +30,7 @@ pub(crate) const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 pub const HEAP_SIZE_BYTES: usize = 1024;
 
 pub const VREF_SAMPLE: u16 = 1210u16;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub const SDCARD_PARTITION: usize = 0;
 // The bit-banging uart in native simulator is set to ultra low speed for obvious reasons
 #[cfg(feature = "with-trinamic")]
@@ -99,18 +99,18 @@ cfg_if::cfg_if! {
 
 /// Shared controllers
 pub struct Controllers {
-    pub sys_watchdog: hwa::StaticController<crate::WatchdogMutexType, device::Watchdog>,
+    pub sys_watchdog: hwa::StaticController<crate::WatchDogHolderType<device::WatchDog>>,
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: hwa::StaticController<crate::SerialPort1MutexType, device::SerialPort1TxDevice>,
+    pub serial_port1_tx: hwa::StaticController<crate::SerialPort1HolderType<device::SerialPort1TxDevice>>,
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx: hwa::StaticController<crate::SerialPort2MutexType, device::SerialPort2TxDevice>,
+    pub serial_port2_tx: hwa::StaticController<crate::SerialPort2HolderType<device::SerialPort2TxDevice>>,
 }
 
 pub struct SysDevices {
     #[cfg(all(feature = "with-motion", feature="executor-interrupt"))]
     pub task_stepper_core: printhor_hwa_common::NoDevice,
     #[cfg(feature = "with-ps-on")]
-    pub ps_on: hwa::StaticController<crate::PSOnMutexType, device::PsOnPin>,
+    pub ps_on: hwa::StaticController<crate::PSOnHolderType<device::PsOnPin>>,
 }
 
 pub struct IODevices {
@@ -119,17 +119,17 @@ pub struct IODevices {
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_rx_stream: device::UartPort2RxInputStream,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_device: device::SDCardBlockDevice,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_device: device::SDCardBlockDevice,
 }
 
 pub struct PwmDevices {
     #[cfg(feature = "with-probe")]
     pub probe: device::ProbePeripherals,
     #[cfg(feature = "with-hot-end")]
-    pub hot_end: device::HotendPeripherals,
+    pub hot_end: device::HotEndPeripherals,
     #[cfg(feature = "with-hot-bed")]
-    pub hot_bed: device::HotbedPeripherals,
+    pub hot_bed: device::HotBedPeripherals,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: device::FanLayerPeripherals,
     #[cfg(feature = "with-fan-extra-1")]
@@ -176,8 +176,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
             let (uart_port1_tx_device, uart_port1_rx_device) = device::UartPort1Device::new(_spawner.make_send()).split();
             let serial_port1_tx = hwa::make_static_controller!(
                 "UartPort1Tx",
-                crate::SerialPort1MutexType,
-                device::SerialPort1TxDevice,
+                crate::SerialPort1HolderType<device::SerialPort1TxDevice>,
                 uart_port1_tx_device
             );
             let serial_port1_rx_stream = device::UartPort1RxInputStream::new(uart_port1_rx_device);
@@ -189,8 +188,7 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
             let (uart_port2_tx_device, uart_port2_rx_device) = device::UartPort2Device::new().split();
             let serial_port2_tx = hwa::make_static_controller!(
                 "UartPort2Tx",
-                crate::SerialPort2MutexType,
-                device::SerialPort2TxDevice,
+                crate::SerialPort2HolderType<device::SerialPort2TxDevice>,
                 uart_port2_tx_device
             );
             let serial_port2_rx_stream = device::UartPort2RxInputStream::new(uart_port2_rx_device);
@@ -225,21 +223,17 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
 
     #[allow(unused)]
     #[cfg(feature = "with-spi")]
-    let spi1_device = {
-        #[link_section = "__DATA,.bss"]
-        static SPI1_INST: TrackedStaticCell<ControllerMutex<device::Spi>> = TrackedStaticCell::new();
-        ControllerRef::new(SPI1_INST.init(
-            "SPI1",
-            ControllerMutex::new(
-                device::Spi::new()
-            )
-        ))
-    };
+    let spi1_device = hwa::make_static_controller!(
+        "SPI1",
+        crate::Spi1HolderType<device::Spi>,
+        device::Spi::new()
+
+    );
     #[cfg(feature = "with-spi")]
     hwa::debug!("SPI done");
 
-    #[cfg(feature = "with-sdcard")]
-    let sdcard_device = {
+    #[cfg(feature = "with-sd-card")]
+    let sd_card_device = {
         device::SDCardBlockDevice::new("data/sdcard.img", false).unwrap()
     };
 
@@ -277,18 +271,16 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
 
     #[cfg(any(feature = "with-probe", feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
     let pwm_any = hwa::make_static_controller!(
-        "PwmController",
-        crate::CriticalSectionRawMutex,
-        mocked_peripherals::MockedPwm,
-        mocked_peripherals::MockedPwm::new(20, _pin_state)
+        "Pwm1Controller",
+        crate::Pwm1ControllerHolderType<device::PwmAny>,
+        device::PwmAny::new(20, _pin_state)
     );
 
     #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-    let adc_hotend_hotbed = hwa::make_static_controller!(
-        "AdcHotendHotbed",
-        crate::AdcHotEndMutexType,
-        device::AdcHotendHotbed,
-        device::AdcHotendHotbed::new(0)
+    let adc_any = hwa::make_static_controller!(
+        "Adc1Controller",
+        crate::Adc1ControllerHolderType<device::AdcHotEnd>,
+        device::AdcHotEnd::new(0)
     );
 
     #[cfg(feature = "with-motion")]
@@ -297,21 +289,20 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
     #[cfg(feature = "with-ps-on")]
     let ps_on = hwa::make_static_controller!(
         "PSOn",
-        crate::PSOnMutexType,
-        device::PsOnPin,
-        mocked_peripherals::MockedIOPin::new(21, _pin_state)
+        crate::PSOnHolderType<device::PsOnPin>,
+        device::PsOnPin::new(21, _pin_state)
     );
 
-    let sys_watchdog = hwa::make_static_controller!(
+    let inst = device::WatchDog::new(_spawner.make_send(), WATCHDOG_TIMEOUT_US);
+    let sys_watch_dog = hwa::make_static_controller!(
         "WatchDog",
-        crate::WatchdogMutexType,
-        device::Watchdog,
-        device::Watchdog::new(_spawner.make_send(), WATCHDOG_TIMEOUT_US)
+        crate::WatchDogHolderType<device::WatchDog>,
+        inst
     );
 
     hwa::MachineContext {
         controllers: Controllers {
-            sys_watchdog,
+            sys_watchdog: sys_watch_dog,
             #[cfg(feature = "with-serial-port-1")]
             serial_port1_tx,
             #[cfg(feature = "with-serial-port-2")]
@@ -328,8 +319,8 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
             serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_rx_stream,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_device,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_device,
         },
         motion: MotionDevices {
             #[cfg(feature = "with-motion")]
@@ -342,18 +333,18 @@ pub async fn setup(_spawner: Spawner, _p: HWIPeripherals) -> hwa::MachineContext
                 power_channel: 0,
             },
             #[cfg(feature = "with-hot-end")]
-            hot_end: device::HotendPeripherals {
+            hot_end: device::HotEndPeripherals {
                 power_pwm: pwm_any.clone(),
                 power_channel: 1,
-                temp_adc: adc_hotend_hotbed.clone(),
+                temp_adc: adc_any.clone(),
                 temp_pin: mocked_peripherals::MockedIOPin::new(23, _pin_state),
                 thermistor_properties: &HOT_END_THERMISTOR_PROPERTIES,
             },
             #[cfg(feature = "with-hot-bed")]
-            hot_bed: device::HotbedPeripherals {
+            hot_bed: device::HotBedPeripherals {
                 power_pwm: pwm_any.clone(),
                 power_channel: 2,
-                temp_adc: adc_hotend_hotbed.clone(),
+                temp_adc: adc_any.clone(),
                 temp_pin: mocked_peripherals::MockedIOPin::new(24, _pin_state),
                 thermistor_properties: &HOT_BED_THERMISTOR_PROPERTIES,
             },

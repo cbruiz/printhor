@@ -38,7 +38,7 @@ with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed", "printhor-hw
 with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion"]
 with-probe = ["embedded-hal", "printhor-hwi_native?/with-probe"]
 with-endstops = []
-with-sdcard = ["embedded-sdmmc", "printhor-hwi_native?/with-sdcard"]
+with-sd-card = ["embedded-sdmmc", "printhor-hwi_native?/with-sd-card"]
 with-fan-layer = ["embedded-hal", "printhor-hwi_native?/with-fan-layer"]
 with-fan-extra-1 = ["embedded-hal", "printhor-hwi_native?/with-fan-extra-1"]
 with-laser = ["embedded-hal", "printhor-hwi_native?/with-laser"]
@@ -79,7 +79,7 @@ cooperative = [
     "printhor-hwi_rp_2040?/cooperative",
 ]
 
-sdcard-uses-spi = []
+sd-card-uses-spi = []
 adc-is-async = []
 trinamic-uart-multi-channel = []
 enable_vrefint-with-delay = []
@@ -150,15 +150,15 @@ native = [
     "with-motion",
     "with-serial-port-1",
     "with-serial-port-2",
-    #"with-spi", #WIP
-    "with-sdcard",
-    "with-print-job",
-    "with-probe",
-    "with-hot-end",
-    "with-hot-bed",
-    "with-fan-layer",
-    "with-fan-extra-1",
-    "with-laser",
+    "with-spi",
+    #"with-sd-card",
+    #"with-print-job",
+    #"with-probe",
+    #"with-hot-end",
+    #"with-hot-bed",
+    #"with-fan-layer",
+    #"with-fan-extra-1",
+    #"with-laser",
     "with-ps-on",
 
     "float-point-f32-impl",
@@ -191,7 +191,7 @@ mks_robin_nano = [
     "with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
     #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2", # Not implemented
     "with-spi", "printhor-hwi_mks_robin_nano/with-spi",
-    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_mks_robin_nano/with-sdcard", "printhor-hwi_mks_robin_nano/sdcard-uses-spi",
+    "with-sd-card", "sd-card-uses-spi", "printhor-hwi_mks_robin_nano/with-sd-card", "printhor-hwi_mks_robin_nano/sd-card-uses-spi",
     "with-print-job", "printhor-hwi_mks_robin_nano/with-print-job",
     "with-probe", "printhor-hwi_mks_robin_nano/with-probe",
     "with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end",
@@ -222,7 +222,7 @@ nucleo64-l476rg = [
     "with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
+    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat/sd-card-uses-spi",
     #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
     "with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     "with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
@@ -253,7 +253,7 @@ nucleo64-f410rb = [
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2. Broken nevertheless
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sdcard", "printhor-hwi_nucleo_64_arduino_cnc_hat/sdcard-uses-spi",
+    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat/sd-card-uses-spi",
     #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
     #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
@@ -288,7 +288,7 @@ skr_mini_e3_v2 = [
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "printhor-hwi_skr_mini_e3/without-ringbuffer",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
-    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
+    "with-sd-card", "sd-card-uses-spi", "printhor-hwi_skr_mini_e3/with-sd-card", "printhor-hwi_skr_mini_e3/sd-card-uses-spi",
     "with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
     #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
     "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
@@ -320,7 +320,7 @@ skr_mini_e3_v3 = [
     #"without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader", # SHOULD NOT
     "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
     "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
-    "with-sdcard", "sdcard-uses-spi", "printhor-hwi_skr_mini_e3/with-sdcard", "printhor-hwi_skr_mini_e3/sdcard-uses-spi",
+    "with-sd-card", "sd-card-uses-spi", "printhor-hwi_skr_mini_e3/with-sd-card", "printhor-hwi_skr_mini_e3/sd-card-uses-spi",
     "with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
     #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", # Broken with bootloader?
     #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", # Broken
@@ -360,7 +360,7 @@ tst-rp2040 = [
     #"with-serial-port-1", "printhor-hwi_rp_2040/with-serial-port-1",
     #"with-serial-port-2", "printhor-hwi_rp_2040/with-serial-port-2",
     #"with-spi", "printhor-hwi_rp_2040/with-spi",
-    #"with-sdcard", "sdcard-uses-spi", "printhor-hwi_rp_2040/with-sdcard", "printhor-hwi_rp_2040/sdcard-uses-spi",
+    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_rp_2040/with-sd-card", "printhor-hwi_rp_2040/sd-card-uses-spi",
     #"with-print-job", "printhor-hwi_rp_2040/with-print-job",
     #"with-probe", "printhor-hwi_rp_2040/with-probe",
     #"with-hot-end", "printhor-hwi_rp_2040/with-hot-end",

@@ -6,8 +6,8 @@ use embassy_time::{with_timeout, Duration};
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-print-job")] {
         cfg_if::cfg_if! {
-            if #[cfg(not(feature = "with-sdcard"))] {
-                compiler_error("Feature with-print-job requires with-sdcard")
+            if #[cfg(not(feature = "with-sd-card"))] {
+                compiler_error("Feature with-print-job requires with-sd-card")
             }
         }
     }
@@ -16,7 +16,7 @@ cfg_if::cfg_if! {
 pub struct ControlTaskControllers {
     #[cfg(feature = "with-print-job")]
     pub printer_controller: hwa::controllers::PrinterController,
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     pub card_controller: hwa::controllers::CardController,
 }
 
@@ -97,7 +97,7 @@ pub async fn task_control(
                     &mut processor,
                     channel,
                     &gc,
-                    #[cfg(feature = "with-sdcard")]
+                    #[cfg(feature = "with-sd-card")]
                     &mut _controllers.card_controller,
                     #[cfg(feature = "with-print-job")]
                     &mut _controllers.printer_controller,
@@ -112,7 +112,7 @@ pub async fn task_control(
 #[allow(unused)]
 async fn manage_timeout<M>(
     processor: &mut hwa::GCodeProcessor,
-    subscriber: &mut hwa::EventBusSubscriber<'_, M>,
+    subscriber: &mut hwa::EventBusSubscriber<'static, M>,
     gcode_input_stream: &mut control::GCodeMultiplexedInputStream,
     comm_channel: hwa::CommChannel,
 ) where
@@ -168,8 +168,9 @@ pub(super) async fn execute(
     processor: &mut hwa::GCodeProcessor,
     channel: hwa::CommChannel,
     gc: &control::GCodeCmd,
-    #[cfg(feature = "with-sdcard")] _card_controller: &mut hwa::controllers::CardController,
-    #[cfg(feature = "with-print-job")] _printer_controller: &mut hwa::controllers::PrinterController,
+    #[cfg(feature = "with-sd-card")] _card_controller: &mut hwa::controllers::CardController,
+    #[cfg(feature = "with-print-job")]
+    _printer_controller: &mut hwa::controllers::PrinterController,
 ) -> control::CodeExecutionResult {
     match &gc.value {
         control::GCodeValue::Nop => {
@@ -188,7 +189,7 @@ pub(super) async fn execute(
                 .await;
             Ok(control::CodeExecutionSuccess::CONSUMED)
         }
-        #[cfg(feature = "with-sdcard")]
+        #[cfg(feature = "with-sd-card")]
         control::GCodeValue::M20(path) => {
             let path = path.clone().unwrap_or(alloc::string::String::from("/"));
             match _card_controller.list_dir(path.as_str()).await {
@@ -204,8 +205,8 @@ pub(super) async fn execute(
                                             "echo: F\"{}\" {} {} ; M20 \n",
                                             entry.name,
                                             match entry.entry_type {
-                                                hwa::controllers::sdcard_controller::SDEntryType::FILE => "A",
-                                                hwa::controllers::sdcard_controller::SDEntryType::DIRECTORY => "D",
+                                                hwa::controllers::sd_card_controller::SDEntryType::FILE => "A",
+                                                hwa::controllers::sd_card_controller::SDEntryType::DIRECTORY => "D",
                                             },
                                             entry.size
                                         );

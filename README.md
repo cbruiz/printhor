@@ -117,7 +117,7 @@ cargo install probe-run
 The framework with a set of mocked peripherals (most of them without any logic).
 Provides a commandline GCode prompt on standard input
 
-__Note__: A SDCard image in ./data/ is required to be open if sdcard feature is enabled in native :)
+__Note__: A SDCard image in ./data/ is required to be open if sd-card feature is enabled in native :)
 
 ```shell
 RUST_LOG=info cargo run --bin printhor
@@ -201,7 +201,7 @@ We are keeping it because it is clear and useful for a high level understanding.
 
 # Customization
 
-For a single board, the high-level features (hotend, hotbed, fan, sdcard, ... ) can be activated/deactivated by cargo feature selection or directly editing the main cargo.toml
+For a single board, the high-level features (hotend, hotbed, fan, SDCard, ... ) can be activated/deactivated by cargo feature selection or directly editing the main cargo.toml
 In order to change pins, writing/adapting some code is required, as of now. There is not expected to be, at least in the short term any kind of configuration file.
 
 Because of that limitation (Rust makes that hard to tackle because of the strict typing), a clean code organization it's crucial and pretty straightforward to assume slight customizations by editing code.  
@@ -218,7 +218,7 @@ printhor is composed by the following architectural blocks
   * printhor-hwi_mks_robin_nano_v3_1 : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
   * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3))
 
-Intentionally, traits are in general avoided when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
+Intentionally, traits are in general avoided in HWI layer when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
 * type aliases
 * module exports
 

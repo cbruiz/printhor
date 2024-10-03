@@ -51,7 +51,7 @@ cfg_if::cfg_if! {
     }
 }
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub type SpiCardDevice = Spi1;
 
 #[cfg(feature = "with-spi")]
@@ -61,7 +61,7 @@ pub type Spi = Spi1;
 pub type SpiDeviceRef = printhor_hwa_common::InterruptControllerRef<Spi>;
 
 cfg_if::cfg_if! {
-    if #[cfg(feature="with-sdcard")] {
+    if #[cfg(feature = "with-sd-card")] {
         pub type SpiCardDeviceRef = printhor_hwa_common::InterruptControllerRef<SpiCardDevice>;
 
         pub type SpiCardCSPin = Output<'static>;
@@ -295,7 +295,7 @@ pub struct MotionDevice {
     pub motion_pins: MotionPins,
 }
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub struct CardDevice {
     pub card_spi: SpiCardDevice,
     pub card_cs: SpiCardCSPin,

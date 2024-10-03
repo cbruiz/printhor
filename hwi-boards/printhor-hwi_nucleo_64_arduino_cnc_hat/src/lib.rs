@@ -31,7 +31,7 @@ cfg_if::cfg_if! {
         pub use board::*;
         pub use board_stm32l4::ADC_START_TIME_US;
         pub use board_stm32l4::ADC_VREF_DEFAULT_MV;
-        #[cfg(feature = "with-sdcard")]
+        #[cfg(feature = "with-sd-card")]
         pub use board_stm32l4::SDCARD_PARTITION;
         #[cfg(feature = "with-serial-usb")]
         const USBSERIAL_BUFFER_SIZE: usize = 512;
@@ -91,7 +91,7 @@ cfg_if::cfg_if! {
         pub use board::*;
         pub use crate::board_stm32f4::ADC_START_TIME_US;
         pub use crate::board_stm32f4::ADC_VREF_DEFAULT_MV;
-        #[cfg(feature = "with-sdcard")]
+        #[cfg(feature = "with-sd-card")]
         pub use board_stm32f4::SDCARD_PARTITION;
         #[cfg(feature = "with-serial-usb")]
         const USBSERIAL_BUFFER_SIZE: usize = 64;

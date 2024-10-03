@@ -53,7 +53,7 @@ cfg_if::cfg_if! {
     }
 }
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub const SDCARD_PARTITION: usize = 0;
 #[cfg(feature = "with-trinamic")]
 pub const TRINAMIC_UART_BAUD_RATE: u32 = 9600;
@@ -120,10 +120,10 @@ pub struct IODevices {
     pub serial_port2_rx_stream: device::UartPort2RxInputStream,
     #[cfg(feature = "with-display")]
     pub display_device: DisplayDevice,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_device: device::SpiCardDeviceRef,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_cs_pin: device::SpiCardCSPin,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_device: device::SpiCardDeviceRef,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_cs_pin: device::SpiCardCSPin,
 }
 
 pub struct PwmDevices {
@@ -413,14 +413,14 @@ pub async fn setup(
     #[cfg(feature = "with-spi")]
     defmt::info!("SPI done");
 
-    #[cfg(feature = "with-sdcard")]
-    let (sdcard_device, sdcard_cs_pin) = {
+    #[cfg(feature = "with-sd-card")]
+    let (sd_card_device, sd_card_cs_pin) = {
         (
             spi1_device.clone(),
             Output::new(p.PA4, Level::High, Speed::VeryHigh),
         )
     };
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     defmt::info!("card_controller done");
 
     #[cfg(feature = "with-display")]
@@ -664,10 +664,10 @@ pub async fn setup(
             serial_port2_rx_stream,
             #[cfg(feature = "with-display")]
             display_device,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_device,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_cs_pin,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_device,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_cs_pin,
         },
         motion: MotionDevices {
             #[cfg(feature = "with-motion")]

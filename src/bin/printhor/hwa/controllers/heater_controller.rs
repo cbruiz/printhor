@@ -64,7 +64,8 @@ where
     thermistor_properties: &'static hwa::ThermistorProperties,
 }
 #[allow(dead_code)]
-impl<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice> HeaterController<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
+impl<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
+    HeaterController<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
 where
     MutexAdc: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
     MutexPwm: embassy_sync::blocking_mutex::raw::RawMutex + 'static,

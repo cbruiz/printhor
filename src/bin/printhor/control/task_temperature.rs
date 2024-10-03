@@ -80,7 +80,7 @@
 use crate::hwa;
 use crate::hwa::controllers::HeaterController;
 use embassy_time::{Duration, Ticker};
-use hwa::{DeferAction};
+use hwa::DeferAction;
 use hwa::{EventFlags, EventStatus};
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
@@ -162,8 +162,11 @@ impl HeaterStateMachine {
     /// This method requires the `ControllerMutex`, `AdcMutex`, `PwmMutex`, `AdcPeri`, `AdcPin`, and `PwmHwaDevice` types to implement specific traits as shown in the where clause.
     async fn update<ControllerMutex, AdcMutex, PwmMutex, AdcPeri, AdcPin, PwmHwaDevice>(
         &mut self,
-        ctrl: &hwa::StaticController<ControllerMutex, HeaterController<AdcMutex, PwmMutex, AdcPeri, AdcPin, PwmHwaDevice>>,
-        event_bus: &hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+        ctrl: &hwa::StaticController<
+            ControllerMutex,
+            HeaterController<AdcMutex, PwmMutex, AdcPeri, AdcPin, PwmHwaDevice>,
+        >,
+        event_bus: &hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
         temperature_flag: EventFlags,
         action: DeferAction,
     ) where
@@ -297,11 +300,13 @@ impl HeaterStateMachine {
 /// Note that this function uses async/await to coordinate asynchronous operations.
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_temperature(
-    event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
-    #[cfg(feature = "with-hot-end")]
-    hot_end_controller: StaticController<hwa::HotEndControllerMutexType, hwa::controllers::HotEndController>,
-    #[cfg(feature = "with-hot-bed")]
-    hot_bed_controller: StaticController<hwa::HotBedControllerMutexType, hwa::controllers::HotBedController>,
+    event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
+    #[cfg(feature = "with-hot-end")] hot_end_controller: StaticController<
+        hwa::HotEndControllerHolderType<hwa::controllers::HotEndController>
+    >,
+    #[cfg(feature = "with-hot-bed")] hot_bed_controller: StaticController<
+        hwa::HotBedControllerHolderType<hwa::controllers::HotBedController>
+    >,
 ) {
     hwa::info!("[task_temperature] Started");
 

@@ -202,7 +202,7 @@ where
     ///
     /// # Example
     ///
-    /// See [DeferChannelRef]
+    /// See [DeferChannel]
     pub const fn new(channel: &'static DeferChannelChannelType<M>) -> Self {
         DeferChannel { channel }
     }
@@ -256,6 +256,9 @@ pub mod tests {
         initialize();
         let mg = DEFER_CHANNEL.read().unwrap();
         let defer_channel = mg.as_ref().unwrap();
+
+        // Can clone
+        let _cloned_defer_channel = defer_channel.clone();
 
         let sender = defer_channel.sender();
         let _ = sender

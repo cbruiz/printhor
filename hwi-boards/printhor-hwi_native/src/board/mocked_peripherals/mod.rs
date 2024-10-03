@@ -6,8 +6,8 @@ pub(crate) mod mocked_pin;
 mod mocked_pwm;
 #[cfg(feature = "with-spi")]
 mod mocked_spi;
-#[cfg(feature = "with-sdcard")]
-mod mocked_sdcard;
+#[cfg(feature = "with-sd-card")]
+mod mocked_sd_card;
 #[cfg(any(feature = "with-serial-port-1",feature = "with-serial-port-usb"))]
 mod mocked_uart;
 #[cfg(feature = "with-serial-port-2")]
@@ -32,8 +32,8 @@ pub use mocked_uart_sink::*;
 #[cfg(feature = "with-spi")]
 pub use mocked_spi::*;
 
-#[cfg(feature = "with-sdcard")]
-pub use mocked_sdcard::*;
+#[cfg(feature = "with-sd-card")]
+pub use mocked_sd_card::*;
 
 #[cfg(feature = "with-trinamic")]
 pub use mocked_trinamic::*;

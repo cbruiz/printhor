@@ -2,6 +2,8 @@
 use printhor_hwa_common as hwa;
 #[allow(unused)]
 use crate::board as board;
+#[allow(unused)]
+use crate::device as device;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-usb")] {
@@ -97,7 +99,7 @@ pub type PwmFanLayer = PwmAny;
 pub type PwmFanExtra1 = PwmAny;
 
 #[cfg(feature = "with-probe")]
-pub type PwmServo = PwmAny;
+pub type PwmProbe = PwmAny;
 
 #[cfg(feature = "with-hot-end")]
 pub type PwmHotEnd = PwmAny;
@@ -111,17 +113,19 @@ pub type PwmLaser = PwmAny;
 #[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
 pub use board::mocked_peripherals::PwmChannel;
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub type SDCardBlockDevice = board::mocked_peripherals::MockledSDCardBlockDevice;
-
-#[cfg(feature = "with-sdcard")]
-pub type SDCardBlockDeviceRef = hwa::StaticController<hwa::SyncSendMutex, SDCardBlockDevice>;
 
 #[cfg(feature = "with-hot-end")]
 pub type AdcHotEndPeripheral = u8;
 
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-pub type AdcHotendHotbed = AdcImpl<u8>;
+#[cfg(feature = "with-hot-end")]
+pub type Adc1 = AdcImpl<u8>;
+
+#[cfg(feature = "with-hot-end")]
+pub type AdcHotEnd = Adc1;
+#[cfg(feature = "with-hot-bed")]
+pub type AdcHotbed = Adc1;
 
 #[cfg(feature = "with-hot-end")]
 pub type AdcHotEndPin = board::mocked_peripherals::MockedIOPin;
@@ -132,7 +136,7 @@ pub type AdcHotBedPeripheral = u8;
 #[cfg(feature = "with-hot-bed")]
 pub type AdcHotBedPin = board::mocked_peripherals::MockedIOPin;
 
-pub type Watchdog = board::mocked_peripherals::MockedWatchdog<'static, u8>;
+pub type WatchDog = board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
 #[cfg(feature = "with-display")]
 compile_error!("To recover");
@@ -255,7 +259,7 @@ pub struct MotionDevice {
 }
 
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub struct CardDevice {
 
     pub card_spi: SDCardBlockDevice,
@@ -263,42 +267,42 @@ pub struct CardDevice {
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub power_pwm: hwa::StaticController<crate::ProbeMutexType, PwmServo>,
+    pub power_pwm: hwa::StaticController<crate::PwmProbeHolderType<device::PwmProbe>>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-hot-end")]
-pub struct HotendPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmHotEndMutexType, PwmHotEnd>,
+pub struct HotEndPeripherals {
+    pub power_pwm: hwa::StaticController<crate::PwmHotEndHolderType<device::PwmHotEnd>>,
     pub power_channel: PwmChannel,
-    pub temp_adc: hwa::StaticController<crate::AdcHotEndMutexType, AdcHotendHotbed>,
+    pub temp_adc: hwa::StaticController<crate::AdcHotEndHolderType<device::AdcHotEnd>>,
     pub temp_pin: board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static hwa::ThermistorProperties,
 }
 
 #[cfg(feature = "with-hot-bed")]
-pub struct HotbedPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmHotBedMutexType, PwmHotBed>,
+pub struct HotBedPeripherals {
+    pub power_pwm: hwa::StaticController<crate::PwmHotBedHolderType<device::PwmHotBed>>,
     pub power_channel: PwmChannel,
-    pub temp_adc: hwa::StaticController<crate::AdcHotBedMutexType, AdcHotendHotbed>,
+    pub temp_adc: hwa::StaticController<crate::AdcHotBedHolderType<device::AdcHotbed>>,
     pub temp_pin: board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static hwa::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmLaserMutexType, PwmFanLayer>,
+    pub power_pwm: hwa::StaticController<crate::PwmLaserHolderType<device::PwmFanLayer>>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-fan-extra-1")]
 pub struct FanExtra1Peripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmFanExtra1MutexType, PwmFanExtra1>,
+    pub power_pwm: hwa::StaticController<crate::PwmFanExtra1HolderType<device::PwmFanExtra1>>,
     pub power_channel: PwmChannel,
 }
 
 #[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmLaserMutexType, PwmLaser>,
+    pub power_pwm: hwa::StaticController<crate::PwmLaserHolderType<device::PwmLaser>>,
     pub power_channel: PwmChannel,
 }

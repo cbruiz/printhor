@@ -1,9 +1,6 @@
 use crate::math::Real;
 use crate::tgeo::TVector;
 
-/// Type alias for the motion configuration's mutex type.
-pub type MotionConfigMutexType = printhor_hwa_common::InterruptControllerMutexType;
-
 /// Configuration structure for motion parameters.
 ///
 /// This structure holds various configuration parameters for controlling motion in a system.

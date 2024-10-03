@@ -2,7 +2,7 @@
 use crate::hwa;
 #[allow(unused)]
 use embedded_hal_02::Pwm;
-use printhor_hwa_utils::StaticController;
+use printhor_hwa_utils::{Holdable, MaybeHoldable, StaticController};
 
 /// The `ProbeTrait` defines a set of asynchronous methods for controlling the probe.
 /// Each method represents a specific probe action, with a customizable sleep duration.
@@ -56,21 +56,24 @@ pub trait ProbeTrait {
 ///
 /// * `servo` - A reference to a static controller PWM servo (PwmServo).
 /// * `channel` - The specific PWM channel associated with the servo motor.
-pub struct ServoController<M>
-    where M: embassy_sync::blocking_mutex::raw::RawMutex + 'static
+pub struct ServoController<H>
+where
+    H: MaybeHoldable + Send + 'static,
+    H::Resource: ProbeTrait + Send + 'static,
 {
     /// A reference to a static controller PWM servo.
-    servo: StaticController<M, hwa::device::PwmServo>,
+    servo: StaticController<H>,
 
     /// The specific PWM channel associated with the servo motor.
     channel: hwa::device::PwmChannel,
 }
 
-impl<M> ServoController<M>
-    where M: embassy_sync::blocking_mutex::raw::RawMutex
+impl<H> ServoController<H>
+where
+    H: MaybeHoldable + Send + 'static,
 {
     pub fn new(
-        servo: StaticController<M, hwa::device::PwmServo>,
+        servo: StaticController<H>,
         channel: hwa::device::PwmChannel,
     ) -> Self {
         Self { servo, channel }
@@ -106,7 +109,8 @@ impl<M> ServoController<M>
 }
 
 impl<M> ProbeTrait for ServoController<M>
-    where M: embassy_sync::blocking_mutex::raw::RawMutex
+where
+    M: embassy_sync::blocking_mutex::raw::RawMutex,
 {
     /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
     ///

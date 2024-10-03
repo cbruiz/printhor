@@ -15,18 +15,17 @@ pub use tgeo::TVector;
 
 use crate::control::task_control::ControlTaskControllers;
 use crate::control::GCodeProcessorParams;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 use crate::hwa::controllers::CardController;
-#[cfg(feature = "with-hot-bed")]
-use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-hot-end")]
 use crate::hwa::controllers::HotEndPwmController;
+#[cfg(feature = "with-hot-bed")]
+use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-print-job")]
 use crate::hwa::controllers::PrinterController;
 #[cfg(feature = "with-motion")]
 use crate::hwa::drivers::MotionDriver;
 #[cfg(feature = "with-motion")]
-use hwa::controllers::{MotionConfig, MotionPlanner};
 use hwa::GCodeProcessor;
 use hwa::{Controllers, IODevices, MotionDevices, PwmDevices, SysDevices};
 
@@ -68,7 +67,7 @@ pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: boo
 
 async fn sys_start(
     spawner: embassy_executor::Spawner,
-) -> Result<hwa::StaticController<hwa::WatchdogMutexType, hwa::device::Watchdog>, ()> {
+) -> Result<hwa::StaticController<hwa::WatchDogHolderType<hwa::device::WatchDog>>, ()> {
     hwa::info!("Init printhor {}", machine::MACHINE_INFO.firmware_version);
     let peripherals = hwa::init();
     hwa::debug!("Peripherals initialized");
@@ -79,16 +78,15 @@ async fn sys_start(
         core::mem::size_of_val(&context)
     );
 
-    let event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType> =
-        hwa::EventBusController::new(hwa::make_static_controller!(
-            "EventBusChannelController",
-            hwa::EventbusMutexType,
-            hwa::EventBusChannelController<hwa::EventBusChannelMutexType>,
+    let event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType> =
+        hwa::EventBus::new(hwa::make_static_controller!(
+            "EventBus",
+            hwa::EventBusHolderType,
             hwa::EventBusChannelController::new(hwa::make_static_ref!(
                 "EventBusChannel",
-                hwa::EventBusPubSubType<hwa::EventBusChannelMutexType>,
-                hwa::EventBusPubSubType::new()
-            ))
+                hwa::EventBusPubSubType<hwa::EventBusPubSubMutexType>,
+                hwa::EventBusPubSubType::new(),
+            )),
         ));
 
     event_bus
@@ -155,24 +153,24 @@ async fn sys_start(
 
 async fn spawn_tasks(
     spawner: embassy_executor::Spawner,
-    event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     _defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
     _controllers: Controllers,
     _sys_devices: SysDevices,
     _io_devices: IODevices,
     _motion_device: MotionDevices,
     _pwm_devices: PwmDevices,
-    _wd: hwa::StaticController<hwa::WatchdogMutexType, hwa::device::Watchdog>,
+    _wd: hwa::StaticController<hwa::WatchDogHolderType<hwa::device::WatchDog>>,
 ) -> Result<(), ()> {
-    #[cfg(all(feature = "with-sdcard", feature = "sdcard-uses-spi"))]
-    let sdcard_adapter =
-        hwa::adapters::SPIAdapter::new(_io_devices.sdcard_device, _io_devices.sdcard_cs_pin);
+    #[cfg(all(feature = "with-sd-card", feature = "sd-card-uses-spi"))]
+    let sd_card_adapter =
+        hwa::adapters::SPIAdapter::new(_io_devices.sd_card_device, _io_devices.sd_card_cs_pin);
 
-    #[cfg(all(feature = "with-sdcard", not(feature = "sdcard-uses-spi")))]
-    let sdcard_adapter = _io_devices.sdcard_device;
+    #[cfg(all(feature = "with-sd-card", not(feature = "sd-card-uses-spi")))]
+    let sd_card_adapter = _io_devices.sd_card_device;
 
-    #[cfg(feature = "with-sdcard")]
-    let sdcard_controller = CardController::new(sdcard_adapter).await;
+    #[cfg(feature = "with-sd-card")]
+    let sd_card_controller = CardController::new(sd_card_adapter).await;
 
     #[cfg(feature = "with-print-job")]
     let printer_controller = PrinterController::new(event_bus.clone());
@@ -191,12 +189,10 @@ async fn spawn_tasks(
     #[cfg(feature = "with-probe")]
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-probe")] {
-            type ServoControllerType = hwa::controllers::ServoController<hwa::ProbeMutexType>;
             let probe_controller = hwa::make_static_controller!(
                 "ProbeServoController",
-                hwa::ServoControllerMutexType,
-                ServoControllerType,
-                ServoControllerType::new(
+                hwa::PwmProbeHolder<hwa::controllers::ServoController<hwa::PwmProbeMutex>>,
+                hwa::controllers::ServoController::new(
                     _pwm_devices.probe.power_pwm,
                     _pwm_devices.probe.power_channel,
                 )
@@ -204,12 +200,10 @@ async fn spawn_tasks(
         }
     }
 
-
     #[cfg(feature = "with-fan-layer")]
     let fan_layer_controller = hwa::make_static_controller!(
         "FanLayerController",
-        hwa::FanLayerControllerMutexType,
-        hwa::controllers::FanLayerPwmController,
+        hwa::PwmFanLayerHolderType<hwa::controllers::FanLayerPwmController>,
         hwa::controllers::FanLayerPwmController::new(
             _pwm_devices.fan_layer.power_pwm,
             _pwm_devices.fan_layer.power_channel,
@@ -219,8 +213,7 @@ async fn spawn_tasks(
     #[cfg(feature = "with-fan-extra-1")]
     let fan_extra_1_controller = hwa::make_static_controller!(
         "FanExtra1Controller",
-        hwa::FanExtra1ControllerMutexType,
-        hwa::controllers::FanExtra1PwmController,
+        hwa::PwmFanExtra1HolderType<hwa::controllers::FanExtra1PwmController>,
         hwa::controllers::FanExtra1PwmController::new(
             _pwm_devices.fan_extra_1.power_pwm,
             _pwm_devices.fan_extra_1.power_channel,
@@ -230,19 +223,17 @@ async fn spawn_tasks(
     #[cfg(feature = "with-laser")]
     let laser_controller = hwa::make_static_controller!(
         "LaserController",
-        hwa::LaserControllerMutexType,
-        hwa::controllers::LaserPwmController,
+        hwa::PwmLaserHolderType<hwa::controllers::LaserPwmController>,
         hwa::controllers::LaserPwmController::new(
             _pwm_devices.laser.power_pwm,
-                _pwm_devices.laser.power_channel,
+            _pwm_devices.laser.power_channel,
         )
     );
 
     #[cfg(feature = "with-hot-end")]
     let hot_end_controller = hwa::make_static_controller!(
         "HotEndController",
-        hwa::HotEndControllerMutexType,
-        hwa::controllers::HotEndController,
+        hwa::PwmHotEndHolderType<hwa::controllers::FanExtra1PwmController>,
         hwa::controllers::HotEndController::new(
             _pwm_devices.hot_end.temp_adc.clone(),
             _pwm_devices.hot_end.temp_pin,
@@ -257,8 +248,7 @@ async fn spawn_tasks(
     #[cfg(feature = "with-hot-bed")]
     let hot_bed_controller = hwa::make_static_controller!(
         "HotBedController",
-        hwa::HotBedControllerMutexType,
-        hwa::controllers::HotBedController,
+        hwa::HotBedHolderType<hwa::controllers::HotBedPwmController>,
         hwa::controllers::HotBedController::new(
             _pwm_devices.hot_bed.temp_adc.clone(),
             _pwm_devices.hot_bed.temp_pin,
@@ -274,15 +264,13 @@ async fn spawn_tasks(
     let motion_planner = {
         let motion_config = hwa::make_static_controller!(
             "MotionConfig",
-            hwa::MotionConfigMutexType,
-            MotionConfig,
-            MotionConfig::new()
+            hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>,
+            hwa::controllers::MotionConfig::new()
         );
 
         let motion_driver = hwa::make_static_controller!(
             "MotionDriver",
-            hwa::MotionDriverMutexType,
-            MotionDriver,
+            hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>,
             MotionDriver::new(hwa::drivers::MotionDriverParams {
                 motion_device: _motion_device.motion_devices,
                 #[cfg(feature = "with-trinamic")]
@@ -298,7 +286,7 @@ async fn spawn_tasks(
             })
         );
 
-        MotionPlanner::new(_defer_channel, motion_config, motion_driver)
+        hwa::controllers::MotionPlanner::new(_defer_channel, motion_config, motion_driver)
     };
 
     let processor: GCodeProcessor = GCodeProcessor::new(GCodeProcessorParams {
@@ -397,8 +385,8 @@ async fn spawn_tasks(
         .spawn(control::task_integration::task_integration(
             control::task_integration::IntegrationaskParams {
                 processor: processor.clone(),
-                #[cfg(feature = "with-sdcard")]
-                card_controller: sdcard_controller.clone(),
+                #[cfg(feature = "with-sd-card")]
+                card_controller: sd_card_controller.clone(),
                 #[cfg(feature = "with-print-job")]
                 printer_controller: printer_controller.clone(),
             },
@@ -419,8 +407,8 @@ async fn spawn_tasks(
             ControlTaskControllers {
                 #[cfg(feature = "with-print-job")]
                 printer_controller: printer_controller.clone(),
-                #[cfg(feature = "with-sdcard")]
-                card_controller: sdcard_controller.clone(),
+                #[cfg(feature = "with-sd-card")]
+                card_controller: sd_card_controller.clone(),
             },
         ))
         .map_err(|_| ())?;
@@ -430,7 +418,7 @@ async fn spawn_tasks(
         .spawn(control::task_print_job::task_print_job(
             processor.clone(),
             printer_controller,
-            sdcard_controller,
+            sd_card_controller,
         ))
         .map_err(|_| ())?;
 

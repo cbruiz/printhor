@@ -4,10 +4,10 @@ use crate::hwa;
 use embassy_time::Duration;
 use embassy_time::{Instant, Timer};
 
-use control::{GCodeCmd, GCodeLineParser, GCodeLineParserError};
 use control::{CodeExecutionFailure, CodeExecutionSuccess};
-use hwa::controllers::sdcard_controller::SDCardError;
-use hwa::controllers::sdcard_controller::SDCardStream;
+use control::{GCodeCmd, GCodeLineParser, GCodeLineParserError};
+use hwa::controllers::sd_card_controller::SDCardError;
+use hwa::controllers::sd_card_controller::SDCardStream;
 use hwa::controllers::PrinterController;
 use hwa::controllers::PrinterControllerEvent;
 use hwa::{CommChannel, EventFlags, EventStatus};

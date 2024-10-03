@@ -1,7 +1,7 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::StaticController;
 use embedded_hal_02::Pwm;
+use hwa::StaticController;
 
 /// A controller for managing PWM (Pulse-Width Modulation).
 ///
@@ -28,7 +28,10 @@ where
     TimPeri: Pwm<Duty = u32> + 'static,
     <TimPeri as Pwm>::Channel: Copy,
 {
-    pub fn new(pwm: StaticController<PwmMutex, TimPeri>, pwm_chan: <TimPeri as Pwm>::Channel) -> Self {
+    pub fn new(
+        pwm: StaticController<PwmMutex, TimPeri>,
+        pwm_chan: <TimPeri as Pwm>::Channel,
+    ) -> Self {
         Self { pwm, pwm_chan }
     }
 

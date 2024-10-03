@@ -85,7 +85,7 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(any(feature="with-spi", feature="with-sdcard"))] {
+    if #[cfg(any(feature="with-spi", feature = "with-sd-card"))] {
         pub type SpiCardDevice = Spi1;
         pub type Spi = Spi1;
         pub type SpiDeviceRef = printhor_hwa_common::StandardControllerRef<Spi>;
@@ -93,7 +93,7 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature="with-sdcard")] {
+    if #[cfg(feature = "with-sd-card")] {
         pub type SpiCardDeviceRef = printhor_hwa_common::StandardControllerRef<Spi>;
         pub type SpiCardCSPin = embassy_stm32::gpio::Output<'static>;
     }
@@ -412,7 +412,7 @@ pub struct MotionDevice {
     pub motion_pins: MotionPins,
 }
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub struct CardDevice {
     pub card_spi: SpiCardDevice,
     pub card_cs: SpiCardCSPin,

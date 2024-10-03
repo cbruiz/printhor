@@ -24,7 +24,7 @@ pub use board::MACHINE_BOARD;
 pub use board::MACHINE_PROCESSOR;
 pub use board::MACHINE_TYPE;
 pub use board::MAX_STATIC_MEMORY;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub use board::SDCARD_PARTITION;
 #[cfg(feature = "with-serial-usb")]
 const USBSERIAL_BUFFER_SIZE: usize = 32;

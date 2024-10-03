@@ -137,9 +137,9 @@ pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / hwa::STEPPER_PLANNE
 /// according to the motion planning profile.
 #[embassy_executor::task]
 pub async fn task_stepper(
-    event_bus: hwa::EventBusController<hwa::EventbusMutexType, hwa::EventBusChannelMutexType>,
+    event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
     motion_planner: hwa::controllers::MotionPlanner,
-    _watchdog: hwa::StaticController<hwa::WatchdogMutexType, hwa::device::Watchdog>,
+    _watchdog: hwa::StaticController<hwa::WatchDogHolderType<hwa::device::WatchDog>>,
 ) {
     let mut steppers_off = true;
 
@@ -153,7 +153,8 @@ pub async fn task_stepper(
 
     STEP_DRIVER.setup(motion_planner.motion_driver());
 
-    let mut s = event_bus.subscriber().await;
+    #[allow(unused_mut)]
+    let mut _s = event_bus.subscriber().await;
 
     hwa::info!(
         "[task_stepper] Segment sampling: {} Hz ({} us period). Micro-segment interpolation: {} Hz ({} us period)",
@@ -204,13 +205,14 @@ pub async fn task_stepper(
             }
             Ok(ExecPlan::Segment(segment, channel)) => {
                 // Process segment plan
-                match s
+                #[cfg(feature="with-ps-on")]
+                match _s
                     .ft_wait_for(EventStatus::containing(EventFlags::ATX_ON))
                     .await
                 {
                     Ok(_) => {}
                     Err(_) => {
-                        let _ = s.ft_wait_while(EventFlags::SYS_ALARM).await;
+                        let _ = _s.ft_wait_while(EventFlags::SYS_ALARM).await;
                     }
                 }
 

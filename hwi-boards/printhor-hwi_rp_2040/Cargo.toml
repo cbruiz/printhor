@@ -27,7 +27,7 @@ with-hot-bed = ["embedded-hal"]
 with-motion = []
 with-probe = ["embedded-hal"]
 with-endstops = []
-with-sdcard = []
+with-sd-card = []
 with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
@@ -47,7 +47,7 @@ without-uart-until_idle = []
 with-uart-buffered = []
 # with-uart-ringbuffered = [] # Not yet present in embassy-rp
 
-sdcard-uses-spi = []
+sd-card-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
 

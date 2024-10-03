@@ -17,16 +17,22 @@ pub struct MotionDriverParams {
     /// Motion config is only used here to submit a copy to trinamic controller
     #[cfg(feature = "with-trinamic")]
     pub motion_config:
-        hwa::StaticController<hwa::MotionConfigMutexType, hwa::controllers::MotionConfig>,
+        hwa::StaticController<hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>>,
     #[cfg(feature = "with-probe")]
-    pub probe_controller:
-        hwa::StaticController<hwa::ServoControllerMutexType, hwa::controllers::ServoController<hwa::ProbeMutexType>>,
+    pub probe_controller: hwa::StaticController<
+        hwa::ServoControllerMutexType,
+        hwa::controllers::ServoController<hwa::ProbeMutexType>,
+    >,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_controller:
-        hwa::StaticController<hwa::FanLayerControllerMutexType, hwa::controllers::FanLayerPwmController>,
+    pub fan_layer_controller: hwa::StaticController<
+        hwa::FanLayerControllerMutexType,
+        hwa::controllers::FanLayerPwmController,
+    >,
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1_controller:
-        hwa::StaticController<hwa::FanExtra1ControllerMutexType, hwa::controllers::FanExtra1PwmController>,
+    pub fan_extra_1_controller: hwa::StaticController<
+        hwa::FanExtra1ControllerMutexType,
+        hwa::controllers::FanExtra1PwmController,
+    >,
     #[cfg(feature = "with-laser")]
     pub laser_controller:
         hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
@@ -38,14 +44,20 @@ pub struct MotionDriver {
     #[cfg(feature = "with-trinamic")]
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
-    pub probe_controller:
-        hwa::StaticController<hwa::ServoControllerMutexType, hwa::controllers::ServoController<hwa::ProbeMutexType>>,
+    pub probe_controller: hwa::StaticController<
+        hwa::ServoControllerMutexType,
+        hwa::controllers::ServoController<hwa::ProbeMutexType>,
+    >,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_controller:
-        hwa::StaticController<hwa::FanLayerControllerMutexType, hwa::controllers::FanLayerPwmController>,
+    pub fan_layer_controller: hwa::StaticController<
+        hwa::FanLayerControllerMutexType,
+        hwa::controllers::FanLayerPwmController,
+    >,
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1_controller:
-        hwa::StaticController<hwa::FanExtra1ControllerMutexType, hwa::controllers::FanExtra1PwmController>,
+    pub fan_extra_1_controller: hwa::StaticController<
+        hwa::FanExtra1ControllerMutexType,
+        hwa::controllers::FanExtra1PwmController,
+    >,
     #[cfg(feature = "with-laser")]
     pub _laser_controller:
         hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
@@ -201,10 +213,8 @@ impl MotionDriver {
     // TODO: Carefully review
     pub async fn homing_action(
         &mut self,
-        motion_config_ref: &hwa::StaticController<
-            hwa::MotionConfigMutexType,
-            hwa::controllers::MotionConfig,
-        >,
+        motion_config_ref:
+            &hwa::StaticController<hwa::MotionDriverHolderType<hwa::controllers::MotionConfig>>,
     ) -> Result<TVector<Real>, TVector<Real>> {
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] [Homing]");

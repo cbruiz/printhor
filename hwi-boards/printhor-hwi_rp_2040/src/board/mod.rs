@@ -40,7 +40,7 @@ cfg_if::cfg_if! {
 
 pub const HEAP_SIZE_BYTES: usize = 1024;
 pub const MAX_STATIC_MEMORY: usize = 4096;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub const SDCARD_PARTITION: usize = 0;
 pub const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
 #[cfg(feature = "with-spi")]
@@ -102,10 +102,10 @@ pub struct IODevices {
     pub serial_port1_rx_stream: device::UartPort1RxInputStream,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_rx_stream: device::UartPort2RxInputStream,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_device: device::SpiCardDeviceRef,
-    #[cfg(feature = "with-sdcard")]
-    pub sdcard_cs_pin: device::SpiCardCSPin,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_device: device::SpiCardDeviceRef,
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_cs_pin: device::SpiCardCSPin,
 }
 
 pub struct PwmDevices {
@@ -303,7 +303,7 @@ pub async fn setup(
         compile_error!("Not yet implemented")
     }
 
-    #[cfg(feature = "with-sdcard")]
+    #[cfg(feature = "with-sd-card")]
     {
         compile_error!("Not yet implemented")
     }
@@ -433,10 +433,10 @@ pub async fn setup(
             serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_rx_stream,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_device,
-            #[cfg(feature = "with-sdcard")]
-            sdcard_cs_pin,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_device,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_cs_pin,
         },
         motion: MotionDevices {
             #[cfg(feature = "with-motion")]
