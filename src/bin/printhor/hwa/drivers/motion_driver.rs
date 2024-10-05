@@ -20,8 +20,11 @@ pub struct MotionDriverParams {
         hwa::StaticController<hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>>,
     #[cfg(feature = "with-probe")]
     pub probe_controller: hwa::StaticController<
-        hwa::ServoControllerMutexType,
-        hwa::controllers::ServoController<hwa::ProbeMutexType>,
+        hwa::ProbeServoControllerHolderType<
+            hwa::controllers::ServoController<
+                hwa::PwmProbeHolderType<hwa::device::PwmProbe>
+            >
+        >,
     >,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer_controller: hwa::StaticController<
@@ -45,8 +48,11 @@ pub struct MotionDriver {
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
     pub probe_controller: hwa::StaticController<
-        hwa::ServoControllerMutexType,
-        hwa::controllers::ServoController<hwa::ProbeMutexType>,
+        hwa::ProbeServoControllerHolderType<
+            hwa::controllers::ServoController<
+                hwa::PwmProbeHolderType<hwa::device::PwmProbe>
+            >
+        >,
     >,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer_controller: hwa::StaticController<

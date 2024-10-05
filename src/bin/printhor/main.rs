@@ -191,7 +191,11 @@ async fn spawn_tasks(
         if #[cfg(feature = "with-probe")] {
             let probe_controller = hwa::make_static_controller!(
                 "ProbeServoController",
-                hwa::PwmProbeHolder<hwa::controllers::ServoController<hwa::PwmProbeMutex>>,
+                hwa::ProbeServoControllerHolderType<
+                    hwa::controllers::ServoController<
+                        hwa::PwmProbeHolderType<hwa::device::PwmProbe>
+                    >
+                >,
                 hwa::controllers::ServoController::new(
                     _pwm_devices.probe.power_pwm,
                     _pwm_devices.probe.power_channel,
@@ -271,6 +275,7 @@ async fn spawn_tasks(
         let motion_driver = hwa::make_static_controller!(
             "MotionDriver",
             hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>,
+
             MotionDriver::new(hwa::drivers::MotionDriverParams {
                 motion_device: _motion_device.motion_devices,
                 #[cfg(feature = "with-trinamic")]

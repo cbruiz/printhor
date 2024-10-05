@@ -110,9 +110,6 @@ pub type PwmHotBed = PwmAny;
 #[cfg(feature = "with-laser")]
 pub type PwmLaser = PwmAny;
 
-#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
-pub use board::mocked_peripherals::PwmChannel;
-
 #[cfg(feature = "with-sd-card")]
 pub type SDCardBlockDevice = board::mocked_peripherals::MockledSDCardBlockDevice;
 
@@ -268,13 +265,13 @@ pub struct CardDevice {
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
     pub power_pwm: hwa::StaticController<crate::PwmProbeHolderType<device::PwmProbe>>,
-    pub power_channel: PwmChannel,
+    pub power_channel: <device::PwmProbe as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-hot-end")]
 pub struct HotEndPeripherals {
     pub power_pwm: hwa::StaticController<crate::PwmHotEndHolderType<device::PwmHotEnd>>,
-    pub power_channel: PwmChannel,
+    pub power_channel: <device::PwmHotEnd as embedded_hal_02::Pwm>::Channel,
     pub temp_adc: hwa::StaticController<crate::AdcHotEndHolderType<device::AdcHotEnd>>,
     pub temp_pin: board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static hwa::ThermistorProperties,
@@ -283,7 +280,7 @@ pub struct HotEndPeripherals {
 #[cfg(feature = "with-hot-bed")]
 pub struct HotBedPeripherals {
     pub power_pwm: hwa::StaticController<crate::PwmHotBedHolderType<device::PwmHotBed>>,
-    pub power_channel: PwmChannel,
+    pub power_channel: <device::PwmHotBed as embedded_hal_02::Pwm>::Channel,
     pub temp_adc: hwa::StaticController<crate::AdcHotBedHolderType<device::AdcHotbed>>,
     pub temp_pin: board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static hwa::ThermistorProperties,

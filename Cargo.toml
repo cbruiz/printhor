@@ -146,14 +146,14 @@ native = [
 
     "with-log",
 
-    "with-trinamic", "trinamic-uart-multi-channel",
+    #"with-trinamic", "trinamic-uart-multi-channel",
     "with-motion",
     "with-serial-port-1",
     "with-serial-port-2",
     "with-spi",
     #"with-sd-card",
     #"with-print-job",
-    #"with-probe",
+    "with-probe",
     #"with-hot-end",
     #"with-hot-bed",
     #"with-fan-layer",

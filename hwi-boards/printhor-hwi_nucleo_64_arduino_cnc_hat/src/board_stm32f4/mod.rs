@@ -98,7 +98,7 @@ pub struct IODevices {
     #[cfg(feature = "with-sd-card")]
     pub sd_card_device: device::SpiCardDeviceRef,
     #[cfg(feature = "with-sd-card")]
-    pub sd-card_cs_pin: device::SpiCardCSPin,
+    pub sd_card_cs_pin: device::SpiCardCSPin,
 }
 
 pub struct PwmDevices {

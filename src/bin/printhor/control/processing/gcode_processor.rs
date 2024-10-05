@@ -78,14 +78,20 @@ pub struct GCodeProcessorParams {
         hwa::StaticController<hwa::SerialUsbHolderType<>, hwa::device::SerialUsbTxDevice>,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_tx:
-        hwa::StaticController<hwa::ServoControllerHolderType<hwa::device::SerialPort1TxDevice>>,
+        hwa::StaticController<hwa::SerialPort1HolderType<hwa::device::SerialPort1TxDevice>>,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_tx:
         hwa::StaticController<hwa::SerialPort2HolderType<hwa::device::SerialPort2TxDevice>>,
     #[cfg(feature = "with-ps-on")]
     pub ps_on: hwa::StaticController<hwa::PSOnHolderType<hwa::device::PsOnPin>>,
     #[cfg(feature = "with-probe")]
-    pub probe: hwa::StaticController<hwa::PwmProbeHolderType<hwa::device::PwmProbe>>,
+    pub probe: hwa::StaticController<
+        hwa::ProbeServoControllerHolderType<
+            hwa::controllers::ServoController<
+                hwa::PwmProbeHolderType<hwa::device::PwmProbe>
+            >
+        >
+    >,
     #[cfg(feature = "with-hot-end")]
     pub hot_end:
         hwa::StaticController<hwa::HotEndControllerHolderType<hwa::controllers::HotEndController>>,
@@ -122,7 +128,9 @@ pub struct GCodeProcessor {
     pub ps_on: hwa::StaticController<hwa::PSOnHolderType<hwa::device::PsOnPin>>,
     #[cfg(feature = "with-probe")]
     pub probe: hwa::StaticController<
-        hwa::ServoControllerHolderType<hwa::controllers::ServoController<hwa::PwmFanLayerHolderType<>>>,
+        hwa::ProbeServoControllerHolderType<
+            hwa::controllers::ServoController<hwa::PwmProbeHolderType<hwa::device::PwmProbe>>
+        >
     >,
     #[cfg(feature = "with-hot-end")]
     pub hot_end:
@@ -357,8 +365,8 @@ impl GCodeProcessor {
                     {
                         return Err(CodeExecutionFailure::PowerRequired);
                     }
-                    let md = self.motion_planner.motion_driver.lock().await;
-                    md.probe_controller.lock().await.probe_pin_up(300_000).await;
+                    let mut mg = self.probe.lock().await;
+                    mg.probe_pin_up(300_000).await;
                     Ok(CodeExecutionSuccess::OK)
                 }
             }

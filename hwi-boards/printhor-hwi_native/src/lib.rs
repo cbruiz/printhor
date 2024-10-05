@@ -26,6 +26,8 @@ pub type AdcHotEndHolderType<D> = Adc1ControllerHolderType<D>;
 pub type AdcHotBedHolderType<D> = Adc1ControllerHolderType<D>;
 pub type Adc2ControllerHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
 
+pub type ProbeServoControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
+
 pub type PwmProbeHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
 pub type PwmHotEndHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
 pub type PwmHotBedHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
@@ -36,7 +38,6 @@ pub type PSOnHolderType<D> = hwa::NotHoldable<hwa::NoopMutex, D>;
 
 pub type PrinterControllerSignalMutexType = hwa::NoopMutex;
 
-pub type ServoControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
 pub type FanLayerControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
 pub type FanExtra1ControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;
 pub type LaserControllerHolderType<D> = hwa::NotHoldable<hwa::SyncSendMutex, D>;

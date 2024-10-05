@@ -4,13 +4,11 @@ use super::mocked_pin::MockedIOPin;
 use super::mocked_pin::PinStateRef;
 use embedded_hal_02::Pwm;
 
-pub type PwmChannel = u8;
-
 pub struct MockedPwm {
     #[allow(unused)]
     p: MockedIOPin,
     // Allow state by channel to share pwm in the same way the MCU does
-    duty_map: HashMap<PwmChannel, <Self as Pwm>::Duty>,
+    duty_map: HashMap<u8, <Self as Pwm>::Duty>,
 
 }
 impl MockedPwm {
