@@ -11,11 +11,8 @@ pub use event_bus::*;
 mod defer_channel;
 pub use defer_channel::*;
 
-mod context;
-pub use context::*;
-
-mod asynch;
-pub use asynch::*;
+mod async_utils;
+pub use async_utils::*;
 use bitflags::bitflags;
 
 use strum::EnumCount;
@@ -32,6 +29,11 @@ cfg_if::cfg_if! {
 
 mod event_bus_channel;
 pub mod soft_uart;
+mod contract;
+mod traits;
+
+pub use contract::{HwiContract, HwiContext};
+
 pub use event_bus_channel::*;
 
 /// Represents a logical channel where the request(s) come from
@@ -290,6 +292,90 @@ bitflags! {
         const UNSET  = 0b10000000;
     }
 }
+
+
+/// Covers a device directly imported from HWI
+pub struct HwiResource<D> {
+    inner: D,
+}
+
+impl<D> HwiResource<D> {
+    pub const fn new(inner: D) -> Self {Self {inner} }
+}
+
+impl<D> RawHwiResource for HwiResource<D>
+{
+    type Resource = D;
+
+    fn take(self) -> D {self.inner}
+}
+
+impl<D> core::ops::Deref for HwiResource<D>
+{
+    type Target = D;
+    fn deref(&self) -> &<Self as core::ops::Deref>::Target {&self.inner}
+}
+
+//#region "Implementation of [hwa::traits] for each single resource bounded to them"
+
+impl<D> traits::ByteStream for HwiResource<D>
+where D: traits::ByteStream
+{
+    type Item = <D as traits::ByteStream>::Item;
+
+    #[inline(always)]
+    async fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().await
+    }
+}
+
+impl<D> traits::Pwm for HwiResource<D>
+where D: traits::Pwm
+{
+    type Channel = <D as traits::Pwm>::Channel;
+
+    type Time = <D as traits::Pwm>::Time;
+
+    type Duty = <D as traits::Pwm>::Duty;
+
+    #[inline(always)]
+    fn disable(&mut self, channel: Self::Channel) {
+        self.inner.disable(channel);
+    }
+
+    #[inline(always)]
+    fn enable(&mut self, channel: Self::Channel) {
+        self.inner.enable(channel);
+    }
+
+    #[inline(always)]
+    fn get_period(&self) -> Self::Time {
+        self.inner.get_period()
+    }
+
+    #[inline(always)]
+    fn get_duty(&self, channel: Self::Channel) -> Self::Duty {
+        self.inner.get_duty(channel)
+    }
+
+    #[inline(always)]
+    fn get_max_duty(&self) -> Self::Duty {
+        self.inner.get_max_duty()
+    }
+
+    #[inline(always)]
+    fn set_duty(&mut self, channel: Self::Channel, duty: Self::Duty) {
+        self.inner.set_duty(channel, duty)
+    }
+
+    #[inline(always)]
+    fn set_period<P>(&mut self, period: P)
+    where P: Into<Self::Time> {
+        self.inner.set_period(period)
+    }
+}
+
+//#endregion
 
 #[cfg(test)]
 mod test {

@@ -1,13 +1,94 @@
 //! Mostly functional
-
+//! Currently, this is a very naive approach using a simple control pid,
+//! but willing to improve with a formal method.
+//!
+//!
+//! AS-IS:
+//!
+//! ```
+//! --+--> power -> pid -> diff --+
+//!   |                           |
+//!   +---------------------------+
+//! ```
+//!
+//! TO-BE:
+//!
+//! <dl>
+//!   <dt>1. Mathematical model</dt>
+//!   <dd>
+//!     The differential equation describing the temperature  $\(T(t)\)$ respecting the time $\(t\)$ is the following:
+//!     <p>$ \[C \frac{dT(t)}{dt} = P(t) - R \cdot [T(t) - T_{\text{amb}}]\] $</p>
+//!     <p>To solve the differential equation and obtain an expression for \(T(t)\), we separate variables and integrate the first order differential equation.</p>
+//!     <p>Assuming initial conditions $\(T(0) = T_0\)$, The general solution:</p>
+//!     <p>$ \[T(t) = T_{\text{amb}} + [T_0 - T_{\text{amb}}] \cdot e^{-\frac{t}{\tau}} + \frac{P_{\text{max}}}{R} \cdot \left(1 - e^{-\frac{t}{\tau}}\right)\] $</p>
+//!     <p>
+//!        Where:
+//!        <ol>
+//!          <li>\(T_{\text{amb}}\) is the ambient temperature.</li>
+//!          <li>\(T_0\) is the initial temperature of the block.</li>
+//!          <li>\(P_{\text{max}}\) is the maximum power of heating.</li>
+//!          <li>\(\tau = \frac{C}{R}\) is the system time constant, which characterizes the speed of thermal response.</li>
+//!        </ol>
+//!        The equation provides a description of how the temperature evolves \(T(t)\) with the time \(t\) in response of the heating power \(P(t)\)
+//!      </p>
+//!   </dd>
+//!   <dt>2. Temperature sensor</dt>
+//!   <dd>
+//!     <p>
+//!       <dl>
+//!         <dt>2.1.</dt>
+//!         <dd>ADC mV Sampling with vref callibration if harware supports it</dd>
+//!         <dt>2.2.</dt>
+//!         <dd>Computation of thermistor resistive value (R_0) depending on circuit model.
+//!            <p>Asuming a rload (R_1) in serie with thermisthor (R_0) connected to ground:</p>
+//!            <p>V_{adc} = \frac{R_0}{R_0 + R_1}*V_{ref}</p>
+//!            <p>Then:</p>
+//!            <p>R_0 = \frac{V_{adc}*R_1}{V_{ref}-V_{adc}}</p>
+//!         </dd>
+//!         <dt>2.3.</dt>
+//!         <dd>
+//!            <p>With the measured resistive value and thermistor factors, convert to degrees leverating the Steinhart-Hart equation https://en.wikipedia.org/wiki/Steinhart%E2%80%93Hart_equation:</p>
+//!            <p>\frac{1}{T}=\frac{1}{T_0}+\frac{1}{B}*\ln{\frac{R}{R_0}}</p>
+//!            <p>where:</p>
+//!            <dl>
+//!              <dt>T</dt><dd>Target temperature in Kelvin degrees</dd>
+//!              <dt>T_0</dt><dd>Nominal temperature of thermistor at 25ºC</dd>
+//!              <dt>B</dt><dd>Beta factor of the thermistor</dd>
+//!              <dt>R</dt><dd>Nominal resistance of the thermistor</dd>
+//!              <dt>R_0</dt><dd>Measured resistive value of thermisthor</dd>
+//!            </dl>
+//!         </dd>
+//!       </dl>
+//!     </p>
+//!   </dd>
+//!   <dt>3. Control model</dt>
+//!   <dd>
+//!    <p>
+//!        Control system uses a continuous feedback PID to adjust
+//!        the amount of heating supplied by a electric resistor to maintain the temperature of the heating block
+//!        The POD controller computes \(P(t)\) respecting to the error (\(e(t) = T_{\text{ref}} - T(t)\)),
+//!        The general equation of the PWM power control is:
+//!    </p>
+//!    <p>$\[P(t) = \text{PWM}(e(t)) \cdot P_{\text{max}}\]$</p>
+//!    <p>where:</p>
+//!    <dl>
+//!      <dt>\(\text{PWM}(e(t))\)</dt><dd>The function that converts the error in a PWM duty cycle (between 0 and 1).</dd>
+//!      <dt>\(P_{\text{max}}\)</dt><dd>The maximum power that electric resitor can supply.</dd>
+//!    </dl>
+//!  </dd>
+//! </dl>
+//!
 use crate::hwa;
-use crate::hwa::controllers::pwm_controller::PwmController;
 #[allow(unused)]
 use crate::math::Real;
 #[allow(unused)]
 use crate::tgeo::ArithmeticOps;
+use embedded_hal_02::Pwm;
+use hwa::controllers::pwm_controller::PwmController;
 use hwa::DeferEvent::{AwaitRequested, Completed};
 use hwa::{CommChannel, DeferAction};
+use printhor_hwa_common::{EventFlags, EventStatus};
+use printhor_hwa_utils::MutexStrategy;
 
 /// A controller struct for managing a heater device.
 ///
@@ -15,9 +96,7 @@ use hwa::{CommChannel, DeferAction};
 /// and a PWM (Pulse-Width Modulation) controller to measure and regulate the temperature.
 ///
 /// # Generics
-/// * `AdcPeri`: Represents the ADC peripheral, it must implement `AdcTrait`.
-/// * `AdcPin`: Represents the specific pin used by the ADC, it must implement `AdcPinTrait`.
-/// * `PwmHwaDevice`: Represents the PWM device, it must implement `embedded_hal_02::Pwm` with `u32` type for `Duty`.
+/// TBD
 ///
 /// # Fields
 /// * `adc`: A reference to the ADC controller used for temperature measurement.
@@ -31,140 +110,78 @@ use hwa::{CommChannel, DeferAction};
 /// * `commander_channel`: The communication channel that sent the current request.
 /// * `on`: A boolean indicating whether the heater is currently on.
 /// * `thermistor_properties`: Properties of the thermistor including its resistance and beta coefficient.
-pub struct HeaterController<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
+pub struct HeaterController<HA, HP, AdcPin>
 where
-    MutexAdc: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    MutexPwm: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    AdcPeri: hwa::device::AdcTrait + 'static,
-    AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
-    <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
+    HA: MutexStrategy + Send + 'static,
+    HA::Resource: Send + 'static,
+    HP: MutexStrategy + Send + 'static,
+    HP::Resource: Pwm + Send + 'static,
+
+    <HP::Resource as Pwm>::Channel: Copy,
+    <HP::Resource as Pwm>::Duty:
+        core::fmt::Debug + Copy + core::cmp::Ord + Into<u32> + From<u16> + TryFrom<u32>,
 {
     /// Shared Analog-Digital Converter (ADC) controller used to measure temperature.
-    adc: hwa::StaticController<MutexAdc, hwa::device::AdcImpl<AdcPeri>>,
-    /// The specific pin used by the ADC.
-    adc_pin: AdcPin,
+    adc: hwa::controllers::AdcController<HA, AdcPin>,
     /// Precomputed ratio of volts per ADC unit, used for voltage to temperature conversion.
     v_ratio: f32,
     /// Shared Pulse-Width Modulation (PWM) controller used to apply heating power.
-    pwm: PwmController<MutexPwm, PwmHwaDevice>,
-    /// The defer channel to submit status changes for deferred processing.
-    defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
+    pwm: hwa::controllers::PwmController<HP>,
     /// The target or expected temperature value in Celsius.
     target_temp: f32,
     /// Last measured temperature value in Celsius, cached for quick access.
     current_temp: f32,
     /// Last measured resistance value in Ohms, cached for quick access.
     current_resistance: f32,
-    /// The communication channel that commanded the current request.
-    commander_channel: CommChannel,
+    current_channel: CommChannel,
+    state_machine: HeaterStateMachine,
+    defer_channel: hwa::types::DeferChannel,
+    defer_action: DeferAction,
+    temperature_flags: EventFlags,
     /// Cache of the heater controller's operational state (on or off).
     on: bool,
-    /// The properties of the thermistor being used, including its resistance and beta coefficient.
-    thermistor_properties: &'static hwa::ThermistorProperties,
+    #[cfg(feature = "native")]
+    t0: embassy_time::Instant,
 }
-#[allow(dead_code)]
-impl<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
-    HeaterController<MutexAdc, MutexPwm, AdcPeri, AdcPin, PwmHwaDevice>
+impl<HA, HP, AdcPin> HeaterController<HA, HP, AdcPin>
 where
-    MutexAdc: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    MutexPwm: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    AdcPeri: hwa::device::AdcTrait + 'static,
-    AdcPin: hwa::device::AdcPinTrait<AdcPeri>,
-    PwmHwaDevice: embedded_hal_02::Pwm<Duty = u32> + 'static,
-    <PwmHwaDevice as embedded_hal_02::Pwm>::Channel: Copy,
-    hwa::device::VrefInt: hwa::device::AdcPinTrait<AdcPeri>,
+    HA: MutexStrategy + Send + 'static,
+    HA::Resource: Send + 'static,
+    HP: MutexStrategy + Send + 'static,
+
+    HP::Resource: Pwm + Send + 'static,
+    <HP::Resource as Pwm>::Channel: Copy,
+    <HP::Resource as Pwm>::Duty:
+        core::fmt::Debug + Copy + core::cmp::Ord + Into<u32> + From<u16> + TryFrom<u32>,
 {
     pub fn new(
-        adc: hwa::StaticController<MutexAdc, hwa::device::AdcImpl<AdcPeri>>,
-        adc_pin: AdcPin,
-        pwm: PwmController<MutexPwm, PwmHwaDevice>,
-        defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
-        thermistor_properties: &'static hwa::ThermistorProperties,
+        adc: hwa::controllers::AdcController<HA, AdcPin>,
+        pwm: hwa::controllers::PwmController<HP>,
+        defer_channel: hwa::types::DeferChannel,
+        defer_action: DeferAction,
+        defer_flags: EventFlags,
     ) -> Self {
         Self {
             adc,
-            adc_pin,
             v_ratio: 1.0f32,
             pwm,
             target_temp: 0.0f32,
             current_temp: 0.0f32,
             current_resistance: 0.0f32,
-            defer_channel,
-            commander_channel: CommChannel::Internal,
+            current_channel: CommChannel::Internal,
+            state_machine: HeaterStateMachine::new(),
             on: false,
-            thermistor_properties,
+            defer_channel,
+            defer_action,
+            temperature_flags: defer_flags,
+            #[cfg(feature = "native")]
+            t0: embassy_time::Instant::now(),
         }
     }
     pub async fn init(&mut self) {
-        hwa::debug!("Initializing ADC...");
-        cfg_if::cfg_if! {
-            if #[cfg(feature="without-vref-int")] {
-                let vref_default = f32::from(hwa::ADC_VREF_DEFAULT_MV);
-                let vref_sample = f32::from(hwa::ADC_VREF_DEFAULT_SAMPLE);
-            }
-            else {
-                let mut bus  = self.adc.lock().await;
-                cfg_if::cfg_if! {
-                    if #[cfg(feature="enable_vrefint-with-delay")] {
-                        let mut vref_int = bus.enable_vrefint();
-                    }
-                    else {
-                        let mut vref_int = bus.enable_vrefint();
-                        embassy_time::Timer::after(embassy_time::Duration::from_micros(hwa::ADC_START_TIME_US as u64)).await;
-                    }
-                }
-                let vref_default = f32::from(hwa::ADC_VREF_DEFAULT_MV);
-                let vref_sample = f32::from(bus.read(&mut vref_int));
-            }
-        }
-        self.v_ratio = vref_default / (vref_sample * 1000.0f32);
-
-        hwa::info!(
-            "ADC Initialized: refint_default = {}, vref_sample = {} | v_ratio = {} volts/adc_unit",
-            Real::from_f32(vref_default),
-            Real::from_f32(vref_sample),
-            Real::from_f32(self.v_ratio),
-        );
+        self.adc.init().await;
     }
 
-    /// Reads the current temperature in Celsius degrees.
-    ///
-    /// # Returns
-    ///
-    /// * `f32` - The current temperature measurement in Celsius degrees.
-    ///
-    /// # Implementation Note
-    ///
-    /// This asynchronous function locks the ADC bus to perform a temperature
-    /// measurement. Depending on the feature configuration, the measurement
-    /// can be performed asynchronously or synchronously. The raw ADC value read
-    /// from the ADC pin is then converted to a temperature value, using the
-    /// `convert_to_celsius` method, which is also responsible for updating the
-    /// cached temperature and resistance values.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// let mut controller = HeaterController::new(adc, adc_pin, pwm, defer_channel, thermistor_properties);
-    /// let current_temp = controller.read_temp().await;
-    /// println!("Current Temperature: {} °C", current_temp);
-    /// ```
-    pub async fn read_temp(&mut self) -> f32 {
-        let mut bus = self.adc.lock().await;
-        cfg_if::cfg_if! {
-            if #[cfg(feature="adc-is-async")] {
-                let value = bus.read(&mut self.adc_pin).await;
-            }
-            else {
-                let value = bus.read(&mut self.adc_pin);
-            }
-        }
-        (self.current_temp, self.current_resistance) = self.convert_to_celcius(value.into());
-        self.current_temp
-    }
-
-    #[inline]
     pub fn get_target_temp(&self) -> f32 {
         self.target_temp
     }
@@ -203,18 +220,18 @@ where
             self.target_temp = requested_temp;
             self.on();
             if tdiff.abs() > 0.1f32 * self.target_temp {
-                self.commander_channel = channel;
+                self.current_channel = channel;
                 self.defer_channel
                     .send(AwaitRequested(action, channel))
                     .await;
                 true
             } else {
-                self.commander_channel = CommChannel::Internal;
+                self.current_channel = CommChannel::Internal;
                 false
             }
         } else {
             self.target_temp = 0.0f32;
-            self.commander_channel = CommChannel::Internal;
+            self.current_channel = CommChannel::Internal;
             self.off().await;
             false
         }
@@ -249,13 +266,13 @@ where
         if self.is_on() && self.current_temp > 0.0f32 {
             let tdiff = self.current_temp - self.target_temp;
             if tdiff.abs() > 0.1f32 * self.target_temp {
-                self.commander_channel = channel;
+                self.current_channel = channel;
                 self.defer_channel
                     .send(AwaitRequested(action, channel))
                     .await;
                 true
             } else {
-                self.commander_channel = CommChannel::Internal;
+                self.current_channel = CommChannel::Internal;
                 false
             }
         } else {
@@ -301,6 +318,8 @@ where
     /// * The Temperature in Celsius degrees
     /// * Even though it's not strictly necessary, the measured resistance, which is really useful to debug and review
     fn convert_to_celcius(&self, sample: u16) -> (f32, f32) {
+        todo!("");
+        /*
         let sample_v = f32::from(sample) * self.v_ratio;
         let measured_resistance: f32 = (sample_v * self.thermistor_properties.r_pullup)
             / ((4095.0f32 * self.v_ratio) - sample_v);
@@ -320,18 +339,20 @@ where
             (1.0 / (log_mr_by_r_nominal / self.thermistor_properties.beta + 1.0 / 298.15)) - 273.15,
             measured_resistance,
         )
+
+         */
     }
 
     // Sends and consume the deferred action
     pub async fn flush_notification(&mut self, action: DeferAction) {
         self.defer_channel
-            .send(Completed(action, self.commander_channel))
+            .send(Completed(action, self.current_channel))
             .await;
-        self.commander_channel = CommChannel::Internal;
+        self.current_channel = CommChannel::Internal;
     }
 
     pub fn is_awaited(&self) -> bool {
-        match &self.commander_channel {
+        match &self.current_channel {
             CommChannel::Internal => false,
             _ => true,
         }
@@ -350,5 +371,170 @@ where
     pub async fn off(&mut self) {
         self.on = false;
         self.pwm.set_power(0).await;
+    }
+
+    /// Updates the state machine with the current temperature readings and
+    /// performs the required actions based on the new temperature state.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctrl` - A reference to the heater controller.
+    ///
+    /// This method carries out the following operations:
+    ///
+    /// 1. Locks the ADC to ensure exclusive access during the update process.
+    /// 2. Reads the current temperature.
+    /// 3. If the "native" feature is enabled, checks whether the heater has been on for more than 5 seconds and
+    ///    adjusts the current temperature reading accordingly.
+    /// 4. Determines the new state of the heater based on the current temperature and target temperature:
+    ///    - If the heater is on, computes the control output using the PID controller and adjusts the power supplied to the heater.
+    ///    - If the heater is off, resets the current temperature to zero and sets the state to `Duty`.
+    /// 5. Updates the current state of the state machine if it has changed.
+    /// 6. Publishes events to the event bus based on the new state.
+    ///
+    pub async fn update(&mut self, event_bus: &hwa::types::EventBus) {
+        use num_traits::ToPrimitive;
+        hwa::info!("Updating HEATER...");
+
+        self.set_current_temp(self.adc.read_temp().await);
+
+        #[cfg(feature = "native")]
+        {
+            if self.is_on() {
+                if self.t0.elapsed() > embassy_time::Duration::from_secs(5) {
+                    self.current_temp = self.get_target_temp();
+                }
+            }
+        }
+        let new_state = {
+            hwa::debug!(
+                "MEASURED_TEMP[{:?}] {}",
+                self.defer_action,
+                self.current_temp
+            );
+            if self.is_on() {
+                let target_temp = self.get_target_temp();
+                self.state_machine.pid.setpoint(target_temp);
+
+                self.state_machine.last_temp = self.current_temp;
+
+                let delta = self
+                    .state_machine
+                    .pid
+                    .next_control_output(self.current_temp)
+                    .output;
+                let power = if delta > 0.0f32 {
+                    if delta < 100.0f32 {
+                        delta / 100.0f32
+                    } else {
+                        1.0f32
+                    }
+                } else {
+                    0.0f32
+                };
+                hwa::debug!(
+                    "TEMP {} -> {}, {} P={} [{}]",
+                    self.state_machine.last_temp,
+                    self.current_temp,
+                    delta,
+                    power,
+                    target_temp
+                );
+
+                self.set_power((power * 100.0f32).to_u8().unwrap_or(0))
+                    .await;
+
+                if (self.current_temp - self.get_target_temp()).abs() / target_temp < 0.25 {
+                    State::Maintaining
+                } else {
+                    State::Targeting
+                }
+            } else {
+                if self.state_machine.last_temp != self.current_temp {
+                    self.state_machine.last_temp = self.current_temp;
+                }
+                State::Duty
+            }
+        };
+
+        if new_state != self.state_machine.state {
+            hwa::trace!("Temp changed to {:?}", new_state);
+            match new_state {
+                State::Duty => {
+                    #[cfg(feature = "native")]
+                    {
+                        self.t0 = embassy_time::Instant::now();
+                    }
+                    event_bus
+                        .publish_event(EventStatus::not_containing(self.temperature_flags))
+                        .await;
+                }
+                State::Maintaining => {
+                    #[cfg(feature = "native")]
+                    hwa::debug!("Temperature reached. Firing {:?}.", self.temperature_flags);
+                    self.flush_notification(self.defer_action).await;
+                    event_bus
+                        .publish_event(EventStatus::containing(self.temperature_flags))
+                        .await;
+                }
+                State::Targeting => {
+                    #[cfg(feature = "native")]
+                    {
+                        self.t0 = embassy_time::Instant::now();
+                    }
+                    event_bus
+                        .publish_event(EventStatus::not_containing(self.temperature_flags))
+                        .await;
+                }
+            }
+            self.state_machine.state = new_state;
+        } else if self.is_awaited() {
+            match new_state {
+                State::Maintaining => {
+                    self.flush_notification(self.defer_action).await;
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The `State` enum represents the different states in which the HeaterStateMachine can be during its execution.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+enum State {
+    /// The `Duty` state indicates that the system is operating in its default duty mode.
+    Duty,
+    /// The `Targeting` state is when the system is trying to reach a target temperature.
+    Targeting,
+    /// The `Maintaining` state indicates that the system is maintaining the current temperature.
+    Maintaining,
+}
+
+/// Represents the finite state machine for handling the heater's operation states.
+struct HeaterStateMachine {
+    /// PID controller used to regulate the heater's temperature.
+    pid: pid::Pid<f32>,
+    /// Current temperature being read from the heater.
+    current_temp: f32,
+    /// The last recorded temperature of the heater.
+    last_temp: f32,
+    /// The current state of the heater's finite state machine (FSM).
+    state: State,
+}
+
+impl HeaterStateMachine {
+    fn new() -> Self {
+        let mut pid: pid::Pid<f32> = pid::Pid::new(0.0f32, 100.0f32);
+        pid.p(5.0f32, 100.0f32);
+        pid.i(0.01f32, 100.0f32);
+        pid.d(1.5f32, 100.0f32);
+
+        Self {
+            pid,
+            current_temp: 0f32,
+            last_temp: 0f32,
+            state: State::Duty,
+        }
     }
 }

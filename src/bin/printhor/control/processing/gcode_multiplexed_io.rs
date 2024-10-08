@@ -12,21 +12,20 @@ use futures_util::future;
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
     #[cfg(feature = "with-serial-usb")]
-    serial_usb_line_parser: control::GCodeLineParser<hwa::device::USBSerialDeviceInputStream>,
+    serial_usb_line_parser: control::GCodeLineParser<hwa::types::SerialUsbInputStream>,
     #[cfg(feature = "with-serial-port-1")]
-    serial_port1_line_parser: control::GCodeLineParser<hwa::device::UartPort1RxInputStream>,
+    serial_port1_line_parser: control::GCodeLineParser<hwa::types::SerialPort1InputStream>,
     #[cfg(feature = "with-serial-port-2")]
-    serial_port2_line_parser: control::GCodeLineParser<hwa::device::UartPort2RxInputStream>,
+    serial_port2_line_parser: control::GCodeLineParser<hwa::types::SerialPort2InputStream>,
 }
 
 impl GCodeMultiplexedInputStream {
     pub fn new(
-        #[cfg(feature = "with-serial-usb")]
-        serial_usb_rx_stream: hwa::device::USBSerialDeviceInputStream,
+        #[cfg(feature = "with-serial-usb")] serial_usb_rx_stream: hwa::types::SerialUsbInputStream,
         #[cfg(feature = "with-serial-port-1")]
-        serial_port1_rx_stream: hwa::device::UartPort1RxInputStream,
+        serial_port1_rx_stream: hwa::types::SerialPort1InputStream,
         #[cfg(feature = "with-serial-port-2")]
-        serial_port2_rx_stream: hwa::device::UartPort2RxInputStream,
+        serial_port2_rx_stream: hwa::types::SerialPort2InputStream,
     ) -> Self {
         Self {
             #[cfg(feature = "with-serial-usb")]

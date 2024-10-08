@@ -14,9 +14,11 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
+default = []
 # Hardware device features
 with-defmt = [] # Just ignore
 with-log = ["printhor-hwa-common/with-log", "env_logger"]
+with-serial-usb = []
 with-serial-port-1 = ["async-std"]
 with-serial-port-2 = []
 with-serial-port-usb = []
@@ -59,8 +61,8 @@ embedded-io-async = { version = "0.6.0", optional = true }
 embedded-io = { version = "0.6.1", optional = true }
 
 async-std = { version = "1.12.0", optional = true}
-gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
-env_logger = { version = "0.10.1", optional = true }
+gnuplot = {version = "0.0", default-features = false, features=[], optional = true}
+env_logger = { version = "0.11", optional = true }
 printhor-hwa-common = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
 printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
@@ -70,11 +72,11 @@ futures = { version = "0.3", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 
 lvgl = { version="0", default-features = false, features =[], optional = true }
-nb = {version = "1.1.0", default-features = false, features = []}
+nb = {version = "1.1", default-features = false, features = []}
 tmc2209 = { version = "0.2", optional = true }
 thread-priority = { version = "0.15"}
 
-cfg-if = {version = "1.0.0"}
+cfg-if = {version = "1.0"}
 const_env = { version = "0.1" }
 
 [patch.crates-io]

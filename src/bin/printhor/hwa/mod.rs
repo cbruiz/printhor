@@ -1,40 +1,18 @@
 pub use crate::control::GCodeProcessor;
-use crate::hwi;
 pub use printhor_hwa_common::*;
+
+/// HWI contains the exports of the lower layer (Hardware Interface)
+pub(in crate::hwa) mod hwi;
 
 pub mod controllers;
 pub mod drivers;
+pub mod types;
 
 //#region Main exports
 
-pub use hwi::*;
+// Isolate/decouple HWI export from board crates
 
 //#endregion
-
-pub mod mem {
-    use crate::{hwa, hwi};
-    pub fn heap_current_size() -> u32 {
-        hwi::heap_current_size()
-    }
-    pub fn heap_max_size() -> usize {
-        hwi::HEAP_SIZE_BYTES
-    }
-
-    pub fn stack_reservation_max_size() -> u32 {
-        hwa::MAX_STATIC_ALLOC_BYTES as u32
-    }
-
-    pub fn stack_reservation_current_size() -> u32 {
-        hwi::stack_reservation_current_size()
-    }
-
-    #[allow(unused)]
-    pub fn stack_reservation_usage_percentage() -> f32 {
-        let alloc = stack_reservation_current_size() as f32;
-        let max = stack_reservation_max_size() as f32;
-        (100.0f32 * alloc) / max
-    }
-}
 
 #[cfg(feature = "with-sd-card")]
 pub struct DummyTimeSource {}
@@ -52,3 +30,5 @@ impl embedded_sdmmc::TimeSource for DummyTimeSource {
         }
     }
 }
+
+pub use hwi::Contract;

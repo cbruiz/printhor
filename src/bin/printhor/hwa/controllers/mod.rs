@@ -20,19 +20,22 @@ mod servo_controller;
 #[cfg(feature = "with-trinamic")]
 mod trinamic_controller;
 
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-mod heater_controller;
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        mod adc_controller;
+        pub use adc_controller::AdcController;
+        mod heater_controller;
+        pub use heater_controller::HeaterController;
+    }
+}
 
-#[cfg(any(
-    feature = "with-hot-end",
-    feature = "with-hot-bed",
-    feature = "with-fan-layer",
-    feature = "with-fan-extra-1",
-    feature = "with-laser"
-))]
-mod pwm_controller;
-
-// Use
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed",
+        feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))] {
+        mod pwm_controller;
+        pub use pwm_controller::PwmController;
+    }
+}
 
 #[cfg(feature = "with-trinamic")]
 pub use trinamic_controller::TrinamicController;
@@ -45,48 +48,3 @@ pub use servo_controller::ServoController;
 
 #[cfg(feature = "with-probe")]
 pub use servo_controller::ProbeTrait;
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-pub use heater_controller::HeaterController;
-
-////
-
-#[cfg(any(feature = "with-hot-end"))]
-pub type HotEndController = HeaterController<
-    hwa::AdcHotEndMutexType,
-    hwa::HotEndControllerMutexType,
-    hwa::device::AdcHotEndPeripheral,
-    hwa::device::AdcHotEndPin,
-    hwa::device::PwmHotEnd,
->;
-
-#[cfg(any(feature = "with-hot-end"))]
-pub type HotEndPwmController =
-    pwm_controller::PwmController<hwa::HotEndControllerHolderType<hwa::device::PwmHotEnd>,>;
-
-////
-
-#[cfg(any(feature = "with-hot-bed"))]
-pub type HotBedController = HeaterController<
-    hwa::AdcHotBedMutexType,
-    hwa::PwmHotBedMutexType,
-    hwa::device::AdcHotBedPeripheral,
-    hwa::device::AdcHotBedPin,
-    hwa::device::PwmHotBed,
->;
-
-#[cfg(any(feature = "with-hot-bed"))]
-pub type HotbedPwmController =
-    pwm_controller::PwmController<hwa::PwmHotBedMutexType, hwa::device::PwmHotBed>;
-
-#[cfg(any(feature = "with-fan-layer"))]
-pub type FanLayerPwmController =
-    pwm_controller::PwmController<hwa::PwmFanLayerMutexType, hwa::device::PwmFanLayer>;
-
-#[cfg(any(feature = "with-fan-extra-1"))]
-pub type FanExtra1PwmController =
-    pwm_controller::PwmController<hwa::FanExtra1ControllerMutexType, hwa::device::PwmFanExtra1>;
-
-#[cfg(any(feature = "with-laser"))]
-pub type LaserPwmController =
-    pwm_controller::PwmController<hwa::PwmLaserMutexType, hwa::device::PwmLaser>;

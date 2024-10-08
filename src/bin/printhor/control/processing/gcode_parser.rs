@@ -366,7 +366,6 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((100, 0))) => Some(GCodeValue::M100),
         #[cfg(feature = "with-hot-end")]
         ('m', Some((104, 0))) => Some(GCodeValue::M104(S::new())),
-        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         ('m', Some((105, 0))) => Some(GCodeValue::M105),
         #[cfg(feature = "with-fan-layer")]
         ('m', Some((106, 0))) => Some(GCodeValue::M106),

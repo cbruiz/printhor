@@ -1,7 +1,7 @@
 //! The hardware/baremetal *abstraction* interface
 //! this is a simple strict-typing abstraction with adapters/proxies
 
-//#region boards
+//#region "Boards exports as HWI"
 
 cfg_if::cfg_if! {
     if #[cfg(feature="skr_mini_e3")] {
@@ -24,8 +24,3 @@ cfg_if::cfg_if! {
     }
 }
 //#endregion
-
-pub mod adapters;
-
-#[allow(unused)]
-use crate::hwi::adapters::*;

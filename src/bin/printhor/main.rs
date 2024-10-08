@@ -6,7 +6,8 @@ extern crate core;
 pub mod control;
 pub mod helpers;
 pub mod hwa;
-mod hwi;
+
+use hwa::HwiContract;
 pub mod machine;
 pub mod math;
 pub mod tgeo;
@@ -14,20 +15,14 @@ pub mod tgeo;
 pub use tgeo::TVector;
 
 use crate::control::task_control::ControlTaskControllers;
-use crate::control::GCodeProcessorParams;
 #[cfg(feature = "with-sd-card")]
 use crate::hwa::controllers::CardController;
-#[cfg(feature = "with-hot-end")]
-use crate::hwa::controllers::HotEndPwmController;
-#[cfg(feature = "with-hot-bed")]
-use crate::hwa::controllers::HotbedPwmController;
 #[cfg(feature = "with-print-job")]
 use crate::hwa::controllers::PrinterController;
 #[cfg(feature = "with-motion")]
 use crate::hwa::drivers::MotionDriver;
 #[cfg(feature = "with-motion")]
 use hwa::GCodeProcessor;
-use hwa::{Controllers, IODevices, MotionDevices, PwmDevices, SysDevices};
 
 //noinspection RsUnresolvedReference
 /// Entry point
@@ -38,8 +33,9 @@ async fn main(spawner: embassy_executor::Spawner) {
 }
 
 pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: bool) {
-    hwa::init_logger();
-    hwa::info!("Init");
+    hwa::Contract::init_logger();
+    hwa::info!("Starting");
+    hwa::Contract::init_heap();
 
     let wdt = match sys_start(spawner).await {
         Ok(wdt) => wdt,
@@ -67,24 +63,26 @@ pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: boo
 
 async fn sys_start(
     spawner: embassy_executor::Spawner,
-) -> Result<hwa::StaticController<hwa::WatchDogHolderType<hwa::device::WatchDog>>, ()> {
+) -> Result<hwa::types::WatchDogController, ()> {
     hwa::info!("Init printhor {}", machine::MACHINE_INFO.firmware_version);
-    let peripherals = hwa::init();
-    hwa::debug!("Peripherals initialized");
 
-    let context = hwa::setup(spawner, peripherals).await;
+    let context = hwa::Contract::init(spawner).await;
+
     hwa::info!(
         "HWI setup completed. Allocated {} bytes for context.",
         core::mem::size_of_val(&context)
     );
 
-    let event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType> =
-        hwa::EventBus::new(hwa::make_static_controller!(
+    type EventBusMutexStrategyType = <hwa::Contract as HwiContract>::EventBusMutexStrategy;
+    type EventBusPubSubMutexType = <hwa::Contract as HwiContract>::EventBusPubSubMutexType;
+
+    let event_bus: hwa::GenericEventBus<EventBusMutexStrategyType, EventBusPubSubMutexType> =
+        hwa::GenericEventBus::new(hwa::make_static_controller!(
             "EventBus",
-            hwa::EventBusHolderType,
+            EventBusMutexStrategyType,
             hwa::EventBusChannelController::new(hwa::make_static_ref!(
                 "EventBusChannel",
-                hwa::EventBusPubSubType<hwa::EventBusPubSubMutexType>,
+                hwa::EventBusPubSubType<EventBusPubSubMutexType>,
                 hwa::EventBusPubSubType::new(),
             )),
         ));
@@ -93,26 +91,38 @@ async fn sys_start(
         .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_BOOTING))
         .await;
 
-    let defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType> =
-        hwa::DeferChannel::new(hwa::make_static_ref!(
-            "DeferChannel",
-            hwa::DeferChannelChannelType<hwa::DeferChannelMutexType>,
-            hwa::DeferChannelChannelType::new()
-        ));
+    cfg_if::cfg_if! {
+        if #[cfg(any(feature = "with-motion", feature = "with-hot-end", feature = "with-hot-bed"))] {
+            type DeferChannelMutexType = <hwa::Contract as HwiContract>::DeferChannelMutexType;
+            let defer_channel: hwa::GenericDeferChannel<DeferChannelMutexType> = {
+                type DeferChannelMutexType = <hwa::Contract as HwiContract>::DeferChannelMutexType;
+                hwa::GenericDeferChannel::new(hwa::make_static_ref!(
+                    "DeferChannel",
+                    hwa::DeferChannelChannelType<DeferChannelMutexType>,
+                    hwa::DeferChannelChannelType::new()
+                ))
+            };
+        }
+    }
 
-    let wdt = context.controllers.sys_watchdog.clone();
-    wdt.lock().await.unleash();
+    let sys_watch_dog = context.sys_watch_dog.clone();
+    sys_watch_dog.lock().await.unleash();
+
+    //#endregion
+
+    //#region "Task Spawning"
 
     if spawn_tasks(
         spawner,
         event_bus.clone(),
+        #[cfg(any(
+            feature = "with-motion",
+            feature = "with-hot-end",
+            feature = "with-hot-bed"
+        ))]
         defer_channel,
-        context.controllers,
-        context.sys_devices,
-        context.io_devices,
-        context.motion,
-        context.pwm,
-        wdt.clone(),
+        context,
+        sys_watch_dog.clone(),
     )
     .await
     .is_ok()
@@ -134,12 +144,12 @@ async fn sys_start(
 
         hwa::info!(
             "Tasks spawned. Allocated {} bytes for shared state. Firing SYS_READY.",
-            hwa::mem::stack_reservation_current_size(),
+            hwa::Contract::stack_reservation_current_size(),
         );
         event_bus
             .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_READY))
             .await;
-        Ok(wdt)
+        Ok(sys_watch_dog)
     } else {
         event_bus
             .publish_event(hwa::EventStatus::containing(
@@ -149,18 +159,20 @@ async fn sys_start(
         hwa::error!("Unable start. Any task launch failed");
         Err(())
     }
+    //#enregion
 }
 
 async fn spawn_tasks(
     spawner: embassy_executor::Spawner,
-    event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
-    _defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType>,
-    _controllers: Controllers,
-    _sys_devices: SysDevices,
-    _io_devices: IODevices,
-    _motion_device: MotionDevices,
-    _pwm_devices: PwmDevices,
-    _wd: hwa::StaticController<hwa::WatchDogHolderType<hwa::device::WatchDog>>,
+    event_bus: hwa::types::EventBus,
+    #[cfg(any(
+        feature = "with-motion",
+        feature = "with-hot-end",
+        feature = "with-hot-bed"
+    ))]
+    _defer_channel: hwa::types::DeferChannel,
+    _context: hwa::HwiContext<hwa::Contract>,
+    _wd: hwa::types::WatchDogController,
 ) -> Result<(), ()> {
     #[cfg(all(feature = "with-sd-card", feature = "sd-card-uses-spi"))]
     let sd_card_adapter =
@@ -175,84 +187,85 @@ async fn spawn_tasks(
     #[cfg(feature = "with-print-job")]
     let printer_controller = PrinterController::new(event_bus.clone());
 
-    #[cfg(feature = "with-hot-end")]
-    let hot_end_pwm = HotEndPwmController::new(
-        _pwm_devices.hot_end.power_pwm.clone(),
-        _pwm_devices.hot_end.power_channel,
-    );
     #[cfg(feature = "with-hot-bed")]
     let hot_bed_pwm = HotbedPwmController::new(
         _pwm_devices.hot_bed.power_pwm.clone(),
         _pwm_devices.hot_bed.power_channel,
     );
 
-    #[cfg(feature = "with-probe")]
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-probe")] {
             let probe_controller = hwa::make_static_controller!(
                 "ProbeServoController",
-                hwa::ProbeServoControllerHolderType<
-                    hwa::controllers::ServoController<
-                        hwa::PwmProbeHolderType<hwa::device::PwmProbe>
-                    >
-                >,
+                hwa::types::_ProbeControllerMutexStrategy_,
                 hwa::controllers::ServoController::new(
-                    _pwm_devices.probe.power_pwm,
-                    _pwm_devices.probe.power_channel,
+                    _context.probe_power_pwm,
+                    _context.probe_power_channel.take(),
                 )
             );
         }
     }
+    #[cfg(feature = "with-laser")]
+    let laser_controller = hwa::make_static_controller!(
+        "LaserPwmController",
+        hwa::types::_LaserControllerMutexStrategy_,
+        hwa::controllers::PwmController::new(
+            _context.laser_power_pwm,
+            _context.laser_power_channel.take(),
+        )
+    );
 
     #[cfg(feature = "with-fan-layer")]
     let fan_layer_controller = hwa::make_static_controller!(
         "FanLayerController",
-        hwa::PwmFanLayerHolderType<hwa::controllers::FanLayerPwmController>,
-        hwa::controllers::FanLayerPwmController::new(
-            _pwm_devices.fan_layer.power_pwm,
-            _pwm_devices.fan_layer.power_channel,
+        hwa::types::FanLayerMutexStrategy,
+        hwa::controllers::PwmController::new(
+            _context.fan_layer_power_pwm,
+            _context.fan_layer_power_channel.take(),
         )
     );
 
     #[cfg(feature = "with-fan-extra-1")]
     let fan_extra_1_controller = hwa::make_static_controller!(
         "FanExtra1Controller",
-        hwa::PwmFanExtra1HolderType<hwa::controllers::FanExtra1PwmController>,
-        hwa::controllers::FanExtra1PwmController::new(
-            _pwm_devices.fan_extra_1.power_pwm,
-            _pwm_devices.fan_extra_1.power_channel,
+        hwa::types::FanExtra1MutexStrategy,
+        hwa::controllers::PwmController::new(
+            _context.fan_extra1_power_pwm,
+            _context.fan_extra1_power_channel.take(),
         )
     );
 
-    #[cfg(feature = "with-laser")]
-    let laser_controller = hwa::make_static_controller!(
-        "LaserController",
-        hwa::PwmLaserHolderType<hwa::controllers::LaserPwmController>,
-        hwa::controllers::LaserPwmController::new(
-            _pwm_devices.laser.power_pwm,
-            _pwm_devices.laser.power_channel,
-        )
-    );
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-hot-end")] {
 
-    #[cfg(feature = "with-hot-end")]
-    let hot_end_controller = hwa::make_static_controller!(
-        "HotEndController",
-        hwa::PwmHotEndHolderType<hwa::controllers::FanExtra1PwmController>,
-        hwa::controllers::HotEndController::new(
-            _pwm_devices.hot_end.temp_adc.clone(),
-            _pwm_devices.hot_end.temp_pin,
-            hot_end_pwm,
-            _defer_channel.clone(),
-            _pwm_devices.hot_end.thermistor_properties,
-        )
-    );
-    #[cfg(feature = "with-hot-end")]
-    hot_end_controller.lock().await.init().await;
+            let hot_end_controller = {
+
+                let c = hwa::controllers::HeaterController::new(
+                    hwa::controllers::AdcController::new(
+                        _context.hot_end_adc,
+                        _context.hot_end_adc_pin.take(),
+                    ),
+                    hwa::controllers::PwmController::new(
+                        _context.hot_end_power_pwm,
+                        _context.hot_end_power_channel.take(),
+                    ),
+                    _defer_channel.clone(),
+                    DeferAction::HotEndTemperature,
+                    EventFlags::HOT_END_TEMP_OK,
+                );
+                hwa::make_static_controller!(
+                    "HotEndController",
+                    hwa::types::_HotEndControllerMutexStrategy_,
+                    c
+                )
+            };
+        }
+    }
 
     #[cfg(feature = "with-hot-bed")]
     let hot_bed_controller = hwa::make_static_controller!(
         "HotBedController",
-        hwa::HotBedHolderType<hwa::controllers::HotBedPwmController>,
+        hwa::HotBedMutexStrategyType<hwa::controllers::HotBedPwmController>,
         hwa::controllers::HotBedController::new(
             _pwm_devices.hot_bed.temp_adc.clone(),
             _pwm_devices.hot_bed.temp_pin,
@@ -268,14 +281,13 @@ async fn spawn_tasks(
     let motion_planner = {
         let motion_config = hwa::make_static_controller!(
             "MotionConfig",
-            hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>,
+            hwa::MotionConfigMutexStrategyType<hwa::controllers::MotionConfig>,
             hwa::controllers::MotionConfig::new()
         );
 
         let motion_driver = hwa::make_static_controller!(
             "MotionDriver",
-            hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>,
-
+            hwa::MotionDriverMutexStrategyType<hwa::drivers::MotionDriver>,
             MotionDriver::new(hwa::drivers::MotionDriverParams {
                 motion_device: _motion_device.motion_devices,
                 #[cfg(feature = "with-trinamic")]
@@ -294,31 +306,31 @@ async fn spawn_tasks(
         hwa::controllers::MotionPlanner::new(_defer_channel, motion_config, motion_driver)
     };
 
-    let processor: GCodeProcessor = GCodeProcessor::new(GCodeProcessorParams {
-        event_bus: event_bus.clone(),
+    let processor: hwa::GCodeProcessor = hwa::GCodeProcessor::new(
+        event_bus.clone(),
         #[cfg(feature = "with-motion")]
         motion_planner,
         #[cfg(feature = "with-serial-usb")]
-        serial_usb_tx: _controllers.serial_usb_tx,
+        _context.serial_usb_tx,
         #[cfg(feature = "with-serial-port-1")]
-        serial_port1_tx: _controllers.serial_port1_tx,
+        _context.serial_port1_tx,
         #[cfg(feature = "with-serial-port-2")]
-        serial_port2_tx: _controllers.serial_port2_tx,
+        _context.serial_port2_tx,
         #[cfg(feature = "with-ps-on")]
-        ps_on: _sys_devices.ps_on,
+        _context.ps_on,
         #[cfg(feature = "with-probe")]
-        probe: probe_controller,
+        probe_controller,
         #[cfg(feature = "with-hot-end")]
-        hot_end: hot_end_controller.clone(),
+        hot_end_controller.clone(),
         #[cfg(feature = "with-hot-bed")]
-        hot_bed: hot_bed_controller.clone(),
+        hot_bed_controller.clone(),
         #[cfg(feature = "with-fan-layer")]
-        fan_layer: fan_layer_controller.clone(),
+        fan_layer_controller.clone(),
         #[cfg(feature = "with-fan-extra-1")]
-        fan_extra_1: fan_extra_1_controller.clone(),
+        fan_extra_1_controller.clone(),
         #[cfg(feature = "with-laser")]
-        laser: laser_controller,
-    });
+        laser_controller,
+    );
 
     hwa::info!("HWA setup completed.");
 
@@ -403,11 +415,11 @@ async fn spawn_tasks(
             processor.clone(),
             control::GCodeMultiplexedInputStream::new(
                 #[cfg(feature = "with-serial-usb")]
-                _io_devices.serial_usb_rx_stream,
+                _context.serial_usb_rx_stream,
                 #[cfg(feature = "with-serial-port-1")]
-                _io_devices.serial_port1_rx_stream,
+                _context.serial_port1_rx_stream,
                 #[cfg(feature = "with-serial-port-2")]
-                _io_devices.serial_port2_rx_stream,
+                _context.serial_port2_rx_stream.take(),
             ),
             ControlTaskControllers {
                 #[cfg(feature = "with-print-job")]
@@ -438,9 +450,13 @@ async fn spawn_tasks(
         ))
         .map_err(|_| ())?;
 
-    #[cfg(feature = "with-motion")]
+    #[cfg(any(
+        feature = "with-motion",
+        feature = "with-hot-end",
+        feature = "with-hot-bed"
+    ))]
     spawner
-        .spawn(control::task_defer::task_defer(processor))
+        .spawn(control::task_defer::task_defer(processor, _defer_channel))
         .map_err(|_| ())?;
 
     Ok(())

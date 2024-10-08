@@ -41,7 +41,9 @@ pub struct SoftTimerDriver {
     num_queued: u8,
 
     /// Reference to the motion driver.
-    drv: Option<hwa::StaticController<hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>>>,
+    drv: Option<
+        hwa::StaticController<hwa::MotionDriverMutexStrategyType<hwa::drivers::MotionDriver>>,
+    >,
 
     /// The waker registration for waking up tasks.
     waker: WakerRegistration,
@@ -404,7 +406,7 @@ impl SoftTimer {
     /// ```
     pub fn setup(
         &self,
-        _mp: hwa::StaticController<hwa::MotionDriverHolderType<hwa::drivers::MotionDriver>>,
+        _mp: hwa::StaticController<hwa::MotionDriverMutexStrategyType<hwa::drivers::MotionDriver>>,
     ) {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);

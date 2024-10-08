@@ -43,11 +43,13 @@
 //!
 //! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core.
 
-use crate::control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
-use crate::control::{GCodeCmd, GCodeValue};
+use crate::control;
 use crate::hwa;
 use crate::machine::MACHINE_INFO;
 use crate::math;
+use control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
+use control::{GCodeCmd, GCodeValue};
+use hwa::HwiContract;
 
 #[cfg(feature = "with-motion")]
 use crate::tgeo::TVector;
@@ -63,118 +65,93 @@ cfg_if::cfg_if! {
     {
         #[allow(unused)]
         use embedded_io_async::Write;
-        #[allow(unused)]
-        use printhor_hwa_common::AsyncWrapper;
     }
-}
-
-pub struct GCodeProcessorParams {
-    pub event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
-
-    #[cfg(feature = "with-motion")]
-    pub motion_planner: hwa::controllers::MotionPlanner,
-    #[cfg(feature = "with-serial-usb")]
-    pub serial_usb_tx:
-        hwa::StaticController<hwa::SerialUsbHolderType<>, hwa::device::SerialUsbTxDevice>,
-    #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx:
-        hwa::StaticController<hwa::SerialPort1HolderType<hwa::device::SerialPort1TxDevice>>,
-    #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx:
-        hwa::StaticController<hwa::SerialPort2HolderType<hwa::device::SerialPort2TxDevice>>,
-    #[cfg(feature = "with-ps-on")]
-    pub ps_on: hwa::StaticController<hwa::PSOnHolderType<hwa::device::PsOnPin>>,
-    #[cfg(feature = "with-probe")]
-    pub probe: hwa::StaticController<
-        hwa::ProbeServoControllerHolderType<
-            hwa::controllers::ServoController<
-                hwa::PwmProbeHolderType<hwa::device::PwmProbe>
-            >
-        >
-    >,
-    #[cfg(feature = "with-hot-end")]
-    pub hot_end:
-        hwa::StaticController<hwa::HotEndControllerHolderType<hwa::controllers::HotEndController>>,
-    #[cfg(feature = "with-hot-bed")]
-    pub hot_bed:
-        hwa::StaticController<hwa::HotBedControllerHolderType<hwa::controllers::HotBedController>>,
-    #[cfg(feature = "with-fan-layer")]
-    pub fan_layer: hwa::StaticController<hwa::FanLayerControllerHolderType<hwa::controllers::FanLayerPwmController>,
-    >,
-    #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1: hwa::StaticController<hwa::FanExtra1ControllerHolderType<hwa::controllers::FanExtra1PwmController>,
-    >,
-    #[cfg(feature = "with-laser")]
-    pub laser:
-        hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
 }
 
 #[derive(Clone)]
 pub struct GCodeProcessor {
-    pub event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
+    pub event_bus: hwa::types::EventBus,
 
     #[cfg(feature = "with-motion")]
     pub motion_planner: hwa::controllers::MotionPlanner,
+
     #[cfg(feature = "with-serial-usb")]
-    pub serial_usb_tx:
-        hwa::StaticController<hwa::SerialUsbHolderType<hwa::device::SerialUsbTxDevice>>,
+    pub serial_usb_tx: hwa::types::SerialUsbTxController,
+
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx:
-        hwa::StaticController<hwa::SerialPort1HolderType<hwa::device::SerialPort1TxDevice>>,
+    pub serial_port1_tx: hwa::types::SerialPort1TxController,
+
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx:
-        hwa::StaticController<hwa::SerialPort2HolderType<hwa::device::SerialPort2TxDevice>>,
+    pub serial_port2_tx: hwa::types::SerialPort2TxController,
+
     #[cfg(feature = "with-ps-on")]
-    pub ps_on: hwa::StaticController<hwa::PSOnHolderType<hwa::device::PsOnPin>>,
+    pub ps_on: hwa::types::PsOnController,
+
     #[cfg(feature = "with-probe")]
-    pub probe: hwa::StaticController<
-        hwa::ProbeServoControllerHolderType<
-            hwa::controllers::ServoController<hwa::PwmProbeHolderType<hwa::device::PwmProbe>>
-        >
-    >,
+    pub probe: hwa::types::ProbeController,
+
     #[cfg(feature = "with-hot-end")]
-    pub hot_end:
-        hwa::StaticController<hwa::HotEndControllerHolderType<hwa::controllers::HotEndController>>,
+    pub hot_end: hwa::types::HotEndController,
+
     #[cfg(feature = "with-hot-bed")]
-    pub hot_bed:
-        hwa::StaticController<hwa::HotBedControllerHolderType<hwa::controllers::HotBedController>>,
+    pub hot_bed: hwa::StaticController<
+        hwa::HotBedControllerMutexStrategyType<hwa::controllers::HotBedController>,
+    >,
+
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer: hwa::StaticController<hwa::FanLayerControllerHolderType<hwa::device::PwmFanLayer>>,
+    pub fan_layer: hwa::types::FanLayerController,
 
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1: hwa::StaticController<hwa::FanExtra1ControllerHolderType<hwa::controllers::FanExtra1PwmController>>,
+    pub fan_extra1: hwa::types::FanExtra1Controller,
+
     #[cfg(feature = "with-laser")]
-    pub _laser:
-        hwa::StaticController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
+    pub _laser: hwa::types::LaserController,
 }
 
 impl GCodeProcessor {
-    pub fn new(params: GCodeProcessorParams) -> Self {
-        Self {
-            #[cfg(feature = "with-serial-usb")]
-            serial_usb_tx: params.serial_usb_tx,
-            #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx: params.serial_port1_tx,
-            #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx: params.serial_port2_tx,
-            #[cfg(feature = "with-ps-on")]
-            ps_on: params.ps_on,
-            #[cfg(feature = "with-motion")]
-            motion_planner: params.motion_planner,
-            #[cfg(feature = "with-probe")]
-            probe: params.probe,
-            #[cfg(feature = "with-hot-end")]
-            hot_end: params.hot_end,
-            #[cfg(feature = "with-hot-bed")]
-            hot_bed: params.hot_bed,
-            #[cfg(feature = "with-fan-layer")]
-            fan_layer: params.fan_layer,
-            #[cfg(feature = "with-fan-extra-1")]
-            fan_extra_1: params.fan_extra_1,
-            #[cfg(feature = "with-laser")]
-            _laser: params.laser,
+    pub const fn new(
+        event_bus: hwa::types::EventBus,
+        #[cfg(feature = "with-motion")] motion_planner: hwa::controllers::MotionPlanner,
+        #[cfg(feature = "with-serial-usb")] serial_usb_tx: hwa::types::SerialUsbTxController,
+        #[cfg(feature = "with-serial-port-1")] serial_port1_tx: hwa::types::SerialPort1TxController,
+        #[cfg(feature = "with-serial-port-2")] serial_port2_tx: hwa::types::SerialPort2TxController,
+        #[cfg(feature = "with-ps-on")] ps_on: hwa::types::PsOnController,
 
-            event_bus: params.event_bus,
+        #[cfg(feature = "with-probe")] probe: hwa::types::ProbeController,
+
+        #[cfg(feature = "with-hot-end")] hot_end: hwa::types::HotEndController,
+        #[cfg(feature = "with-hot-bed")] hot_bed: hwa::types::HotBedController,
+
+        #[cfg(feature = "with-fan-layer")] fan_layer: hwa::types::FanLayerController,
+
+        #[cfg(feature = "with-fan-extra-1")] fan_extra1: hwa::types::FanExtra1Controller,
+
+        #[cfg(feature = "with-laser")] _laser: hwa::types::LaserController,
+    ) -> Self {
+        Self {
+            event_bus,
+            #[cfg(feature = "with-serial-usb")]
+            serial_usb_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port1_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port2_tx,
+            #[cfg(feature = "with-ps-on")]
+            ps_on,
+            #[cfg(feature = "with-motion")]
+            motion_planner,
+            #[cfg(feature = "with-probe")]
+            probe,
+            #[cfg(feature = "with-hot-end")]
+            hot_end,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer,
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra1,
+            #[cfg(feature = "with-laser")]
+            _laser,
         }
     }
 
@@ -195,12 +172,14 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
+                use hwa::AsyncWrapperWriter;
                 let mut mg = self.serial_port1_tx.lock().await;
                 let _ = mg.wrapped_write(_msg.as_bytes()).await;
                 mg.wrapped_flush().await;
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
+                use hwa::AsyncWrapperWriter;
                 let mut mg = self.serial_port2_tx.lock().await;
                 let _ = mg.wrapped_write(_msg.as_bytes()).await;
                 mg.wrapped_flush().await;
@@ -233,13 +212,13 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
-                use printhor_hwa_common::AsyncWrapper;
+                use hwa::AsyncWrapperWriter;
                 let mut mg = self.serial_port1_tx.lock().await;
                 mg.wrapped_flush().await;
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
-                use printhor_hwa_common::AsyncWrapper;
+                use hwa::AsyncWrapperWriter;
                 let mut mg = self.serial_port2_tx.lock().await;
                 mg.wrapped_flush().await;
             }
@@ -305,7 +284,10 @@ impl GCodeProcessor {
             #[cfg(feature = "with-motion")]
             GCodeValue::G0(_) | GCodeValue::G1(_) => {
                 #[cfg(feature = "with-ps-on")]
-                if !self.event_bus.get_status().await
+                if !self
+                    .event_bus
+                    .get_status()
+                    .await
                     .contains(EventFlags::ATX_ON)
                 {
                     return Err(CodeExecutionFailure::PowerRequired);
@@ -340,7 +322,10 @@ impl GCodeProcessor {
                 true => Err(CodeExecutionFailure::BUSY),
                 false => {
                     #[cfg(feature = "with-ps-on")]
-                    if !self.event_bus.get_status().await
+                    if !self
+                        .event_bus
+                        .get_status()
+                        .await
                         .contains(EventFlags::ATX_ON)
                     {
                         return Err(CodeExecutionFailure::PowerRequired);
@@ -360,7 +345,10 @@ impl GCodeProcessor {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
                     #[cfg(feature = "with-ps-on")]
-                    if !self.event_bus.get_status().await
+                    if !self
+                        .event_bus
+                        .get_status()
+                        .await
                         .contains(EventFlags::ATX_ON)
                     {
                         return Err(CodeExecutionFailure::PowerRequired);
@@ -376,17 +364,16 @@ impl GCodeProcessor {
                     Err(CodeExecutionFailure::BUSY)
                 } else {
                     #[cfg(feature = "with-ps-on")]
-                    if !self.event_bus.get_status().await
+                    if !self
+                        .event_bus
+                        .get_status()
+                        .await
                         .contains(EventFlags::ATX_ON)
                     {
                         return Err(CodeExecutionFailure::PowerRequired);
                     }
-                    let md = self.motion_planner.motion_driver.lock().await;
-                    md.probe_controller
-                        .lock()
-                        .await
-                        .probe_pin_down(300_000)
-                        .await;
+                    let mut md = self.probe.lock().await;
+                    md.probe_pin_down(300_000).await;
                     Ok(CodeExecutionSuccess::OK)
                 }
             }
@@ -441,7 +428,7 @@ impl GCodeProcessor {
             GCodeValue::M79 => {
                 let _ = self.write(channel, "echo: Software reset\n").await;
                 self.flush(channel).await;
-                hwa::sys_reset();
+                hwa::Contract::sys_reset();
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-ps-on")]
@@ -482,13 +469,13 @@ impl GCodeProcessor {
             #[cfg(feature = "with-motion")]
             GCodeValue::M84 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M100 => {
-                let heap_current = hwa::mem::heap_current_size();
-                let heap_max = hwa::mem::heap_max_size();
-                let stack_current = hwa::mem::stack_reservation_current_size();
-                let stack_max = hwa::mem::stack_reservation_max_size();
+                let heap_current = hwa::Contract::heap_current_size();
+                let heap_max = hwa::Contract::heap_max_size();
+                let stack_current = hwa::Contract::stack_reservation_current_size();
+                let stack_max = hwa::Contract::stack_reservation_max_size();
 
                 let z1 = alloc::format!(
-                    "echo: {}/{} {}% of heap usage\n",
+                    "echo: {}/{} {:?}% of heap usage\n",
                     heap_current,
                     heap_max,
                     math::Real::from_f32(100.0f32 * heap_current as f32 / heap_max as f32),
@@ -496,7 +483,7 @@ impl GCodeProcessor {
                 self.write(channel, z1.as_str()).await;
 
                 let z2 = alloc::format!(
-                    "echo: {}/{} {}% of stack reservation\n",
+                    "echo: {}/{} {:?}% of stack reservation\n",
                     stack_current,
                     stack_max,
                     math::Real::from_f32(100.0f32 * stack_current as f32 / stack_max as f32),
@@ -513,7 +500,10 @@ impl GCodeProcessor {
             #[cfg(feature = "with-hot-end")]
             GCodeValue::M104(s) => {
                 #[cfg(feature = "with-ps-on")]
-                if !self.event_bus.get_status().await
+                if !self
+                    .event_bus
+                    .get_status()
+                    .await
                     .contains(EventFlags::ATX_ON)
                 {
                     return Err(CodeExecutionFailure::PowerRequired);
@@ -528,7 +518,6 @@ impl GCodeProcessor {
                 .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
             GCodeValue::M105 => {
                 let hotend_temp_report = {
                     #[cfg(feature = "with-hot-end")]
@@ -568,7 +557,10 @@ impl GCodeProcessor {
             #[cfg(feature = "with-fan-layer")]
             GCodeValue::M106 => {
                 #[cfg(feature = "with-ps-on")]
-                if !self.event_bus.get_status().await
+                if !self
+                    .event_bus
+                    .get_status()
+                    .await
                     .contains(EventFlags::ATX_ON)
                 {
                     return Err(CodeExecutionFailure::PowerRequired);
@@ -588,7 +580,10 @@ impl GCodeProcessor {
             #[cfg(feature = "with-hot-end")]
             GCodeValue::M109(s) => {
                 #[cfg(feature = "with-ps-on")]
-                if !self.event_bus.get_status().await
+                if !self
+                    .event_bus
+                    .get_status()
+                    .await
                     .contains(EventFlags::ATX_ON)
                 {
                     return Err(CodeExecutionFailure::PowerRequired);
@@ -694,7 +689,10 @@ impl GCodeProcessor {
             #[cfg(feature = "with-hot-bed")]
             GCodeValue::M140(s) => {
                 #[cfg(feature = "with-ps-on")]
-                if !self.event_bus.get_status().await
+                if !self
+                    .event_bus
+                    .get_status()
+                    .await
                     .contains(EventFlags::ATX_ON)
                 {
                     return Err(CodeExecutionFailure::PowerRequired);
@@ -714,7 +712,10 @@ impl GCodeProcessor {
             #[cfg(feature = "with-hot-bed")]
             GCodeValue::M190 => {
                 #[cfg(feature = "with-ps-on")]
-                if !self.event_bus.get_status().await
+                if !self
+                    .event_bus
+                    .get_status()
+                    .await
                     .contains(EventFlags::ATX_ON)
                 {
                     return Err(CodeExecutionFailure::PowerRequired);

@@ -98,9 +98,17 @@ pub use embassy_sync::blocking_mutex::raw::NoopRawMutex as NoopMutex;
 
 //#endregion
 
-//#region "The `Holdable` Mutex trait"
+//#region "The Raw HWi resource wrapper"
+pub trait RawHwiResource: Deref {
+    type Resource;
+    fn take(self) -> Self::Resource;
+}
 
-pub trait MaybeHoldable
+//#endregion
+
+//#region "The `MutexStrategy` Mutex trait"
+
+pub trait MutexStrategy
 where
     Self::MutexType: RawMutex + 'static,
     Self::Resource: Sized + 'static,
@@ -170,7 +178,7 @@ where
     }
 }
 
-impl<M, D> MaybeHoldable for NotHoldable<M, D>
+impl<M, D> MutexStrategy for NotHoldable<M, D>
 where
     M: RawMutex + 'static,
     D: Sized + 'static,
@@ -192,7 +200,7 @@ where
 
 //#region "A Generic Holdable Mutex"
 
-//#region "The Holder"
+//#region "The MutexStrategy"
 
 pub struct Holder<M, T>
 where
@@ -222,7 +230,7 @@ where
                     _m.replace(guard);
                 }
                 Err(_e) => {
-                    unreachable!("Unable to borrow Holder");
+                    unreachable!("Unable to borrow MutexStrategy");
                 }
             });
     }
@@ -233,7 +241,7 @@ where
                     let _trash = _m.take();
                 }
                 Err(_e) => {
-                    unreachable!("Unable to borrow Holder");
+                    unreachable!("Unable to borrow MutexStrategy");
                 }
             });
     }
@@ -288,7 +296,7 @@ where
     }
 }
 
-impl<M, D> MaybeHoldable for Holdable<M, D>
+impl<M, D> MutexStrategy for Holdable<M, D>
 where
     M: RawMutex + Sync + 'static,
     D: Sized + Sync + Send + 'static,
@@ -333,18 +341,18 @@ where
 
 pub struct StaticController<H>
 where
-    H: MaybeHoldable + 'static,
-    <H as MaybeHoldable>::MutexType: RawMutex + 'static,
-    <H as MaybeHoldable>::Resource: 'static,
+    H: MutexStrategy,
+    <H as MutexStrategy>::MutexType: RawMutex + 'static,
+    <H as MutexStrategy>::Resource: 'static,
 {
     wrapped_mutex: H,
 }
 
 impl<H> StaticController<H>
 where
-    H: MaybeHoldable + 'static,
-    <H as MaybeHoldable>::MutexType: RawMutex + 'static,
-    <H as MaybeHoldable>::Resource: 'static,
+    H: MutexStrategy + 'static,
+    <H as MutexStrategy>::MutexType: RawMutex + 'static,
+    <H as MutexStrategy>::Resource: 'static,
 {
     pub const fn new(mutex: H) -> Self {
         Self {
@@ -355,9 +363,9 @@ where
 
 impl<H> Clone for StaticController<H>
 where
-    H: MaybeHoldable + 'static,
-    <H as MaybeHoldable>::MutexType: RawMutex + 'static,
-    <H as MaybeHoldable>::Resource: 'static,
+    H: MutexStrategy + 'static,
+    <H as MutexStrategy>::MutexType: RawMutex + 'static,
+    <H as MutexStrategy>::Resource: 'static,
 {
     fn clone(&self) -> Self {
         StaticController {
@@ -368,9 +376,9 @@ where
 
 impl<H> Deref for StaticController<H>
 where
-    H: MaybeHoldable + 'static,
-    <H as MaybeHoldable>::MutexType: RawMutex + 'static,
-    <H as MaybeHoldable>::Resource: 'static,
+    H: MutexStrategy + 'static,
+    <H as MutexStrategy>::MutexType: RawMutex + 'static,
+    <H as MutexStrategy>::Resource: 'static,
 {
     type Target = H;
 
@@ -406,7 +414,7 @@ cfg_if::cfg_if! {
 #[cfg(test)]
 mod test {
     use crate as hwa;
-    use hwa::MaybeHoldable;
+    use hwa::MutexStrategy;
     use std::clone::Clone;
 
     struct DummyDevice {}

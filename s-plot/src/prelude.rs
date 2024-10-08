@@ -18,11 +18,8 @@ pub mod helpers;
 #[path = "../../src/bin/printhor/machine.rs"]
 pub mod machine;
 
-#[path = "../../src/bin/printhor/hwi/mod.rs"]
-pub mod core_hwi;
 
 pub mod hwi {
-    pub use super::core_hwi::*;
     pub const MACHINE_BOARD: &str = "native";
     pub const MACHINE_PROCESSOR: &str = "native";
     pub const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;

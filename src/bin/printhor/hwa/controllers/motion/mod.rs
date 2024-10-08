@@ -31,6 +31,8 @@ pub use motion_status::*;
 pub use motion_time_driver::*;
 pub use motion_timing::*;
 
+pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
+
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
     /// A movement segment.

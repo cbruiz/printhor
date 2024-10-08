@@ -6,14 +6,12 @@ use crate::board as board;
 use crate::device as device;
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-serial-port-usb")] {
-        pub type SerialUSBDevice = ();
-        pub type SerialUSBTxDevice = ();
-        pub type SerialUSBRxDevice = ();
-        pub type SerialUSBRxInputStream = ();
-
-        // The device type exported to HWA
-        pub type SerialUSBTxDevice = ();
+    if #[cfg(feature = "with-serial-usb")] {
+        // The HWI Device types
+        pub type SerialUsbDevice = board::mocked_peripherals::MockedUartSink;
+        pub type SerialUsbRxDevice = board::mocked_peripherals::MockedUartSinkRx;
+        pub type SerialUsbTxDevice = board::mocked_peripherals::MockedUartSinkTx;
+        pub type SerialUsbInputStream = board::mocked_peripherals::MockedUartSinkRxInputStream;
     }
 }
 
@@ -21,23 +19,19 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
 
         // The HWI Device types
-        pub type UartPort1Device = board::mocked_peripherals::MockedUart;
-        pub type UartPort1TxDevice = board::mocked_peripherals::MockedUartTx;
-        pub type UartPort1RxDevice = board::mocked_peripherals::MockedUartRx;
-        pub type UartPort1RxInputStream = board::mocked_peripherals::MockedUartRxInputStream;
-
-        // The device type exported to HWA
-        pub type SerialPort1TxDevice = UartPort1TxDevice;
+        pub type SerialPort1Device = board::mocked_peripherals::MockedUart;
+        pub type SerialPort1RxDevice = board::mocked_peripherals::MockedUartRx;
+        pub type SerialPort1TxDevice = board::mocked_peripherals::MockedUartTx;
+        pub type SerialPort1InputStream = board::mocked_peripherals::MockedUartRxInputStream;
     }
 }
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-2")] {
-        pub type UartPort2Device = board::mocked_peripherals::MockedUartSink;
-        pub type UartPort2TxDevice = board::mocked_peripherals::MockedUartSinkTx;
-        pub type UartPort2RxDevice = board::mocked_peripherals::MockedUartSinkRx;
-        pub type UartPort2RxInputStream = board::mocked_peripherals::MockedUartSinkRxInputStream;
+        pub type SerialPort2Device = board::mocked_peripherals::MockedUartSink;
+        pub type SerialPort2TxDevice = board::mocked_peripherals::MockedUartSinkTx;
+        pub type SerialPort2RxDevice = board::mocked_peripherals::MockedUartSinkRx;
+        pub type SerialPort2InputStream = board::mocked_peripherals::MockedUartSinkRxInputStream;
 
-        pub type SerialPort2TxDevice = UartPort2TxDevice;
     }
 }
 
@@ -100,6 +94,21 @@ pub type PwmFanExtra1 = PwmAny;
 
 #[cfg(feature = "with-probe")]
 pub type PwmProbe = PwmAny;
+
+#[cfg(feature = "with-probe")]
+pub type PwmProbeChannel = u8;
+#[cfg(feature = "with-laser")]
+pub type PwmLaserChannel = u8;
+#[cfg(feature = "with-fan-layer")]
+pub type PwmFanLayerChannel = u8;
+#[cfg(feature = "with-fan-extra-1")]
+pub type PwmFanExtra1Channel = u8;
+
+#[cfg(feature = "with-hot-end")]
+pub type PwmHotEndChannel = u8;
+
+#[cfg(feature = "with-hot-bed")]
+pub type PwmHotBedChannel = u8;
 
 #[cfg(feature = "with-hot-end")]
 pub type PwmHotEnd = PwmAny;
@@ -264,42 +273,42 @@ pub struct CardDevice {
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmProbeHolderType<device::PwmProbe>>,
+    pub power_pwm: hwa::StaticController<crate::PwmProbeMutexStrategyType<device::PwmProbe>>,
     pub power_channel: <device::PwmProbe as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-hot-end")]
 pub struct HotEndPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmHotEndHolderType<device::PwmHotEnd>>,
+    pub power_pwm: hwa::StaticController<crate::PwmHotEndMutexStrategyType<device::PwmHotEnd>>,
     pub power_channel: <device::PwmHotEnd as embedded_hal_02::Pwm>::Channel,
-    pub temp_adc: hwa::StaticController<crate::AdcHotEndHolderType<device::AdcHotEnd>>,
+    pub temp_adc: hwa::StaticController<crate::AdcHotEndMutexStrategyType<device::AdcHotEnd>>,
     pub temp_pin: board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static hwa::ThermistorProperties,
 }
 
 #[cfg(feature = "with-hot-bed")]
 pub struct HotBedPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmHotBedHolderType<device::PwmHotBed>>,
+    pub power_pwm: hwa::StaticController<crate::PwmHotBedMutexStrategyType<device::PwmHotBed>>,
     pub power_channel: <device::PwmHotBed as embedded_hal_02::Pwm>::Channel,
-    pub temp_adc: hwa::StaticController<crate::AdcHotBedHolderType<device::AdcHotbed>>,
+    pub temp_adc: hwa::StaticController<crate::AdcHotBedMutexStrategyType<device::AdcHotbed>>,
     pub temp_pin: board::mocked_peripherals::MockedIOPin,
     pub thermistor_properties: &'static hwa::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmLaserHolderType<device::PwmFanLayer>>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmLaserMutexStrategyType<device::PwmFanLayer>>,
+    pub power_channel: <device::PwmFanLayer as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-fan-extra-1")]
 pub struct FanExtra1Peripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmFanExtra1HolderType<device::PwmFanExtra1>>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmFanExtra1MutexStrategyType<device::PwmFanExtra1>>,
+    pub power_channel: <device::PwmFanExtra1 as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
-    pub power_pwm: hwa::StaticController<crate::PwmLaserHolderType<device::PwmLaser>>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmLaserMutexStrategyType<device::PwmLaser>>,
+    pub power_channel: <device::PwmLaser as embedded_hal_02::Pwm>::Channel,
 }

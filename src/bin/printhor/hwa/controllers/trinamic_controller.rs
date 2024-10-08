@@ -35,13 +35,14 @@ pub struct TrinamicController {
     /// of the stepper motors, such as microstep configurations and possibly other
     /// parameters needed to correctly drive the motors.
     motion_config:
-        hwa::StaticController<hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>>,
+        hwa::StaticController<hwa::MotionConfigMutexStrategyType<hwa::controllers::MotionConfig>>,
 }
 impl TrinamicController {
     pub const fn new(
         uart: TrinamicUart,
-        motion_config:
-            hwa::StaticController<hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>>,
+        motion_config: hwa::StaticController<
+            hwa::MotionConfigMutexStrategyType<hwa::controllers::MotionConfig>,
+        >,
     ) -> Self {
         Self {
             uart,

@@ -13,7 +13,11 @@ pub use processing::*;
 
 mod base;
 pub mod task_control;
-#[cfg(feature = "with-motion")]
+#[cfg(any(
+    feature = "with-motion",
+    feature = "with-hot-end",
+    feature = "with-hot-bed"
+))]
 pub mod task_defer;
 #[cfg(any(test, feature = "integration-test"))]
 pub mod task_integration;
@@ -75,7 +79,7 @@ impl defmt::Format for XYZE {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct XYZF {
     pub x: Option<Real>,
     pub y: Option<Real>,
@@ -101,17 +105,29 @@ impl defmt::Format for XYZF {
     }
 }
 
-#[cfg(feature = "native")]
-impl core::fmt::Display for XYZF {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(
-            f,
-            "X {} Y {} Z {} F {}",
-            self.x.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-            self.y.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-            self.z.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-            self.f.map_or_else(|| "NaN".to_string(), |v| v.to_string()),
-        )
+impl core::fmt::Debug for XYZF {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::write!(fmt, "X ")?;
+        match &self.x {
+            Some(v) => write!(fmt, "{:?}", v)?,
+            None => write!(fmt, "NaN")?,
+        }
+        core::write!(fmt, "Y ")?;
+        match &self.y {
+            Some(v) => write!(fmt, "{:?}", v)?,
+            None => write!(fmt, "NaN")?,
+        }
+        core::write!(fmt, "Z ")?;
+        match &self.z {
+            Some(v) => write!(fmt, "{:?}", v)?,
+            None => write!(fmt, "NaN")?,
+        }
+        core::write!(fmt, "F ")?;
+        match &self.f {
+            Some(v) => write!(fmt, "{:?}", v)?,
+            None => write!(fmt, "NaN")?,
+        }
+        Ok(())
     }
 }
 
@@ -434,7 +450,6 @@ pub enum GCodeValue {
     M104(S),
 
     /// Get HotEnd and/or HotBed Temperature
-    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
     M105,
 
     /// Fan On

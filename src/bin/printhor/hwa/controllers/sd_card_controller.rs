@@ -354,7 +354,7 @@ impl TimeSource for DummyTimeSource {
 }
 
 pub struct CardController {
-    instance: StaticController<hwa::SDCardHolderType<SDCard>>,
+    instance: StaticController<hwa::SDCardMutexStrategyType<SDCard>>,
 }
 
 #[allow(unused)]
@@ -379,7 +379,7 @@ impl CardController {
         Self {
             instance: hwa::make_static_controller!(
                 "SDCardSharedState",
-                hwa::SDCardHolderType<SDCard>,
+                hwa::SDCardMutexStrategyType<SDCard>,
                 SDCard {
                     mgr: card,
                     vol: vol.ok(),
@@ -543,14 +543,14 @@ pub struct SDDirEntry {
 }
 
 pub struct CardAsyncDirIterator {
-    instance: StaticController<hwa::SDCardHolderType<SDCard>>,
+    instance: StaticController<hwa::SDCardMutexStrategyType<SDCard>>,
     path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     current_index: usize,
 }
 
 impl CardAsyncDirIterator {
     pub fn new(
-        instance: StaticController<hwa::SDCardHolderType<SDCard>>,
+        instance: StaticController<hwa::SDCardMutexStrategyType<SDCard>>,
         path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     ) -> Self {
         Self {

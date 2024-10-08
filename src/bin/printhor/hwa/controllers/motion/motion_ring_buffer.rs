@@ -1,5 +1,6 @@
 use crate::hwa;
-use crate::hwa::controllers::{motion, PlanEntry};
+use hwa::controllers::{motion, PlanEntry};
+use hwa::HwiContract;
 
 /// A ring buffer data structure designed for storing `PlanEntry` items efficiently.
 ///
@@ -13,7 +14,7 @@ use crate::hwa::controllers::{motion, PlanEntry};
 /// * `used` - The number of elements currently stored in the buffer.
 pub struct RingBuffer {
     /// An array of `PlanEntry` elements representing the buffer storage.
-    pub data: [PlanEntry; hwa::SEGMENT_QUEUE_SIZE as usize],
+    pub data: [PlanEntry; hwa::Contract::SEGMENT_QUEUE_SIZE as usize],
     /// An index pointing to the start of the buffer.
     pub head: u8,
     /// The number of elements currently stored in the buffer
@@ -24,7 +25,7 @@ impl RingBuffer {
     /// Creates a new `RingBuffer` with an initial empty state.
     pub const fn new() -> Self {
         Self {
-            data: [PlanEntry::Empty; hwa::SEGMENT_QUEUE_SIZE as usize],
+            data: [PlanEntry::Empty; hwa::Contract::SEGMENT_QUEUE_SIZE as usize],
             head: 0,
             used: 0,
         }

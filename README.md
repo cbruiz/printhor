@@ -222,7 +222,7 @@ Intentionally, traits are in general avoided in HWI layer when not strictly requ
 * type aliases
 * module exports
 
-Diagram is Work in Progress
+[Advanced documentation](doc/README.md)
 
 # Similar, related software and shout-outs
 

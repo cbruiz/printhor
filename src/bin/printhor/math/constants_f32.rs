@@ -1,6 +1,5 @@
 cfg_if::cfg_if! {
     if #[cfg(feature="float-point-f32-impl")] {
-        //use core::f32;
         use crate::math::Real;
         pub const ZERO: Real = Real::from_f32(0.0);
         pub const HALF: Real = Real::from_f32(0.5);

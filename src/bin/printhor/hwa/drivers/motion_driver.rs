@@ -1,15 +1,15 @@
 #[cfg(all(feature = "native", feature = "plot-timings"))]
 use super::timing_monitor::*;
-#[allow(unused)]
-#[cfg(feature = "with-probe")]
-use crate::hwa::controllers::ProbeTrait;
+use crate::hwa;
 use crate::math;
 use crate::math::Real;
 use crate::tgeo::{ArithmeticOps, CoordSel, TVector};
 #[allow(unused)]
-use crate::{hwa, hwi};
 use core::ops::Neg;
 use embassy_time::Duration;
+#[allow(unused)]
+#[cfg(feature = "with-probe")]
+use hwa::controllers::ProbeTrait;
 
 #[cfg(feature = "with-motion")]
 pub struct MotionDriverParams {
@@ -17,20 +17,17 @@ pub struct MotionDriverParams {
     /// Motion config is only used here to submit a copy to trinamic controller
     #[cfg(feature = "with-trinamic")]
     pub motion_config:
-        hwa::StaticController<hwa::MotionConfigHolderType<hwa::controllers::MotionConfig>>,
+        hwa::StaticController<hwa::MotionConfigMutexStrategyType<hwa::controllers::MotionConfig>>,
     #[cfg(feature = "with-probe")]
     pub probe_controller: hwa::StaticController<
-        hwa::ProbeServoControllerHolderType<
+        hwa::ProbeServoControllerMutexStrategyType<
             hwa::controllers::ServoController<
-                hwa::PwmProbeHolderType<hwa::device::PwmProbe>
-            >
+                hwa::PwmProbeMutexStrategyType<hwa::device::PwmProbe>,
+            >,
         >,
     >,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_controller: hwa::StaticController<
-        hwa::FanLayerControllerMutexType,
-        hwa::controllers::FanLayerPwmController,
-    >,
+    pub fan_layer_controller: hwa::types::FanLayerController,
     #[cfg(feature = "with-fan-extra-1")]
     pub fan_extra_1_controller: hwa::StaticController<
         hwa::FanExtra1ControllerMutexType,
@@ -48,17 +45,14 @@ pub struct MotionDriver {
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
     pub probe_controller: hwa::StaticController<
-        hwa::ProbeServoControllerHolderType<
+        hwa::ProbeServoControllerMutexStrategyType<
             hwa::controllers::ServoController<
-                hwa::PwmProbeHolderType<hwa::device::PwmProbe>
-            >
+                hwa::PwmProbeMutexStrategyType<hwa::device::PwmProbe>,
+            >,
         >,
     >,
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_controller: hwa::StaticController<
-        hwa::FanLayerControllerMutexType,
-        hwa::controllers::FanLayerPwmController,
-    >,
+    pub fan_layer_controller: hwa::types::FanLayerController,
     #[cfg(feature = "with-fan-extra-1")]
     pub fan_extra_1_controller: hwa::StaticController<
         hwa::FanExtra1ControllerMutexType,
@@ -219,8 +213,9 @@ impl MotionDriver {
     // TODO: Carefully review
     pub async fn homing_action(
         &mut self,
-        motion_config_ref:
-            &hwa::StaticController<hwa::MotionDriverHolderType<hwa::controllers::MotionConfig>>,
+        motion_config_ref: &hwa::StaticController<
+            hwa::MotionDriverMutexStrategyType<hwa::controllers::MotionConfig>,
+        >,
     ) -> Result<TVector<Real>, TVector<Real>> {
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] [Homing]");

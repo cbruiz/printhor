@@ -1,4 +1,5 @@
-pub trait AsyncWrapper<E> {
+//#region "Async wrapper"
+pub trait AsyncWrapperWriter<E> {
     fn wrapped_write(
         &mut self,
         data: &[u8],
@@ -7,13 +8,13 @@ pub trait AsyncWrapper<E> {
     fn wrapped_flush(&mut self) -> impl core::future::Future<Output = ()>;
 }
 
-pub struct SerialAsyncWrapper<P> {
+pub struct SerialTxWrapper<P> {
     peri: P,
     ticks_by_word: u64,
     last_write_len: usize,
 }
 
-impl<P> SerialAsyncWrapper<P> {
+impl<P> SerialTxWrapper<P> {
     pub const fn new(peri: P, baud_rate: u32) -> Self {
         let ticks_by_word =
             embassy_time::Duration::from_micros(((1000000 / baud_rate) * 10) as u64).as_ticks();
@@ -25,7 +26,7 @@ impl<P> SerialAsyncWrapper<P> {
     }
 }
 
-impl<P, E> AsyncWrapper<E> for SerialAsyncWrapper<P>
+impl<P, E> AsyncWrapperWriter<E> for SerialTxWrapper<P>
 where
     P: embedded_io_async::Write<Error = E>,
 {
@@ -51,10 +52,19 @@ where
     }
 }
 
+pub trait AsyncWrapperReader<E> {
+    fn wrapped_write(
+        &mut self,
+        data: &[u8],
+    ) -> impl core::future::Future<Output = Result<usize, E>>;
+
+    fn wrapped_flush(&mut self) -> impl core::future::Future<Output = ()>;
+}
+
 #[cfg(test)]
 mod test {
     use crate as hwa;
-    use crate::AsyncWrapper;
+    use hwa::AsyncWrapperWriter;
 
     #[futures_test::test]
     async fn serial_wrapper_works() {
@@ -74,7 +84,7 @@ mod test {
             }
         }
 
-        let mut async_wrapper = hwa::SerialAsyncWrapper::new(DummyDevice::new(), 115200);
+        let mut async_wrapper = hwa::SerialTxWrapper::new(DummyDevice::new(), 115200);
 
         async_wrapper.wrapped_write(b"hello world").await.unwrap();
         async_wrapper.wrapped_flush().await;

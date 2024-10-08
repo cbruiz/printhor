@@ -1,10 +1,11 @@
 #[allow(unused)]
 use crate::control;
-#[allow(unused)]
 use crate::hwa;
 #[allow(unused)]
 use crate::math;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+#[allow(unused)]
+use hwa::HwiContract;
 use hwa::PersistentState;
 #[allow(unused)]
 use hwa::{CommChannel, EventBusSubscriber, EventFlags, EventStatus};
@@ -695,7 +696,7 @@ fn finish_task(success: Result<(), &'static str>) {
         }
     }
     #[cfg(test)]
-    hwa::sys_stop();
+    hwa::Contract::sys_stop();
     // In native simulator, we need to exit
 }
 

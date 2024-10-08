@@ -8,9 +8,13 @@ use embassy_time::{with_timeout, Duration};
 
 #[derive(Clone, Copy, Default)]
 struct SubscriptionCounting {
+    #[cfg(feature = "with-motion")]
     num_homes: u8,
+    #[cfg(feature = "with-motion")]
     num_linear: u8,
+    #[cfg(feature = "with-motion")]
     num_rapid: u8,
+    #[cfg(feature = "with-motion")]
     num_dwell: u8,
     #[cfg(feature = "with-hot-end")]
     num_hotend: u8,
@@ -42,9 +46,13 @@ impl Subscriptions {
             }
 
             let counter = match action {
+                #[cfg(feature = "with-motion")]
                 DeferAction::Homing => &mut counts.num_homes,
+                #[cfg(feature = "with-motion")]
                 DeferAction::RapidMove => &mut counts.num_rapid,
+                #[cfg(feature = "with-motion")]
                 DeferAction::LinearMove => &mut counts.num_linear,
+                #[cfg(feature = "with-motion")]
                 DeferAction::Dwell => &mut counts.num_dwell,
                 #[cfg(feature = "with-hot-end")]
                 DeferAction::HotEndTemperature => &mut counts.num_hotend,
@@ -65,18 +73,13 @@ impl Subscriptions {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_defer(processor: hwa::GCodeProcessor) {
+pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::types::DeferChannel) {
     hwa::info!("[task_defer] started");
 
     let mut subscriptions = Subscriptions::new();
 
     loop {
-        match with_timeout(
-            Duration::from_secs(30),
-            processor.motion_planner.defer_channel.receive(),
-        )
-        .await
-        {
+        match with_timeout(Duration::from_secs(30), defer_channel.receive()).await {
             Err(_) => {
                 #[cfg(feature = "trace-commands")]
                 hwa::info!(

@@ -9,6 +9,6 @@ mod gcode_processor;
 ))]
 pub use gcode_parser::GCodeLineParser;
 pub use gcode_parser::GCodeLineParserError;
-pub use gcode_processor::{GCodeProcessor, GCodeProcessorParams};
+pub use gcode_processor::GCodeProcessor;
 
 pub use gcode_multiplexed_io::GCodeMultiplexedInputStream;

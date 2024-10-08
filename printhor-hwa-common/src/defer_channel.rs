@@ -29,7 +29,7 @@
 //! #[cfg(feature = "with-motion")]
 //! {
 //!     use printhor_hwa_common as hwa;
-//!     use hwa::{DeferChannel, DeferAction, DeferEvent, CommChannel};
+//!     use hwa::{GenericDeferChannel, DeferAction, DeferEvent, CommChannel};
 //!     use hwa::make_static_ref;
 //!     // Define the mutex type
 //!     type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -41,7 +41,7 @@
 //!         DeferAction::RapidMove, CommChannel::default()
 //!     );
 //!
-//!     let defer_channel: hwa::DeferChannel<MutexType> = DeferChannel::new(
+//!     let defer_channel: hwa::GenericDeferChannel<MutexType> = GenericDeferChannel::new(
 //!         make_static_ref!(
 //!             "DeferChannel",
 //!             hwa::DeferChannelChannelType<MutexType>,
@@ -170,7 +170,7 @@ pub type DeferChannelChannelType<M> = Channel<M, DeferEvent, DEFER_CHANNEL_SIZE>
 ///
 /// type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 ///
-/// let defer_channel: hwa::DeferChannel<MutexType> = hwa::DeferChannel::new(
+/// let defer_channel: hwa::GenericDeferChannel<MutexType> = hwa::GenericDeferChannel::new(
 ///     hwa::make_static_ref!(
 ///         "DeferChannel",
 ///         hwa::DeferChannelChannelType<MutexType>,
@@ -179,14 +179,14 @@ pub type DeferChannelChannelType<M> = Channel<M, DeferEvent, DEFER_CHANNEL_SIZE>
 /// );
 ///
 /// ```
-pub struct DeferChannel<M>
+pub struct GenericDeferChannel<M>
 where
     M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
 {
     channel: &'static DeferChannelChannelType<M>,
 }
 
-impl<M> DeferChannel<M>
+impl<M> GenericDeferChannel<M>
 where
     M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
 {
@@ -202,12 +202,12 @@ where
     ///
     /// # Example
     ///
-    /// See [DeferChannel]
+    /// See [GenericDeferChannel]
     pub const fn new(channel: &'static DeferChannelChannelType<M>) -> Self {
-        DeferChannel { channel }
+        GenericDeferChannel { channel }
     }
 }
-impl<M> core::ops::Deref for DeferChannel<M>
+impl<M> core::ops::Deref for GenericDeferChannel<M>
 where
     M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
 {
@@ -218,12 +218,12 @@ where
     }
 }
 
-impl<M> Clone for DeferChannel<M>
+impl<M> Clone for GenericDeferChannel<M>
 where
     M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
 {
     fn clone(&self) -> Self {
-        DeferChannel::new(self.channel)
+        GenericDeferChannel::new(self.channel)
     }
 }
 
@@ -237,13 +237,13 @@ pub mod tests {
 
     type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-    static DEFER_CHANNEL: RwLock<Option<hwa::DeferChannel<MutexType>>> = RwLock::new(None);
+    static DEFER_CHANNEL: RwLock<Option<hwa::GenericDeferChannel<MutexType>>> = RwLock::new(None);
 
     fn initialize() {
         let mut global = DEFER_CHANNEL.write().unwrap();
 
         if global.is_none() {
-            global.replace(hwa::DeferChannel::new(hwa::make_static_ref!(
+            global.replace(hwa::GenericDeferChannel::new(hwa::make_static_ref!(
                 "DeferChannel",
                 hwa::DeferChannelChannelType<MutexType>,
                 hwa::DeferChannelChannelType::new()

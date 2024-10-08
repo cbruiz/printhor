@@ -97,6 +97,10 @@ impl MockedUartTx {
         Self {
         }
     }
+
+    pub async fn write_packet(&mut self, b: &[u8]) {
+        self.wrapped_write(b).await;
+    }
     pub async fn wrapped_flush(&mut self) {
     }
     pub async fn wrapped_write(&mut self, b: &[u8]) {

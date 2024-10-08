@@ -1,25 +1,27 @@
+#[allow(unused)]
+use printhor_hwa_common as hwa;
 
 #[cfg(feature = "with-serial-usb")]
 compile_error!("Not supported");
 
 #[cfg(feature = "with-serial-port-1")]
 pub mod uart_port1 {
-    use printhor_hwa_common as hwa;
-    use hwa::HwiContract;
+    use crate::board::device::UartPort1RingBufferedRxDevice;
+    use crate::board::device::UartPort1RxDevice;
 
     pub struct UartPort1RxInputStream {
-        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
+        receiver: UartPort1RingBufferedRxDevice,
     }
 
     impl UartPort1RxInputStream {
-        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
-            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
+        pub fn new(receiver: UartPort1RxDevice) -> Self {
+            type BufferType = [u8; crate::UART_PORT1_BUFFER_SIZE];
 
             Self {
-                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
+                receiver: receiver.into_ring_buffered(crate::hwa::make_static_ref!(
                     "UartPort1RXRingBuff",
                     BufferType,
-                    [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
+                    [0; crate::UART_PORT1_BUFFER_SIZE]
                 )),
             }
         }
@@ -45,4 +47,4 @@ pub mod uart_port1 {
 }
 
 #[cfg(feature = "with-serial-port-2")]
-compile_error!("Not implemented");
+compiler_error!("Not implemented");

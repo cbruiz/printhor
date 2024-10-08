@@ -26,26 +26,31 @@ default = ["native"]
 
 # Hardware device features
 
-with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt"]
+with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwi_rp_2040?/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt"]
 with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log"]
-with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwa-common/with-serial-usb"]
+with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1"]
 with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2"]
+with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on"]
+
+with-probe = ["embedded-hal", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe"]
+with-laser = ["embedded-hal", "printhor-hwa-common/with-laser", "printhor-hwi_native?/with-laser"]
+with-fan-layer = ["embedded-hal", "printhor-hwa-common/with-fan-layer", "printhor-hwi_native?/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal", "printhor-hwa-common/with-fan-extra-1", "printhor-hwi_native?/with-fan-extra-1"]
+
+
 with-print-job = ["printhor-hwi_native?/with-print-job"]
 with-spi = ["embedded-hal", "printhor-hwi_native?/with-spi"]
 with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end"]
 with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion"]
-with-probe = ["embedded-hal", "printhor-hwi_native?/with-probe"]
+
 with-endstops = []
 with-sd-card = ["embedded-sdmmc", "printhor-hwi_native?/with-sd-card"]
-with-fan-layer = ["embedded-hal", "printhor-hwi_native?/with-fan-layer"]
-with-fan-extra-1 = ["embedded-hal", "printhor-hwi_native?/with-fan-extra-1"]
-with-laser = ["embedded-hal", "printhor-hwi_native?/with-laser"]
 with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic"]
 # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
 with-display = ["printhor-hwi_native?/with-display"]
-with-ps-on = ["printhor-hwi_native?/with-ps-on"]
+
 
 without-bootloader = []
 numerical-robusticity-check = []
@@ -147,19 +152,20 @@ native = [
     "with-log",
 
     #"with-trinamic", "trinamic-uart-multi-channel",
-    "with-motion",
-    "with-serial-port-1",
-    "with-serial-port-2",
-    "with-spi",
+    #"with-motion",
+    "with-serial-usb",
+    #"with-serial-port-1",
+    #"with-serial-port-2",
+    #"with-spi",
     #"with-sd-card",
     #"with-print-job",
-    "with-probe",
+    #"with-probe",
     #"with-hot-end",
     #"with-hot-bed",
     #"with-fan-layer",
     #"with-fan-extra-1",
     #"with-laser",
-    "with-ps-on",
+    #"with-ps-on",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -205,6 +211,7 @@ mks_robin_nano = [
     #"fixed-point-128-impl",
 
     "printhor-hwi_mks_robin_nano", "embassy-executor/executor-thread", "cortex-m-rt",
+    "ryu/no-panic",
 ]
 
 #################
@@ -244,12 +251,12 @@ nucleo64-f410rb = [
     "cornering",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    "debug-signals",
-    "trace-commands",
+    #"debug-signals",
+    #"trace-commands",
 
     #"verbose-timings",
     "with-defmt",
-    "with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
+    #"with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
     #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2. Broken nevertheless
     "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
     #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
@@ -270,7 +277,7 @@ nucleo64-f410rb = [
 ]
 
 nucleo_64_arduino_cnc_hat = [
-    "printhor-hwi_nucleo_64_arduino_cnc_hat", "embassy-executor/executor-thread", "cortex-m-rt"
+    "printhor-hwi_nucleo_64_arduino_cnc_hat", "embassy-executor/executor-thread", "cortex-m-rt", "ryu/no-panic",
 ]
 
 #################
@@ -344,7 +351,7 @@ skr_mini_e3_v3 = [
 ]
 
 skr_mini_e3 = [
-    "printhor-hwi_skr_mini_e3", "embassy-executor/executor-thread", "cortex-m-rt"
+    "printhor-hwi_skr_mini_e3", "embassy-executor/executor-thread", "cortex-m-rt", "ryu/no-panic",
 ]
 
 #################
@@ -374,7 +381,7 @@ tst-rp2040 = [
     #"fixed-point-128-impl",
 
     "rp_2040",
-    "printhor-hwi_rp_2040/tst-rp2040",
+    "printhor-hwi_rp_2040/tst-rp2040", "ryu/no-panic",
 ]
 
 rp_2040 = [
@@ -390,54 +397,54 @@ rp_2040 = [
 
 [dependencies]
 # Optional baremetal
-defmt = {version = "0.3.8", optional = true, default-features = false, features = []}
-panic-probe = { version = "0.3.2", features = ["print-defmt"], optional = true}
-defmt-rtt = { version = "0.4.1", optional = true }
+defmt = {version = "0.3", optional = true, default-features = false, features = []}
+panic-probe = { version = "0.3", features = ["print-defmt"], optional = true}
+defmt-rtt = { version = "0.4", optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
 cortex-m-rt = { version = "0.7.3", optional = true}
-alloc-cortex-m = { version = "0.4.4", optional = true}
-critical-section = {version = "1.1.2", default-features = false}
+alloc-cortex-m = { version = "0.4", optional = true}
+critical-section = {version = "1.1", default-features = false}
 
-embassy-stm32 = { version = "0.1.0", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.6.0", default-features = false, features = ["executor-thread"], optional = true }
-embassy-sync = { version = "0.6.0", features = [] }
-embassy-time = { version = "*", features = [] }
-embassy-futures = { version = "0.1.1", features = [] }
-embassy-embedded-hal = { version = "0.1.0", features = [], optional = true }
-embassy-usb = { version = "*", features = [], optional = true }
-embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
-embedded-hal = { version = "1.0.0", default-features = false, optional = true }
+embassy-stm32 = { version = "0.1", default-features = false, features = [], optional = true }
+embassy-executor = { version = "0.6", default-features = false, features = ["executor-thread"], optional = true }
+embassy-sync = { version = "0.6", features = [] }
+embassy-time = { version = "0.3", features = [] }
+embassy-futures = { version = "0.1", features = [] }
+embassy-embedded-hal = { version = "0.2", features = [], optional = true }
+embassy-usb = { version = "0.3", features = [], optional = true }
+embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
+embedded-hal = { version = "1.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven", ] }
 
-futures = { version = "0.3.17", default-features = false, features = [] }
+futures = { version = "0.3", default-features = false, features = [] }
 futures-util = { version = "0.3", default-features = false, features = [] }
 heapless = { version = "0.8", default-features = false, features = [] }
 
 async-gcode = {version = "0.3", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "parse-checksum"]}
 
-strum = { version = "0.26.3", default-features = false, features = ["derive"] }
+strum = { version = "0.26", default-features = false, features = ["derive"] }
 
-rust_decimal = { version = "1.35.0", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { version = "1.34.2" }
-pid = { version = "4.0.0", default-features = false, features = []}
-num-traits = {version = "0.2.19", default-features = false, features = [] }
-micromath = { version = "2.1.0", default-features = false, features = []}
-embedded-io-async = {version = "0.6.1", default-features = false, features = []}
+rust_decimal = { version = "1", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { version = "1" }
+pid = { version = "4.0", default-features = false, features = []}
+num-traits = {version = "0.2", default-features = false, features = [] }
+micromath = { version = "2.1", default-features = false, features = []}
+embedded-io-async = {version = "0.6", default-features = false, features = []}
 
 # Steppers
-tmc2209 = { version = "0.2.2", optional = true }
+tmc2209 = { version = "0.2", optional = true }
 
 # Common base
 printhor-hwa-common = { version = "0.0", default-features = false, features = [] }
 printhor-hwa-utils = { version = "0.0", default-features = false, features = [] }
 
 # Boards
-printhor-hwi_native = { version = "*", default-features = false, optional = true }
-printhor-hwi_skr_mini_e3 = { version = "*", default-features = false, optional = true }
-printhor-hwi_mks_robin_nano = { version = "*", default-features = false, optional = true }
-printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "*", default-features = false, optional = true }
-printhor-hwi_rp_2040 = { version = "*", default-features = false, optional = true }
+printhor-hwi_native = { version = "0.0", default-features = false, optional = true }
+printhor-hwi_skr_mini_e3 = { version = "0.0", default-features = false, optional = true }
+printhor-hwi_mks_robin_nano = { version = "0.0", default-features = false, optional = true }
+printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "0.0", default-features = false, optional = true }
+printhor-hwi_rp_2040 = { version = "0.0", default-features = false, optional = true }
 
 gnuplot = {version = "0.0.43", default-features = false, features=[], optional = true}
 # Display
@@ -446,20 +453,21 @@ gnuplot = {version = "0.0.43", default-features = false, features=[], optional =
 
 ### machinery
 
-cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
-bitflags = { version = "2.6.0", default-features = false, features = [] }
+cstr_core = { version = "0.2", default-features = false, features = ["alloc"], optional = true }
+bitflags = { version = "2.6", default-features = false, features = [] }
 
-cfg-if = { version = "1.0.0", features = [] }
+cfg-if = { version = "1.0", features = [] }
 const_env = { version = "0.1" }
 
 # For light and fast float parsing
 #fast-float = { version = "0.2", default-features = false, features = [], path = "libs/fast-float"}
-# For light and fast float formatting
-lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
-
+# For light and fast float striong formatting
+#lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
+# For very compact and fast float to string conversion
+ryu = {version = "1.0", default-features = false, features = []}
 [build-dependencies]
 #proc-macro2 = "1.0."
-cfg-if = "1.0.0"
+cfg-if = "1.0"
 
 [dev-dependencies]
 futures-test = { version = "0.3"}

@@ -1,7 +1,7 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::{MaybeHoldable, StaticController};
 use embedded_hal_02::Pwm;
+use hwa::{MutexStrategy, StaticController};
 
 /// The `ProbeTrait` defines a set of asynchronous methods for controlling the probe.
 /// Each method represents a specific probe action, with a customizable sleep duration.
@@ -14,7 +14,6 @@ use embedded_hal_02::Pwm;
 /// * `probe_alarm_release(&mut self, sleep_us: u64)` - Releases any probe alarms.
 /// * `probe_test_mode(&mut self, sleep_us: u64)` - Sets the probe into test mode.
 pub trait ProbeTrait {
-
     /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
     ///
     /// # Parameters
@@ -56,7 +55,7 @@ pub trait ProbeTrait {
 /// * `channel` - The specific PWM channel associated with the servo motor.
 pub struct ServoController<H>
 where
-    H: MaybeHoldable + Send + 'static,
+    H: MutexStrategy + Send + 'static,
     H::Resource: Pwm + Send + 'static,
     <H::Resource as Pwm>::Channel: Copy,
     <H::Resource as Pwm>::Duty: Into<u32> + From<u16>,
@@ -70,21 +69,17 @@ where
 
 impl<H> ServoController<H>
 where
-    H: MaybeHoldable + Send + 'static,
+    H: MutexStrategy + Send + 'static,
     H::Resource: Pwm + Send + 'static,
     <H::Resource as Pwm>::Channel: Copy,
-    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>
+    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>,
 {
-    pub fn new(
-        servo: StaticController<H>,
-        channel: <H::Resource as Pwm>::Channel,
-    ) -> Self {
+    pub fn new(servo: StaticController<H>, channel: <H::Resource as Pwm>::Channel) -> Self {
         Self { servo, channel }
     }
 
     pub async fn set_angle(&mut self, angle: u16, sleep_us: u64) {
         {
-
             let mut mg = self.servo.lock().await;
             let max_duty = mg.get_max_duty();
             // 100% duty period width (uS)
@@ -115,10 +110,10 @@ where
 
 impl<H> ProbeTrait for ServoController<H>
 where
-    H: MaybeHoldable + Send + 'static,
+    H: MutexStrategy + Send + 'static,
     H::Resource: Pwm + Send + 'static,
     <H::Resource as Pwm>::Channel: Copy,
-    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>
+    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>,
 {
     /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
     ///

@@ -15,7 +15,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-std = []
+std = ["futures-test/std"]
 default = [
     "std", "embassy-time/std", "embassy-time/generic-queue-128",
     "with-log",
@@ -30,6 +30,11 @@ with-defmt = ["defmt", "printhor-hwa-utils/with-defmt"]
 with-serial-usb = []
 with-serial-port-1 = []
 with-serial-port-2 = []
+with-ps-on = []
+with-probe = []
+with-laser = []
+with-fan-layer = []
+with-fan-extra-1 = []
 with-motion = []
 with-hot-end = []
 with-hot-bed = []
@@ -45,23 +50,25 @@ printhor-hwa-utils = { version = "0",  path = "../printhor-hwa-utils", default-f
 const_env = { version = "0.1.2"}
 
 embassy-sync = { version = "0.6", features = [] }
+embassy-executor = { version = "0.6", features = [] }
 embassy-time = { version = "0.3", features = [] }
 
-embedded-hal = { version = "1.0.0", default-features = false }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
-embedded-io-async = {version = "0.6.1", default-features = false, features = []}
+embedded-hal-01 = { package = "embedded-hal", version = "1.0", default-features = false }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
+embedded-io-async = { version = "0.6", default-features = false, features = [] }
+async-gcode = { version = "0.3", default-features = false, features = []}
 
-bitflags = { version = "2.6.0", default-features = false, features = ["bytemuck"] }
+bitflags = { version = "2.6", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }
 strum = { version = "0.26", default-features = false, features = ["derive"] }
 
-
 [dev-dependencies]
-futures-test = { version = "0.3"}
-tmc2209 = { version = "0.2.2"}
+futures-test = { version = "0.3", default-features = false}
+tmc2209 = { version = "0.2"}
 
 [patch.crates-io]
 embassy-sync = { path = "../libs/embassy/embassy-sync" }
 embassy-time = { path = "../libs/embassy/embassy-time" }
+async-gcode = { path = "../libs/async-gcode" }

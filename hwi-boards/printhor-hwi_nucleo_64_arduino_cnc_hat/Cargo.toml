@@ -21,19 +21,19 @@ nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-aren
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
 with-print-job = []
-with-serial-port-1 = ["embedded-io-async"]
+with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]
 with-serial-port-2 = ["embedded-io-async"]
-with-spi = ["embedded-hal"]
-with-hot-end = ["embedded-hal"]
-with-hot-bed = ["embedded-hal"]
+with-spi = ["embedded-hal-1"]
+with-hot-end = ["embedded-hal-1"]
+with-hot-bed = ["embedded-hal-1"]
 with-motion = []
-with-probe = ["embedded-hal"]
+with-probe = ["embedded-hal-1"]
 with-endstops = []
 with-sd-card = []
-with-fan-layer = ["embedded-hal"]
+with-fan-layer = ["embedded-hal-1"]
 with-fan-extra-1 = []
-with-laser = ["embedded-hal"]
-with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
+with-laser = ["embedded-hal-1"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = []
 with-ps-on = []
 without-ringbuffer = []
@@ -54,23 +54,23 @@ ili9341_spi = ["with-spi"]
 
 [dependencies]
 defmt = { version = "0.3", default-features = false, optional = true }
-cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
 cortex-m-rt = { version = "0.7.3", default-features = false }
-alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
+alloc-cortex-m = { version = "0.4", default-features = false, features = [] }
 
-embassy-stm32 = { version = "*", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-cortex-m"] }
-embassy-sync = { version = "*", features = [] }
-embassy-time = { version = "*", features = [] }
-embassy-futures = { version = "*", features = [] }
-embassy-usb = { version = "*", features = [], optional = true }
+embassy-stm32 = { version = "0.1", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "0.6", default-features = false, features = ["arch-cortex-m"] }
+embassy-sync = { version = "0.6", features = [] }
+embassy-time = { version = "0.3", features = [] }
+embassy-futures = { version = "0.1", features = [] }
+embassy-usb = { version = "0.3", features = [], optional = true }
 
 printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-utils" }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3", default-features = false, features = [] }
-embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
-embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
+embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true, features = [] }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
 embedded-io-async = { version = "0.6", default-features = false, optional = true, features = [] }
 
 cfg-if = { version = "1.0" }

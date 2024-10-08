@@ -1,51 +1,56 @@
 //! TODO: This feature is still in incubation
+
 use crate::hwa;
 use embedded_hal_02::Pwm;
+use hwa::MutexStrategy;
 use hwa::StaticController;
 
 /// A controller for managing PWM (Pulse-Width Modulation).
 ///
 /// # Type Parameters
 ///
-/// * `TimPeri` - A type that implements the `Pwm` trait and is 'static.
+/// * `H` - A type that implements the `MutexStrategy` trait and is 'static.
 ///
 /// # Fields
 ///
 /// * `pwm` - A reference to an interrupt controller managing the PWM peripheral.
 /// * `pwm_chan` - The specific PWM channel being controlled.
-pub struct PwmController<PwmMutex, TimPeri>
+pub struct PwmController<H>
 where
-    PwmMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    TimPeri: Pwm + 'static,
+    H: MutexStrategy + Send + 'static,
+    H::Resource: Pwm + Send + 'static,
+    <H::Resource as Pwm>::Channel: Copy,
+    <H::Resource as Pwm>::Duty:
+        core::fmt::Debug + Copy + core::cmp::Ord + Into<u32> + From<u16> + TryFrom<u32>,
 {
-    pwm: StaticController<PwmMutex, TimPeri>,
-    pwm_chan: <TimPeri as Pwm>::Channel,
+    pwm: StaticController<H>,
+    pwm_chan: <H::Resource as Pwm>::Channel,
 }
 
-impl<PwmMutex, TimPeri> PwmController<PwmMutex, TimPeri>
+impl<H> PwmController<H>
 where
-    PwmMutex: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
-    TimPeri: Pwm<Duty = u32> + 'static,
-    <TimPeri as Pwm>::Channel: Copy,
+    H: MutexStrategy + Send + 'static,
+    H::Resource: Pwm + Send + 'static,
+    <H::Resource as Pwm>::Channel: Copy,
+    <H::Resource as Pwm>::Duty:
+        core::fmt::Debug + Copy + core::cmp::Ord + Into<u32> + From<u16> + TryFrom<u32>,
 {
-    pub fn new(
-        pwm: StaticController<PwmMutex, TimPeri>,
-        pwm_chan: <TimPeri as Pwm>::Channel,
-    ) -> Self {
+    pub fn new(pwm: StaticController<H>, pwm_chan: <H::Resource as Pwm>::Channel) -> Self {
         Self { pwm, pwm_chan }
     }
 
     // Sets the applied power in scale between 0 and 100
-    #[allow(unused)]
     pub async fn set_power(&mut self, power: u8) {
         let mut mg = self.pwm.lock().await;
         if power > 0 {
             let max_duty = mg.get_max_duty();
-            let duty_result: Result<u32, _> = (((power as u32) * (max_duty)) / 100u32).try_into();
+            let duty_result: Result<u32, _> =
+                (((power as u32) * max_duty.into()) / 100u32).try_into();
             match duty_result {
                 Ok(duty) => {
-                    hwa::trace!("Set duty: {}", duty);
-                    mg.set_duty(self.pwm_chan, duty.min(max_duty) as <TimPeri as Pwm>::Duty);
+                    let d: <H::Resource as Pwm>::Duty = duty.try_into().unwrap_or(max_duty);
+                    hwa::trace!("Set duty: {:?}", d);
+                    mg.set_duty(self.pwm_chan, d.min(max_duty));
                     mg.enable(self.pwm_chan);
                 }
                 _ => {
@@ -62,12 +67,12 @@ where
     #[allow(unused)]
     pub async fn get_power(&mut self) -> f32 {
         let mg = self.pwm.lock().await;
-        let duty_result: Result<f32, _> = ((mg.get_duty(self.pwm_chan) as f32 * 100.0f32)
-            / (mg.get_max_duty() as f32))
-            .try_into();
+        let d: u32 = mg.get_duty(self.pwm_chan).into();
+        let duty_result: Result<f32, _> =
+            ((d as f32 * 100.0f32) / (mg.get_max_duty().into() as f32)).try_into();
         hwa::debug!(
-            "Computing power: ({} * {}) / {} = {:?}",
-            mg.get_duty(self.pwm_chan) as f32,
+            "Computing power: ({} * {}) / {:?} = {:?}",
+            mg.get_duty(self.pwm_chan).into() as f32,
             100f32,
             mg.get_max_duty(),
             duty_result,

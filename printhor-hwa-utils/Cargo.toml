@@ -15,24 +15,24 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-default = ["std", "with-log"]
+default = ["std", "futures-test/std", "with-log"]
 std = ["critical-section/std"]
 with-log = ["log"]
 with-defmt = ["defmt"]
 
 [dependencies]
-printhor-hwa-common-macros = { version = "0", path = "../printhor-hwa-common-macros" }
+printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
 portable-atomic = { version = "1.6",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.1",  default-features = false, features = [] }
 const_env = { version = "0.1.2"}
 embassy-sync = { version = "0.6", features = [] }
-futures = { version = "0.3" }
+futures = { version = "0.3", default-features = false }
 cfg-if = { version = "1.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }
 critical-section = { version = "1.1", default-features = false, features = []}
 [dev-dependencies]
-futures-test = { version = "0.3" }
+futures-test = { version = "0.3", default-features = false }
 
 [patch.crates-io]
 embassy-sync = { path = "../libs/embassy/embassy-sync" }

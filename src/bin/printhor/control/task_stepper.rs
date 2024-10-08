@@ -23,6 +23,7 @@ use hwa::controllers::motion::SegmentIterator;
 use hwa::controllers::motion::STEP_DRIVER;
 use hwa::controllers::ExecPlan;
 use hwa::controllers::LinearMicrosegmentStepInterpolator;
+use hwa::HwiContract;
 use hwa::StepperChannel;
 use hwa::{DeferAction, DeferEvent, EventFlags, EventStatus};
 use num_traits::ToPrimitive;
@@ -80,7 +81,7 @@ const STEPPER_INACTIVITY_TIMEOUT: embassy_time::Duration = embassy_time::Duratio
 // // Used in task_stepper to control stepper motor behavior
 // ```
 const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
-    1_000_000 / hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
+    1_000_000 / hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY;
 
 ///
 /// This constant defines the period in microseconds for generating the clock ticks
@@ -114,7 +115,8 @@ const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
 /// let clock_period = STEPPER_PLANNER_CLOCK_PERIOD_US;
 /// // Use this value in timing calculations for stepper control
 /// ```
-pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / hwa::STEPPER_PLANNER_CLOCK_FREQUENCY;
+pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 =
+    1_000_000 / hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY;
 
 /// This asynchronous task manages the steps of the stepper motors
 /// based on motion segments from the motion queue.
@@ -137,9 +139,9 @@ pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / hwa::STEPPER_PLANNE
 /// according to the motion planning profile.
 #[embassy_executor::task]
 pub async fn task_stepper(
-    event_bus: hwa::EventBus<hwa::EventBusHolderType, hwa::EventBusPubSubMutexType>,
+    event_bus: hwa::types::EventBus,
     motion_planner: hwa::controllers::MotionPlanner,
-    _watchdog: hwa::StaticController<hwa::WatchDogHolderType<hwa::device::WatchDog>>,
+    _watchdog: hwa::types::WatchDogController,
 ) {
     let mut steppers_off = true;
 
@@ -158,9 +160,9 @@ pub async fn task_stepper(
 
     hwa::info!(
         "[task_stepper] Segment sampling: {} Hz ({} us period). Micro-segment interpolation: {} Hz ({} us period)",
-        hwa::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY,
+        hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY,
         STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
-        hwa::STEPPER_PLANNER_CLOCK_FREQUENCY,
+        hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY,
         STEPPER_PLANNER_CLOCK_PERIOD_US,
     );
 
@@ -205,7 +207,7 @@ pub async fn task_stepper(
             }
             Ok(ExecPlan::Segment(segment, channel)) => {
                 // Process segment plan
-                #[cfg(feature="with-ps-on")]
+                #[cfg(feature = "with-ps-on")]
                 match _s
                     .ft_wait_for(EventStatus::containing(EventFlags::ATX_ON))
                     .await
@@ -248,10 +250,9 @@ pub async fn task_stepper(
                         }
 
                         // First, translate displacement in mm to steps
-                        let (units_per_mm, micro_steps) = hwa::interrupt_free(|| {
+                        let (units_per_mm, micro_steps) = {
                             let motion_cfg = motion_planner.motion_cfg();
-                            let mg = motion_cfg.try_lock();
-                            match mg {
+                            match motion_cfg.lock().await {
                                 Ok(_g) => (
                                     neutral_element + _g.units_per_mm,
                                     neutral_element + _g.get_usteps_as_vector(),
@@ -260,7 +261,7 @@ pub async fn task_stepper(
                                     panic!("Unexpectedly, cannot lock motion cfg")
                                 }
                             }
-                        });
+                        };
 
                         let steps_per_mm: TVector<Real> = units_per_mm * micro_steps;
 
@@ -596,11 +597,11 @@ async fn park(motion_planner: &hwa::controllers::MotionPlanner) {
         .await
         .disable_steppers(StepperChannel::all());
     STEP_DRIVER.reset();
-    hwa::pause_ticker();
+    hwa::Contract::pause_ticker();
 }
 
 async fn unpark(motion_planner: &hwa::controllers::MotionPlanner, enable_steppers: bool) {
-    hwa::resume_ticker();
+    hwa::Contract::resume_ticker();
     if enable_steppers {
         STEP_DRIVER.flush().await;
         motion_planner

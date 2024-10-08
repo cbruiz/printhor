@@ -35,6 +35,8 @@ impl MockedUartSinkTx {
 
     pub async fn write(&mut self, _b: &[u8]) {}
 
+    pub async fn write_packet(&mut self, _b: &[u8]) {}
+
     pub async fn wrapped_flush(&mut self) {}
     pub async fn wrapped_write(&mut self, _b: &[u8]) {}
 }

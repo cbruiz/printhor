@@ -106,7 +106,7 @@ pub fn make_static_ref(input: TokenStream) -> TokenStream {
 struct StaticControllerParserInput {
     instance_name: LitStr,
     _comma1: Token![,],
-    holder_type: TypePath,
+    mutex_strategy_type: TypePath,
     _comma2: Token![,],
     owned_instance: Expr,
 }
@@ -115,14 +115,14 @@ impl Parse for StaticControllerParserInput {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let instance_name = input.parse()?;
         let _comma1 = input.parse()?;
-        let holder_type = input.parse()?;
+        let mutex_strategy_type = input.parse()?;
         let _comma2 = input.parse()?;
         let owned_instance = input.parse()?;
         let _ = input.parse::<Token![,]>();
         Ok(StaticControllerParserInput {
             instance_name,
             _comma1,
-            holder_type,
+            mutex_strategy_type,
             _comma2,
             owned_instance,
         })
@@ -130,17 +130,17 @@ impl Parse for StaticControllerParserInput {
 }
 
 /// Declares a instance of [StaticController], which holds
-/// a static reference of given resource wrapped into a `MaybeHoldable` implementation.
+/// a static reference of given resource wrapped into a `MutexStrategy` implementation.
 /// The resource is allocated in .bss section.
 ///
 /// This macro uses a wrapped implementation over the `static-cell` crate.
 ///
-/// Syntax: [make_static_controller!] ( `instance_name`, `holder_type`, `owned_instance` )
+/// Syntax: [make_static_controller!] ( `instance_name`, `strategy_type`, `owned_instance` )
 ///
 /// # Params
 ///
 /// * `instance_name` - A `&str` literal for tracking purposes
-/// * `holder_type` - A concrete type implementing [MayBeHoldable] trait.
+/// * `strategy_type` - A concrete type implementing [MutexStrategy] trait.
 /// * `owned_instance` - The instance of the resource content.
 ///
 /// # Usage
@@ -165,16 +165,15 @@ impl Parse for StaticControllerParserInput {
 pub fn make_static_controller(input: TokenStream) -> TokenStream {
     let StaticControllerParserInput {
         instance_name,
-        holder_type,
+        mutex_strategy_type,
         owned_instance,
         ..
     } = parse_macro_input!(input as StaticControllerParserInput);
 
-
     let expanded = quote! {
         {
-            type M = <#holder_type as printhor_hwa_utils::MaybeHoldable>::MutexType;
-            type D = <#holder_type as printhor_hwa_utils::MaybeHoldable>::Resource;
+            type M = <#mutex_strategy_type as printhor_hwa_utils::MutexStrategy>::MutexType;
+            type D = <#mutex_strategy_type as printhor_hwa_utils::MutexStrategy>::Resource;
 
             #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
             #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
@@ -184,8 +183,8 @@ pub fn make_static_controller(input: TokenStream) -> TokenStream {
             match printhor_hwa_utils::stack_allocation_increment(core::mem::size_of::<printhor_hwa_utils::StaticCell<printhor_hwa_utils::Mutex<M, D>>>()) {
                 Ok(_num_bytes) => {
                     printhor_hwa_utils::debug!("Statically allocated {} bytes for {}", _num_bytes, #instance_name);
-                    let controller: printhor_hwa_utils::StaticController<#holder_type> = printhor_hwa_utils::StaticController::new(
-                        <#holder_type> :: new(
+                    let controller: printhor_hwa_utils::StaticController<#mutex_strategy_type> = printhor_hwa_utils::StaticController::new(
+                        <#mutex_strategy_type> :: new(
                             CELL_INSTANCE.init(
                                 printhor_hwa_utils::Mutex::new(#owned_instance)
                             )

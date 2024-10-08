@@ -1,4 +1,5 @@
 #![allow(unused)]
+compile_error!("Broken: Pending to refactor");
 
 extern crate alloc;
 extern crate core;
@@ -217,7 +218,7 @@ async fn main(spawner: embassy_executor::Spawner) {
             )
         )
     );
-    let defer_channel: hwa::DeferChannel<hwa::DeferChannelMutexType> = hwa::DeferChannel::new(
+    let defer_channel: hwa::GenericDeferChannel<hwa::DeferChannelMutexType> = hwa::GenericDeferChannel::new(
         hwa::make_static_ref!(
             "DeferChannel",
             hwa::DeferChannelChannelType<hwa::DeferChannelMutexType>,

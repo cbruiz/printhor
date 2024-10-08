@@ -7,7 +7,7 @@ use core::ops::{BitAnd, BitOr, BitXor};
 
 /// Represents the *internal* channel controller of the event bus.
 /// It's responsible for managing and
-/// publishing events within the system. The [crate::EventBus]
+/// publishing events within the system. The [crate::GenericEventBus]
 /// structure holds a reference to this one, a publisher
 /// for sending events, and the current status flags.
 ///
@@ -16,7 +16,7 @@ use core::ops::{BitAnd, BitOr, BitXor};
 /// broadcast state changes and other relevant events globally.
 ///
 /// # Traits
-/// * `H` - The Holder of the internal resource (the pub-sub channel)
+/// * `H` - The MutexStrategy of the internal resource (the pub-sub channel)
 /// * `M` - The MutexType of the pub-sub channel.
 ///
 /// # Fields
@@ -28,7 +28,7 @@ use core::ops::{BitAnd, BitOr, BitXor};
 ///
 /// # Examples
 ///
-/// See [crate::EventBus]
+/// See [crate::GenericEventBus]
 pub struct EventBusChannelController<M>
 where
     M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
@@ -149,19 +149,19 @@ where
     ///
     /// ```rust
     /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBus, EventFlags, EventStatus};
+    /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
     /// type ChannelControllerMutexType = hwa::SyncSendMutex;
     /// type PubSubMutexType = hwa::SyncSendMutex;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusHolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
     /// // let event_bus: EventBusController<BusMutexType, ChannelMutexType> = {
     /// // [...]
     /// // };
     ///
-    /// async fn any_sample_task(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
+    /// async fn any_sample_task(event_bus: GenericEventBus<EventBusMutexStrategyType, PubSubMutexType>) {
     ///     let mut subscriber = event_bus.subscriber().await;
     ///     // [...]
     ///     match subscriber.ft_wait_for(EventStatus::containing(EventFlags::SYS_READY)).await {
@@ -231,19 +231,19 @@ where
     ///
     /// ```rust
     /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBus, EventFlags, EventStatus};
+    /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
     /// type ChannelControllerMutexType = hwa::SyncSendMutex;
     /// type PubSubMutexType = hwa::SyncSendMutex;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusHolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
-    /// // let event_bus: EventBus<EventBusHolderType, PubSubMutexType> = {
+    /// // let event_bus: EventBus<EventBusMutexStrategyType, PubSubMutexType> = {
     /// // [...]
     /// // };
     ///
-    /// async fn any_sample_task(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
+    /// async fn any_sample_task(event_bus: GenericEventBus<EventBusMutexStrategyType, PubSubMutexType>) {
     ///     let mut subscriber = event_bus.subscriber().await;
     ///     // [...]
     ///     match subscriber.ft_wait_until(EventFlags::SYS_BOOTING).await {
@@ -275,19 +275,19 @@ where
     ///
     /// ```rust
     /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBus, EventFlags, EventStatus};
+    /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
     /// type ChannelControllerMutexType = hwa::SyncSendMutex;
     /// type PubSubMutexType = hwa::SyncSendMutex;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusHolderType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
-    /// // let event_bus: EventBus<EventBusHolderType, PubSubMutexType> = {
+    /// // let event_bus: EventBus<EventBusMutexStrategyType, PubSubMutexType> = {
     /// // [...]
     /// // };
     ///
-    /// async fn any_sample_task(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
+    /// async fn any_sample_task(event_bus: GenericEventBus<EventBusMutexStrategyType, PubSubMutexType>) {
     ///     let mut subscriber = event_bus.subscriber().await;
     ///     // [...]
     ///     match subscriber.ft_wait_until_reset(EventFlags::SYS_BOOTING).await {
@@ -319,19 +319,19 @@ where
     ///
     /// ```rust
     /// use printhor_hwa_common as hwa;
-    /// use hwa::{EventBus, EventFlags, EventStatus};
+    /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
     /// type ChannelControllerMutexType = hwa::NoopMutex;
     /// type PubSubMutexType = hwa::NoopMutex;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusHolderType = hwa::NotHoldable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::NotHoldable<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
-    /// // let event_bus: EventBus<EventBusHolderType, PubSubMutexType> = {
+    /// // let event_bus: EventBus<EventBusMutexStrategyType, PubSubMutexType> = {
     /// // [...]
     /// // };
     ///
-    /// async fn any_sample_task(event_bus: EventBus<EventBusHolderType, PubSubMutexType>) {
+    /// async fn any_sample_task(event_bus: GenericEventBus<EventBusMutexStrategyType, PubSubMutexType>) {
     ///     let mut subscriber = event_bus.subscriber().await;
     ///     // [...]
     ///     match subscriber.ft_wait_while(EventFlags::SYS_BOOTING).await {
