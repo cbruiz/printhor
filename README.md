@@ -37,6 +37,7 @@ Which means the principal short-term goal is not to develop a productive firmwar
 * Precise thermal control plan with PID. Briefly exlained at [Temperature Task](src/bin/printhor/control/task_temperature.rs).
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
+* High behavior customization.
 * Wide GCode standard coverage.
 * Native simulation for development and benchmarking.
   * Many others coming.
