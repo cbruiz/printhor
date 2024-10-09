@@ -8,10 +8,27 @@ mod mocked_pwm;
 mod mocked_spi;
 #[cfg(feature = "with-sd-card")]
 mod mocked_sd_card;
-#[cfg(any(feature = "with-serial-port-1"))]
-mod mocked_uart;
-#[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-2"))]
-mod mocked_uart_sink;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-usb")] {
+        mod mocked_uart_unix_socket;
+        pub use mocked_uart_unix_socket::*;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-1")] {
+        mod mocked_uart;
+        pub use mocked_uart::*;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-2")] {
+        mod mocked_uart_sink;
+        pub use mocked_uart_sink::*;
+    }
+}
 
 #[cfg(feature = "with-trinamic")]
 mod mocked_trinamic;
@@ -23,11 +40,7 @@ pub use mocked_pin::*;
 
 pub use mocked_wdt::*;
 
-#[cfg(feature = "with-serial-port-1")]
-pub use mocked_uart::*;
 
-#[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-2"))]
-pub use mocked_uart_sink::*;
 
 #[cfg(feature = "with-spi")]
 pub use mocked_spi::*;

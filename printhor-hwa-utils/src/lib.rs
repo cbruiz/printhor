@@ -8,7 +8,8 @@
 //! Max memory is set by constant [MAX_STATIC_ALLOC_BYTES] that can be overridden with the proper
 //! environment variable.
 //!
-//! * The [StaticController] interface, with the proper alternatives based on expected behavior
+//! * The [StaticSyncController] interface, with the proper alternatives based on expected behavior
+//! * The [StaticAsyncController] interface, with the proper alternatives based on expected behavior
 //!
 //! * A convenient exports of [trace], [debug], [info], [warn], [error] log macros redirected
 //! to the feature-based log implementation (`defmt` or `log` crates)
@@ -16,16 +17,64 @@
 //! # Example
 //! ```rust
 //! use printhor_hwa_utils as hwa;
+//! use hwa::SyncMutexStrategy;
+//! use core::cell::RefCell;
 //!
-//! struct DummyDevice {}
+//! struct DummyDevice {
+//!     value: u32,
+//! }
+//! impl DummyDevice {
 //!
-//! type MutexType = hwa::SyncSendMutex;
-//! static MUTEX_INSTANCE: hwa::StaticCell<hwa::Mutex<MutexType, DummyDevice>> = hwa::StaticCell::new();
-//! let controller: hwa::StaticController<hwa::Holdable<MutexType, DummyDevice>> =
-//!     hwa::StaticController::new(
-//!         hwa::Holdable::new(
-//!             MUTEX_INSTANCE.init(
-//!                 hwa::Mutex::new(DummyDevice{})
+//!     const fn new() -> Self { Self {value: 0} }
+//!
+//!     fn increment(&mut self) {
+//!         self.value += 1
+//!     }
+//!     fn get_count(&self) -> u32 {
+//!         self.value
+//!     }
+//! }
+//!
+//! type SyncMutexType = hwa::SyncNoopMutexType;
+//! static SYNC_MUTEX_INSTANCE: hwa::StaticCell<hwa::SyncMutex<SyncMutexType, DummyDevice>> = hwa::StaticCell::new();
+//! let controller: hwa::StaticSyncController<hwa::SyncStandardStrategy<SyncMutexType, DummyDevice>> =
+//!     hwa::StaticSyncController::new(
+//!         hwa::SyncStandardStrategy::new(
+//!             SYNC_MUTEX_INSTANCE. init(
+//!                 hwa::SyncMutex::new(
+//!                     RefCell::new(DummyDevice::new())
+//!                 )
+//!             )
+//!         )
+//!     );
+//!
+//! // can be cloned
+//! let c = controller.clone();
+//! let _v1 = c.apply(|_my| {
+//!     _my.get_count()
+//! });
+//! c.apply_mut(|_my| {
+//!     _my.increment()
+//! });
+//! let _v2 = c.apply(|_my| {
+//!     _my.get_count()
+//! });
+//! let _v3 = c.apply(|_my| {
+//!     _my.get_count()
+//! });
+//! assert_eq!(_v1, 0);
+//! assert_eq!(_v2, 1);
+//! assert_eq!(_v3, 1);
+//!
+//! // Async controller:
+//!
+//! type AsyncMutexType = hwa::AsyncNoopMutexType;
+//! static ASYNC_MUTEX_INSTANCE: hwa::StaticCell<hwa::AsyncMutex<AsyncMutexType, DummyDevice>> = hwa::StaticCell::new();
+//! let controller: hwa::StaticAsyncController<hwa::AsyncHoldableStrategy<AsyncMutexType, DummyDevice>> =
+//!     hwa::StaticAsyncController::new(
+//!         hwa::AsyncHoldableStrategy::new(
+//!             ASYNC_MUTEX_INSTANCE.init(
+//!                 hwa::AsyncMutex::new(DummyDevice::new())
 //!             )
 //!         )
 //!     );
@@ -36,9 +85,13 @@
 //! - `with-defmt`: Enables logging of allocation details when enabled.
 //! - otherwise, `no_log` internal backend is used (Will completely discard the expression)
 #![cfg_attr(not(feature = "std"), no_std)]
-use core::cell::RefCell;
-use core::ops::{Deref, DerefMut};
-use futures;
+
+mod mutex_sync;
+pub use mutex_sync::*;
+mod mutex_async;
+pub use mutex_async::*;
+
+use core::ops::Deref;
 use portable_atomic::{AtomicUsize, Ordering};
 pub use static_cell::StaticCell;
 
@@ -80,24 +133,6 @@ pub fn stack_allocation_decrement(nbytes: usize) {
 
 //#endregion
 
-//#region "Useful reexports"
-
-pub use embassy_sync::mutex::Mutex;
-pub use embassy_sync::mutex::MutexGuard;
-
-/// A shortcut for [embassy_sync::blocking_mutex::raw::RawMutex]
-pub use embassy_sync::blocking_mutex::raw::RawMutex;
-
-/// A [core::marker::Sync] and [core::marker::Send] mutex type. Thread-safe even between cores.
-/// A shortcut for [embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex]
-pub use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex as SyncSendMutex;
-
-/// A NOT [core::marker::Sync] but [core::marker::Send] mutex type. Safe in single thread async runtime only.
-/// A shortcut for [embassy_sync::blocking_mutex::raw::NoopRawMutex]
-pub use embassy_sync::blocking_mutex::raw::NoopRawMutex as NoopMutex;
-
-//#endregion
-
 //#region "The Raw HWi resource wrapper"
 pub trait RawHwiResource: Deref {
     type Resource;
@@ -106,253 +141,22 @@ pub trait RawHwiResource: Deref {
 
 //#endregion
 
-//#region "The `MutexStrategy` Mutex trait"
+//#region "Static Sync Controller"
 
-pub trait MutexStrategy
+pub struct StaticSyncController<H>
 where
-    Self::MutexType: RawMutex + 'static,
-    Self::Resource: Sized + 'static,
-    Self: Clone + Deref<Target = Mutex<Self::MutexType, Self::Resource>>,
-{
-    const CAN_RETAIN: bool;
-    type MutexType;
-    type Resource;
-
-    fn can_retain(&self) -> bool {
-        Self::CAN_RETAIN
-    }
-
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> + Send {
-        async { Err(()) }
-    }
-
-    fn release(&self) -> Result<(), ()> {
-        Err(())
-    }
-
-    fn apply_or_error<F, U, E>(&self, f: F, error: E) -> Result<U, E>
-    where
-        F: FnOnce(&mut Self::Resource) -> Result<U, E>;
-}
-
-//#endregion
-
-//#region "A Generic NOT Holdable Mutex"
-
-pub struct NotHoldable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    mutex: &'static Mutex<M, D>,
-}
-
-impl<M, D> NotHoldable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    pub const fn new(mutex: &'static Mutex<M, D>) -> Self {
-        Self { mutex }
-    }
-}
-
-impl<M, D> Clone for NotHoldable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    fn clone(&self) -> Self {
-        Self { mutex: self.mutex }
-    }
-}
-
-impl<M, D> Deref for NotHoldable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    type Target = Mutex<M, D>;
-    fn deref(&self) -> &Self::Target {
-        &self.mutex
-    }
-}
-
-impl<M, D> MutexStrategy for NotHoldable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    const CAN_RETAIN: bool = false;
-    type MutexType = M;
-    type Resource = D;
-
-    // Not supported in not holdable
-    fn apply_or_error<F, U, E>(&self, _f: F, error: E) -> Result<U, E>
-    where
-        F: FnOnce(&mut Self::Resource) -> Result<U, E>,
-    {
-        Err(error)
-    }
-}
-
-//#endregion
-
-//#region "A Generic Holdable Mutex"
-
-//#region "The MutexStrategy"
-
-pub struct Holder<M, T>
-where
-    M: RawMutex + 'static,
-    T: Sized + 'static,
-{
-    retained_guard: embassy_sync::blocking_mutex::CriticalSectionMutex<
-        RefCell<Option<MutexGuard<'static, M, T>>>,
-    >,
-}
-impl<M, T> Holder<M, T>
-where
-    M: RawMutex + 'static,
-    T: Sized + 'static,
-{
-    const fn new() -> Self {
-        Self {
-            retained_guard: embassy_sync::blocking_mutex::CriticalSectionMutex::new(RefCell::new(
-                None,
-            )),
-        }
-    }
-    fn set(&self, guard: MutexGuard<'static, M, T>) {
-        self.retained_guard
-            .lock(|retained| match retained.try_borrow_mut() {
-                Ok(mut _m) => {
-                    _m.replace(guard);
-                }
-                Err(_e) => {
-                    unreachable!("Unable to borrow MutexStrategy");
-                }
-            });
-    }
-    fn release(&self) {
-        self.retained_guard
-            .lock(move |retained| match retained.try_borrow_mut() {
-                Ok(mut _m) => {
-                    let _trash = _m.take();
-                }
-                Err(_e) => {
-                    unreachable!("Unable to borrow MutexStrategy");
-                }
-            });
-    }
-}
-
-//#endregion
-
-pub struct Holdable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    mutex: &'static Mutex<M, D>,
-    holder: Holder<M, D>,
-}
-
-impl<M, D> Holdable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    pub const fn new(mutex: &'static Mutex<M, D>) -> Self {
-        Self {
-            mutex,
-            holder: Holder::new(),
-        }
-    }
-}
-
-impl<M, D> Clone for Holdable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + Sync + Send + 'static,
-    Self: Sync,
-{
-    fn clone(&self) -> Self {
-        Self {
-            mutex: self.mutex,
-            holder: Holder::new(),
-        }
-    }
-}
-
-impl<M, D> Deref for Holdable<M, D>
-where
-    M: RawMutex + 'static,
-    D: Sized + 'static,
-{
-    type Target = Mutex<M, D>;
-    fn deref(&self) -> &Self::Target {
-        &self.mutex
-    }
-}
-
-impl<M, D> MutexStrategy for Holdable<M, D>
-where
-    M: RawMutex + Sync + 'static,
-    D: Sized + Sync + Send + 'static,
-    Self: Sync,
-{
-    const CAN_RETAIN: bool = true;
-    type MutexType = M;
-    type Resource = D;
-
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> + Send {
-        async {
-            self.holder.set(self.mutex.lock().await);
-            Ok(())
-        }
-    }
-
-    fn release(&self) -> Result<(), ()> {
-        self.holder.release();
-        Ok(())
-    }
-
-    fn apply_or_error<F, U, E>(&self, f: F, error: E) -> Result<U, E>
-    where
-        F: FnOnce(&mut Self::Resource) -> Result<U, E>,
-    {
-        self.holder.retained_guard.lock(|retained| {
-            if let Ok(mut ref_mut) = retained.try_borrow_mut() {
-                match ref_mut.as_mut() {
-                    Some(guard) => f(guard.deref_mut()),
-                    None => Err(error),
-                }
-            } else {
-                Err(error)
-            }
-        })
-    }
-}
-
-//#endregion
-
-//#region "Static Controller"
-
-pub struct StaticController<H>
-where
-    H: MutexStrategy,
-    <H as MutexStrategy>::MutexType: RawMutex + 'static,
-    <H as MutexStrategy>::Resource: 'static,
+    H: SyncMutexStrategy,
+    <H as SyncMutexStrategy>::SyncMutexType: SyncRawMutex + 'static,
+    <H as SyncMutexStrategy>::Resource: 'static,
 {
     wrapped_mutex: H,
 }
 
-impl<H> StaticController<H>
+impl<H> StaticSyncController<H>
 where
-    H: MutexStrategy + 'static,
-    <H as MutexStrategy>::MutexType: RawMutex + 'static,
-    <H as MutexStrategy>::Resource: 'static,
+    H: SyncMutexStrategy + 'static,
+    <H as SyncMutexStrategy>::SyncMutexType: SyncRawMutex + 'static,
+    <H as SyncMutexStrategy>::Resource: 'static,
 {
     pub const fn new(mutex: H) -> Self {
         Self {
@@ -361,24 +165,76 @@ where
     }
 }
 
-impl<H> Clone for StaticController<H>
+impl<H> Clone for StaticSyncController<H>
 where
-    H: MutexStrategy + 'static,
-    <H as MutexStrategy>::MutexType: RawMutex + 'static,
-    <H as MutexStrategy>::Resource: 'static,
+    H: SyncMutexStrategy + 'static,
+    <H as SyncMutexStrategy>::SyncMutexType: SyncRawMutex + 'static,
+    <H as SyncMutexStrategy>::Resource: 'static,
 {
     fn clone(&self) -> Self {
-        StaticController {
+        StaticSyncController {
             wrapped_mutex: self.wrapped_mutex.clone(),
         }
     }
 }
 
-impl<H> Deref for StaticController<H>
+impl<H> Deref for StaticSyncController<H>
 where
-    H: MutexStrategy + 'static,
-    <H as MutexStrategy>::MutexType: RawMutex + 'static,
-    <H as MutexStrategy>::Resource: 'static,
+    H: SyncMutexStrategy + 'static,
+    <H as SyncMutexStrategy>::SyncMutexType: SyncRawMutex + 'static,
+    <H as SyncMutexStrategy>::Resource: 'static,
+{
+    type Target = H;
+
+    fn deref(&self) -> &Self::Target {
+        &self.wrapped_mutex
+    }
+}
+
+//#endregion
+
+//#region "Static Async Controller"
+
+pub struct StaticAsyncController<H>
+where
+    H: AsyncMutexStrategy,
+    <H as AsyncMutexStrategy>::AsyncMutexType: AsyncRawMutex + 'static,
+    <H as AsyncMutexStrategy>::Resource: 'static,
+{
+    wrapped_mutex: H,
+}
+
+impl<H> StaticAsyncController<H>
+where
+    H: AsyncMutexStrategy + 'static,
+    <H as AsyncMutexStrategy>::AsyncMutexType: AsyncRawMutex + 'static,
+    <H as AsyncMutexStrategy>::Resource: 'static,
+{
+    pub const fn new(mutex: H) -> Self {
+        Self {
+            wrapped_mutex: mutex,
+        }
+    }
+}
+
+impl<H> Clone for StaticAsyncController<H>
+where
+    H: AsyncMutexStrategy + 'static,
+    <H as AsyncMutexStrategy>::AsyncMutexType: AsyncRawMutex + 'static,
+    <H as AsyncMutexStrategy>::Resource: 'static,
+{
+    fn clone(&self) -> Self {
+        StaticAsyncController {
+            wrapped_mutex: self.wrapped_mutex.clone(),
+        }
+    }
+}
+
+impl<H> Deref for StaticAsyncController<H>
+where
+    H: AsyncMutexStrategy + 'static,
+    <H as AsyncMutexStrategy>::AsyncMutexType: AsyncRawMutex + 'static,
+    <H as AsyncMutexStrategy>::Resource: 'static,
 {
     type Target = H;
 
@@ -404,90 +260,6 @@ cfg_if::cfg_if! {
         pub use printhor_hwa_common_macros::no_log as info;
         pub use printhor_hwa_common_macros::no_log as warn;
         pub use printhor_hwa_common_macros::no_log as error;
-    }
-}
-
-//#endregion
-
-//#region "Tests"
-
-#[cfg(test)]
-mod test {
-    use crate as hwa;
-    use hwa::MutexStrategy;
-    use std::clone::Clone;
-
-    struct DummyDevice {}
-    impl DummyDevice {
-        pub fn new() -> Self {
-            Self {}
-        }
-
-        pub fn do_nothing(&mut self) {
-            hwa::info!("Did something")
-        }
-    }
-
-    #[futures_test::test]
-    async fn test_not_holdable_static_controller() {
-        type MutexType = hwa::NoopMutex;
-        static CELL_INSTANCE: hwa::StaticCell<hwa::Mutex<MutexType, DummyDevice>> =
-            hwa::StaticCell::new();
-
-        let controller: hwa::StaticController<hwa::NotHoldable<MutexType, DummyDevice>> =
-            hwa::StaticController::new(hwa::NotHoldable::new(
-                CELL_INSTANCE.init(hwa::Mutex::new(DummyDevice::new())),
-            ));
-
-        assert!(
-            !controller.can_retain(),
-            "A NotHoldable StaticController can NOT retain"
-        );
-
-        let _r = controller.retain().await;
-
-        let mut mg = controller.lock().await;
-        mg.do_nothing();
-    }
-
-    #[futures_test::test]
-    async fn test_holdable_static_controller() {
-        type MutexType = hwa::SyncSendMutex;
-        static MUTEX_INSTANCE: hwa::StaticCell<hwa::Mutex<MutexType, DummyDevice>> =
-            hwa::StaticCell::new();
-
-        let controller: hwa::StaticController<hwa::Holdable<MutexType, DummyDevice>> =
-            hwa::StaticController::new(hwa::Holdable::new(
-                MUTEX_INSTANCE.init(hwa::Mutex::new(DummyDevice::new())),
-            ));
-
-        assert!(
-            controller.can_retain(),
-            "A Holdable StaticController can retain"
-        );
-        assert!(
-            controller.retain().await.is_ok(),
-            "A Holdable StaticController retains"
-        );
-        assert!(
-            controller.try_lock().is_err(),
-            "A retained Holdable StaticController cannot be lock until released"
-        );
-        assert!(
-            controller.release().is_ok(),
-            "A Holdable StaticController releases"
-        );
-
-        assert!(
-            controller.retain().await.is_ok(),
-            "A released Holdable StaticController retains again"
-        );
-
-        let other_controller = controller.clone();
-
-        let _c = other_controller.apply_or_error(|_d| Ok(_d.do_nothing()), ());
-
-        let _c2 = controller.apply_or_error(|_d| Ok(_d.do_nothing()), ());
     }
 }
 

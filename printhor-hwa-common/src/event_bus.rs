@@ -385,21 +385,21 @@ impl core::fmt::Debug for EventStatus {
 ///
 /// # Generics
 ///
-/// * `H` is the MutexStrategy (an instance of the trait [MutexStrategy]) to choose the locking strategy.
-/// * `M` is the MutexType (an instance of the trait [hwa::RawMutex]) of the inner pub-sub mechanism.
+/// * `H` is the MutexStrategy (an instance of the trait [AsyncMutexStrategy]) to choose the locking strategy.
+/// * `M` is the MutexType (an instance of the trait [hwa::AsyncRawMutex]) of the inner pub-sub mechanism.
 ///
 /// # Examples
 ///
 /// ```rust
 /// use printhor_hwa_common as hwa;
 ///
-/// type ChannelControllerMutexType = hwa::SyncSendMutex;
-/// type PubSubMutexType = hwa::SyncSendMutex;
+/// type ChannelControllerMutexType = hwa::AsyncCsMutexType;
+/// type PubSubMutexType = hwa::AsyncCsMutexType;
 /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-/// type MutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+/// type MutexStrategyType = hwa::AsyncStandardStrategy<ChannelControllerMutexType, ResourceType>;
 ///
 /// let _controller = hwa::GenericEventBus::new(
-///     hwa::make_static_controller!(
+///     hwa::make_static_async_controller!(
 ///         "EventBus",
 ///         MutexStrategyType,
 ///         hwa::EventBusChannelController::new(
@@ -418,16 +418,16 @@ impl core::fmt::Debug for EventStatus {
 /// * `instance` - A reference to the controller wrapping the `GenericEventBus`.
 pub struct GenericEventBus<H, M>
 where
-    H: MutexStrategy<Resource = EventBusChannelController<M>> + 'static,
-    M: hwa::RawMutex + 'static,
+    H: AsyncMutexStrategy<Resource = EventBusChannelController<M>> + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
-    channel_controller: StaticController<H>,
+    channel_controller: StaticAsyncController<H>,
 }
 
 impl<H, M> Clone for GenericEventBus<H, M>
 where
-    H: MutexStrategy<Resource= EventBusChannelController<M>> + 'static,
-    M: hwa::RawMutex + 'static,
+    H: AsyncMutexStrategy<Resource = EventBusChannelController<M>> + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     fn clone(&self) -> Self {
         GenericEventBus::new(self.channel_controller.clone())
@@ -436,10 +436,10 @@ where
 
 impl<H, M> GenericEventBus<H, M>
 where
-    H: MutexStrategy<Resource= EventBusChannelController<M>> + 'static,
-    M: hwa::RawMutex + 'static,
+    H: AsyncMutexStrategy<Resource = EventBusChannelController<M>> + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
-    pub const fn new( channel_controller: StaticController<H>) -> Self {
+    pub const fn new(channel_controller: StaticAsyncController<H>) -> Self {
         Self { channel_controller }
     }
 
@@ -461,10 +461,11 @@ where
     /// use printhor_hwa_common as hwa;
     /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
-    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
-    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// // A Holdable mutex requires a Sync MutexType
+    /// type ChannelControllerMutexType = hwa::AsyncCsMutexType;
+    /// type PubSubMutexType = hwa::AsyncCsMutexType;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::AsyncHoldableStrategy<ChannelControllerMutexType, ResourceType>;
     ///
     /// async fn assumed_initialization(event_bus: GenericEventBus<EventBusMutexStrategyType, PubSubMutexType>) {
     ///     event_bus.publish_event(EventStatus::not_containing(EventFlags::SYS_READY)).await
@@ -507,10 +508,10 @@ where
     /// use printhor_hwa_common as hwa;
     /// use hwa::{GenericEventBus, EventFlags, EventStatus};    ///
     ///
-    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
-    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// type ChannelControllerMutexType = hwa::AsyncNoopMutexType;
+    /// type PubSubMutexType = hwa::AsyncNoopMutexType;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::AsyncStandardStrategy<ChannelControllerMutexType, ResourceType>;
     ///
     ///
     /// async fn assumed_initialization(event_bus: GenericEventBus<EventBusMutexStrategyType, PubSubMutexType>) {
@@ -559,16 +560,16 @@ mod test {
         hwa::info!("event status: {:?}", event_status);
     }
 
-    type ChannelControllerMutexType = hwa::SyncSendMutex;
-    type PubSubMutexType = hwa::SyncSendMutex;
+    type ChannelControllerMutexType = hwa::AsyncCsMutexType;
+    type PubSubMutexType = hwa::AsyncCsMutexType;
     type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    type MutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    type MutexStrategyType = hwa::AsyncHoldableStrategy<ChannelControllerMutexType, ResourceType>;
 
     #[futures_test::test]
     async fn test_manual() {
         use crate as printhor_hwa_utils;
 
-        let controller = hwa::GenericEventBus::new(hwa::make_static_controller!(
+        let controller = hwa::GenericEventBus::new(hwa::make_static_async_controller!(
             "EventBus",
             MutexStrategyType,
             hwa::EventBusChannelController::new(hwa::make_static_ref!(
@@ -595,15 +596,17 @@ mod test {
         let mut global = EVENT_BUS.write().unwrap();
 
         if global.is_none() {
-            global.replace(hwa::GenericEventBus::new(hwa::make_static_controller!(
-                "EventBus",
-                MutexStrategyType,
-                hwa::EventBusChannelController::new(hwa::make_static_ref!(
-                    "EventBusChannel",
-                    hwa::EventBusPubSubType<PubSubMutexType>,
-                    hwa::EventBusPubSubType::new(),
-                )),
-            )));
+            global.replace(hwa::GenericEventBus::new(
+                hwa::make_static_async_controller!(
+                    "EventBus",
+                    MutexStrategyType,
+                    hwa::EventBusChannelController::new(hwa::make_static_ref!(
+                        "EventBusChannel",
+                        hwa::EventBusPubSubType<PubSubMutexType>,
+                        hwa::EventBusPubSubType::new(),
+                    )),
+                ),
+            ));
         }
     }
 

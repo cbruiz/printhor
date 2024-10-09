@@ -1,13 +1,14 @@
-use crate::hwa;
+use printhor_hwa_common as hwa;
+
 use std::io::{stdout, Write};
 use embassy_executor::SendSpawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, with_timeout};
 use async_std::io::ReadExt;
-use crate::TERMINATION;
+use printhor_hwa_common::HwiContract;
+use crate::board::TERMINATION;
 
-pub static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
+pub static SERIAL_PIPE: Pipe<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}> = Pipe::<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}>::new();
 
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_mocked_uart() {
@@ -109,25 +110,26 @@ impl MockedUartTx {
     }
 }
 
-pub struct MockedUartRxInputStream {
+pub struct MockedUartRxInputStream<const BUF_SIZE: usize> {
     pub receiver: MockedUartRx,
-    buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
+    buffer: [u8; BUF_SIZE],
     bytes_read: u8,
     current_byte_index: u8,
 }
 
-impl MockedUartRxInputStream {
+impl<const BUFF_SIZE: usize> MockedUartRxInputStream<BUFF_SIZE>
+{
     pub fn new(receiver: MockedUartRx) -> Self {
         Self {
             receiver,
-            buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
+            buffer: [0; BUFF_SIZE],
             bytes_read: 0,
             current_byte_index: 0,
         }
     }
 }
 
-impl async_gcode::ByteStream for MockedUartRxInputStream
+impl<const BUFF_SIZE: usize> async_gcode::ByteStream for MockedUartRxInputStream<BUFF_SIZE>
 {
     type Item = Result<u8, async_gcode::Error>;
 

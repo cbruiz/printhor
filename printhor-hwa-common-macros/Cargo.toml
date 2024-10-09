@@ -3,6 +3,10 @@ name = "printhor-hwa-common-macros"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 syn = "2.0"
 quote = "1.0"

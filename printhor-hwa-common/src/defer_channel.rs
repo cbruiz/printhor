@@ -66,8 +66,9 @@
 //! By using static references and safe concurrency practices, this module ensures that deferred actions are managed
 //! in a predictable and efficient manner.
 
-use crate::CommChannel;
+use crate as hwa;
 use embassy_sync::channel::Channel;
+use hwa::CommChannel;
 
 //#region "Defer Action"
 
@@ -131,7 +132,9 @@ pub enum DeferAction {
 /// use printhor_hwa_common as hwa;
 /// use hwa::{DeferEvent, DeferAction, CommChannel};
 /// // Example usage of DeferEvent
+/// #[cfg(feature = "with-motion")]
 /// let _event1 = DeferEvent::AwaitRequested(DeferAction::Homing, CommChannel::default());
+/// #[cfg(feature = "with-motion")]
 /// let _event2 = DeferEvent::Completed(DeferAction::RapidMove, CommChannel::default());
 /// ```
 pub enum DeferEvent {
@@ -181,14 +184,14 @@ pub type DeferChannelChannelType<M> = Channel<M, DeferEvent, DEFER_CHANNEL_SIZE>
 /// ```
 pub struct GenericDeferChannel<M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     channel: &'static DeferChannelChannelType<M>,
 }
 
 impl<M> GenericDeferChannel<M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     /// Creates a new `DeferChannelRef`.
     ///
@@ -209,7 +212,7 @@ where
 }
 impl<M> core::ops::Deref for GenericDeferChannel<M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     type Target = DeferChannelChannelType<M>;
 
@@ -220,7 +223,7 @@ where
 
 impl<M> Clone for GenericDeferChannel<M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     fn clone(&self) -> Self {
         GenericDeferChannel::new(self.channel)
@@ -251,6 +254,7 @@ pub mod tests {
         }
     }
 
+    #[cfg(feature = "with-motion")]
     #[futures_test::test]
     async fn test_event_bus() {
         initialize();

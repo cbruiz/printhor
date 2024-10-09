@@ -15,14 +15,8 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-std = ["futures-test/std"]
-default = [
-    "std", "embassy-time/std", "embassy-time/generic-queue-128",
-    "with-log",
-    "with-serial-usb", "with-serial-port-1", "with-serial-port-2",
-    "with-motion", "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
-    "with-hot-end", "with-hot-bed"
-]
+std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std", "embassy-time/generic-queue-128"]
+default = ["std", "with-log"]
 nightly = []
 executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
@@ -67,8 +61,3 @@ strum = { version = "0.26", default-features = false, features = ["derive"] }
 [dev-dependencies]
 futures-test = { version = "0.3", default-features = false}
 tmc2209 = { version = "0.2"}
-
-[patch.crates-io]
-embassy-sync = { path = "../libs/embassy/embassy-sync" }
-embassy-time = { path = "../libs/embassy/embassy-time" }
-async-gcode = { path = "../libs/async-gcode" }

@@ -1,15 +1,16 @@
 //! A synchronization primitive for polling values from a task.
 //! Basically, a copy of embassy_sync::Signal with a dirty hack to not lose the consumed value
+use crate as hwa;
 use core::cell::Cell;
 use core::future::{poll_fn, Future};
 use core::task::{Context, Poll, Waker};
-use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::blocking_mutex::Mutex;
+use hwa::AsyncRawMutex;
 
 #[allow(unused)]
 pub struct PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     state: Mutex<M, Cell<State<T>>>,
@@ -29,7 +30,7 @@ where
 #[allow(unused)]
 impl<M, T> PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     /// Create a new `Signal`.
@@ -43,7 +44,7 @@ where
 #[allow(unused)]
 impl<M, T> Default for PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     fn default() -> Self {
@@ -54,7 +55,7 @@ where
 #[allow(unused)]
 impl<M, T> PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     /// Mark this Signal as signaled.
@@ -128,7 +129,7 @@ mod tests {
     use future::Future;
     use std::task::Poll;
 
-    type MutexType = hwa::NoopMutex;
+    type MutexType = hwa::AsyncNoopMutexType;
 
     #[futures_test::test]
     async fn foundation_test() {

@@ -64,7 +64,7 @@ embassy-time = { version = "*", features = ["defmt"] }
 embassy-futures = { version = "*", features = ["defmt"] }
 embassy-usb = { version = "*", features = [], optional = true }
 
-portable-atomic = { version = "1.5", features = ["critical-section"] }
+portable-atomic = { version = "1", features = ["critical-section"] }
 printhor-hwa-common = { version = "*", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }

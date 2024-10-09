@@ -27,12 +27,12 @@ cfg_if::cfg_if! {
     }
 }
 
+mod contract;
 mod event_bus_channel;
 pub mod soft_uart;
-mod contract;
 mod traits;
 
-pub use contract::{HwiContract, HwiContext};
+pub use contract::{HwiContext, HwiContract};
 
 pub use event_bus_channel::*;
 
@@ -293,33 +293,37 @@ bitflags! {
     }
 }
 
-
 /// Covers a device directly imported from HWI
 pub struct HwiResource<D> {
     inner: D,
 }
 
 impl<D> HwiResource<D> {
-    pub const fn new(inner: D) -> Self {Self {inner} }
+    pub const fn new(inner: D) -> Self {
+        Self { inner }
+    }
 }
 
-impl<D> RawHwiResource for HwiResource<D>
-{
+impl<D> RawHwiResource for HwiResource<D> {
     type Resource = D;
 
-    fn take(self) -> D {self.inner}
+    fn take(self) -> D {
+        self.inner
+    }
 }
 
-impl<D> core::ops::Deref for HwiResource<D>
-{
+impl<D> core::ops::Deref for HwiResource<D> {
     type Target = D;
-    fn deref(&self) -> &<Self as core::ops::Deref>::Target {&self.inner}
+    fn deref(&self) -> &<Self as core::ops::Deref>::Target {
+        &self.inner
+    }
 }
 
 //#region "Implementation of [hwa::traits] for each single resource bounded to them"
 
 impl<D> traits::ByteStream for HwiResource<D>
-where D: traits::ByteStream
+where
+    D: traits::ByteStream,
 {
     type Item = <D as traits::ByteStream>::Item;
 
@@ -330,7 +334,8 @@ where D: traits::ByteStream
 }
 
 impl<D> traits::Pwm for HwiResource<D>
-where D: traits::Pwm
+where
+    D: traits::Pwm,
 {
     type Channel = <D as traits::Pwm>::Channel;
 
@@ -370,7 +375,9 @@ where D: traits::Pwm
 
     #[inline(always)]
     fn set_period<P>(&mut self, period: P)
-    where P: Into<Self::Time> {
+    where
+        P: Into<Self::Time>,
+    {
         self.inner.set_period(period)
     }
 }
@@ -379,11 +386,18 @@ where D: traits::Pwm
 
 #[cfg(test)]
 mod test {
+    #[allow(unused)]
     use crate as hwa;
-    use crate::StepperChannel;
 
+    #[cfg(all(
+        feature = "with-serial-usb",
+        feature = "with-serial-port-1",
+        feature = "with-serial-port-2"
+    ))]
     #[test]
     fn test_some_objects() {
+        use crate::StepperChannel;
+
         let _nd = hwa::NoDevice::new();
         let ch1 = StepperChannel::E;
         hwa::info!("{:?}", ch1);

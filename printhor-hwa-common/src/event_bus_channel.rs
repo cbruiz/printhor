@@ -1,9 +1,10 @@
 //#region "Event Bus Channel"
+use crate as hwa;
 
-use crate::event_bus::{
+use core::ops::{BitAnd, BitOr, BitXor};
+use hwa::event_bus::{
     EventBusPubSubType, EventBusPublisherType, EventBusSubscriberType, EventFlags, EventStatus,
 };
-use core::ops::{BitAnd, BitOr, BitXor};
 
 /// Represents the *internal* channel controller of the event bus.
 /// It's responsible for managing and
@@ -31,7 +32,7 @@ use core::ops::{BitAnd, BitOr, BitXor};
 /// See [crate::GenericEventBus]
 pub struct EventBusChannelController<M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     channel: &'static EventBusPubSubType<M>,
     publisher: EventBusPublisherType<M>,
@@ -40,7 +41,7 @@ where
 
 impl<M> EventBusChannelController<M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     pub fn new(channel: &'static EventBusPubSubType<M>) -> Self {
         let publisher = channel.publisher().unwrap();
@@ -101,7 +102,7 @@ where
 
 pub struct EventBusSubscriber<'a, M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     inner: EventBusSubscriberType<'a, M>,
     last_status: EventFlags,
@@ -109,7 +110,7 @@ where
 
 impl<M> EventBusSubscriber<'static, M>
 where
-    M: embassy_sync::blocking_mutex::raw::RawMutex + 'static,
+    M: hwa::AsyncRawMutex + 'static,
 {
     pub(crate) const fn new(
         inner: EventBusSubscriberType<'static, M>,
@@ -151,10 +152,10 @@ where
     /// use printhor_hwa_common as hwa;
     /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
-    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
-    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// type ChannelControllerMutexType = hwa::AsyncCsMutexType;
+    /// type PubSubMutexType = hwa::AsyncCsMutexType;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::AsyncHoldableStrategy<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
     /// // let event_bus: EventBusController<BusMutexType, ChannelMutexType> = {
@@ -233,10 +234,10 @@ where
     /// use printhor_hwa_common as hwa;
     /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
-    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
-    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// type ChannelControllerMutexType = hwa::AsyncNoopMutexType;
+    /// type PubSubMutexType = hwa::AsyncNoopMutexType;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::AsyncStandardStrategy<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
     /// // let event_bus: EventBus<EventBusMutexStrategyType, PubSubMutexType> = {
@@ -277,10 +278,10 @@ where
     /// use printhor_hwa_common as hwa;
     /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
-    /// type ChannelControllerMutexType = hwa::SyncSendMutex;
-    /// type PubSubMutexType = hwa::SyncSendMutex;
+    /// type ChannelControllerMutexType = hwa::AsyncNoopMutexType;
+    /// type PubSubMutexType = hwa::AsyncNoopMutexType;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusMutexStrategyType = hwa::Holdable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::AsyncStandardStrategy<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
     /// // let event_bus: EventBus<EventBusMutexStrategyType, PubSubMutexType> = {
@@ -321,10 +322,10 @@ where
     /// use printhor_hwa_common as hwa;
     /// use hwa::{GenericEventBus, EventFlags, EventStatus};
     ///
-    /// type ChannelControllerMutexType = hwa::NoopMutex;
-    /// type PubSubMutexType = hwa::NoopMutex;
+    /// type ChannelControllerMutexType = hwa::AsyncNoopMutexType;
+    /// type PubSubMutexType = hwa::AsyncNoopMutexType;
     /// type ResourceType = hwa::EventBusChannelController<PubSubMutexType>;
-    /// type EventBusMutexStrategyType = hwa::NotHoldable<ChannelControllerMutexType, ResourceType>;
+    /// type EventBusMutexStrategyType = hwa::AsyncStandardStrategy<ChannelControllerMutexType, ResourceType>;
     ///
     /// // See [EventBus]
     /// // let event_bus: EventBus<EventBusMutexStrategyType, PubSubMutexType> = {

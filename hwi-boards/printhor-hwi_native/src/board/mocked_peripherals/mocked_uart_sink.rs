@@ -5,12 +5,12 @@ pub struct MockedUartSink {
 }
 
 impl MockedUartSink {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
         }
     }
 
-    pub(crate) fn split(&self) -> (MockedUartSinkTx, MockedUartSinkRx) {
+    pub fn split(&self) -> (MockedUartSinkTx, MockedUartSinkRx) {
         (MockedUartSinkTx::new(), MockedUartSinkRx::new())
     }
 }

@@ -51,18 +51,18 @@ cfg_if::cfg_if! {
 
         //#region "Mutex types for this board"
 
-        pub type EventbusMutexType = hwa::NoopMutex;
-        pub type EventBusChannelMutexType = hwa::NoopMutex;
-        pub type DeferChannelMutexType = hwa::NoopMutex;
-        pub type WatchdogMutexType = hwa::NoopMutex;
+        pub type EventbusMutexType = hwa::NoopRawMutexType;
+        pub type EventBusChannelMutexType = hwa::NoopRawMutexType;
+        pub type DeferChannelMutexType = hwa::NoopRawMutexType;
+        pub type WatchdogMutexType = hwa::NoopRawMutexType;
         pub type MotionDriverMutexType = hwa::SyncSendMutex;
-        pub type MotionPlannerMutexType = hwa::NoopMutex;
-        pub type MotionConfigMutexType = hwa::NoopMutex;
-        pub type MotionStatusMutexType = hwa::NoopMutex;
-        pub type MotionRingBufferMutexType = hwa::NoopMutex;
-        pub type MotionSignalMutexType = hwa::NoopMutex;
+        pub type MotionPlannerMutexType = hwa::NoopRawMutexType;
+        pub type MotionConfigMutexType = hwa::NoopRawMutexType;
+        pub type MotionStatusMutexType = hwa::NoopRawMutexType;
+        pub type MotionRingBufferMutexType = hwa::NoopRawMutexType;
+        pub type MotionSignalMutexType = hwa::NoopRawMutexType;
 
-        pub type SerialPort1MutexType = hwa::NoopMutex;
+        pub type SerialPort1MutexType = hwa::NoopRawMutexType;
 
         //#endregion
 
