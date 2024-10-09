@@ -23,10 +23,9 @@ jobs:
       run: cargo build --features native --package prinThor --bin printhor
     - name: Run tests
       run: cargo test --features native --package prinThor --bin printhor
-    - name: Run cargo-tarpaulin
-      uses: actions-rs/tarpaulin@v0.1
-      with:
-        version: '0.15.0'
-        args: '--features native --exclude-files "libs/*" --exclude-files "hwi-boards/printhor-hwi_mks_robin_nano/*" --exclude-files "hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/*" --exclude-files "hwi-boards/printhor-hwi_rp_2040/*" --exclude-files "hwi-boards/printhor-hwi_skr_mini_e3/*" --exclude-files "s-plot/*" --exclude-files "printhor-hwa-common-macros/*" -- --test-threads 1'
-    - name: Coveralls
-      uses: coverallsapp/github-action@v2
+    - name: Install Tarpaulin
+      run: cargo install cargo-tarpaulin
+    - name: Run tests with coverage
+      run: cargo tarpaulin --features native --exclude-files "libs/*" --exclude-files "hwi-boards/printhor-hwi_mks_robin_nano/*" --exclude-files "hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/*" --exclude-files "hwi-boards/printhor-hwi_rp_2040/*" --exclude-files "hwi-boards/printhor-hwi_skr_mini_e3/*" --exclude-files "s-plot/*" --exclude-files "printhor-hwa-common-macros/*" -- --test-threads 1
+    - name: Upload coverage to Coveralls
+      uses: coverallsapp/github-action@v2.3.0
