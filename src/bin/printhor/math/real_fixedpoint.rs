@@ -1,3 +1,4 @@
+//noinspection RsDetachedFile
 cfg_if::cfg_if! {
     if #[cfg(feature="fixed-point-128-impl")] {
         use core::cmp::Ordering;
@@ -299,9 +300,9 @@ cfg_if::cfg_if! {
         }
 
         #[cfg(feature = "with-defmt")]
-        impl crate::hwa::defmt::Format for Real {
-            fn format(&self, fmt: crate::hwa::defmt::Formatter) {
-                crate::hwa::defmt::write!(fmt, "{:?}", self.0.to_f64());
+        impl defmt::Format for Real {
+            fn format(&self, fmt: defmt::Formatter) {
+                defmt::write!(fmt, "{:?}", self.0.to_f64());
             }
         }
 

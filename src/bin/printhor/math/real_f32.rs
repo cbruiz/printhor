@@ -2,7 +2,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature="float-point-f32-impl")] {
         use core::cmp::Ordering;
         use core::ops::*;
-        use core::fmt::{Debug, Display, Formatter};
+        use core::fmt::{Debug, Formatter};
         #[cfg(feature = "with-defmt")]
         use defmt::Format;
         use num_traits::float::FloatCore;
@@ -354,28 +354,22 @@ cfg_if::cfg_if! {
 
         impl Debug for Real {
             fn fmt(&self, _f: &mut Formatter<'_>) -> core::fmt::Result {
+                /*
                 use lexical_core::BUFFER_SIZE;
                 let mut buffer = [b'0'; BUFFER_SIZE];
-                const FORMAT: u128 = lexical_core::format::STANDARD;
-                let mut options = lexical_core::WriteFloatOptions::new();
-                //options.set_trim_floats(true);
-                options.set_max_significant_digits(core::num::NonZero::new(6));
-                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
-                core::write!(_f, "{}", core::str::from_utf8(&slice).map_err(|_| core::fmt::Error)?)?;
-                Ok(())
-            }
-        }
 
-        impl Display for Real {
-            fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                use lexical_core::BUFFER_SIZE;
-                let mut buffer = [b'0'; BUFFER_SIZE];
                 const FORMAT: u128 = lexical_core::format::STANDARD;
                 let mut options = lexical_core::WriteFloatOptions::new();
                 //options.set_trim_floats(true);
                 options.set_max_significant_digits(core::num::NonZero::new(6));
                 let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
                 core::write!(_f, "{}", core::str::from_utf8(&slice).map_err(|_| core::fmt::Error)?)?;
+
+                 */
+                let mut buffer = ryu::Buffer::new();
+                let slice = buffer.format(self.0);
+                core::write!(_f, "{}", slice)?;
+
                 Ok(())
             }
         }
@@ -383,17 +377,7 @@ cfg_if::cfg_if! {
         #[cfg(feature = "with-defmt")]
         impl Format for Real {
             fn format(&self, _f: defmt::Formatter) {
-                use lexical_core::BUFFER_SIZE;
-                let mut buffer = [b'0'; BUFFER_SIZE];
-                const FORMAT: u128 = lexical_core::format::STANDARD;
-                let mut options = lexical_core::WriteFloatOptions::new();
-                //options.set_trim_floats(true);
-                options.set_max_significant_digits(core::num::NonZero::new(6));
-                let slice = lexical_core::write_with_options::<_, FORMAT>(self.0, &mut buffer, &options);
-                if let Ok(s) = core::str::from_utf8(&slice) {
-                    defmt::write!(_f, "{}", s);
-                }
-
+                defmt::write!(_f, "{}", self.0);
             }
         }
 
@@ -412,7 +396,7 @@ cfg_if::cfg_if! {
             pub fn new(start: Real, end: Real, step_size: Real) -> Self {
                 let num_steps = ((end - start) / step_size).ceil();
                 #[cfg(feature = "native")]
-                println!("RealInclusiveRange: start={} end={} step_size={}, num_steps={}", start, end, step_size, num_steps);
+                println!("RealInclusiveRange: start={:?} end={:?} step_size={:?}, num_steps={:?}", start, end, step_size, num_steps);
                 RealInclusiveRange {
                     current: start,
                     current_back: start,

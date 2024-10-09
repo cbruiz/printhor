@@ -1,14 +1,14 @@
 /// Implementation borrowed and adapted from embedded_sdmmc to provide a pseudo-async approach
 use crate::hwa;
 use core::cell::RefCell;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 use embedded_hal_02::prelude::_embedded_hal_blocking_delay_DelayUs;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 use embedded_sdmmc::sdcard::AcquireOpts;
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 use embedded_sdmmc::sdcard::proto::*;
 
 /// Adapter to manage multiple drivers
@@ -31,13 +31,13 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
 
     #[inline]
     pub async fn retain(&self) {
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         self.spi.retain().await;
     }
 
     #[inline]
     pub async fn release(&self) {
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         self.spi.release().await;
     }
 

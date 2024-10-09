@@ -1,24 +1,42 @@
+#[allow(unused)]
+use printhor_hwa_common as hwa;
+#[allow(unused)]
+use crate::board as board;
+#[allow(unused)]
+use crate::device as device;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-usb")] {
+        // The HWI Device types
+        pub type SerialUsbDevice = board::mocked_peripherals::MockedUartSink;
+        pub type SerialUsbRxDevice = board::mocked_peripherals::MockedUartSinkRx;
+        pub type SerialUsbTxDevice = board::mocked_peripherals::MockedUartSinkTx;
+        pub type SerialUsbInputStream = board::mocked_peripherals::MockedUartSinkRxInputStream;
+    }
+}
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
-        pub type UartPort1Device = crate::board::mocked_peripherals::MockedUart;
-        pub type UartPort1Tx = crate::board::mocked_peripherals::MockedUartTx;
-        pub type UartPort1Rx = crate::board::mocked_peripherals::MockedUartRx;
-        pub type UartPort1TxControllerRef = crate::board::StandardControllerRef<UartPort1Tx>;
-        pub type UartPort1RxInputStream = crate::board::mocked_peripherals::MockedUartRxInputStream;
+
+        // The HWI Device types
+        pub type SerialPort1Device = board::mocked_peripherals::MockedUart;
+        pub type SerialPort1RxDevice = board::mocked_peripherals::MockedUartRx;
+        pub type SerialPort1TxDevice = board::mocked_peripherals::MockedUartTx;
+        pub type SerialPort1InputStream = board::mocked_peripherals::MockedUartRxInputStream;
     }
 }
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-2")] {
-        pub type UartPort2Device = crate::board::mocked_peripherals::MockedUartSink;
-        pub type UartPort2Tx = crate::board::mocked_peripherals::MockedUartSinkTx;
-        pub type UartPort2Rx = crate::board::mocked_peripherals::MockedUartSinkRx;
-        pub type UartPort2TxControllerRef = crate::board::ControllerRef<UartPort2Tx>;
-        pub type UartPort2RxInputStream = crate::board::mocked_peripherals::MockedUartSinkRxInputStream;
+        pub type SerialPort2Device = board::mocked_peripherals::MockedUartSink;
+        pub type SerialPort2TxDevice = board::mocked_peripherals::MockedUartSinkTx;
+        pub type SerialPort2RxDevice = board::mocked_peripherals::MockedUartSinkRx;
+        pub type SerialPort2InputStream = board::mocked_peripherals::MockedUartSinkRxInputStream;
+
     }
 }
 
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-pub type AdcImpl<T> = crate::board::mocked_peripherals::MockedAdc<T>;
+pub type AdcImpl<T> = board::mocked_peripherals::MockedAdc<T>;
 
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub trait AdcTrait {}
@@ -42,36 +60,31 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-trinamic")]
-pub type TrinamicUart = crate::board::comm::SingleWireSoftwareUart;
+pub type TrinamicUart = board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-trinamic")]
-pub use crate::board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};
+pub use board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};
 
 #[cfg(feature = "with-trinamic")]
-pub use crate::board::comm::AxisChannel;
+pub use board::comm::AxisChannel;
 
 #[cfg(feature = "with-trinamic")]
-pub type TMCUartCh1Pin = crate::board::MockedIOPin;
+pub type TMCUartCh1Pin = board::mocked_peripherals::MockedIOPin;
 #[cfg(feature = "with-trinamic")]
-pub type TMCUartCh2Pin = crate::board::MockedIOPin;
+pub type TMCUartCh2Pin = board::mocked_peripherals::MockedIOPin;
 #[cfg(feature = "with-trinamic")]
-pub type TMCUartCh3Pin = crate::board::MockedIOPin;
+pub type TMCUartCh3Pin = board::mocked_peripherals::MockedIOPin;
 #[cfg(feature = "with-trinamic")]
-pub type TMCUartCh4Pin = crate::board::MockedIOPin;
+pub type TMCUartCh4Pin = board::mocked_peripherals::MockedIOPin;
 
 #[cfg(feature = "with-ps-on")]
-pub type PsOnPin = crate::board::mocked_peripherals::MockedIOPin;
-#[cfg(feature = "with-ps-on")]
-pub type PsOnRef = printhor_hwa_common::StandardControllerRef<PsOnPin>;
+pub type PsOnPin = board::mocked_peripherals::MockedIOPin;
 
 #[cfg(feature = "with-spi")]
-pub type Spi = crate::board::mocked_peripherals::MockedSpi;
-
-#[cfg(feature = "with-spi")]
-pub type SpiDeviceRef = printhor_hwa_common::ControllerRef<Spi>;
+pub type Spi = board::mocked_peripherals::MockedSpi;
 
 #[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
-pub type PwmAny = crate::board::mocked_peripherals::MockedPwm;
+pub type PwmAny = board::mocked_peripherals::MockedPwm;
 
 #[cfg(feature = "with-fan-layer")]
 pub type PwmFanLayer = PwmAny;
@@ -80,69 +93,81 @@ pub type PwmFanLayer = PwmAny;
 pub type PwmFanExtra1 = PwmAny;
 
 #[cfg(feature = "with-probe")]
-pub type PwmServo = PwmAny;
+pub type PwmProbe = PwmAny;
+
+#[cfg(feature = "with-probe")]
+pub type PwmProbeChannel = u8;
+#[cfg(feature = "with-laser")]
+pub type PwmLaserChannel = u8;
+#[cfg(feature = "with-fan-layer")]
+pub type PwmFanLayerChannel = u8;
+#[cfg(feature = "with-fan-extra-1")]
+pub type PwmFanExtra1Channel = u8;
 
 #[cfg(feature = "with-hot-end")]
-pub type PwmHotend = PwmAny;
+pub type PwmHotEndChannel = u8;
 
 #[cfg(feature = "with-hot-bed")]
-pub type PwmHotbed = PwmAny;
+pub type PwmHotBedChannel = u8;
+
+#[cfg(feature = "with-hot-end")]
+pub type PwmHotEnd = PwmAny;
+
+#[cfg(feature = "with-hot-bed")]
+pub type PwmHotBed = PwmAny;
 
 #[cfg(feature = "with-laser")]
 pub type PwmLaser = PwmAny;
 
-#[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
-pub use crate::board::mocked_peripherals::PwmChannel;
-
-#[cfg(feature = "with-sdcard")]
-pub type SDCardBlockDevice = crate::board::mocked_peripherals::MockledSDCardBlockDevice;
-
-#[cfg(feature = "with-sdcard")]
-pub type SDCardBlockDeviceRef = crate::board::StandardControllerRef<SDCardBlockDevice>;
+#[cfg(feature = "with-sd-card")]
+pub type SDCardBlockDevice = board::mocked_peripherals::MockledSDCardBlockDevice;
 
 #[cfg(feature = "with-hot-end")]
-pub type AdcHotendPeripheral = u8;
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-pub type AdcHotendHotbed = AdcImpl<u8>;
+pub type AdcHotEndPeripheral = u8;
 
 #[cfg(feature = "with-hot-end")]
-pub type AdcHotendPin = crate::board::mocked_peripherals::MockedIOPin;
+pub type Adc1 = AdcImpl<u8>;
+
+#[cfg(feature = "with-hot-end")]
+pub type AdcHotEnd = Adc1;
+#[cfg(feature = "with-hot-bed")]
+pub type AdcHotbed = Adc1;
+
+#[cfg(feature = "with-hot-end")]
+pub type AdcHotEndPin = board::mocked_peripherals::MockedIOPin;
 
 #[cfg(feature = "with-hot-bed")]
-pub type AdcHotbedPeripheral = u8;
+pub type AdcHotBedPeripheral = u8;
 
 #[cfg(feature = "with-hot-bed")]
-pub type AdcHotbedPin = crate::board::mocked_peripherals::MockedIOPin;
+pub type AdcHotBedPin = board::mocked_peripherals::MockedIOPin;
 
-pub type Watchdog = crate::board::mocked_peripherals::MockedWatchdog<'static, u8>;
+pub type WatchDog = board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
 #[cfg(feature = "with-display")]
-pub type DisplayDevice = crate::board::mocked_peripherals::SimulatorDisplayDevice;
-#[cfg(feature = "with-display")]
-pub type DisplayScreen<UI> = crate::board::mocked_peripherals::SimulatorDisplayScreen<UI>;
+compile_error!("To recover");
 
 #[cfg(feature = "with-motion")]
 pub struct MotionPins {
-    pub x_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub y_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub z_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub e_enable_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub x_enable_pin: board::mocked_peripherals::MockedIOPin,
+    pub y_enable_pin: board::mocked_peripherals::MockedIOPin,
+    pub z_enable_pin: board::mocked_peripherals::MockedIOPin,
+    pub e_enable_pin: board::mocked_peripherals::MockedIOPin,
 
-    pub x_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub y_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub z_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub e_endstop_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub x_endstop_pin: board::mocked_peripherals::MockedIOPin,
+    pub y_endstop_pin: board::mocked_peripherals::MockedIOPin,
+    pub z_endstop_pin: board::mocked_peripherals::MockedIOPin,
+    pub e_endstop_pin: board::mocked_peripherals::MockedIOPin,
 
-    pub x_step_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub y_step_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub z_step_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub e_step_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub x_step_pin: board::mocked_peripherals::MockedIOPin,
+    pub y_step_pin: board::mocked_peripherals::MockedIOPin,
+    pub z_step_pin: board::mocked_peripherals::MockedIOPin,
+    pub e_step_pin: board::mocked_peripherals::MockedIOPin,
 
-    pub x_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub y_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub z_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub e_dir_pin: crate::board::mocked_peripherals::MockedIOPin,
+    pub x_dir_pin: board::mocked_peripherals::MockedIOPin,
+    pub y_dir_pin: board::mocked_peripherals::MockedIOPin,
+    pub z_dir_pin: board::mocked_peripherals::MockedIOPin,
+    pub e_dir_pin: board::mocked_peripherals::MockedIOPin,
 }
 
 #[cfg(feature = "with-motion")]
@@ -190,39 +215,39 @@ impl MotionPins {
         self.e_enable_pin.set_low();
     }
 
-    pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    pub fn disable(&mut self, _channels: hwa::StepperChannel)
     {
 
     }
 
-    pub fn enable(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    pub fn enable(&mut self, _channels: hwa::StepperChannel)
     {
 
     }
 
-    pub fn set_forward_direction(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    pub fn set_forward_direction(&mut self, _channels: hwa::StepperChannel)
     {
 
     }
 
-    pub fn step_toggle(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
-
-    }
-
-
-    pub fn step_high(&mut self, _channels: printhor_hwa_common::StepperChannel)
-    {
-
-    }
-
-    pub fn step_low(&mut self, _channels: printhor_hwa_common::StepperChannel)
+    pub fn step_toggle(&mut self, _channels: hwa::StepperChannel)
     {
 
     }
 
 
-    pub fn endstop_triggered(&mut self, _channels: printhor_hwa_common::StepperChannel) -> bool
+    pub fn step_high(&mut self, _channels: hwa::StepperChannel)
+    {
+
+    }
+
+    pub fn step_low(&mut self, _channels: hwa::StepperChannel)
+    {
+
+    }
+
+
+    pub fn endstop_triggered(&mut self, _channels: hwa::StepperChannel) -> bool
     {
         false
     }
@@ -240,7 +265,7 @@ pub struct MotionDevice {
 }
 
 
-#[cfg(feature = "with-sdcard")]
+#[cfg(feature = "with-sd-card")]
 pub struct CardDevice {
 
     pub card_spi: SDCardBlockDevice,
@@ -248,42 +273,42 @@ pub struct CardDevice {
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmServo>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmProbeMutexStrategyType<device::PwmProbe>>,
+    pub power_channel: <device::PwmProbe as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-hot-end")]
-pub struct HotendPeripherals {
-    pub power_pwm: printhor_hwa_common::ControllerRef<PwmHotend>,
-    pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::ControllerRef<AdcHotendHotbed>,
-    pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
+pub struct HotEndPeripherals {
+    pub power_pwm: hwa::StaticController<crate::PwmHotEndMutexStrategyType<device::PwmHotEnd>>,
+    pub power_channel: <device::PwmHotEnd as embedded_hal_02::Pwm>::Channel,
+    pub temp_adc: hwa::StaticController<crate::AdcHotEndMutexStrategyType<device::AdcHotEnd>>,
+    pub temp_pin: board::mocked_peripherals::MockedIOPin,
+    pub thermistor_properties: &'static hwa::ThermistorProperties,
 }
 
 #[cfg(feature = "with-hot-bed")]
-pub struct HotbedPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotbed>,
-    pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotendHotbed>,
-    pub temp_pin: crate::board::mocked_peripherals::MockedIOPin,
-    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
+pub struct HotBedPeripherals {
+    pub power_pwm: hwa::StaticController<crate::PwmHotBedMutexStrategyType<device::PwmHotBed>>,
+    pub power_channel: <device::PwmHotBed as embedded_hal_02::Pwm>::Channel,
+    pub temp_adc: hwa::StaticController<crate::AdcHotBedMutexStrategyType<device::AdcHotbed>>,
+    pub temp_pin: board::mocked_peripherals::MockedIOPin,
+    pub thermistor_properties: &'static hwa::ThermistorProperties,
 }
 
 #[cfg(feature = "with-fan-layer")]
 pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanLayer>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmLaserMutexStrategyType<device::PwmFanLayer>>,
+    pub power_channel: <device::PwmFanLayer as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-fan-extra-1")]
 pub struct FanExtra1Peripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanExtra1>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmFanExtra1MutexStrategyType<device::PwmFanExtra1>>,
+    pub power_channel: <device::PwmFanExtra1 as embedded_hal_02::Pwm>::Channel,
 }
 
 #[cfg(feature = "with-laser")]
 pub struct LaserPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmLaser>,
-    pub power_channel: PwmChannel,
+    pub power_pwm: hwa::StaticController<crate::PwmLaserMutexStrategyType<device::PwmLaser>>,
+    pub power_channel: <device::PwmLaser as embedded_hal_02::Pwm>::Channel,
 }

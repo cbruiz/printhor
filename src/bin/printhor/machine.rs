@@ -1,5 +1,6 @@
 //! Machine metadata information
 use crate::hwa;
+use hwa::HwiContract;
 
 /// The Machine metadata info structure
 pub struct MachineInfo {
@@ -14,15 +15,14 @@ pub struct MachineInfo {
 }
 
 impl MachineInfo {
-    #[allow(unused)]
-    pub(crate) const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             firmware_name: "PrinThor",
             firmware_version: env!("CARGO_PKG_VERSION"),
             firmware_url: "https://github.com/cbruiz/printhor",
-            machine_type: hwa::MACHINE_TYPE,
-            machine_board: hwa::MACHINE_BOARD,
-            machine_processor: hwa::MACHINE_PROCESSOR,
+            machine_type: hwa::Contract::MACHINE_TYPE,
+            machine_board: hwa::Contract::MACHINE_BOARD,
+            machine_processor: hwa::Contract::MACHINE_PROCESSOR,
             machine_uuid: "00000000-0000-0000-0000-000000000000",
             extruder_count: 1,
         }

@@ -120,3 +120,42 @@ where
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate as hwa;
+    use core::future;
+    use future::Future;
+    use std::task::Poll;
+
+    type MutexType = hwa::NoopMutex;
+
+    #[futures_test::test]
+    async fn foundation_test() {
+        let persistent_state: hwa::PersistentState<MutexType, bool> = hwa::PersistentState::new();
+        assert_eq!(persistent_state.signaled(), false);
+        persistent_state.signal(true);
+        assert_eq!(persistent_state.signaled(), true);
+        // The value stored is `true`
+        assert_eq!(persistent_state.wait().await, true);
+        // The value stored is still `true`
+        assert_eq!(persistent_state.wait().await, true);
+        persistent_state.reset();
+
+        let persistent_state: hwa::PersistentState<MutexType, bool> = Default::default();
+
+        future::poll_fn(|cx| {
+            let mut pinned_fut = core::pin::pin!(persistent_state.wait());
+            let p = pinned_fut.as_mut().poll(cx);
+            assert!(p.is_pending());
+
+            persistent_state.signal(true);
+
+            let p = pinned_fut.as_mut().poll(cx);
+            assert!(!p.is_pending());
+
+            Poll::Ready(())
+        })
+        .await;
+    }
+}

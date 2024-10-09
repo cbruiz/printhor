@@ -1,52 +1,45 @@
+use crate::control;
 ///! Input Multiplexer
 ///!
 ///! This feature is a bit inefficient and could be improved leveraging macros
 ///! because currently useless polls are performed in disabled channels
 use crate::hwa;
-use crate::control::{GCodeCmd, GCodeLineParserError};
+use control::{GCodeCmd, GCodeLineParserError};
 use embassy_futures::select::Either3;
 #[allow(unused)]
 use futures_util::future;
 
-
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
     #[cfg(feature = "with-serial-usb")]
-    serial_usb_line_parser:
-        crate::control::GCodeLineParser<hwa::device::USBSerialDeviceInputStream>,
+    serial_usb_line_parser: control::GCodeLineParser<hwa::types::SerialUsbInputStream>,
     #[cfg(feature = "with-serial-port-1")]
-    serial_port1_line_parser:
-        crate::control::GCodeLineParser<hwa::device::UartPort1RxInputStream>,
+    serial_port1_line_parser: control::GCodeLineParser<hwa::types::SerialPort1InputStream>,
     #[cfg(feature = "with-serial-port-2")]
-    serial_port2_line_parser:
-        crate::control::GCodeLineParser<hwa::device::UartPort2RxInputStream>,
+    serial_port2_line_parser: control::GCodeLineParser<hwa::types::SerialPort2InputStream>,
 }
 
 impl GCodeMultiplexedInputStream {
     pub fn new(
-        #[cfg(feature = "with-serial-usb")]
-        serial_usb_rx_stream: hwa::device::USBSerialDeviceInputStream,
+        #[cfg(feature = "with-serial-usb")] serial_usb_rx_stream: hwa::types::SerialUsbInputStream,
         #[cfg(feature = "with-serial-port-1")]
-        serial_port1_rx_stream: hwa::device::UartPort1RxInputStream,
+        serial_port1_rx_stream: hwa::types::SerialPort1InputStream,
         #[cfg(feature = "with-serial-port-2")]
-        serial_port2_rx_stream: hwa::device::UartPort2RxInputStream,
+        serial_port2_rx_stream: hwa::types::SerialPort2InputStream,
     ) -> Self {
         Self {
             #[cfg(feature = "with-serial-usb")]
-            serial_usb_line_parser: crate::control::GCodeLineParser::new(serial_usb_rx_stream),
+            serial_usb_line_parser: control::GCodeLineParser::new(serial_usb_rx_stream),
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_line_parser: crate::control::GCodeLineParser::new(serial_port1_rx_stream),
+            serial_port1_line_parser: control::GCodeLineParser::new(serial_port1_rx_stream),
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_line_parser: crate::control::GCodeLineParser::new(serial_port2_rx_stream),
+            serial_port2_line_parser: control::GCodeLineParser::new(serial_port2_rx_stream),
         }
     }
 
     pub async fn next_gcode(
         &mut self,
-    ) -> (
-        Result<GCodeCmd, GCodeLineParserError>,
-        hwa::CommChannel,
-    ) {
+    ) -> (Result<GCodeCmd, GCodeLineParserError>, hwa::CommChannel) {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-usb")] {
                 let f1 = self.serial_usb_line_parser.next_gcode();
@@ -111,58 +104,49 @@ impl GCodeMultiplexedInputStream {
 
     #[allow(unused)]
     pub fn get_state(&self, channel: hwa::CommChannel) -> async_gcode::AsyncParserState {
-
         match channel {
-            #[cfg(feature="with-serial-usb")]
+            #[cfg(feature = "with-serial-usb")]
             hwa::CommChannel::SerialUsb => self.serial_usb_line_parser.get_state(),
-            #[cfg(feature="with-serial-port-1")]
+            #[cfg(feature = "with-serial-port-1")]
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.get_state(),
-            #[cfg(feature="with-serial-port-2")]
+            #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.get_state(),
-            hwa::CommChannel::Internal => {
-                async_gcode::AsyncParserState::ErrorRecovery
-            }
+            hwa::CommChannel::Internal => async_gcode::AsyncParserState::ErrorRecovery,
         }
     }
 
     #[allow(unused)]
     pub fn get_line(&self, channel: hwa::CommChannel) -> u32 {
-
         match channel {
-            #[cfg(feature="with-serial-usb")]
+            #[cfg(feature = "with-serial-usb")]
             hwa::CommChannel::SerialUsb => self.serial_usb_line_parser.get_line(),
-            #[cfg(feature="with-serial-port-1")]
+            #[cfg(feature = "with-serial-port-1")]
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.get_line(),
-            #[cfg(feature="with-serial-port-2")]
+            #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.get_line(),
-            hwa:: CommChannel::Internal => {
-                0
-            }
+            hwa::CommChannel::Internal => 0,
         }
     }
 
     pub fn get_gcode_line(&self, channel: hwa::CommChannel) -> Option<u32> {
-
         match channel {
-            #[cfg(feature="with-serial-usb")]
+            #[cfg(feature = "with-serial-usb")]
             hwa::CommChannel::SerialUsb => self.serial_usb_line_parser.gcode_line(),
-            #[cfg(feature="with-serial-port-1")]
+            #[cfg(feature = "with-serial-port-1")]
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.gcode_line(),
-            #[cfg(feature="with-serial-port-2")]
+            #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.gcode_line(),
-            hwa::CommChannel::Internal => {
-                None
-            }
+            hwa::CommChannel::Internal => None,
         }
     }
 
     pub fn reset(&mut self, comm_channel: hwa::CommChannel) {
         match comm_channel {
-            #[cfg(feature="with-serial-usb")]
+            #[cfg(feature = "with-serial-usb")]
             hwa::CommChannel::SerialUsb => self.serial_usb_line_parser.reset(),
-            #[cfg(feature="with-serial-port-1")]
+            #[cfg(feature = "with-serial-port-1")]
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.reset(),
-            #[cfg(feature="with-serial-port-2")]
+            #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.reset(),
             hwa::CommChannel::Internal => {}
         }

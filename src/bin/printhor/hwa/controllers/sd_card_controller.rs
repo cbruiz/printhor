@@ -5,15 +5,14 @@ use embedded_sdmmc::{
     DirEntry, Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx,
     VolumeManager,
 };
-use printhor_hwa_common::ControllerMutex;
-use printhor_hwa_common::{StandardControllerMutex, TrackedStaticCell};
+use printhor_hwa_utils::StaticController;
 
 const MAX_DIRS: usize = 3usize;
 const MAX_FILES: usize = 1usize;
 
-#[cfg(feature = "sdcard-uses-spi")]
+#[cfg(feature = "sd-card-uses-spi")]
 pub type SDCardBlockDevice = hwa::adapters::SPIAdapter<hwa::device::SpiCardCSPin>;
-#[cfg(not(feature = "sdcard-uses-spi"))]
+#[cfg(not(feature = "sd-card-uses-spi"))]
 pub type SDCardBlockDevice = hwa::device::SDCardBlockDevice;
 
 #[allow(unused)]
@@ -70,12 +69,12 @@ pub struct DirectoryRef {
 #[allow(unused)]
 impl SDCard {
     pub(crate) async fn retain(&mut self) {
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         self.mgr.device().retain().await;
     }
 
     pub(crate) async fn release(&mut self) {
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         self.mgr.device().release().await;
     }
 
@@ -355,22 +354,18 @@ impl TimeSource for DummyTimeSource {
 }
 
 pub struct CardController {
-    instance: &'static StandardControllerMutex<SDCard>,
+    instance: StaticController<hwa::SDCardMutexStrategyType<SDCard>>,
 }
 
 #[allow(unused)]
 impl CardController {
     pub async fn new(device: SDCardBlockDevice) -> Self {
-        #[cfg_attr(not(target_arch = "aarch64"), link_section = ".bss")]
-        #[cfg_attr(target_arch = "aarch64", link_section = "__DATA,.bss")]
-        static CARD_CTRL_SHARED_STATE: TrackedStaticCell<StandardControllerMutex<SDCard>> =
-            TrackedStaticCell::new();
         let mut card =
             SDCardVolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         card.device().retain().await;
         let vol = card.open_raw_volume(VolumeIdx(hwa::SDCARD_PARTITION));
-        #[cfg(feature = "sdcard-uses-spi")]
+        #[cfg(feature = "sd-card-uses-spi")]
         card.device().release().await;
         let mut opened_dir_slots = heapless::Vec::new();
         let mut opened_dir_refcount = heapless::Vec::new();
@@ -382,23 +377,21 @@ impl CardController {
         }
 
         Self {
-            instance: CARD_CTRL_SHARED_STATE.init::<{ hwa::MAX_STATIC_MEMORY }>(
-                "card_shared_state",
-                ControllerMutex::new(SDCard {
+            instance: hwa::make_static_controller!(
+                "SDCardSharedState",
+                hwa::SDCardMutexStrategyType<SDCard>,
+                SDCard {
                     mgr: card,
                     vol: vol.ok(),
                     opened_dir_slots,
                     opened_dir_refcount,
                     opened_dir_names,
-                }),
+                }
             ),
         }
     }
 
-    pub async fn list_dir(
-        &self,
-        full_path: &str,
-    ) -> Result<CardAsyncDirIterator, SDCardError> {
+    pub async fn list_dir(&self, full_path: &str) -> Result<CardAsyncDirIterator, SDCardError> {
         hwa::debug!("list_dir() called");
         let mut path: heapless::Vec<DirectoryRef, MAX_DIRS> = heapless::Vec::new();
         hwa::debug!("Locking card");
@@ -436,7 +429,7 @@ impl CardController {
             }
         }
         card.release().await;
-        Ok(CardAsyncDirIterator::new(self.instance, path))
+        Ok(CardAsyncDirIterator::new(self.instance.clone(), path))
     }
 
     pub async fn new_stream(&self, file_path: &str) -> Result<SDCardStream, SDCardError> {
@@ -533,7 +526,7 @@ impl CardController {
 impl Clone for CardController {
     fn clone(&self) -> Self {
         Self {
-            instance: self.instance,
+            instance: self.instance.clone(),
         }
     }
 }
@@ -550,14 +543,14 @@ pub struct SDDirEntry {
 }
 
 pub struct CardAsyncDirIterator {
-    instance: &'static StandardControllerMutex<SDCard>,
+    instance: StaticController<hwa::SDCardMutexStrategyType<SDCard>>,
     path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     current_index: usize,
 }
 
 impl CardAsyncDirIterator {
     pub fn new(
-        instance: &'static StandardControllerMutex<SDCard>,
+        instance: StaticController<hwa::SDCardMutexStrategyType<SDCard>>,
         path: heapless::Vec<DirectoryRef, MAX_DIRS>,
     ) -> Self {
         Self {
@@ -678,9 +671,7 @@ impl async_gcode::ByteStream for SDCardStream {
             self.bytes_read = 0;
             let result = match self.file.as_mut() {
                 None => Err(SDCardError::NotFound),
-                Some(f) => {
-                    self.card_controller.read(f, &mut self.buffer).await
-                }
+                Some(f) => self.card_controller.read(f, &mut self.buffer).await,
             };
             match result {
                 Ok(bytes_read) => {
@@ -695,7 +686,7 @@ impl async_gcode::ByteStream for SDCardStream {
                         self.current_byte_index = 0;
                         None
                     }
-                },
+                }
                 Err(_) => Some(Err(async_gcode::Error::NumberOverflow)),
             }
         }

@@ -22,14 +22,16 @@ mod motion_timing;
 /// The module for motion time driver functionalities.
 mod motion_time_driver;
 
+use crate::hwa;
 pub use motion_config::*;
-pub use motion_planner::*;
 pub use motion_interpolation::*;
+pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;
-pub use motion_timing::*;
 pub use motion_time_driver::*;
-use crate::hwa;
+pub use motion_timing::*;
+
+pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
 
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
@@ -38,7 +40,7 @@ pub enum ScheduledMove {
     /// A homing action.
     Homing,
     /// A dwell action.
-    Dwell,
+    Dwell(Option<u32>),
 }
 
 /// Types of movements in the motion system.
@@ -75,8 +77,10 @@ pub enum PlanEntry {
     ///
     /// *_1: CommChannel* - The input channel requesting the move.
     ///
-    /// *_2: bool* - Indicates if motion is deferred or not.
-    Dwell(hwa::CommChannel, bool),
+    /// *_2: Option<u32>* - The number of milliseconds to delay.
+    ///
+    /// *_3: bool* - Indicates if motion is deferred or not.
+    Dwell(hwa::CommChannel, Option<u32>, bool),
     /// An executing move.
     ///
     /// *_1: MovType* - The type of the move.
@@ -89,5 +93,20 @@ pub enum PlanEntry {
 impl Default for PlanEntry {
     fn default() -> Self {
         PlanEntry::Empty
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::hwa::controllers::PlanEntry;
+
+    #[test]
+    fn plan_entry_test() {
+        let sz = size_of::<PlanEntry>();
+        assert!(
+            sz < 512,
+            "Plan entry is not so big ({} bytes. max: 512)",
+            sz
+        );
     }
 }

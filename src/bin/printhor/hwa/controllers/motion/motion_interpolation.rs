@@ -1,9 +1,9 @@
 use crate::hwa;
-use hwa::StepperChannel;
-use hwa::controllers::MultiTimer;
 use crate::math;
-use math::Real;
 use crate::tgeo::TVector;
+use hwa::controllers::MultiTimer;
+use hwa::StepperChannel;
+use math::Real;
 
 /// A struct for interpolating microsteps along linear trajectories.
 pub struct LinearMicrosegmentStepInterpolator {
@@ -108,7 +108,6 @@ impl LinearMicrosegmentStepInterpolator {
 
         #[cfg(test)]
         {
-
             hwa::trace!("...");
             hwa::trace!(
                 "step_pos: {} steps_to_advance : {}",
@@ -192,10 +191,10 @@ pub mod interpolation_test {
     #[test]
     fn interpolation_test_1() {
         use crate::hwa;
-        use hwa::controllers::LinearMicrosegmentStepInterpolator;
         use crate::math;
-        use math::Real;
         use crate::tgeo::TVector;
+        use hwa::controllers::LinearMicrosegmentStepInterpolator;
+        use math::Real;
 
         let mut lin = LinearMicrosegmentStepInterpolator::new(
             TVector::from_coords(Some(math::ONE), None, None, None),

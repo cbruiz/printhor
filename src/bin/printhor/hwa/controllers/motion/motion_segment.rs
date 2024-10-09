@@ -1,4 +1,5 @@
 //! TODO: This feature is still in incubation
+
 use crate::control::motion::{Constraints, MotionProfile};
 use crate::hwa;
 use crate::math::Real;
@@ -48,7 +49,7 @@ pub struct SegmentData {
     /// Tool power utilized in the segment.
     pub tool_power: Real,
     /// Motion constraints applicable to the segment.
-    pub constraints: Constraints,
+    pub constraints: Constraints, // Should remove this?
 }
 
 /// Represents a motion segment.
@@ -74,12 +75,10 @@ impl Segment {
     pub fn new(segment_data: SegmentData) -> Self {
         cfg_if::cfg_if! {
             if #[cfg(feature="native")] {
-                static mut COUNTER: u32 = 0;
-                // TODO: remove unsafe
-                let id = unsafe {
-                    COUNTER += 1;
-                    COUNTER
-                };
+                use std::sync::atomic::AtomicU32;
+
+                static COUNTER: AtomicU32 = AtomicU32::new(0);
+                let id = COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
                 Self {segment_data, id}
             }
             else {
@@ -166,9 +165,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::control::motion::SCurveMotionProfile;
     use crate::math;
-    use super::*;
     use crate::math::Real;
     use crate::tgeo::TVector;
 
@@ -189,13 +188,12 @@ mod tests {
                 v_max: math::ONE_HUNDRED,
                 a_max: math::ONE_THOUSAND,
                 j_max: math::ONE_THOUSAND,
-            }
+            },
         }
     }
 
     #[test]
     fn test_segment_creation() {
-
         let segment = Segment::new(dummy_segment());
         assert_eq!(segment.segment_data.speed_enter_mms, Real::from_f32(10.0));
         assert_eq!(segment.segment_data.speed_exit_mms, Real::from_f32(15.0));
@@ -205,7 +203,6 @@ mod tests {
     #[test]
     #[cfg(feature = "native")]
     fn test_segment_creation_with_id() {
-
         let segment = Segment::new(dummy_segment());
         assert_eq!(segment.segment_data.speed_enter_mms, Real::from_f32(10.0));
         assert_eq!(segment.segment_data.speed_exit_mms, Real::from_f32(15.0));
@@ -221,13 +218,16 @@ mod tests {
         let constraints = Constraints {
             v_max: Real::from_f32(10.0),
             a_max: Real::from_f32(2.0),
-            j_max: Real::from_f32(1.0)
+            j_max: Real::from_f32(1.0),
         };
         let motion_profile = SCurveMotionProfile::compute(
             Real::from_f32(20.0),
             Real::from_f32(0.0),
             Real::from_f32(5.0),
-            &constraints, true).unwrap();
+            &constraints,
+            true,
+        )
+        .unwrap();
 
         let mut segment_iter = SegmentIterator::new(&motion_profile, ref_time);
 
@@ -249,13 +249,16 @@ mod tests {
         let constraints = Constraints {
             v_max: Real::from_f32(10.0),
             a_max: Real::from_f32(2.0),
-            j_max: Real::from_f32(1.0)
+            j_max: Real::from_f32(1.0),
         };
         let motion_profile = SCurveMotionProfile::compute(
             Real::from_f32(20.0),
             Real::from_f32(0.0),
             Real::from_f32(5.0),
-            &constraints, true).unwrap();
+            &constraints,
+            true,
+        )
+        .unwrap();
         let ref_time = Real::from_f32(0.0);
         let mut segment_iter = SegmentIterator::new(&motion_profile, ref_time);
 

@@ -1,5 +1,5 @@
+//noinspection RsDetachedFile
 // Math module
-
 #[path = "../../src/bin/printhor/control/mod.rs"]
 pub mod control;
 
@@ -10,7 +10,7 @@ pub mod tgeo;
 pub mod math;
 
 #[path = "../../src/bin/printhor/hwa/mod.rs"]
-pub mod hwa;
+mod hwa_core;
 
 #[path = "../../src/bin/printhor/helpers/mod.rs"]
 pub mod helpers;
@@ -18,16 +18,13 @@ pub mod helpers;
 #[path = "../../src/bin/printhor/machine.rs"]
 pub mod machine;
 
-#[path = "../../src/bin/printhor/hwi/mod.rs"]
-pub mod core_hwi;
 
 pub mod hwi {
-    pub use super::core_hwi::*;
     pub const MACHINE_BOARD: &str = "native";
     pub const MACHINE_PROCESSOR: &str = "native";
     pub const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
 
-    pub const SEGMENT_QUEUE_SIZE: u8 = 20;
+    pub const SEGMENT_QUEUE_SIZE: u8 = 10;
 
     pub const MAX_STATIC_MEMORY: usize = 16386;
     pub const HEAP_SIZE_BYTES: usize = 1024;
@@ -37,21 +34,30 @@ pub mod hwi {
     /// Micro-segment clock frequency in Hz
     pub const STEPPER_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
+
+    use super::hwa_core as hwa;
+    pub type EventbusMutexType = hwa::SyncSendMutex;
+    pub type EventBusChannelMutexType = hwa::NoopMutex;
+    pub type DeferChannelMutexType = hwa::NoopMutex;
+    pub type WatchdogMutexType = hwa::NoopMutex;
+    pub type MotionDriverMutexType = hwa::SyncSendMutex;
+    pub type MotionPlannerMutexType = hwa::NoopMutex;
+    pub type MotionConfigMutexType = hwa::SyncSendMutex;
+    pub type MotionStatusMutexType = hwa::NoopMutex;
+    pub type MotionRingBufferMutexType = hwa::NoopMutex;
+    pub type MotionSignalMutexType = hwa::NoopMutex;
+    pub type SerialPort1MutexType = hwa::SyncSendMutex;
+
     pub mod device {
-        use printhor_hwa_common::StepperChannel;
         use crate::prelude::tgeo::CoordSel;
+        use printhor_hwa_common::StepperChannel;
 
         #[derive(Clone)]
-        pub struct MotionPins {
-
-        }
+        pub struct MotionPins {}
 
         impl MotionPins {
-
             pub fn new() -> Self {
-                Self {
-
-                }
+                Self {}
             }
             pub fn enable(&mut self, channels: StepperChannel) {
                 todo!()
@@ -73,9 +79,7 @@ pub mod hwi {
                 todo!()
             }
 
-            pub fn step_toggle(&mut self, _channels: StepperChannel) {
-
-            }
+            pub fn step_toggle(&mut self, _channels: StepperChannel) {}
 
             pub fn endstop_triggered(&mut self, channels: StepperChannel) -> bool {
                 let mut triggered = false;
@@ -99,16 +103,19 @@ pub mod hwi {
             }
         }
 
-        pub struct MotionDevice
-        {
+        pub struct MotionDevice {
             pub motion_pins: MotionPins,
         }
 
-        pub struct Watchdog {
-
-        }
+        pub struct Watchdog {}
     }
-
 }
 
+pub mod hwa {
+    pub use super::hwa_core::*;
+    pub use crate::hwi::*;
 
+    //#region "Mutex types for this board"
+
+    //#endregion
+}
