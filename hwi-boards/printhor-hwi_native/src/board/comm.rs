@@ -3,19 +3,17 @@
 use printhor_hwa_common as hwa;
 use hwa::soft_uart;
 use hwa::soft_uart::{AsyncRead, MultiChannel, UartChannel};
-use printhor_hwa_common::soft_uart::{AsyncWrite, SerialError};
-use crate::device;
+use hwa::soft_uart::{AsyncWrite, SerialError};
+use crate::{board, device};
 
 #[derive(Debug)]
 pub enum Error {
     Uninit,
     Timeout,
 }
-#[allow(unused)]
-use crate::board::MockedIOPin;
 
 /// Software UART channel
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum AxisChannel {
     TMCUartX,
     TMCUartY,
@@ -34,7 +32,7 @@ impl Into<UartChannel> for AxisChannel {
     }
 }
 
-pub struct AnyPinWrapper(MockedIOPin);
+pub struct AnyPinWrapper(board::mocked_peripherals::MockedIOPin);
 
 impl soft_uart::IOPin for AnyPinWrapper
 {
@@ -85,7 +83,7 @@ impl SingleWireSoftwareUart {
         }
     }
 
-    /// "Low level" speciallization with channel semantics
+    /// "Low level" specialization with channel semantics
     pub fn set_axis_channel(&mut self, axis_channel: Option<AxisChannel>) {
         self.set_channel(axis_channel.and_then(|ac| Some(ac.into())));
     }
