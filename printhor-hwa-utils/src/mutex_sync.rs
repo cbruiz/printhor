@@ -125,9 +125,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use printhor_hwa_common_macros::make_static_sync_controller;
     use crate as hwa;
     use hwa::SyncMutexStrategy;
+    use printhor_hwa_common_macros::make_static_sync_controller;
 
     struct DummyDevice {
         value: u32,
@@ -175,12 +175,8 @@ mod test {
         type MutexType = hwa::SyncNoopMutexType;
         type SyncMutexStrategy = hwa::SyncStandardStrategy<MutexType, DummyDevice>;
 
-
-        let controller = make_static_sync_controller!(
-            "DummyDevice",
-            SyncMutexStrategy,
-            DummyDevice::new()
-        );
+        let controller =
+            make_static_sync_controller!("DummyDevice", SyncMutexStrategy, DummyDevice::new());
 
         let _c2 = controller.clone();
         hwa::info!("OK");

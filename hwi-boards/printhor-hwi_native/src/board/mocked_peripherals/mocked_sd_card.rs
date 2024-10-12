@@ -1,8 +1,10 @@
+use printhor_hwa_common as hwa;
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
+use hwa::traits::{AsyncSDBlockDevice, SDBlockDevice};
+use embedded_sdmmc::{Block, BlockCount, BlockIdx};
 
 #[derive(Debug, Clone)]
 enum Error {
@@ -24,25 +26,35 @@ impl From<embedded_sdmmc::SdCardError> for Error {
     }
 }
 
-#[derive(Debug)]
-pub struct MockledSDCardBlockDevice {
+pub struct MockedSDCardBlockDevice {
     file: RefCell<File>,
     print_blocks: bool,
 }
 
-impl MockledSDCardBlockDevice {
-    pub(crate) fn new<P>(device_name: P, print_blocks: bool) -> Result<MockledSDCardBlockDevice, std::io::Error>
+impl MockedSDCardBlockDevice {
+    pub fn new<P>(device_name: P, print_blocks: bool) -> Result<MockedSDCardBlockDevice, std::io::Error>
         where
             P: AsRef<Path>,
     {
-        Ok(MockledSDCardBlockDevice {
+        hwa::info!("Cwd: Opening {}/{:?}", std::env::current_dir().as_ref().unwrap().to_str().unwrap(),  device_name.as_ref().to_str().unwrap());
+
+        Ok(MockedSDCardBlockDevice {
             file: RefCell::new(File::open(device_name)?),
             print_blocks,
         })
     }
 }
 
-impl BlockDevice for MockledSDCardBlockDevice {
+impl AsyncSDBlockDevice for MockedSDCardBlockDevice {
+    async fn retain(&self) -> Result<(), ()> {
+        Ok(())
+    }
+    fn release(&self) -> Result<(), ()> {
+        Ok(())
+    }
+}
+
+impl SDBlockDevice for MockedSDCardBlockDevice {
     type Error = std::io::Error;
 
     fn read(

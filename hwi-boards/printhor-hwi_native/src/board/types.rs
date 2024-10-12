@@ -44,6 +44,20 @@ cfg_if::cfg_if! {
         pub type PSOnLockType = hwa::AsyncNoopMutexType;
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-probe", feature = "with-hot-end",feature = "with-hot-bed",
+        feature = "with-laser", feature = "with-fan-layer", feature = "with-fan-extra-1"))] {
+        pub type Pwm1LockType = hwa::SyncNoopMutexType;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end",feature = "with-hot-bed"))] {
+        pub type Adc1LockType = hwa::AsyncNoopMutexType;
+    }
+}
+
 //#endregion
 
 //#region "General controllers locking strategy customization"
@@ -80,6 +94,57 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
         pub type PSOnMutexStrategy = hwa::SyncStandardStrategy<PSOnLockType, super::device::PsOnPin>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-probe", feature = "with-hot-end",feature = "with-hot-bed",
+        feature = "with-laser", feature = "with-fan-layer", feature = "with-fan-extra-1"))] {
+        pub type Pwm1MutexStrategy = hwa::SyncStandardStrategy<Pwm1LockType, super::device::Pwm1>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-probe")] {
+        pub type ProbeMutexStrategy = Pwm1MutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end",feature = "with-hot-bed"))] {
+        pub type Adc1MutexStrategy = hwa::AsyncStandardStrategy<Adc1LockType, super::device::Adc1>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-end")] {
+        pub type HotEndAdcMutexStrategy = Adc1MutexStrategy;
+        pub type HotEndPwmMutexStrategy = Pwm1MutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-bed")] {
+        pub type HotBedAdcMutexStrategy = Adc1MutexStrategy;
+        pub type HotBedPwmMutexStrategy = Pwm1MutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-layer")] {
+        pub type FanLayerPwmMutexStrategy = Pwm1MutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-sd-card")] {
+        pub type SDCardBlockDevice = super::device::SDCardBlockDevice;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-print-job")] {
+        pub type PrinterControllerSignalMutexType = hwa::AsyncNoopMutexType;
     }
 }
 

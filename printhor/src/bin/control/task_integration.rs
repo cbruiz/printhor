@@ -12,14 +12,7 @@ use hwa::{CommChannel, EventBusSubscriber, EventFlags, EventStatus};
 #[allow(unused)]
 use math::Real;
 use printhor_hwa_common::StepperChannel;
-
-pub struct IntegrationaskParams {
-    pub processor: hwa::GCodeProcessor,
-    #[cfg(feature = "with-sd-card")]
-    pub card_controller: hwa::controllers::CardController,
-    #[cfg(feature = "with-print-job")]
-    pub printer_controller: hwa::controllers::PrinterController,
-}
+use crate::hwa::GCodeProcessor;
 
 // A global static notifier to indicate when task_integration is completed
 #[cfg(any(test, feature = "integration-test"))]
@@ -27,7 +20,14 @@ pub static INTEGRATION_STATUS: PersistentState<CriticalSectionRawMutex, bool> =
     PersistentState::new();
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskParams) {
+pub async fn task_integration(
+    mut processor: GCodeProcessor,
+    #[cfg(feature = "with-sd-card")]
+    mut card_controller: hwa::types::SDCardController,
+    #[cfg(feature = "with-print-job")]
+    mut printer_controller: hwa::types::PrinterController,
+
+) {
     #[allow(unused)]
     let expect_immediate = |res| match res {
         control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => {
@@ -45,7 +45,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
         control::CodeExecutionSuccess::DEFERRED(evt) => Ok(evt),
     };
 
-    let event_bus = params.processor.event_bus.clone();
+    let event_bus = processor.event_bus.clone();
 
     let mut subscriber = event_bus.subscriber().await;
 
@@ -69,17 +69,16 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
     // Set endstops up for simulation for homing to be completed properly
     #[cfg(feature = "with-motion")]
     {
-        let dg = params.processor.motion_planner.motion_driver().lock().await;
-        dg.pins.set_end_stop_high(StepperChannel::X | StepperChannel::Y | StepperChannel::Z)
+        let dg = processor.motion_planner.motion_driver().lock().await;
+        dg.pins
+            .set_end_stop_high(StepperChannel::X | StepperChannel::Y | StepperChannel::Z)
     }
 
     {
         let test_name = "T1 [M100 (Machine info)]";
 
         hwa::info!("## {} - BEGIN", test_name);
-        if let Some(_result) = params
-            .processor
-            .execute(
+        if let Some(_result) = processor.execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M100),
                 true,
@@ -103,9 +102,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
         let test_name = "T2 [M80 (Power On)]";
 
         hwa::info!("## {} - BEGIN", test_name);
-        if let Some(_result) = params
-            .processor
-            .execute(
+        if let Some(_result) = processor.execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M80),
                 false,
@@ -176,8 +173,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
 
         hwa::info!("## {} - BEGIN", test_name);
         let _t0 = embassy_time::Instant::now();
-        if let Some(evt) = params
-            .processor
+        if let Some(evt) = processor
             .execute(CommChannel::Internal, &homing_gcode, false)
             .await
             .and_then(expect_deferred)
@@ -213,9 +209,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
         );
 
         hwa::info!("## {} - BEGIN", test_name);
-        if params
-            .processor
-            .execute(CommChannel::Internal, &set_pos_gcode, false)
+        if processor.execute(CommChannel::Internal, &set_pos_gcode, false)
             .await
             .and_then(expect_immediate)
             .is_ok()
@@ -236,9 +230,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
             control::GCodeCmd::new(6, Some(6), control::GCodeValue::G4(control::S { s: None }));
 
         hwa::info!("## {} - BEGIN", test_name);
-        if let Some(evt) = params
-            .processor
-            .execute(CommChannel::Internal, &set_pos_gcode, false)
+        if let Some(evt) = processor.execute(CommChannel::Internal, &set_pos_gcode, false)
             .await
             .and_then(expect_deferred)
             .ok()
@@ -266,13 +258,13 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
 
         hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
-            &mut params.processor,
+            &mut processor,
             CommChannel::Internal,
             &gcode,
             #[cfg(feature = "with-sd-card")]
-            &mut params.card_controller,
+            &mut card_controller,
             #[cfg(feature = "with-print-job")]
-            &mut params.printer_controller,
+            &mut printer_controller,
         )
         .await;
         if resp.and_then(expect_immediate).is_ok() {
@@ -297,13 +289,13 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
 
         hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
-            &mut params.processor,
+            &mut processor,
             CommChannel::Internal,
             &gcode,
             #[cfg(feature = "with-sd-card")]
-            &mut params.card_controller,
+            &mut card_controller,
             #[cfg(feature = "with-print-job")]
-            &mut params.printer_controller,
+            &mut printer_controller,
         )
         .await;
         if resp.and_then(expect_immediate).is_ok() {
@@ -598,7 +590,7 @@ pub async fn task_integration(#[allow(unused_mut)] mut params: IntegrationaskPar
         );
         hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
-            &mut params.processor,
+            &mut processor,
             CommChannel::Internal,
             &gcode,
             #[cfg(feature = "with-sd-card")]
@@ -778,6 +770,9 @@ mod integration_test {
 
     #[test]
     fn do_integration_test() {
+        std::env::set_current_dir(
+            std::env::current_dir().unwrap().parent().unwrap()
+        ).unwrap();
         // 1. Init embassy runtime
         let executor = hwa::make_static_ref!("Executor", MockedExecutor, MockedExecutor::new());
 

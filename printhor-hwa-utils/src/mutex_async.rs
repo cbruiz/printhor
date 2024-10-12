@@ -47,9 +47,7 @@ where
         Self::CAN_RETAIN
     }
 
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> + Send
-    where
-        Self::AsyncMutexType: Sync,
+    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>>
     {
         async { Err(()) }
     }
@@ -185,7 +183,7 @@ where
 impl<M, D> Clone for AsyncHoldableStrategy<M, D>
 where
     M: AsyncRawMutex + 'static,
-    D: Sized + Send + 'static,
+    D: Sized + 'static,
 {
     fn clone(&self) -> Self {
         Self {
@@ -209,15 +207,13 @@ where
 impl<M, D> AsyncMutexStrategy for AsyncHoldableStrategy<M, D>
 where
     M: AsyncRawMutex + 'static,
-    D: Sized + Send + 'static,
+    D: Sized + 'static,
 {
     const CAN_RETAIN: bool = true;
     type AsyncMutexType = M;
     type Resource = D;
 
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> + Send
-    where
-        M: Sync,
+    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>>
     {
         async {
             self.holder.set(self.mutex.lock().await);

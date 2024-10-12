@@ -112,7 +112,7 @@ pub enum DeferAction {
 
     /// Action to set or monitor hotbed temperature.
     #[cfg(feature = "with-hot-bed")]
-    HotbedTemperature,
+    HotBedTemperature,
 }
 
 //#endregion
@@ -233,6 +233,7 @@ where
 //#endregion
 
 #[cfg(test)]
+#[cfg(feature = "with-motion")]
 pub mod tests {
 
     use crate as hwa;

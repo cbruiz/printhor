@@ -1,7 +1,6 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use embedded_hal_02::Pwm;
-use hwa::{AsyncMutexStrategy, StaticAsyncController};
+use embedded_hal_0::Pwm;
 
 /// The `ProbeTrait` defines a set of asynchronous methods for controlling the probe.
 /// Each method represents a specific probe action, with a customizable sleep duration.
@@ -45,7 +44,7 @@ pub trait ProbeTrait {
     fn probe_test_mode(&mut self, sleep_us: u64) -> impl std::future::Future<Output = ()>;
 }
 
-/// The `ServoController` structure is responsible for managing a servo motor
+/// The `GenericServoController` structure is responsible for managing a servo motor
 /// using an interrupt-controlled PWM (Pulse Width Modulation) channel.
 /// It provides methods to control the angle of the servo and implements the `ProbeTrait` for additional probe-related actions.
 ///
@@ -53,35 +52,37 @@ pub trait ProbeTrait {
 ///
 /// * `servo` - A reference to a static controller PWM servo (PwmServo).
 /// * `channel` - The specific PWM channel associated with the servo motor.
-pub struct ServoController<H>
+pub struct GenericServoController<H>
 where
-    H: AsyncMutexStrategy + Send + 'static,
-    H::Resource: Pwm + Send + 'static,
+    H: hwa::SyncMutexStrategy + 'static,
+    H::Resource: Pwm + 'static,
     <H::Resource as Pwm>::Channel: Copy,
-    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>,
+    <H::Resource as Pwm>::Duty: Into<u32> + From<u16> + Copy,
 {
     /// A reference to a static controller PWM servo.
-    servo: StaticAsyncController<H>,
+    servo: hwa::StaticSyncController<H>,
 
     /// The specific PWM channel associated with the servo motor.
     channel: <H::Resource as Pwm>::Channel,
 }
 
-impl<H> ServoController<H>
+impl<H> GenericServoController<H>
 where
-    H: AsyncMutexStrategy + Send + 'static,
-    H::Resource: Pwm + Send + 'static,
+    H: hwa::SyncMutexStrategy + 'static,
+    H::Resource: Pwm + 'static,
     <H::Resource as Pwm>::Channel: Copy,
-    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>,
+    <H::Resource as Pwm>::Duty: Into<u32> + From<u16> + Copy,
 {
-    pub fn new(servo: StaticAsyncController<H>, channel: <H::Resource as Pwm>::Channel) -> Self {
+    pub fn new(
+        servo: hwa::StaticSyncController<H>,
+        channel: <H::Resource as Pwm>::Channel,
+    ) -> Self {
         Self { servo, channel }
     }
 
     pub async fn set_angle(&mut self, angle: u16, sleep_us: u64) {
         {
-            let mut mg = self.servo.lock().await;
-            let max_duty = mg.get_max_duty();
+            let max_duty = self.servo.apply(|servo| servo.get_max_duty());
             // 100% duty period width (uS)
             const PERIOD: u32 = 20_000;
             // minimum pulse width (uS)
@@ -94,26 +95,40 @@ where
 
             #[cfg(feature = "trace-commands")]
             hwa::info!(
-                "Set probe angle: {} : duty: {} uS | {} max_duty: {:?}",
+                "Set probe angle: {:?} : duty: {:?} uS | {:?} max_duty: {:?}",
                 angle,
                 duty_us,
                 duty_cnt,
-                max_duty,
+                Into::<u32>::into(max_duty),
             );
-            mg.disable(self.channel);
-            mg.set_duty(self.channel, duty_cnt.into());
-            mg.enable(self.channel);
+            self.servo.apply_mut(|servo| {
+                servo.disable(self.channel);
+                servo.set_duty(self.channel, duty_cnt.into());
+                servo.enable(self.channel);
+            });
         }
         embassy_time::Timer::after_micros(sleep_us).await;
     }
 }
 
-impl<H> ProbeTrait for ServoController<H>
+impl<H> Clone for GenericServoController<H>
 where
-    H: AsyncMutexStrategy + Send + 'static,
-    H::Resource: Pwm + Send + 'static,
+    H: hwa::SyncMutexStrategy + 'static,
+    H::Resource: Pwm + 'static,
     <H::Resource as Pwm>::Channel: Copy,
-    <H::Resource as Pwm>::Duty: Into<u32> + From<u16>,
+    <H::Resource as Pwm>::Duty: Into<u32> + From<u16> + Copy,
+{
+    fn clone(&self) -> Self {
+        Self::new(self.servo.clone(), self.channel.clone())
+    }
+}
+
+impl<H> ProbeTrait for GenericServoController<H>
+where
+    H: hwa::SyncMutexStrategy + 'static,
+    H::Resource: Pwm + 'static,
+    <H::Resource as Pwm>::Channel: Copy,
+    <H::Resource as Pwm>::Duty: Into<u32> + From<u16> + Copy,
 {
     /// Lowers the probe pin, causing it to make contact. The operation waits for a specified duration.
     ///

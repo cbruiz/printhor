@@ -98,6 +98,11 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
+
+            const HOT_END_ADC_V_REF_DEFAULT_MV: u16;
+
+            const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16;
+
             /// The `Beta` value of the thermistor for **HotEnd** (see thermistor specs).
             ///
             /// Typically, 3950.0 for the classic `NTC **3950** 100K`
@@ -125,6 +130,11 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
+
+            const HOT_BED_ADC_V_REF_DEFAULT_MV: u16;
+
+            const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16;
+
             /// The `Beta` value of the thermistor for **HotBed** (see thermistor specs).
             ///
             /// Typically, 3950.0 for the classic `NTC **3950** 100K`
@@ -168,6 +178,12 @@ pub trait HwiContract: Sized {
         }
     }
 
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-print-job")] {
+            type PrinterControllerSignalMutexType: hwa::AsyncRawMutex;
+        }
+    }
+
     //#endregion
 
     //#region "Locking strategies"
@@ -182,7 +198,7 @@ pub trait HwiContract: Sized {
             const SERIAL_USB_RX_BUFFER_SIZE: usize;
 
             type SerialUsbTx: hwa::AsyncMutexStrategy;
-            type SerialUsbRx: hwa::RawHwiResource;
+            type SerialUsbRx: hwa::traits::GCodeByteStream;
         }
     }
     cfg_if::cfg_if! {
@@ -192,7 +208,7 @@ pub trait HwiContract: Sized {
             const SERIAL_PORT1_RX_BUFFER_SIZE: usize;
 
             type SerialPort1Tx: hwa::AsyncMutexStrategy;
-            type SerialPort1Rx: RawHwiResource + traits::ByteStream;
+            type SerialPort1Rx: traits::GCodeByteStream;
         }
     }
     cfg_if::cfg_if! {
@@ -201,7 +217,7 @@ pub trait HwiContract: Sized {
             const SERIAL_PORT2_RX_BUFFER_SIZE: usize;
 
             type SerialPort2Tx: hwa::AsyncMutexStrategy;
-            type SerialPort2Rx: hwa::RawHwiResource + traits::ByteStream;
+            type SerialPort2Rx: traits::GCodeByteStream;
         }
     }
 
@@ -220,22 +236,48 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-probe")] {
-            type ProbePowerPwm: hwa::SyncMutexStrategy;
-            type ProbePowerPwmChannel: hwa::RawHwiResource;
+            type ProbePwm: hwa::SyncMutexStrategy;
+            type ProbePwmChannel: hwa::RawHwiResource + Copy;
+        }
+    }
+
+    cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-end")] {
+            type HotEndAdc: hwa::AsyncMutexStrategy;
+            type HotEndAdcPin: hwa::RawHwiResource;
+            type HotEndPwm: hwa::SyncMutexStrategy;
+            type HotEndPwmChannel: hwa::RawHwiResource + Copy;
+        }
+    }
+
+    cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-bed")] {
+            type HotBedAdc: hwa::AsyncMutexStrategy;
+            type HotBedAdcPin: hwa::RawHwiResource;
+            type HotBedPwm: hwa::SyncMutexStrategy;
+            type HotBedPwmChannel: hwa::RawHwiResource + Copy;
+        }
+    }
+
+    cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-layer")] {
+            type FanLayerPwm: hwa::SyncMutexStrategy;
+            type FanLayerPwmChannel: hwa::RawHwiResource + Copy;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-sd-card")] {
+            const SD_CARD_MAX_DIRS: usize;
+            const SD_CARD_MAX_FILES: usize;
+            type SDCardBlockDevice: traits::AsyncSDBlockDevice;
         }
     }
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-laser")] {
             type LaserPowerPwm: hwa::SyncMutexStrategy;
-            type LaserPowerPwmChannel: hwa::RawHwiResource;
-        }
-    }
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-fan-layer")] {
-            type FanLayerPowerPwm: hwa::SyncMutexStrategy;
-            type FanLayerPowerPwmChannel: hwa::RawHwiResource;
+            type LaserPowerPwmChannel: hwa::RawHwiResource + Copy;
         }
     }
 
@@ -243,14 +285,6 @@ pub trait HwiContract: Sized {
         if #[cfg(feature = "with-fan-extra-1")] {
             type FanExtra1PowerPwm: hwa::SyncMutexStrategy;
             type FanExtra1PowerPwmChannel: hwa::RawHwiResource;
-        }
-    }
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-hot-end")] {
-            type HotEndAdc: hwa::AsyncMutexStrategy;
-            type HotEndAdcPin: hwa::RawHwiResource;
-            type HotEndPowerPwm: hwa::SyncMutexStrategy;
-            type HotEndPwmChannel: hwa::RawHwiResource;
         }
     }
 
@@ -276,8 +310,10 @@ pub trait HwiContract: Sized {
     where
         F: FnOnce() -> R;
 
+    #[cfg(feature = "with-motion")]
     fn pause_ticker();
 
+    #[cfg(feature = "with-motion")]
     fn resume_ticker();
 }
 
@@ -310,28 +346,10 @@ where
     pub motion_pins: C::MotionPins,
 
     #[cfg(feature = "with-probe")]
-    pub probe_power_pwm: crate::StaticAsyncController<C::ProbePowerPwm>,
+    pub probe_pwm: crate::StaticSyncController<C::ProbePwm>,
 
     #[cfg(feature = "with-probe")]
-    pub probe_power_channel: C::ProbePowerPwmChannel,
-
-    #[cfg(feature = "with-laser")]
-    pub laser_power_pwm: crate::StaticAsyncController<C::LaserPowerPwm>,
-
-    #[cfg(feature = "with-laser")]
-    pub laser_power_channel: C::LaserPowerPwmChannel,
-
-    #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_power_pwm: crate::StaticAsyncController<C::FanLayerPowerPwm>,
-
-    #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_power_channel: C::FanLayerPowerPwmChannel,
-
-    #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra1_power_pwm: crate::StaticAsyncController<C::FanExtra1PowerPwm>,
-
-    #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra1_power_channel: C::FanExtra1PowerPwmChannel,
+    pub probe_pwm_channel: C::ProbePwmChannel,
 
     #[cfg(feature = "with-hot-end")]
     pub hot_end_adc: crate::StaticAsyncController<C::HotEndAdc>,
@@ -340,8 +358,41 @@ where
     pub hot_end_adc_pin: C::HotEndAdcPin,
 
     #[cfg(feature = "with-hot-end")]
-    pub hot_end_power_pwm: crate::StaticAsyncController<C::HotEndPowerPwm>,
+    pub hot_end_pwm: crate::StaticSyncController<C::HotEndPwm>,
 
     #[cfg(feature = "with-hot-end")]
-    pub hot_end_power_channel: C::HotEndPwmChannel,
+    pub hot_end_pwm_channel: C::HotEndPwmChannel,
+
+    #[cfg(feature = "with-hot-bed")]
+    pub hot_bed_adc: crate::StaticAsyncController<C::HotBedAdc>,
+
+    #[cfg(feature = "with-hot-bed")]
+    pub hot_bed_adc_pin: C::HotBedAdcPin,
+
+    #[cfg(feature = "with-hot-bed")]
+    pub hot_bed_pwm: crate::StaticSyncController<C::HotBedPwm>,
+
+    #[cfg(feature = "with-hot-bed")]
+    pub hot_bed_pwm_channel: C::HotBedPwmChannel,
+
+    #[cfg(feature = "with-fan-layer")]
+    pub fan_layer_pwm: crate::StaticSyncController<C::FanLayerPwm>,
+
+    #[cfg(feature = "with-fan-layer")]
+    pub fan_layer_pwm_channel: C::FanLayerPwmChannel,
+
+    #[cfg(feature = "with-sd-card")]
+    pub sd_card_block_device: C::SDCardBlockDevice,
+
+    #[cfg(feature = "with-laser")]
+    pub laser_pwm: crate::StaticAsyncController<C::LaserPowerPwm>,
+
+    #[cfg(feature = "with-laser")]
+    pub laser_pwm_channel: C::LaserPowerPwmChannel,
+
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra1_pwm: crate::StaticAsyncController<C::FanExtra1PowerPwm>,
+
+    #[cfg(feature = "with-fan-extra-1")]
+    pub fan_extra1_pwm_channel: C::FanExtra1PowerPwmChannel,
 }

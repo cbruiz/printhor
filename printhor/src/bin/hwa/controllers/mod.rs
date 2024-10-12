@@ -5,7 +5,7 @@ use crate::hwa;
 pub mod sd_card_controller;
 
 #[cfg(feature = "with-sd-card")]
-pub use sd_card_controller::CardController;
+pub use sd_card_controller::GenericSDCardController;
 #[cfg(feature = "with-print-job")]
 mod printer_controller;
 
@@ -23,7 +23,7 @@ mod trinamic_controller;
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
         mod adc_controller;
-        pub use adc_controller::AdcController;
+        pub use adc_controller::GenericAdcController;
         mod heater_controller;
         pub use heater_controller::HeaterController;
     }
@@ -33,7 +33,7 @@ cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed",
         feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))] {
         mod pwm_controller;
-        pub use pwm_controller::PwmController;
+        pub use pwm_controller::GenericPwmController;
     }
 }
 
@@ -44,7 +44,7 @@ pub use trinamic_controller::TrinamicController;
 pub use motion::*;
 
 #[cfg(feature = "with-probe")]
-pub use servo_controller::ServoController;
+pub use servo_controller::GenericServoController;
 
 #[cfg(feature = "with-probe")]
 pub use servo_controller::ProbeTrait;

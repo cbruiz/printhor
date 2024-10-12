@@ -144,7 +144,8 @@ impl Parse for StaticSyncControllerParserInput {
 ///
 /// # Usage
 /// ```rust
-/// use printhor_hwa_common_macros::make_static_sync_controller;
+/// use printhor_hwa_common as hwa;
+/// use hwa::make_static_sync_controller;
 ///
 /// // Or the convenient export of `printhor_hwa_common`
 ///
@@ -153,9 +154,9 @@ impl Parse for StaticSyncControllerParserInput {
 ///     pub const fn new() -> Self { Self {} }
 /// }
 ///
-/// let controller = make_static_sync_controller!(
+/// let controller = hwa::make_static_sync_controller!(
 ///     "DummyController",
-///     hwa::Holdable<hwa::SyncSendMutex, MyObject>,
+///     hwa::SyncStandardStrategy<hwa::SyncCsMutexType, MyObject>,
 ///     MyObject::new()
 /// );
 /// ```
@@ -254,7 +255,8 @@ impl Parse for StaticAsyncControllerParserInput {
 ///
 /// # Usage
 /// ```rust
-/// use printhor_hwa_common_macros::make_static_async_controller;
+/// use printhor_hwa_common as hwa;
+/// use hwa::make_static_async_controller;
 ///
 /// // Or the convenient export of `printhor_hwa_common`
 ///
@@ -265,7 +267,7 @@ impl Parse for StaticAsyncControllerParserInput {
 ///
 /// let controller = make_static_async_controller!(
 ///     "DummyController",
-///     hwa::Holdable<hwa::SyncSendMutex, MyObject>,
+///     hwa::AsyncHoldableStrategy<hwa::AsyncNoopMutexType, MyObject>,
 ///     MyObject::new()
 /// );
 /// ```

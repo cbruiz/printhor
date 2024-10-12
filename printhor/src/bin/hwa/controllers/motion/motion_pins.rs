@@ -3,7 +3,7 @@ use hwa::SyncMutexStrategy;
 use printhor_hwa_common::StepperChannel;
 
 pub struct MotionPins {
-    pins: hwa::StaticSyncController<hwa::types::MotionPinsMutexStrategy>
+    pins: hwa::StaticSyncController<hwa::types::MotionPinsMutexStrategy>,
 }
 
 impl MotionPins {
@@ -87,7 +87,6 @@ impl MotionPins {
 
     pub fn step_toggle(&self, channels: StepperChannel) {
         self.pins.apply_mut(|pins| {
-
             if channels.contains(StepperChannel::X) {
                 pins.x_step_pin.toggle();
             }
@@ -102,7 +101,6 @@ impl MotionPins {
             }
         });
     }
-
 }
 
 impl Clone for MotionPins {
@@ -110,4 +108,3 @@ impl Clone for MotionPins {
         Self::new(self.pins.clone())
     }
 }
-

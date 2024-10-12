@@ -353,7 +353,6 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((25, 0))) => Some(GCodeValue::M25),
         ('m', Some((37, 0))) => Some(GCodeValue::M37(S::new())),
-        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((73, 0))) => Some(GCodeValue::M73),
         ('m', Some((79, 0))) => Some(GCodeValue::M79),
         #[cfg(feature = "with-ps-on")]

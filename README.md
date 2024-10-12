@@ -10,7 +10,7 @@
 
 # Overview
 
-Printhor is a generic a hardware-agnostic firmware framework focused on FDM printers, CNC and Engravers implemented in Rust.
+Printhor is a generic and hardware-agnostic firmware framework for FDM printers, CNC and Engravers implemented in Rust.
 
 There are many productive firmwares in the community like gbrl, marlin, reprap, etc. Each single one have a concrete approach and guidelines.
 This one aims to provide a research environment for not strictly productive purpose, but a reliable platform with the following goals:

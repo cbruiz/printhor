@@ -1,9 +1,12 @@
 //! Common Hardware Abstraction types and traits
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
+extern crate core;
 
+use bitflags::bitflags;
 pub use printhor_hwa_common_macros::*;
 pub use printhor_hwa_utils::*;
+use strum::EnumCount;
 
 mod event_bus;
 pub use event_bus::*;
@@ -11,11 +14,12 @@ pub use event_bus::*;
 mod defer_channel;
 pub use defer_channel::*;
 
-mod async_utils;
-pub use async_utils::*;
-use bitflags::bitflags;
-
-use strum::EnumCount;
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature = "with-serial-port-2"))] {
+        mod async_utils;
+        pub use async_utils::*;
+    }
+}
 
 mod persistent_state;
 pub use persistent_state::PersistentState;
@@ -30,9 +34,15 @@ cfg_if::cfg_if! {
 mod contract;
 mod event_bus_channel;
 pub mod soft_uart;
-mod traits;
+pub mod traits;
 
 pub use contract::{HwiContext, HwiContract};
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-sd-card")] {
+        pub mod sd_card;
+    }
+}
 
 pub use event_bus_channel::*;
 
@@ -319,70 +329,16 @@ impl<D> core::ops::Deref for HwiResource<D> {
     }
 }
 
-//#region "Implementation of [hwa::traits] for each single resource bounded to them"
-
-impl<D> traits::ByteStream for HwiResource<D>
+impl<D> Clone for HwiResource<D>
 where
-    D: traits::ByteStream,
+    D: Clone,
 {
-    type Item = <D as traits::ByteStream>::Item;
-
-    #[inline(always)]
-    async fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next().await
+    fn clone(&self) -> Self {
+        HwiResource::new(self.inner.clone())
     }
 }
 
-impl<D> traits::Pwm for HwiResource<D>
-where
-    D: traits::Pwm,
-{
-    type Channel = <D as traits::Pwm>::Channel;
-
-    type Time = <D as traits::Pwm>::Time;
-
-    type Duty = <D as traits::Pwm>::Duty;
-
-    #[inline(always)]
-    fn disable(&mut self, channel: Self::Channel) {
-        self.inner.disable(channel);
-    }
-
-    #[inline(always)]
-    fn enable(&mut self, channel: Self::Channel) {
-        self.inner.enable(channel);
-    }
-
-    #[inline(always)]
-    fn get_period(&self) -> Self::Time {
-        self.inner.get_period()
-    }
-
-    #[inline(always)]
-    fn get_duty(&self, channel: Self::Channel) -> Self::Duty {
-        self.inner.get_duty(channel)
-    }
-
-    #[inline(always)]
-    fn get_max_duty(&self) -> Self::Duty {
-        self.inner.get_max_duty()
-    }
-
-    #[inline(always)]
-    fn set_duty(&mut self, channel: Self::Channel, duty: Self::Duty) {
-        self.inner.set_duty(channel, duty)
-    }
-
-    #[inline(always)]
-    fn set_period<P>(&mut self, period: P)
-    where
-        P: Into<Self::Time>,
-    {
-        self.inner.set_period(period)
-    }
-}
-
-//#endregion
+impl<D> Copy for HwiResource<D> where D: Copy {}
 
 #[cfg(test)]
 mod test {

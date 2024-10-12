@@ -17,13 +17,7 @@ pub struct MotionDriver {
     #[cfg(feature = "with-trinamic")]
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
-    pub probe_controller: hwa::StaticAsyncController<
-        hwa::ProbeServoControllerMutexStrategyType<
-            hwa::controllers::ServoController<
-                hwa::PwmProbeMutexStrategyType<hwa::device::PwmProbe>,
-            >,
-        >,
-    >,
+    pub probe_controller: hwa::types::ProbeController,
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer_controller: hwa::types::FanLayerController,
     #[cfg(feature = "with-fan-extra-1")]
@@ -32,8 +26,10 @@ pub struct MotionDriver {
         hwa::controllers::FanExtra1PwmController,
     >,
     #[cfg(feature = "with-laser")]
-    pub _laser_controller:
-        hwa::StaticAsyncController<hwa::LaserControllerMutexType, hwa::controllers::LaserPwmController>,
+    pub _laser_controller: hwa::StaticAsyncController<
+        hwa::LaserControllerMutexType,
+        hwa::controllers::LaserPwmController,
+    >,
     #[cfg(all(feature = "native", feature = "plot-timings"))]
     tmon: TimingsMonitor,
 }
@@ -44,35 +40,30 @@ impl MotionDriver {
         pins: hwa::controllers::MotionPins,
         //#[cfg(feature = "with-trinamic")]
         //trinamic_controller: hwa::controllers::TrinamicController::new(params.motion_device.trinamic_uart, params.motion_config, ),
-        #[cfg(feature = "with-probe")]
-        probe_controller: probe_controller,
-        #[cfg(feature = "with-fan-layer")]
-        fan_layer_controller: fan_layer_controller,
-        #[cfg(feature = "with-fan-extra-1")]
-        fan_extra_1_controller: fan_extra_1_controller,
-        #[cfg(feature = "with-laser")]
-        _laser_controller: laser_controller,
-        #[cfg(all(feature = "native", feature = "plot-timings"))]
-        tmon: TimingsMonitor::new(),
-    ) ->Self {
+        #[cfg(feature = "with-probe")] probe_controller: hwa::types::ProbeController,
+        #[cfg(feature = "with-fan-layer")] fan_layer_controller: hwa::types::FanLayerController,
+        #[cfg(feature = "with-fan-extra-1")] fan_extra_1_controller: fan_extra_1_controller,
+        #[cfg(feature = "with-laser")] _laser_controller: laser_controller,
+        #[cfg(all(feature = "native", feature = "plot-timings"))] tmon: TimingsMonitor::new(),
+    ) -> Self {
         Self {
-    pins,
-    # [cfg(feature = "with-trinamic")]
-    trinamic_controller: hwa::controllers::TrinamicController::new(
-    params.motion_device.trinamic_uart,
-    params.motion_config,
-    ),
-    #[cfg(feature = "with-probe")]
-    probe_controller: params.probe_controller,
-    # [cfg(feature = "with-fan-layer")]
-    fan_layer_controller: params.fan_layer_controller,
-    #[cfg(feature = "with-fan-extra-1")]
-    fan_extra_1_controller: params.fan_extra_1_controller,
-    # [cfg(feature = "with-laser")]
-    _laser_controller: params.laser_controller,
-    #[cfg(all(feature = "native", feature = "plot-timings"))]
-    tmon: TimingsMonitor::new(),
-    }
+            pins,
+            #[cfg(feature = "with-trinamic")]
+            trinamic_controller: hwa::controllers::TrinamicController::new(
+                params.motion_device.trinamic_uart,
+                params.motion_config,
+            ),
+            #[cfg(feature = "with-probe")]
+            probe_controller,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer_controller,
+            #[cfg(feature = "with-fan-extra-1")]
+            fan_extra_1_controller: params.fan_extra_1_controller,
+            #[cfg(feature = "with-laser")]
+            _laser_controller: params.laser_controller,
+            #[cfg(all(feature = "native", feature = "plot-timings"))]
+            tmon: TimingsMonitor::new(),
+        }
     }
 
     pub fn pins(&self) -> &hwa::controllers::MotionPins {
@@ -165,9 +156,9 @@ impl MotionDriver {
     /// range of motion.
     // TODO: Carefully review
     pub async fn homing_action(
-        &mut self, motion_config: &hwa::controllers::MotionConfig
+        &mut self,
+        motion_config: &hwa::controllers::MotionConfig,
     ) -> Result<TVector<Real>, TVector<Real>> {
-
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] [Homing]");
 
@@ -380,7 +371,6 @@ impl MotionDriver {
         check_endstops: bool,
         position: Option<&mut TVector<Real>>,
     ) -> TVector<u32> {
-
         let steps_to_advance: TVector<u32> = (vdir * module * steps_per_mm)
             .abs()
             .round()

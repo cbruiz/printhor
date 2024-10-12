@@ -57,24 +57,24 @@ cortex-m = { version = "0.7.7", features = ["inline-asm"] }
 cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
-embassy-rp = { version = "*", default-features = false, features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
-embassy-executor = { version = "*", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m", "integrated-timers"] }
-embassy-sync = { version = "*", features = ["defmt"] }
-embassy-time = { version = "*", features = ["defmt"] }
-embassy-futures = { version = "*", features = ["defmt"] }
-embassy-usb = { version = "*", features = [], optional = true }
+embassy-rp = { version = "0", default-features = false, features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
+embassy-executor = { version = "0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m", "integrated-timers"] }
+embassy-sync = { version = "0", features = ["defmt"] }
+embassy-time = { version = "0", features = ["defmt"] }
+embassy-futures = { version = "0", features = ["defmt"] }
+embassy-usb = { version = "0", features = [], optional = true }
 
 portable-atomic = { version = "1", features = ["critical-section"] }
-printhor-hwa-common = { version = "*", features = [] }
+printhor-hwa-common = { version = "0", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.30", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
+futures = { version = "0.3", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
 
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
 embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
 embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
 
-cfg-if = { version = "1.0.0" }
-const_env = { version = "0.1" }
+cfg-if = { version = "1" }
+const_env = { version = "0" }
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }

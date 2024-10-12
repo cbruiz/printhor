@@ -6,8 +6,6 @@ pub(crate) mod mocked_pin;
 mod mocked_pwm;
 #[cfg(feature = "with-spi")]
 mod mocked_spi;
-#[cfg(feature = "with-sd-card")]
-mod mocked_sd_card;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-usb")] {
@@ -30,6 +28,13 @@ cfg_if::cfg_if! {
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-sd-card")] {
+        mod mocked_sd_card;
+        pub use mocked_sd_card::MockedSDCardBlockDevice;
+    }
+}
+
 #[cfg(feature = "with-trinamic")]
 mod mocked_trinamic;
 
@@ -44,9 +49,6 @@ pub use mocked_wdt::*;
 
 #[cfg(feature = "with-spi")]
 pub use mocked_spi::*;
-
-#[cfg(feature = "with-sd-card")]
-pub use mocked_sd_card::*;
 
 #[cfg(feature = "with-trinamic")]
 pub use mocked_trinamic::*;

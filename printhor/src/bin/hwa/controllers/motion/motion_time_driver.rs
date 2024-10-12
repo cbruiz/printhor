@@ -97,19 +97,14 @@ impl SoftTimerDriver {
                     Some(pins) => {
                         #[cfg(feature = "debug-signals")]
                         pins.y_dir_pin.set_high();
-                        if self.current_stepper_enable_flags
-                            != self.current.stepper_enable_flags
-                        {
+                        if self.current_stepper_enable_flags != self.current.stepper_enable_flags {
                             pins.enable_steppers(self.current.stepper_enable_flags);
-                            self.current_stepper_enable_flags =
-                                self.current.stepper_enable_flags;
+                            self.current_stepper_enable_flags = self.current.stepper_enable_flags;
                         }
-                        if self.current_stepper_dir_fwd_flags
-                            != self.current.stepper_dir_fwd_flags
+                        if self.current_stepper_dir_fwd_flags != self.current.stepper_dir_fwd_flags
                         {
                             pins.set_forward_direction(self.current.stepper_dir_fwd_flags);
-                            self.current_stepper_dir_fwd_flags =
-                                self.current.stepper_dir_fwd_flags;
+                            self.current_stepper_dir_fwd_flags = self.current.stepper_dir_fwd_flags;
                         }
                     }
                 }
@@ -284,7 +279,7 @@ impl SoftTimerDriver {
                         }
                     }
                     true
-                },
+                }
             }
         }
     }

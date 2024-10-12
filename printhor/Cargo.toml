@@ -22,6 +22,13 @@ default = ["native",
     "with-serial-port-2",
     "with-motion",
     "with-ps-on",
+    "with-probe",
+    "with-hot-end",
+    "with-hot-bed",
+    "with-fan-layer",
+    "with-sd-card",
+    #"with-print-job",
+    #"trace-commands",
 ]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
@@ -38,19 +45,19 @@ with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_na
 with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion"]
 with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on"]
 
-with-probe = ["embedded-hal-1", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe"]
+with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe"]
 with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser", "printhor-hwi_native?/with-laser"]
 with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer", "printhor-hwi_native?/with-fan-layer"]
 with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1", "printhor-hwi_native?/with-fan-extra-1"]
 
 
-with-print-job = ["printhor-hwi_native?/with-print-job"]
+with-print-job = ["printhor-hwa-common/with-print-job", "printhor-hwi_native?/with-print-job"]
 with-spi = ["embedded-hal-1", "printhor-hwi_native?/with-spi"]
 with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end"]
 with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed"]
 
 with-endstops = []
-with-sd-card = ["embedded-sdmmc", "printhor-hwi_native?/with-sd-card"]
+with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card", "printhor-hwi_native?/with-sd-card"]
 with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic"]
 # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
 with-display = ["printhor-hwi_native?/with-display"]
@@ -408,7 +415,7 @@ defmt-rtt = { version = "0.4", optional = true }
 cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
 cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4", optional = true}
-critical-section = {version = "1.1", default-features = false}
+critical-section = {version = "1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1", default-features = false, features = [], optional = true }
 embassy-executor = { version = "0.6", default-features = false, features = ["executor-thread"], optional = true }
@@ -419,7 +426,7 @@ embassy-embedded-hal = { version = "0.2", features = [], optional = true }
 embassy-usb = { version = "0.3", features = [], optional = true }
 embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
-#embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven", ], optional = true }
 
 futures = { version = "0.3", default-features = false, features = [] }
 futures-util = { version = "0.3", default-features = false, features = [] }

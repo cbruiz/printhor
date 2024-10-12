@@ -59,7 +59,11 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
 
-            const HOT_END_THERM_BETA = 3950.0;
+            const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = 4096;
+
+            const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
+
+            const HOT_END_THERM_BETA: f32 = 3950.0;
 
             const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
 
@@ -72,12 +76,17 @@ impl hwa::HwiContract for Contract {
     //#region Constant settings for with-hot-bed feature [...]
 
     cfg_if::cfg_if! {
-        if #[cfg(feature="with-hot-end")] {
-            const HOT_END_THERM_BETA = 3950.0;
+        if #[cfg(feature="with-hot-bed")] {
 
-            const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
+            const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = 4096;
 
-            const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 1.0;
+            const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
+
+            const HOT_BED_THERM_BETA: f32 = 3950.0;
+
+            const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
+
+            const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 1.0;
         }
     }
 
@@ -117,7 +126,7 @@ impl hwa::HwiContract for Contract {
             #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
             const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
-            type SerialUsbRx = hwa::HwiResource<mocked_peripherals::MockedUartNamedPipeRxInputStream>;
+            type SerialUsbRx = mocked_peripherals::MockedUartNamedPipeRxInputStream;
         }
     }
 
@@ -129,7 +138,7 @@ impl hwa::HwiContract for Contract {
             const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort1Tx = types::SerialPort1TxMutexStrategy;
-            type SerialPort1Rx = hwa::HwiResource<device::SerialPort1Rx>;
+            type SerialPort1Rx = device::SerialPort1Rx;
         }
     }
 
@@ -141,7 +150,7 @@ impl hwa::HwiContract for Contract {
             const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
-            type SerialPort2Rx = hwa::HwiResource<device::SerialPort2Rx>;
+            type SerialPort2Rx = device::SerialPort2Rx;
         }
     }
 
@@ -156,6 +165,52 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-ps-on")] {
             type PSOnMutexStrategy = types::PSOnMutexStrategy;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-probe")] {
+            type ProbePwm = types::ProbeMutexStrategy;
+            type ProbePwmChannel = hwa::HwiResource<device::ProbePwmChannel>;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-hot-end")] {
+            type HotEndAdc = types::HotEndAdcMutexStrategy;
+            type HotEndAdcPin = hwa::HwiResource<device::HotEndAdcPin>;
+            type HotEndPwm = types::HotEndPwmMutexStrategy;
+            type HotEndPwmChannel = hwa::HwiResource<device::HotEndPwmChannel>;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-hot-bed")] {
+            type HotBedAdc = types::HotBedAdcMutexStrategy;
+            type HotBedAdcPin = hwa::HwiResource<device::HotBedAdcPin>;
+            type HotBedPwm = types::HotBedPwmMutexStrategy;
+            type HotBedPwmChannel = hwa::HwiResource<device::HotBedPwmChannel>;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-fan-layer")] {
+            type FanLayerPwm = types::FanLayerPwmMutexStrategy;
+            type FanLayerPwmChannel = hwa::HwiResource<device::FanLayerPwmChannel>;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-sd-card")] {
+            const SD_CARD_MAX_FILES: usize = 4;
+            const SD_CARD_MAX_DIRS: usize = 4;
+            type SDCardBlockDevice = types::SDCardBlockDevice;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-print-job")] {
+            type PrinterControllerSignalMutexType = types::PrinterControllerSignalMutexType;
         }
     }
 
@@ -200,7 +255,7 @@ impl hwa::HwiContract for Contract {
                     types::SerialUsbTxMutexStrategy,
                     usb_tx_device
                 );
-                let serial_usb_rx_stream = hwa::HwiResource::new(mocked_peripherals::MockedUartNamedPipeRxInputStream::new(usb_rx_device));
+                let serial_usb_rx_stream = mocked_peripherals::MockedUartNamedPipeRxInputStream::new(usb_rx_device);
             }
         }
 
@@ -212,7 +267,7 @@ impl hwa::HwiContract for Contract {
                     types::SerialPort1TxMutexStrategy,
                     uart_port1_tx_device
                 );
-                let serial_port1_rx_stream = hwa::HwiResource::new(device::SerialPort1Rx::new(uart_port1_rx_device));
+                let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device);
             }
         }
 
@@ -224,7 +279,7 @@ impl hwa::HwiContract for Contract {
                     types::SerialPort2TxMutexStrategy,
                     uart_port2_tx_device
                 );
-                let serial_port2_rx_stream = hwa::HwiResource::new(device::SerialPort2Rx::new(uart_port2_rx_device));
+                let serial_port2_rx_stream = device::SerialPort2Rx::new(uart_port2_rx_device);
             }
         }
 
@@ -265,11 +320,6 @@ impl hwa::HwiContract for Contract {
         #[cfg(feature = "with-spi")]
         hwa::debug!("SPI done");
 
-        #[cfg(feature = "with-sd-card")]
-        let sd_card_device = {
-            device::SDCardBlockDevice::new("data/sdcard.img", false).unwrap()
-        };
-
         #[cfg(feature = "with-motion")]
         let motion_pins = device::MotionPins {
             x_enable_pin: mocked_peripherals::MockedIOPin::new(4, _pin_state),
@@ -300,17 +350,17 @@ impl hwa::HwiContract for Contract {
             feature = "with-fan-extra-1",
             feature = "with-laser"
         ))]
-        let pwm_any = hwa::make_static_async_controller!(
+        let pwm1 = hwa::make_static_sync_controller!(
             "Pwm1Controller",
-            crate::Pwm1ControllerMutexStrategyType<device::PwmAny>,
-            device::PwmAny::new(20, _pin_state)
+            types::Pwm1MutexStrategy,
+            device::Pwm1::new(20, _pin_state)
         );
 
         #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         let adc_any = hwa::make_static_async_controller!(
             "Adc1Controller",
-            crate::Adc1ControllerMutexStrategyType<device::Adc1>,
-            device::AdcHotEnd::new(0)
+            types::Adc1MutexStrategy,
+            device::Adc1::new(0, 4096)
         );
 
         #[cfg(feature = "with-motion")]
@@ -320,20 +370,14 @@ impl hwa::HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
-                let probe_power_pwm = pwm_any.clone();
-                let probe_power_channel = hwa::HwiResource::new(0u8);
+                let probe_pwm = pwm1.clone();
+                let probe_channel = hwa::HwiResource::new(0u8);
             }
         }
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-laser")] {
                 let laser_power_pwm = pwm_any.clone();
                 let laser_power_channel = hwa::HwiResource::new(0u8);
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-fan-layer")] {
-                let fan_layer_power_pwm = pwm_any.clone();
-                let fan_layer_power_channel = hwa::HwiResource::new(0u8);
             }
         }
         cfg_if::cfg_if! {
@@ -346,8 +390,30 @@ impl hwa::HwiContract for Contract {
             if #[cfg(feature = "with-hot-end")] {
                 let hot_end_adc = adc_any.clone();
                 let hot_end_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(23, _pin_state));
-                let hot_end_power_pwm= pwm_any.clone();
-                let hot_end_power_channel = hwa::HwiResource::new(0u8);
+                let hot_end_pwm= pwm1.clone();
+                let hot_end_pwm_channel = hwa::HwiResource::new(0u8);
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-hot-bed")] {
+                let hot_bed_adc = adc_any.clone();
+                let hot_bed_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(24, _pin_state));
+                let hot_bed_pwm= pwm1.clone();
+                let hot_bed_pwm_channel = hwa::HwiResource::new(0u8);
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-fan-layer")] {
+                let fan_layer_pwm = pwm1.clone();
+                let fan_layer_pwm_channel = hwa::HwiResource::new(0u8);
+            }
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-sd-card")] {
+                let sd_card_block_device = {
+                     device::SDCardBlockDevice::new("data/sdcard.img", false).unwrap()
+                };
             }
         }
 
@@ -381,17 +447,13 @@ impl hwa::HwiContract for Contract {
             ),
 
             #[cfg(feature = "with-probe")]
-            probe_power_pwm,
+            probe_pwm,
             #[cfg(feature = "with-probe")]
-            probe_power_channel,
+            probe_pwm_channel: probe_channel,
             #[cfg(feature = "with-laser")]
             laser_power_pwm,
             #[cfg(feature = "with-laser")]
             laser_power_channel,
-            #[cfg(feature = "with-fan-layer")]
-            fan_layer_power_pwm,
-            #[cfg(feature = "with-fan-layer")]
-            fan_layer_power_channel,
             #[cfg(feature = "with-fan-extra-1")]
             fan_extra1_power_pwm,
             #[cfg(feature = "with-fan-extra-1")]
@@ -401,9 +463,23 @@ impl hwa::HwiContract for Contract {
             #[cfg(feature = "with-hot-end")]
             hot_end_adc_pin,
             #[cfg(feature = "with-hot-end")]
-            hot_end_power_pwm,
+            hot_end_pwm,
             #[cfg(feature = "with-hot-end")]
-            hot_end_power_channel,
+            hot_end_pwm_channel,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_adc,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_adc_pin,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_pwm,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_pwm_channel,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer_pwm,
+            #[cfg(feature = "with-fan-layer")]
+            fan_layer_pwm_channel,
+            #[cfg(feature = "with-sd-card")]
+            sd_card_block_device,
         }
     }
 
@@ -427,11 +503,13 @@ impl hwa::HwiContract for Contract {
         f()
     }
 
+    #[cfg(feature = "with-motion")]
     fn pause_ticker() {
         hwa::info!("Ticker Paused");
         TICKER_SIGNAL.reset();
     }
 
+    #[cfg(feature = "with-motion")]
     fn resume_ticker() {
         hwa::debug!("Ticker Resumed");
         TICKER_SIGNAL.signal(true);

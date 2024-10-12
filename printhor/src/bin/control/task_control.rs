@@ -17,10 +17,8 @@ cfg_if::cfg_if! {
 pub async fn task_control(
     mut processor: hwa::GCodeProcessor,
     mut gcode_input_stream: control::GCodeMultiplexedInputStream,
-    #[cfg(feature = "with-print-job")]
-    printer_controller: hwa::controllers::PrinterController,
-    #[cfg(feature = "with-sd-card")]
-    card_controller: hwa::controllers::CardController,
+    #[cfg(feature = "with-print-job")] mut printer_controller: hwa::controllers::PrinterController,
+    #[cfg(feature = "with-sd-card")] mut card_controller: hwa::types::SDCardController,
 ) {
     let ev2 = processor.event_bus.clone();
     let mut subscriber = ev2.subscriber().await;
@@ -94,9 +92,9 @@ pub async fn task_control(
                     channel,
                     &gc,
                     #[cfg(feature = "with-sd-card")]
-                    &mut _controllers.card_controller,
+                    &mut card_controller,
                     #[cfg(feature = "with-print-job")]
-                    &mut _controllers.printer_controller,
+                    &mut printer_controller,
                 )
                 .await;
                 report(response, &gc, channel, &mut processor).await;
@@ -164,7 +162,7 @@ pub(super) async fn execute(
     processor: &mut hwa::GCodeProcessor,
     channel: hwa::CommChannel,
     gc: &control::GCodeCmd,
-    #[cfg(feature = "with-sd-card")] _card_controller: &mut hwa::controllers::CardController,
+    #[cfg(feature = "with-sd-card")] _card_controller: &mut hwa::types::SDCardController,
     #[cfg(feature = "with-print-job")]
     _printer_controller: &mut hwa::controllers::PrinterController,
 ) -> control::CodeExecutionResult {
@@ -186,48 +184,43 @@ pub(super) async fn execute(
             Ok(control::CodeExecutionSuccess::CONSUMED)
         }
         #[cfg(feature = "with-sd-card")]
-        control::GCodeValue::M20(path) => {
-            let path = path.clone().unwrap_or(alloc::string::String::from("/"));
-            match _card_controller.list_dir(path.as_str()).await {
-                Ok(mut it) => {
-                    loop {
-                        //crate::debug!("will get next");
-                        match it.next().await {
-                            Ok(result) => {
-                                //crate::debug!("got a result");
-                                match result {
-                                    Some(entry) => {
-                                        let s = alloc::format!(
-                                            "echo: F\"{}\" {} {} ; M20 \n",
-                                            entry.name,
-                                            match entry.entry_type {
-                                                hwa::controllers::sd_card_controller::SDEntryType::FILE => "A",
-                                                hwa::controllers::sd_card_controller::SDEntryType::DIRECTORY => "D",
-                                            },
-                                            entry.size
-                                        );
-                                        processor.write(channel, s.as_str()).await;
-                                        //crate::debug!("sent to uart");
-                                    }
-                                    None => {
-                                        //crate::debug!("got EOF");
-                                        break;
-                                    }
+        control::GCodeValue::M20(_path) => {
+            {
+                let path = _path.clone().unwrap_or(alloc::string::String::from("/"));
+                match _card_controller.dir_iterator(path.as_str()).await {
+                    Ok(mut it) => {
+                        loop {
+                            match it.next().await {
+                                Ok(Some(entry)) => {
+                                    let s = alloc::format!(
+                                        "echo: F\"{}\" {} {} ; M20 \n",
+                                        entry.name,
+                                        match entry.entry_type {
+                                            hwa::controllers::sd_card_controller::SDEntryType::FILE => "A",
+                                            hwa::controllers::sd_card_controller::SDEntryType::DIRECTORY => "D",
+                                        },
+                                        entry.size
+                                    );
+                                    processor.write(channel, s.as_str()).await;
+                                }
+                                Ok(None) => {
+                                    // EOF
+                                    break;
+                                }
+                                Err(_e) => {
+                                    hwa::error!("Error listing files");
+                                    break;
                                 }
                             }
-                            Err(_e) => {
-                                let s = alloc::format!("Error; M20; Error listing: {:?}\n", _e);
-                                processor.write(channel, s.as_str()).await;
-                            }
                         }
+                        it.close().await;
+                        Ok(control::CodeExecutionSuccess::OK)
                     }
-                    it.close().await;
-                    Ok(control::CodeExecutionSuccess::OK)
-                }
-                Err(_e) => {
-                    let s = alloc::format!("echo: M20: Unable to list: {:?}\n", _e);
-                    processor.write(channel, s.as_str()).await;
-                    Err(control::CodeExecutionFailure::ERR)
+                    Err(_e) => {
+                        let s = alloc::format!("echo: M20: Unable to list: {:?}\n", _e);
+                        processor.write(channel, s.as_str()).await;
+                        Err(control::CodeExecutionFailure::ERR)
+                    }
                 }
             }
         }

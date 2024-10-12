@@ -36,7 +36,7 @@ use math::{CoordSel, Real, TVector};
 /// ```
 
 pub struct MotionConfig {
-    cfg: hwa::StaticSyncController<hwa::types::MotionConfigMutexStrategy>
+    cfg: hwa::StaticSyncController<hwa::types::MotionConfigMutexStrategy>,
 }
 
 impl MotionConfig {
@@ -84,7 +84,13 @@ impl MotionConfig {
         });
     }
 
-    pub fn set_micro_steps_per_axis(&self, x_micro_steps: u8, y_micro_steps: u8, z_micro_steps: u8, e_micro_steps: u8) {
+    pub fn set_micro_steps_per_axis(
+        &self,
+        x_micro_steps: u8,
+        y_micro_steps: u8,
+        z_micro_steps: u8,
+        e_micro_steps: u8,
+    ) {
         let micro_steps: [u16; 4] = [
             x_micro_steps.into(),
             y_micro_steps.into(),
@@ -108,35 +114,21 @@ impl MotionConfig {
         })
     }
 
-
-
     pub fn get_units_per_mm(&self) -> TVector<Real> {
-        self.cfg.apply(|m| {
-            m.units_per_mm
-        })
+        self.cfg.apply(|m| m.units_per_mm)
     }
 
     pub fn get_micro_steps(&self) -> [u16; 4] {
-        self.cfg.apply(|m| {
-            m.micro_steps_per_axis
-        })
+        self.cfg.apply(|m| m.micro_steps_per_axis)
     }
 
     pub fn get_micro_steps_as_vector(&self) -> TVector<Real> {
         let micro_steps = self.get_micro_steps();
         TVector::from_coords(
-            Some(
-                Real::from_lit(micro_steps[0].into(), 0),
-            ),
-            Some(
-                Real::from_lit(micro_steps[1].into(), 0),
-            ),
-            Some(
-                Real::from_lit(micro_steps[2].into(), 0),
-            ),
-            Some(
-                Real::from_lit(micro_steps[3].into(), 0),
-            ),
+            Some(Real::from_lit(micro_steps[0].into(), 0)),
+            Some(Real::from_lit(micro_steps[1].into(), 0)),
+            Some(Real::from_lit(micro_steps[2].into(), 0)),
+            Some(Real::from_lit(micro_steps[3].into(), 0)),
         )
     }
 
@@ -145,15 +137,11 @@ impl MotionConfig {
     }
 
     pub fn get_flow_rate(&self) -> u8 {
-        self.cfg.apply(|m| {
-            m.flow_rate
-        })
+        self.cfg.apply(|m| m.flow_rate)
     }
 
     pub fn get_speed_rate(&self) -> u8 {
-        self.cfg.apply(|m| {
-            m.speed_rate
-        })
+        self.cfg.apply(|m| m.speed_rate)
     }
 
     pub fn get_flow_rate_as_real(&self) -> Real {
@@ -165,22 +153,15 @@ impl MotionConfig {
     }
 
     pub fn get_default_travel_speed(&self) -> u16 {
-        self.cfg.apply(|m| {
-            m.default_travel_speed
-        })
+        self.cfg.apply(|m| m.default_travel_speed)
     }
 
     pub fn get_default_travel_speed_as_real(&self) -> Real {
-        Real::new(
-            self.get_default_travel_speed() as i64,
-            0,
-        )
+        Real::new(self.get_default_travel_speed() as i64, 0)
     }
 
     pub fn get_max_speed(&self) -> TVector<u32> {
-        self.cfg.apply(|m| {
-            m.max_speed
-        })
+        self.cfg.apply(|m| m.max_speed)
     }
 
     pub fn get_max_speed_as_vector_real(&self) -> TVector<Real> {
@@ -188,9 +169,7 @@ impl MotionConfig {
     }
 
     pub fn get_max_accel(&self) -> TVector<u32> {
-        self.cfg.apply(|m| {
-            m.max_accel
-        })
+        self.cfg.apply(|m| m.max_accel)
     }
 
     pub fn get_max_accel_as_vector_real(&self) -> TVector<Real> {
@@ -198,9 +177,7 @@ impl MotionConfig {
     }
 
     pub fn get_max_jerk(&self) -> TVector<u32> {
-        self.cfg.apply(|m| {
-            m.max_jerk
-        })
+        self.cfg.apply(|m| m.max_jerk)
     }
 
     pub fn get_max_jerk_as_vector_real(&self) -> TVector<Real> {
@@ -221,7 +198,6 @@ impl Clone for MotionConfig {
         MotionConfig::new(self.cfg.clone())
     }
 }
-
 
 pub struct MotionConfigContent {
     /// Maximum acceleration for the motion.

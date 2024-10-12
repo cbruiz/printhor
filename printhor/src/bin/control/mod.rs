@@ -419,7 +419,6 @@ pub enum GCodeValue {
     M37(S), // Simulation mode (Dry run mode)
 
     /// Set Print Progress
-    #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
     M73,
 
     /// Soft reset

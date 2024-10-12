@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 default = ["std", "with-log"]
-std = ["critical-section/std", "futures-test/std", "with-log"]
+std = ["printhor-hwa-common-macros/std", "critical-section/std", "futures-test/std", "with-log"]
 with-log = ["log"]
 with-defmt = ["defmt"]
 
@@ -30,6 +30,6 @@ futures = { version = "0.3", default-features = false }
 cfg-if = { version = "1.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }
-critical-section = { version = "1.1", default-features = false, features = []}
+critical-section = { version = "1", default-features = false, features = []}
 [dev-dependencies]
 futures-test = { version = "0.3", default-features = false }

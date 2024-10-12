@@ -1,9 +1,8 @@
+#[allow(unused)]
+use crate::control;
 ///! This module contains the peripheral and devices export required for ALL HWI boards
 use crate::hwa;
 use hwa::HwiContract;
-#[allow(unused)]
-use crate::control;
-
 //#region "The core and mandatory devices/peripherals"
 
 pub type EventBus = hwa::GenericEventBus<
@@ -19,9 +18,8 @@ cfg_if::cfg_if! {
     }
 }
 
-pub type WatchDogController = hwa::StaticAsyncController<
-    <hwa::Contract as HwiContract>::WatchDogMutexStrategy
->;
+pub type WatchDogController =
+    hwa::StaticAsyncController<<hwa::Contract as HwiContract>::WatchDogMutexStrategy>;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
@@ -58,18 +56,6 @@ cfg_if::cfg_if! {
     }
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-fan-layer")] {
-
-        pub type FanLayerController = hwa::StaticAsyncController<
-            hwa::hwi::FanLayerControllerMutexStrategyType<
-                hwa::controllers::PwmController<
-                    hwa::hwi::PwmFanLayerMutexStrategyType<device::PwmFanLayer>
-                >
-            >
-        >;
-    }
-}
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-fan-extra-1")] {
         pub type FanExtra1Device = hwi::device::PwmFanExtra1;
@@ -122,39 +108,119 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-probe")] {
         // A nested controller
-        type _ProbeDeviceMutexStrategy_ = hwi::PwmProbeMutexStrategyType<hwi::device::PwmProbe>;
-        pub type _ProbeControllerMutexStrategy_ = hwi::ProbeServoControllerMutexStrategyType<
-            hwa::controllers::ServoController<
-                _ProbeDeviceMutexStrategy_
-            >
+        pub type InnerProbeController = hwa::controllers::GenericServoController<
+            <hwa::Contract as HwiContract>::ProbePwm
         >;
-        pub type ProbeController = hwa::StaticAsyncController<_ProbeControllerMutexStrategy_>;
+
+        pub type ProbeControllerMutexStrategy = hwa::AsyncStandardStrategy<
+                hwa::AsyncNoopMutexType,
+                InnerProbeController,
+            >;
+
+        pub type ProbeController = hwa::StaticAsyncController<
+            ProbeControllerMutexStrategy
+        >;
+
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-hot-end")] {
-        //hwa::StaticAsyncController<hwa::HotBedControllerMutexStrategyType<hwa::controllers::HotBedController>>
-        /*pub type HotBedController = HeaterController<
-    hwa::AdcHotBedMutexType,
-    hwa::PwmHotBedMutexType,
-    hwa::device::AdcHotBedPeripheral,
-    hwa::device::AdcHotBedPin,
-    hwa::device::PwmHotBed,
->;
-        */
-        // A complex nested controller
-        type _HotEndAdcDeviceMutexStrategy_ = hwi::AdcHotEndMutexStrategyType<hwi::device::AdcHotEnd>;
-        type _HotEndPwmDeviceMutexStrategy_ = hwi::PwmHotEndMutexStrategyType<hwi::device::PwmHotEnd>;
-        type _HotEndAdcPin_ =  hwi::device::AdcHotEndPin;
 
-        pub type _HotEndControllerMutexStrategy_ = hwi::HotEndControllerMutexStrategyType<
+        pub type HotEndPwmController = hwa::controllers::GenericPwmController<
+            <hwa::Contract as HwiContract>::HotEndPwm
+        >;
+        pub type HotEndAdcController = hwa::controllers::GenericAdcController<
+            <hwa::Contract as HwiContract>::HotEndAdc,
+        >;
+
+        pub type HotEndControllerMutexStrategy = hwa::AsyncStandardStrategy<
+            hwa::AsyncNoopMutexType,
             hwa::controllers::HeaterController<
-                _HotEndAdcDeviceMutexStrategy_,_HotEndPwmDeviceMutexStrategy_,_HotEndAdcPin_
+                <hwa::Contract as HwiContract>::HotEndAdc,
+                <hwa::Contract as HwiContract>::HotEndPwm,
             >
         >;
-        pub type HotEndController = hwa::StaticAsyncController<_HotEndControllerMutexStrategy_>;
+        pub type HotEndController = hwa::StaticAsyncController<HotEndControllerMutexStrategy>;
+    }
+}
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-bed")] {
 
+        pub type HotBedPwmController = hwa::controllers::GenericPwmController<
+            <hwa::Contract as HwiContract>::HotBedPwm
+        >;
+        pub type HotBedAdcController = hwa::controllers::GenericAdcController<
+            <hwa::Contract as HwiContract>::HotBedAdc,
+        >;
+
+        pub type HotBedControllerMutexStrategy = hwa::AsyncStandardStrategy<
+            hwa::AsyncNoopMutexType,
+            hwa::controllers::HeaterController<
+                <hwa::Contract as HwiContract>::HotBedAdc,
+                <hwa::Contract as HwiContract>::HotBedPwm,
+            >
+        >;
+        pub type HotBedController = hwa::StaticAsyncController<HotBedControllerMutexStrategy>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-layer")] {
+        // A nested controller
+        pub type InnerFanLayerController = hwa::controllers::GenericPwmController<
+            <hwa::Contract as HwiContract>::FanLayerPwm
+        >;
+
+        pub type FanLayerControllerMutexStrategy = hwa::AsyncStandardStrategy<
+            hwa::AsyncNoopMutexType,
+            InnerFanLayerController,
+        >;
+
+        pub type FanLayerController = hwa::StaticAsyncController<
+            FanLayerControllerMutexStrategy
+        >;
+
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-sd-card")] {
+        // A nested controller
+
+        pub type SDCardInnerController = hwa::controllers::GenericSDCardController<
+            <hwa::Contract as HwiContract>::SDCardBlockDevice,
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+        >;
+
+        pub type SDCardControllerMutexStrategy = hwa::AsyncStandardStrategy<
+            hwa::AsyncNoopMutexType,
+            SDCardInnerController,
+        >;
+
+        pub type SDCardController = hwa::controllers::GenericSDCardController<
+            <hwa::Contract as HwiContract>::SDCardBlockDevice,
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+        >;
+
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-print-job")] {
+        // A nested controller
+
+        pub type PrinterControllerSignalMutexType = <hwa::Contract as HwiContract>::PrinterControllerSignalMutexType;
+
+        pub type SDCardLineParser = control::GCodeLineParser<
+            hwa::controllers::sd_card_controller::SDCardStream<
+                <hwa::Contract as HwiContract>::SDCardBlockDevice,
+                {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
+                {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+            >
+        >;
     }
 }

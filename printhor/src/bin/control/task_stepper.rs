@@ -251,7 +251,6 @@ pub async fn task_stepper(
 
                         // First, translate displacement in mm to steps
                         let (units_per_mm, micro_steps) = {
-
                             let motion_config = motion_planner.motion_config();
                             (
                                 neutral_element + motion_config.get_units_per_mm(),
@@ -407,7 +406,10 @@ pub async fn task_stepper(
                             hwa::trace!("Micro-segment END");
                             // Microsegment end
                         }
-                        hwa::debug!("\t\t+Advanced: {:?}", microsegment_interpolator.advanced_mm());
+                        hwa::debug!(
+                            "\t\t+Advanced: {:?}",
+                            microsegment_interpolator.advanced_mm()
+                        );
                         hwa::debug!(
                             " + segment advanced: {:?}",
                             microsegment_interpolator.advanced_steps()
@@ -587,7 +589,10 @@ pub async fn task_stepper(
 async fn park(motion_planner: &hwa::controllers::MotionPlanner) {
     hwa::warn!("Stepping parked");
     STEP_DRIVER.flush().await;
-    motion_planner.motion_driver().lock().await
+    motion_planner
+        .motion_driver()
+        .lock()
+        .await
         .pins()
         .disable_steppers(StepperChannel::all());
     STEP_DRIVER.reset();
@@ -602,7 +607,8 @@ async fn unpark(motion_planner: &hwa::controllers::MotionPlanner, enable_stepper
             .motion_driver()
             .lock()
             .await
-            .pins().enable_steppers(StepperChannel::all());
+            .pins()
+            .enable_steppers(StepperChannel::all());
         STEP_DRIVER.reset();
     }
     #[cfg(feature = "trace-commands")]

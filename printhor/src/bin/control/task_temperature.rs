@@ -1,15 +1,11 @@
 //! The Temperature controller task
 
 use crate::hwa;
-use crate::hwa::controllers::HeaterController;
 use embassy_time::{Duration, Ticker};
-use hwa::DeferAction;
-use hwa::{EventFlags, EventStatus};
 #[cfg(not(feature = "native"))]
 use num_traits::float::FloatCore;
+#[allow(unused)]
 use num_traits::ToPrimitive;
-use printhor_hwa_utils::{AsyncMutexStrategy, StaticAsyncController};
-use std::ops::Deref;
 
 ///
 /// # Asynchronous Task Entry Point
@@ -56,6 +52,6 @@ pub async fn task_temperature(
         hot_end_controller.lock().await.update(&event_bus).await;
 
         #[cfg(feature = "with-hot-bed")]
-        hot_end_controller.lock().await.update(&event_bus).await;
+        hot_bed_controller.lock().await.update(&event_bus).await;
     }
 }

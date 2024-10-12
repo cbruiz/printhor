@@ -1,6 +1,4 @@
 use embassy_time::{Duration, Timer};
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-use crate::device::AdcPinTrait;
 
 pub(crate) type PinsCell<T> = std::sync::Mutex<T>;
 
@@ -112,38 +110,6 @@ impl MockedIOPin {
         //println!("wait_edge");
         Timer::after(Duration::from_secs(10)).await;
     }
-}
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedIOPin {
-
-}
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
-
-}
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl AdcPinTrait<u8> for u8 {
-
-}
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl AdcPinTrait<u8> for MockedIOPin {
-
-}
-
-#[cfg(feature = "with-hot-bed")]
-impl<'a, ADC, Word, PIN> embedded_hal_02::adc::OneShot<ADC, Word, PIN> for MockedIOPin
-where PIN: embedded_hal_02::adc::Channel<ADC>
-{
-
-    type Error = u8;
-    fn read(&mut self, _: &mut PIN) -> Result<Word, nb::Error<u8>> {
-        todo!()
-    }
-
 }
 
 

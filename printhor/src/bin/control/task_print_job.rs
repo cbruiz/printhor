@@ -6,8 +6,7 @@ use embassy_time::{Instant, Timer};
 
 use control::{CodeExecutionFailure, CodeExecutionSuccess};
 use control::{GCodeCmd, GCodeLineParser, GCodeLineParserError};
-use hwa::controllers::sd_card_controller::SDCardError;
-use hwa::controllers::sd_card_controller::SDCardStream;
+use hwa::sd_card::SDCardError;
 use hwa::controllers::PrinterController;
 use hwa::controllers::PrinterControllerEvent;
 use hwa::{CommChannel, EventFlags, EventStatus};
@@ -18,7 +17,7 @@ use hwa::{CommChannel, EventFlags, EventStatus};
 pub async fn task_print_job(
     mut processor: hwa::GCodeProcessor,
     mut printer_controller: PrinterController,
-    mut card_controller: hwa::controllers::CardController,
+    mut card_controller: hwa::types::SDCardController,
 ) {
     let event_bus = processor.event_bus.clone();
     let mut subscriber = event_bus.subscriber().await;
@@ -32,11 +31,6 @@ pub async fn task_print_job(
         Ok(_) => hwa::info!("[task_print_job] Got SYS_BOOTING. Continuing."),
         Err(_) => crate::initialization_error(),
     }
-
-    hwa::debug!(
-        "SDCardStream takes {} bytes",
-        core::mem::size_of::<SDCardStream>()
-    );
 
     let mut print_job_parser = None;
     let mut job_time = Duration::from_ticks(0);
@@ -242,7 +236,7 @@ pub async fn task_print_job(
 }
 
 async fn gcode_pull(
-    print_job_parser: &mut Option<GCodeLineParser<SDCardStream>>,
+    print_job_parser: &mut Option<hwa::types::SDCardLineParser>,
 ) -> Result<GCodeCmd, GCodeLineParserError> {
     match print_job_parser.as_mut() {
         Some(parser) => parser.next_gcode().await.map(|mut gc| {

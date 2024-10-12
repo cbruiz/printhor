@@ -1,14 +1,14 @@
-use crate::{hwa, control, math};
-use hwa::HwiContract;
+use crate::{control, hwa, math};
 use hwa::controllers::ExecPlan::Homing;
+use hwa::HwiContract;
 
 use embassy_sync::mutex::MutexGuard;
-use printhor_hwi_native::Contract;
-use hwa::AsyncMutexStrategy;
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
 use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use hwa::AsyncMutexStrategy;
 use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
+use printhor_hwi_native::Contract;
 
 use math::{CoordSel, TVector};
 
@@ -150,17 +150,15 @@ impl MotionPlanner {
     ///
     /// It is important to note that the motion planner will remain idle and not execute any movements until this `start` method is called.
     /// This ensures that no motion-related activities commence before the system is fully set up and ready, preventing any accidental or unplanned actions.
-    pub async fn start(
-        &self,
-        event_bus: &hwa::types::EventBus,
-    ) {
+    pub async fn start(&self, event_bus: &hwa::types::EventBus) {
         self.move_planned.reset();
         self.available.signal(true);
         event_bus
             .publish_event(
                 hwa::EventStatus::containing(EventFlags::MOV_QUEUE_EMPTY)
                     .and_not_containing(EventFlags::MOV_QUEUE_FULL),
-            ).await;
+            )
+            .await;
     }
 
     // Dequeues actual velocity plan
@@ -193,10 +191,7 @@ impl MotionPlanner {
     ///
     /// The method ensures that the motion planner's state is correctly updated and synchronized with the event
     /// bus, which is important for maintaining the overall system's consistency and reliability.
-    pub async fn next_plan(
-        &self,
-        event_bus: &hwa::types::EventBus,
-    ) -> ExecPlan {
+    pub async fn next_plan(&self, event_bus: &hwa::types::EventBus) -> ExecPlan {
         loop {
             let _ = self.move_planned.wait().await;
             {
@@ -268,10 +263,7 @@ impl MotionPlanner {
     /// This function is typically called after the execution of a movement has been completed to update the state
     /// of the ring buffer and signal the availability of slots for new commands. It is an integral part of the system
     /// to ensure that the motion planner operates smoothly and consistently by managing the state of planned and executed movements.
-    pub async fn consume_current_segment_data(
-        &self,
-        event_bus: &hwa::types::EventBus,
-    ) -> u8 {
+    pub async fn consume_current_segment_data(&self, event_bus: &hwa::types::EventBus) -> u8 {
         let mut rb = self.ring_buffer.lock().await;
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
@@ -444,7 +436,11 @@ impl MotionPlanner {
                                 curr_vmax.min(curr_segment.segment_data.constraints.v_max);
                             let v_marginal_gain =
                                 curr_boundary - curr_segment.segment_data.speed_exit_mms;
-                            hwa::debug!("\t- constraint = {:?} bound = {:?}", curr_vmax, curr_boundary);
+                            hwa::debug!(
+                                "\t- constraint = {:?} bound = {:?}",
+                                curr_vmax,
+                                curr_boundary
+                            );
                             hwa::debug!("\t= v_margin: {:?}", v_marginal_gain);
                             curr_segment.segment_data.speed_enter_constrained_mms = v_marginal_gain;
                             curr_segment.segment_data.speed_exit_constrained_mms = v_marginal_gain;
@@ -492,9 +488,8 @@ impl MotionPlanner {
                                     _ => {}
                                 }
                             }
-                            self.motion_status.update_last_planned_position(
-                                &curr_segment.segment_data.dest_pos
-                            );
+                            self.motion_status
+                                .update_last_planned_position(&curr_segment.segment_data.dest_pos);
                             (
                                 PlanEntry::PlannedMove(curr_segment, action, channel, is_defer),
                                 hwa::EventStatus::containing(EventFlags::NOTHING),
@@ -603,7 +598,6 @@ impl MotionPlanner {
     ) {
         mutex_guard.max_speed.assign(CoordSel::all(), &speed);
     }
-
 
     /// Plans and schedules a series of motion commands based on the given GCode.
     ///
@@ -722,7 +716,6 @@ impl MotionPlanner {
         num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
-
         let p0 = self
             .motion_status
             .get_last_planned_position()
@@ -851,10 +844,7 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn do_homing(
-        &self,
-        event_bus: &hwa::types::EventBus,
-    ) -> Result<(), ()> {
+    pub async fn do_homing(&self, event_bus: &hwa::types::EventBus) -> Result<(), ()> {
         match self
             .motion_driver
             .lock()
@@ -1214,7 +1204,11 @@ pub mod planner_test {
             }
         }
         let expected_advanced_steps = microsegment_interpolator.advanced_steps();
-        assert_eq!(expected_advanced_steps, real_advanced_steps, "Advanced steps matching. Expected: {:?} Got {:?}", expected_advanced_steps, real_advanced_steps)
+        assert_eq!(
+            expected_advanced_steps, real_advanced_steps,
+            "Advanced steps matching. Expected: {:?} Got {:?}",
+            expected_advanced_steps, real_advanced_steps
+        )
     }
 
     #[test]
@@ -1366,7 +1360,11 @@ pub mod planner_test {
             }
         }
         let expected_advanced_steps = microsegment_interpolator.advanced_steps();
-        assert_eq!(expected_advanced_steps, real_advanced_steps, "Advanced steps matching. Expected: {:?} Got {:?}", expected_advanced_steps, real_advanced_steps)
+        assert_eq!(
+            expected_advanced_steps, real_advanced_steps,
+            "Advanced steps matching. Expected: {:?} Got {:?}",
+            expected_advanced_steps, real_advanced_steps
+        )
     }
 
     #[test]
@@ -1516,7 +1514,11 @@ pub mod planner_test {
             }
         }
         let expected_advanced_steps = microsegment_interpolator.advanced_steps();
-        assert_eq!(expected_advanced_steps, real_advanced_steps, "Advanced steps matching. Expected: {:?} Got {:?}", expected_advanced_steps, real_advanced_steps)
+        assert_eq!(
+            expected_advanced_steps, real_advanced_steps,
+            "Advanced steps matching. Expected: {:?} Got {:?}",
+            expected_advanced_steps, real_advanced_steps
+        )
     }
 
     #[futures_test::test]
@@ -1535,14 +1537,12 @@ pub mod planner_test {
             ))
         ));
 
-
         let defer_channel: hwa::GenericDeferChannel<MutexType> =
             hwa::GenericDeferChannel::new(hwa::make_static_ref!(
                 "DeferChannel",
                 hwa::DeferChannelChannelType<MutexType>,
                 hwa::DeferChannelChannelType::new()
             ));
-
 
         let _motion_config = hwa::make_static_sync_controller!(
             "MotionConfig",

@@ -38,7 +38,9 @@ impl From<StepperChannel> for CoordSel {
     }
 }
 
-pub trait ArithmeticOps: core::fmt::Debug + Copy
+pub trait ArithmeticOps:
+    core::fmt::Debug
+    + Copy
     + Clone
     + core::ops::Add<Self, Output = Self>
     + core::ops::Mul<Self, Output = Self>
@@ -912,38 +914,31 @@ where
     T: ArithmeticOps + core::fmt::Debug,
 {
     fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-
-        // TODO !!!!
-        /*
         let mut spacing = false;
         if let Some(v) = &self.x {
-            core::write!(f, "X {:?}", v)?;
+            core::write!(_f, "X {:?}", v)?;
             spacing = true;
         }
         if let Some(v) = &self.y {
             if spacing {
-                core::write!(f, " ")?;
+                core::write!(_f, " ")?;
             }
-            core::write!(f, "Y {:?}", v)?;
+            core::write!(_f, "Y {:?}", v)?;
             spacing = true;
         }
         if let Some(v) = &self.z {
             if spacing {
-                core::write!(f, " ")?;
+                core::write!(_f, " ")?;
             }
-            core::write!(f, "Z {:?}", v)?;
+            core::write!(_f, "Z {:?}", v)?;
             spacing = true;
         }
         if let Some(v) = &self.e {
             if spacing {
-                core::write!(f, " ")?;
+                core::write!(_f, " ")?;
             }
-            core::write!(f, "E {:?}", v)?;
-            spacing = true;
+            core::write!(_f, "E {:?}", v)?;
         }
-
-
-         */
         Ok(())
     }
 }

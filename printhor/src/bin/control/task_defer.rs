@@ -57,7 +57,7 @@ impl Subscriptions {
                 #[cfg(feature = "with-hot-end")]
                 DeferAction::HotEndTemperature => &mut counts.num_hotend,
                 #[cfg(feature = "with-hot-bed")]
-                DeferAction::HotbedTemperature => &mut counts.num_hotbed,
+                DeferAction::HotBedTemperature => &mut counts.num_hotbed,
             };
             let new_value = *counter as i8 + increment;
             return if new_value < 0 {

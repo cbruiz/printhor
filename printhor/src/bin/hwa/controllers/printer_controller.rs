@@ -1,6 +1,6 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::{CommChannel, GenericEventBus, PersistentState};
+use hwa::{CommChannel, PersistentState};
 
 #[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
@@ -63,7 +63,7 @@ pub enum PrinterControllerError {
 }
 
 pub type PrinterControllerSignalType =
-    embassy_sync::signal::Signal<hwa::PrinterControllerSignalMutexType, PrinterControllerEvent>;
+    embassy_sync::signal::Signal<hwa::types::PrinterControllerSignalMutexType, PrinterControllerEvent>;
 
 /// The `PrinterController` struct represents the controller for managing printer operations.
 ///
@@ -87,19 +87,17 @@ pub struct PrinterController {
     channel: &'static PrinterControllerSignalType,
 
     /// The event bus for broadcasting events.
-    event_bus: GenericEventBus<hwa::EventBusMutexStrategyType, hwa::EventBusPubSubMutexType>,
+    event_bus: hwa::types::EventBus,
 
     /// The current status of the printer controller.
     status:
-        &'static PersistentState<hwa::PrinterControllerSignalMutexType, PrinterControllerStatus>,
+        &'static PersistentState<hwa::types::PrinterControllerSignalMutexType, PrinterControllerStatus>,
 }
 
 impl PrinterController {
-    pub fn new(
-        event_bus: GenericEventBus<hwa::EventBusMutexStrategyType, hwa::EventBusPubSubMutexType>,
-    ) -> PrinterController {
+    pub fn new( event_bus: hwa::types::EventBus ) -> PrinterController {
         type StatusType =
-            PersistentState<hwa::PrinterControllerSignalMutexType, PrinterControllerStatus>;
+            PersistentState<hwa::types::PrinterControllerSignalMutexType, PrinterControllerStatus>;
         let status_cfg = StatusType::new();
         status_cfg.signal(PrinterControllerStatus::Ready(CommChannel::Internal));
         let channel = hwa::make_static_ref!(

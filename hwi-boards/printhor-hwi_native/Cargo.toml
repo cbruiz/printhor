@@ -25,7 +25,7 @@ with-print-job = []
 with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end"]
 with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
-with-probe = ["embedded-hal-1"]
+with-probe = ["embedded-hal-0"]
 with-endstops = []
 with-sd-card = ["embedded-sdmmc"]
 with-fan-layer = ["embedded-hal-1"]
@@ -67,7 +67,7 @@ printhor-hwa-common = { version = "0.0", default-features = false, features = ["
 printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
-embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven" ] }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven" ], optional = true }
 futures = { version = "0.3", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 

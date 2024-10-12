@@ -5,4 +5,3 @@ mod timing_monitor;
 
 #[cfg(feature = "with-motion")]
 pub use motion_driver::MotionDriver;
-

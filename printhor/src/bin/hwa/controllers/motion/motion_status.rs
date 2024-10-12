@@ -3,7 +3,7 @@ use hwa::SyncMutexStrategy;
 use math::{CoordSel, Real, TVector};
 
 pub struct MotionStatus {
-    cfg: hwa::StaticSyncController<hwa::types::MotionStatusMutexStrategy>
+    cfg: hwa::StaticSyncController<hwa::types::MotionStatusMutexStrategy>,
 }
 
 impl MotionStatus {
@@ -42,23 +42,16 @@ impl MotionStatus {
     }
 
     pub fn get_last_planned_position(&self) -> Option<TVector<Real>> {
-        self.cfg.apply(|m| {
-            m.last_planned_pos
-        })
+        self.cfg.apply(|m| m.last_planned_pos)
     }
 
     pub fn get_last_planned_real_position(&self) -> Option<TVector<Real>> {
-        self.cfg.apply(|m| {
-            m.last_real_pos
-        })
+        self.cfg.apply(|m| m.last_real_pos)
     }
 
     pub fn is_absolute_positioning(&self) -> bool {
-        self.cfg.apply(|m| {
-            m.absolute_positioning
-        })
+        self.cfg.apply(|m| m.absolute_positioning)
     }
-
 }
 
 impl Clone for MotionStatus {

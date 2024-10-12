@@ -21,17 +21,19 @@ nightly = []
 executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
 with-defmt = ["defmt", "printhor-hwa-utils/with-defmt"]
-with-serial-usb = []
-with-serial-port-1 = []
-with-serial-port-2 = []
-with-ps-on = []
-with-probe = []
-with-laser = []
-with-fan-layer = []
-with-fan-extra-1 = []
-with-motion = []
-with-hot-end = []
-with-hot-bed = []
+with-serial-usb = ["async-gcode", "embedded-io-async"]
+with-serial-port-1 = ["async-gcode", "embedded-io-async"]
+with-serial-port-2 = ["async-gcode", "embedded-io-async"]
+with-ps-on = ["embedded-hal-1"]
+with-probe = ["embedded-hal-0"]
+with-laser = ["embedded-hal-0"]
+with-fan-layer = ["embedded-hal-0"]
+with-fan-extra-1 = ["embedded-hal-0"]
+with-motion = ["embedded-hal-0"]
+with-hot-end = ["embedded-hal-0"]
+with-hot-bed = ["embedded-hal-0"]
+with-sd-card = ["async-gcode", "embedded-sdmmc", "heapless"]
+with-print-job = []
 
 with-x-axis = []
 with-y-axis = []
@@ -47,10 +49,13 @@ embassy-sync = { version = "0.6", features = [] }
 embassy-executor = { version = "0.6", features = [] }
 embassy-time = { version = "0.3", features = [] }
 
-embedded-hal-01 = { package = "embedded-hal", version = "1.0", default-features = false }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
-embedded-io-async = { version = "0.6", default-features = false, features = [] }
-async-gcode = { version = "0.3", default-features = false, features = []}
+embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven"], optional = true }
+embedded-sdmmc = { version = "0.8.0", default-features = false, features = [], optional = true }
+embedded-io-async = { version = "0.6", default-features = false, features = [], optional = true }
+async-gcode = { version = "0.3", default-features = false, features = [], optional = true}
+
+heapless = { version = "0.8", default-features = false, features = [], optional = true }
 
 bitflags = { version = "2.6", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0" }

@@ -27,8 +27,8 @@ mod motion_pins;
 
 use crate::hwa;
 pub use motion_config::*;
-pub use motion_pins::*;
 pub use motion_interpolation::*;
+pub use motion_pins::*;
 pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;

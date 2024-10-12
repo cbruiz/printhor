@@ -34,8 +34,9 @@ pub struct TrinamicController {
     /// The motion configuration holds various settings related to the movement
     /// of the stepper motors, such as microstep configurations and possibly other
     /// parameters needed to correctly drive the motors.
-    motion_config:
-        hwa::StaticAsyncController<hwa::MotionConfigMutexStrategyType<hwa::controllers::MotionConfigContent>>,
+    motion_config: hwa::StaticAsyncController<
+        hwa::MotionConfigMutexStrategyType<hwa::controllers::MotionConfigContent>,
+    >,
 }
 impl TrinamicController {
     pub const fn new(

@@ -12,5 +12,9 @@ syn = "2.0"
 quote = "1.0"
 proc-macro2 = "1.0"
 
+[dev-dependencies]
+printhor-hwa-common = {version = "0", path = "../printhor-hwa-common"}
+printhor-hwa-utils = {version = "0", path = "../printhor-hwa-utils"}
+
 [lib]
 proc-macro = true

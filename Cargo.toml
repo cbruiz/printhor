@@ -9,7 +9,7 @@ members = [
 ]
 
 exclude = [
-	"libs/unix-fifo-async", "libs/embassy", "libs/async-gcode",
+	"libs/embassy", "libs/async-gcode",
 	"hwi-boards/printhor-hwi_native",
 	"hwi-boards/printhor-hwi_mks_robin_nano",
 	"hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat",

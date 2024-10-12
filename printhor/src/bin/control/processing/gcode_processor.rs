@@ -48,12 +48,12 @@ use crate::hwa;
 use crate::math;
 use control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use control::{GCodeCmd, GCodeValue};
-use hwa::HwiContract;
-use hwa::Contract;
-#[allow(unused)]
-use hwa::SyncMutexStrategy;
 #[allow(unused)]
 use hwa::AsyncMutexStrategy;
+use hwa::Contract;
+use hwa::HwiContract;
+#[allow(unused)]
+use hwa::SyncMutexStrategy;
 
 #[cfg(feature = "with-motion")]
 use crate::math::TVector;
@@ -64,7 +64,6 @@ use hwa::StepperChannel;
 #[allow(unused)]
 use hwa::{CommChannel, DeferAction, DeferEvent, EventFlags, EventStatus};
 use strum::VariantNames;
-
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-serial-port-1", feature="with-serial-port-2"))]
@@ -100,9 +99,7 @@ pub struct GCodeProcessor {
     pub hot_end: hwa::types::HotEndController,
 
     #[cfg(feature = "with-hot-bed")]
-    pub hot_bed: hwa::StaticAsyncController<
-        hwa::HotBedControllerMutexStrategyType<hwa::controllers::HotBedController>,
-    >,
+    pub hot_bed: hwa::types::HotBedController,
 
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer: hwa::types::FanLayerController,
@@ -357,8 +354,7 @@ impl GCodeProcessor {
                     {
                         return Err(CodeExecutionFailure::PowerRequired);
                     }
-                    let mut mg = self.probe.lock().await;
-                    mg.probe_pin_up(300_000).await;
+                    self.probe.lock().await.probe_pin_up(300_000).await;
                     Ok(CodeExecutionSuccess::OK)
                 }
             }
@@ -384,18 +380,23 @@ impl GCodeProcessor {
             GCodeValue::G80 => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
             GCodeValue::G90 => {
-                self.motion_planner.motion_status().set_absolute_positioning(true);
+                self.motion_planner
+                    .motion_status()
+                    .set_absolute_positioning(true);
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G91 => {
-                self.motion_planner.motion_status().set_absolute_positioning(false);
+                self.motion_planner
+                    .motion_status()
+                    .set_absolute_positioning(false);
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
-                self.motion_planner.motion_status().set_last_planned_position(
-                    &TVector {
+                self.motion_planner
+                    .motion_status()
+                    .set_last_planned_position(&TVector {
                         x: _pos.x,
                         y: _pos.y,
                         z: _pos.z,
@@ -426,7 +427,6 @@ impl GCodeProcessor {
                     .await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
             GCodeValue::M73 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M79 => {
                 let _ = self.write(channel, "echo: Software reset\n").await;
@@ -536,10 +536,10 @@ impl GCodeProcessor {
                     {
                         let mut h = self.hot_end.lock().await;
                         alloc::format!(
-                            " T:{} /{} T@:{} TZ:{}",
+                            " T:{:?} /{:?} T@:{:?} TZ:{:?}",
                             math::Real::from_f32(h.get_current_temp()),
                             math::Real::from_f32(h.get_target_temp()),
-                            math::Real::from_f32(h.get_current_power().await),
+                            math::Real::from_f32(h.get_current_power()),
                             math::Real::from_f32(h.get_current_resistance()),
                         )
                     }
@@ -551,10 +551,10 @@ impl GCodeProcessor {
                     {
                         let mut h = self.hot_bed.lock().await;
                         alloc::format!(
-                            " B:{} /{} B@:{} BZ:{}",
+                            " B:{:?} /{:?} B@:{:?} BZ:{:?}",
                             math::Real::from_f32(h.get_current_temp()),
                             math::Real::from_f32(h.get_target_temp()),
-                            math::Real::from_f32(h.get_current_power().await),
+                            math::Real::from_f32(h.get_current_power()),
                             math::Real::from_f32(h.get_current_resistance()),
                         )
                     }
@@ -578,13 +578,13 @@ impl GCodeProcessor {
                     return Err(CodeExecutionFailure::PowerRequired);
                 }
                 //crate::info!("M106 BEGIN");
-                self.fan_layer.lock().await.set_power(255).await;
+                self.fan_layer.lock().await.set_power(255);
                 //crate::info!("M106 END");
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-fan-layer")]
             GCodeValue::M107 => {
-                self.fan_layer.lock().await.set_power(0).await;
+                self.fan_layer.lock().await.set_power(0);
                 Ok(CodeExecutionSuccess::OK)
             }
             // Wait for hot-end temperature
@@ -711,7 +711,7 @@ impl GCodeProcessor {
                 let mut h = self.hot_bed.lock().await;
                 h.set_target_temp(
                     CommChannel::Internal,
-                    DeferAction::HotbedTemperature,
+                    DeferAction::HotBedTemperature,
                     val as f32,
                 )
                 .await;
@@ -732,7 +732,7 @@ impl GCodeProcessor {
                 }
                 let deferred = {
                     let mut he = self.hot_bed.lock().await;
-                    he.ping_subscribe(channel, DeferAction::HotbedTemperature)
+                    he.ping_subscribe(channel, DeferAction::HotBedTemperature)
                         .await
                 };
                 if deferred {
