@@ -1,5 +1,6 @@
 use crate::{control, hwa, math};
 use hwa::controllers::ExecPlan::Homing;
+use hwa::Contract;
 use hwa::HwiContract;
 
 use embassy_sync::mutex::MutexGuard;
@@ -8,15 +9,14 @@ use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
 use hwa::AsyncMutexStrategy;
 use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
-use printhor_hwi_native::Contract;
 
 use math::{CoordSel, TVector};
 
 /// The execution plan action dequeued from the buffer
 pub enum ExecPlan {
     Segment(motion::Segment, hwa::CommChannel),
-    Dwell(Option<u32>, hwa::CommChannel),
-    Homing(hwa::CommChannel),
+    Dwell(Option<u32>, hwa::CommChannel, u32),
+    Homing(hwa::CommChannel, u32),
 }
 
 /// The `MotionPlanner` struct is responsible for handling the motion planning logic
@@ -201,29 +201,34 @@ impl MotionPlanner {
                     PlanEntry::Empty => {
                         self.move_planned.reset();
                     }
-                    PlanEntry::Dwell(channel, sleep, _deferred) => {
-                        rb.data[head] = PlanEntry::Executing(MovType::Dwell(channel), true);
-                        return ExecPlan::Dwell(sleep, channel);
+                    PlanEntry::Dwell(channel, sleep, _deferred, order_num) => {
+                        rb.data[head] =
+                            PlanEntry::Executing(MovType::Dwell(channel), true, order_num);
+                        return ExecPlan::Dwell(sleep, channel, order_num);
                     }
-                    PlanEntry::PlannedMove(planned_data, action, channel, deferred) => {
+                    PlanEntry::PlannedMove(planned_data, action, channel, deferred, order_num) => {
                         hwa::debug!(
                             "PlannedMove starting: {} / {} h={}",
                             rb.used,
                             Contract::SEGMENT_QUEUE_SIZE,
                             head
                         );
-                        rb.data[head] =
-                            PlanEntry::Executing(MovType::Move(action, channel), deferred);
+                        rb.data[head] = PlanEntry::Executing(
+                            MovType::Move(action, channel),
+                            deferred,
+                            order_num,
+                        );
                         return ExecPlan::Segment(planned_data, channel);
                     }
-                    PlanEntry::Homing(channel, _deferred) => {
+                    PlanEntry::Homing(channel, _deferred, order_num) => {
                         event_bus
                             .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                             .await;
-                        rb.data[head] = PlanEntry::Executing(MovType::Homing(channel), true);
-                        return Homing(channel);
+                        rb.data[head] =
+                            PlanEntry::Executing(MovType::Homing(channel), true, order_num);
+                        return Homing(channel, order_num);
                     }
-                    PlanEntry::Executing(_, _) => {
+                    PlanEntry::Executing(_, _, _) => {
                         self.move_planned.reset();
                         hwa::error!("Unexpected error: RingBuffer Overrun");
                     }
@@ -268,7 +273,7 @@ impl MotionPlanner {
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
         match &rb.data[head as usize] {
-            PlanEntry::Executing(MovType::Homing(channel), _) => {
+            PlanEntry::Executing(MovType::Homing(channel), _, order_num) => {
                 event_bus
                     .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))
                     .await;
@@ -276,21 +281,23 @@ impl MotionPlanner {
                     .send(hwa::DeferEvent::Completed(
                         hwa::DeferAction::Homing,
                         *channel,
+                        *order_num,
                     ))
                     .await;
             }
-            PlanEntry::Executing(MovType::Dwell(channel), _) => {
+            PlanEntry::Executing(MovType::Dwell(channel), _, order_num) => {
                 self.defer_channel
                     .send(hwa::DeferEvent::Completed(
                         hwa::DeferAction::Homing,
                         *channel,
+                        *order_num,
                     ))
                     .await;
             }
-            PlanEntry::Executing(MovType::Move(action, channel), deferred) => {
+            PlanEntry::Executing(MovType::Move(action, channel), deferred, order_num) => {
                 if *deferred {
                     self.defer_channel
-                        .send(hwa::DeferEvent::Completed(*action, *channel))
+                        .send(hwa::DeferEvent::Completed(*action, *channel, *order_num))
                         .await;
                 }
             }
@@ -389,7 +396,7 @@ impl MotionPlanner {
                     let curr_insert_index = rb.index_from_tail(0).unwrap();
 
                     let (curr_planned_entry, event) = match move_type {
-                        ScheduledMove::Move(curr_segment_data) => {
+                        ScheduledMove::Move(curr_segment_data, order_num) => {
                             let mut curr_segment = motion::Segment::new(curr_segment_data);
                             // TODO:
                             // 1) Find a better way to approximate
@@ -459,7 +466,7 @@ impl MotionPlanner {
 
                             if let Ok(prev_index) = rb.index_from_tail(1) {
                                 match &mut rb.data[prev_index as usize] {
-                                    PlanEntry::PlannedMove(prev_segment, _, _, _) => {
+                                    PlanEntry::PlannedMove(prev_segment, _, _, _, _) => {
                                         let proj: Real = prev_segment
                                             .segment_data
                                             .unit_vector_dir
@@ -491,21 +498,27 @@ impl MotionPlanner {
                             self.motion_status
                                 .update_last_planned_position(&curr_segment.segment_data.dest_pos);
                             (
-                                PlanEntry::PlannedMove(curr_segment, action, channel, is_defer),
+                                PlanEntry::PlannedMove(
+                                    curr_segment,
+                                    action,
+                                    channel,
+                                    is_defer,
+                                    order_num,
+                                ),
                                 hwa::EventStatus::containing(EventFlags::NOTHING),
                             )
                         }
-                        ScheduledMove::Homing => {
+                        ScheduledMove::Homing(order_num) => {
                             is_defer = true;
                             (
-                                PlanEntry::Homing(channel, is_defer),
+                                PlanEntry::Homing(channel, is_defer, order_num),
                                 hwa::EventStatus::not_containing(hwa::EventFlags::HOMING),
                             )
                         }
-                        ScheduledMove::Dwell(sleep) => {
+                        ScheduledMove::Dwell(sleep, order_num) => {
                             is_defer = true;
                             (
-                                PlanEntry::Dwell(channel, sleep, is_defer),
+                                PlanEntry::Dwell(channel, sleep, is_defer, order_num),
                                 hwa::EventStatus::containing(hwa::EventFlags::MOV_QUEUE_EMPTY),
                             )
                         }
@@ -542,7 +555,7 @@ impl MotionPlanner {
                             line_tag
                         );
                         self.defer_channel
-                            .send(hwa::DeferEvent::AwaitRequested(action, channel))
+                            .send(hwa::DeferEvent::AwaitRequested(action, channel, num_order))
                             .await;
                         Ok(control::CodeExecutionSuccess::DEFERRED(event))
                     } else {
@@ -672,7 +685,7 @@ impl MotionPlanner {
                     "G4",
                     channel,
                     hwa::DeferAction::Dwell,
-                    ScheduledMove::Dwell(t.s.map(|v| v.int() as u32)),
+                    ScheduledMove::Dwell(t.s.map(|v| v.int() as u32), gc.order_num),
                     blocking,
                     event_bus,
                     gc.order_num,
@@ -689,7 +702,7 @@ impl MotionPlanner {
                         "G28",
                         channel,
                         hwa::DeferAction::Homing,
-                        ScheduledMove::Homing,
+                        ScheduledMove::Homing(gc.order_num),
                         blocking,
                         event_bus,
                         gc.order_num,
@@ -810,7 +823,7 @@ impl MotionPlanner {
                     mnemonic,
                     channel,
                     action,
-                    ScheduledMove::Move(segment_data),
+                    ScheduledMove::Move(segment_data, num),
                     blocking,
                     event_bus,
                     num,
@@ -978,8 +991,8 @@ fn perform_cornering(
             let (left_segment, right_segment) =
                 match rb.entries_from_tail(left_offset, right_offset) {
                     (
-                        Some(PlanEntry::PlannedMove(_s, _, _, _)),
-                        Some(PlanEntry::PlannedMove(_t, _, _, _)),
+                        Some(PlanEntry::PlannedMove(_s, _, _, _, _)),
+                        Some(PlanEntry::PlannedMove(_t, _, _, _, _)),
                     ) => (_s, _t),
                     _ => panic!(""),
                 };
@@ -1521,6 +1534,58 @@ pub mod planner_test {
         )
     }
 
+    #[cfg(feature = "pending")]
+    #[futures_test::test]
+    async fn boundary_conditions_tests() {
+        // Test with zero values
+        let segment_zero = Segment::new(0.0, 0.0, 0.0, 0.0, 0.0, Constraints::new(0.0, 0.0, 0.0));
+        assert_eq!(segment_zero.compute(), Ok(()));
+
+        // Test with very large positive values
+        let segment_large = Segment::new(
+            f32::MAX,
+            f32::MAX,
+            f32::MAX,
+            f32::MAX,
+            f32::MAX,
+            Constraints::new(f32::MAX, f32::MAX, f32::MAX),
+        );
+        assert_eq!(segment_large.compute(), Ok(()));
+
+        // Test with very small positive values (close to zero but not zero)
+        let segment_small = Segment::new(
+            f32::EPSILON,
+            f32::EPSILON,
+            f32::EPSILON,
+            f32::EPSILON,
+            f32::EPSILON,
+            Constraints::new(f32::EPSILON, f32::EPSILON, f32::EPSILON),
+        );
+        assert_eq!(segment_small.compute(), Ok(()));
+
+        // Test with negative values
+        let segment_negative = Segment::new(
+            -100.0,
+            -100.0,
+            -100.0,
+            -100.0,
+            -100.0,
+            Constraints::new(-100.0, -100.0, -100.0),
+        );
+        assert_eq!(segment_negative.compute(), Ok(()));
+
+        // Test with normal values
+        let segment_normal = Segment::new(
+            100.0,
+            150.0,
+            200.0,
+            250.0,
+            300.0,
+            Constraints::new(400.0, 500.0, 600.0),
+        );
+        assert_eq!(segment_normal.compute(), Ok(()));
+    }
+
     #[futures_test::test]
     async fn receiver_receives_given_try_send_async() {
         type MutexType = hwa::AsyncCsMutexType;
@@ -1556,6 +1621,7 @@ pub mod planner_test {
             .send(DeferEvent::Completed(
                 DeferAction::Homing,
                 CommChannel::Internal,
+                1,
             ))
             .await;
         /*

@@ -8,17 +8,39 @@ pub mod device;
 pub mod mocked_peripherals;
 mod types;
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-trinamic")] {
+        pub mod comm;
+    }
+}
+
 pub struct Contract;
 impl hwa::HwiContract for Contract {
+
+    //#region "Common constants"
+
     const MACHINE_TYPE: &'static str = "Simulator/debugger";
     const MACHINE_BOARD: &'static str = "PC";
     const MACHINE_PROCESSOR: &'static str = std::env::consts::ARCH;
 
+    cfg_if::cfg_if! {
+        if #[cfg(feature="with-motion")] {
+            #[const_env::from_env("PROCESSOR_SYS_CK_MHZ")]
+            const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
+        }
+    }
+
+    //#enregion
+
     //#region Hard-coded settings [...]
+
     #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
     const WATCHDOG_TIMEOUT_US: u32 = 10_000_000;
 
+    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
     const MAX_HEAP_SIZE_BYTES: usize = 0;
+
+    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 32768;
 
     //#endregion
@@ -46,8 +68,13 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
+            #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
             const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
+
+            #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
             const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
+            #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
             const SEGMENT_QUEUE_SIZE: u8 = 20;
         }
     }
@@ -59,14 +86,19 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
 
+            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_MV")]
             const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = 4096;
 
+            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
 
+            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_BETA: f32 = 3950.0;
 
+            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
 
+            #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 1.0;
         }
     }
@@ -78,14 +110,19 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
 
+            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_MV")]
             const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = 4096;
 
+            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
 
+            #[const_env::from_env("HOT_BED_THERM_BETA")]
             const HOT_BED_THERM_BETA: f32 = 3950.0;
 
+            #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
             const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
 
+            #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 1.0;
         }
     }
@@ -126,7 +163,7 @@ impl hwa::HwiContract for Contract {
             #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
             const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
-            type SerialUsbRx = mocked_peripherals::MockedUartNamedPipeRxInputStream;
+            type SerialUsbRx = device::SerialUsbRx;
         }
     }
 
@@ -157,8 +194,7 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             type MotionPinsMutexStrategy = types::MotionPinsMutexStrategy;
-            type MotionPins = hwa::HwiResource<device::MotionPins>;
-
+            type MotionPins = device::MotionPins;
         }
     }
 
@@ -201,6 +237,20 @@ impl hwa::HwiContract for Contract {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-laser")] {
+            type LaserPwm = types::LaserPwmMutexStrategy;
+            type LaserPwmChannel = hwa::HwiResource<device::LaserPwmChannel>;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-fan-extra-1")] {
+            type FanExtra1Pwm = types::FanExtra1PwmMutexStrategy;
+            type FanExtra1PwmChannel = hwa::HwiResource<device::FanExtra1PwmChannel>;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-sd-card")] {
             const SD_CARD_MAX_FILES: usize = 4;
             const SD_CARD_MAX_DIRS: usize = 4;
@@ -211,6 +261,12 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-print-job")] {
             type PrinterControllerSignalMutexType = types::PrinterControllerSignalMutexType;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-trinamic")] {
+            const TRINAMIC_UART_BAUD_RATE: u32 = 4096;
         }
     }
 
@@ -286,7 +342,7 @@ impl hwa::HwiContract for Contract {
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
             device::TrinamicUart::new(
-                TRINAMIC_UART_BAUD_RATE,
+                Self::TRINAMIC_UART_BAUD_RATE,
                 mocked_peripherals::MockedIOPin::new(0, _pin_state),
                 mocked_peripherals::MockedIOPin::new(1, _pin_state),
                 mocked_peripherals::MockedIOPin::new(2, _pin_state),
@@ -299,6 +355,7 @@ impl hwa::HwiContract for Contract {
             _spawner.spawn(
                 device::trinamic_driver_simulator(
                     device::MockedTrinamicDriver::new(
+                        Self::TRINAMIC_UART_BAUD_RATE,
                         mocked_peripherals::MockedIOPin::new(0, _pin_state),
                         mocked_peripherals::MockedIOPin::new(1, _pin_state),
                         mocked_peripherals::MockedIOPin::new(2, _pin_state),
@@ -307,7 +364,6 @@ impl hwa::HwiContract for Contract {
                 )
             ).unwrap();
         }
-
 
         #[cfg(feature = "with-spi")]
         let spi1_device = hwa::make_static_async_controller!(
@@ -366,24 +422,10 @@ impl hwa::HwiContract for Contract {
         #[cfg(feature = "with-motion")]
         hwa::debug!("motion_planner done");
 
-
-
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
                 let probe_pwm = pwm1.clone();
                 let probe_channel = hwa::HwiResource::new(0u8);
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-laser")] {
-                let laser_power_pwm = pwm_any.clone();
-                let laser_power_channel = hwa::HwiResource::new(0u8);
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-fan-extra-1")] {
-                let fan_extra1_power_pwm = pwm_any.clone();
-                let fan_extra1_power_channel = hwa::HwiResource::new(0u8);
             }
         }
         cfg_if::cfg_if! {
@@ -417,6 +459,20 @@ impl hwa::HwiContract for Contract {
             }
         }
 
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-laser")] {
+                let laser_pwm = pwm1.clone();
+                let laser_pwm_channel = hwa::HwiResource::new(0u8);
+            }
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-fan-extra-1")] {
+                let fan_extra1_pwm = pwm1.clone();
+                let fan_extra1_pwm_channel = hwa::HwiResource::new(0u8);
+            }
+        }
+
         hwa::HwiContext {
             sys_watch_dog: hwa::make_static_async_controller!(
                 "WatchDogController",
@@ -442,22 +498,19 @@ impl hwa::HwiContract for Contract {
                 device::PsOnPin::new(21, _pin_state)
             ),
             #[cfg(feature = "with-motion")]
-            motion_pins: hwa::HwiResource::new(
-                motion_pins
-            ),
-
+            motion_pins,
             #[cfg(feature = "with-probe")]
             probe_pwm,
             #[cfg(feature = "with-probe")]
             probe_pwm_channel: probe_channel,
             #[cfg(feature = "with-laser")]
-            laser_power_pwm,
+            laser_pwm,
             #[cfg(feature = "with-laser")]
-            laser_power_channel,
+            laser_pwm_channel,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra1_power_pwm,
+            fan_extra1_pwm,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra1_power_channel,
+            fan_extra1_pwm_channel,
             #[cfg(feature = "with-hot-end")]
             hot_end_adc,
             #[cfg(feature = "with-hot-end")]

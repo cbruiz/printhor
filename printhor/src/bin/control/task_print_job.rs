@@ -1,18 +1,51 @@
-//! TODO: This feature is still incomplete
+//! This module contains functionality related to the execution of print jobs in a 3D printer.
+//! It leverages asynchronous tasks and event-driven programming to manage and control the
+//! sequence of actions required to process G-code commands from an SD card and relay them to the printer controller.
+//!
+//! The task `task_print_job` is defined with the main goal of managing the print job execution. It initializes
+//! controllers, waits for system readiness, handles SD card operations, and processes G-code lines. Key events such
+//! as setting a new file for printing, resuming a print job, and handling timeouts are meticulously managed.
+//!
+//! The workflow involves:
+//! 1. **Initialization**: The task sets up an event subscriber and waits for the system to finish booting.
+//! 2. **Event Handling**: It enters a loop where it waits for the system to be free of alarms (`SYS_ALARM`), then tries
+//!    to consume any commands from the printer controller.
+//! 3. **G-code Processing**: When a new file is set for printing, it parses the G-code lines asynchronously.
+//! 4. **Error Management**: Handles various errors such as file not found on the SD card, or any fatal errors during G-code execution.
+//! 5. **State Updates**: Publishes events to signal the state of the print job (e.g., `JOB_PAUSED`, `JOB_COMPLETED`).
+//!
+//! This approach ensures robust handling of print job execution, making sure that the 3D printer can efficiently
+//! and reliably process and execute the G-code commands.
 use crate::control;
 use crate::hwa;
 use embassy_time::Duration;
 use embassy_time::{Instant, Timer};
 
+use crate::control::GCodeValue;
 use control::{CodeExecutionFailure, CodeExecutionSuccess};
 use control::{GCodeCmd, GCodeLineParser, GCodeLineParserError};
-use hwa::sd_card::SDCardError;
 use hwa::controllers::PrinterController;
 use hwa::controllers::PrinterControllerEvent;
+use hwa::sd_card::SDCardError;
 use hwa::{CommChannel, EventFlags, EventStatus};
 
+/// The `task_print_job` function manages the execution of a 3D printer's print job.
+///
+/// # Arguments
+/// * `processor` - The GCode processor responsible for handling the GCode commands.
+/// * `printer_controller` - The controller for the printer to interface with the hardware.
+/// * `card_controller` - The controller for the SD card where GCode files are stored.
+///
+/// # Description
+/// This async function achieves the following tasks:
+/// 1. **Initialization**: Sets up an event subscriber and waits for the system to finish booting.
+/// 2. **Event Handling**: Enters a loop where it waits for the system to be free of alarms (`SYS_ALARM`) and tries to consume any commands from the printer controller.
+/// 3. **G-code Processing**: When a new file is set for printing, it parses the G-code lines asynchronously.
+/// 4. **Error Management**: Handles various errors such as file not found on the SD card, or any fatal errors during G-code execution.
+/// 5. **State Updates**: Publishes events to signal the state of the print job (e.g., `JOB_PAUSED`, `JOB_COMPLETED`).
+///
+/// The robust handling of print job execution ensures that the 3D printer can efficiently and reliably process and execute the G-code commands.
 #[allow(unused_mut)]
-#[allow(unreachable_patterns)]
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_print_job(
     mut processor: hwa::GCodeProcessor,
@@ -40,14 +73,14 @@ pub async fn task_print_job(
             .ft_wait_for(EventStatus::not_containing(EventFlags::SYS_ALARM))
             .await;
 
-        match embassy_time::with_timeout(Duration::from_secs(30), printer_controller.consume())
+        match embassy_time::with_timeout(Duration::from_secs(10), printer_controller.consume())
             .await
         {
             Err(_) => {
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [task_print_job]] Timeout");
                 #[cfg(test)]
-                if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+                if control::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_print_job] Ending gracefully");
                     return ();
                 }
@@ -80,7 +113,10 @@ pub async fn task_print_job(
                 };
                 processor
                     .event_bus
-                    .publish_event(EventStatus::containing(EventFlags::JOB_PAUSED))
+                    .publish_event(
+                        EventStatus::containing(EventFlags::JOB_PAUSED)
+                            .and_not_containing(EventFlags::JOB_COMPLETED),
+                    )
                     .await;
             }
             Ok(PrinterControllerEvent::Resume(channel)) => {
@@ -90,52 +126,89 @@ pub async fn task_print_job(
                 loop {
                     match gcode_pull(&mut print_job_parser).await {
                         Ok(gcode) => {
-                            #[cfg(feature = "trace-commands")]
-                            hwa::info!("[trace-commands] Executing {}", gcode);
-                            match processor.execute(CommChannel::Internal, &gcode, true).await {
-                                Ok(CodeExecutionSuccess::OK) => {
-                                    hwa::debug!("Response: OK {} (I)", gcode);
-                                }
-                                Ok(CodeExecutionSuccess::CONSUMED) => {
-                                    hwa::debug!("Response: OK {} (C)", gcode);
-                                }
-                                Ok(CodeExecutionSuccess::QUEUED) => {
-                                    hwa::debug!("Response: OK {} (Q)", gcode);
-                                }
-                                Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
-                                    hwa::debug!("Deferred {} (D)", gcode);
-                                    if subscriber.ft_wait_for(_status).await.is_err() {
-                                        // Must pause. Recoverable when SYS_ALARM go down
-                                        break;
-                                    } else {
-                                        hwa::debug!("Response: OK {} (D)", gcode);
+                            match &gcode.value {
+                                GCodeValue::M2 => {
+                                    match printer_controller
+                                        .set(PrinterControllerEvent::Abort(channel))
+                                        .await
+                                    {
+                                        Ok(_f) => {
+                                            processor
+                                                .write(channel, "echo: Print job terminated\n")
+                                                .await;
+                                            break;
+                                        }
+                                        Err(_e) => {
+                                            let s = alloc::format!(
+                                                "echo: M2: Unable to terminate: {:?}\n",
+                                                _e
+                                            );
+                                            processor.write(channel, s.as_str()).await;
+                                            fatal_error = true;
+                                            hwa::error!("Response: ERR {}", gcode);
+                                            break;
+                                        }
                                     }
                                 }
-                                Err(CodeExecutionFailure::BUSY) => {
-                                    fatal_error = true;
-                                    hwa::error!("Response: BUSY {}", gcode);
-                                    break;
-                                }
-                                Err(
-                                    CodeExecutionFailure::ERR
-                                    | CodeExecutionFailure::NumericalError,
-                                ) => {
-                                    fatal_error = true;
-                                    hwa::error!("Response: ERR {}", gcode);
-                                    break;
-                                }
-                                Err(CodeExecutionFailure::NotYetImplemented) => {
-                                    hwa::warn!("Ignoring GCode not implemented {}", gcode);
-                                }
-                                Err(CodeExecutionFailure::HomingRequired) => {
-                                    fatal_error = true;
-                                    hwa::error!("Unexpected HomingRequired before {}", gcode);
-                                    break;
-                                }
-                                Err(CodeExecutionFailure::PowerRequired) => {
-                                    fatal_error = true;
-                                    hwa::error!("Unexpected PowerRequired before {}", gcode);
-                                    break;
+                                _ => {
+                                    #[cfg(feature = "trace-commands")]
+                                    hwa::info!("[trace-commands] Executing {}", gcode);
+
+                                    match processor
+                                        .execute(CommChannel::Internal, &gcode, true)
+                                        .await
+                                    {
+                                        Ok(CodeExecutionSuccess::OK) => {
+                                            hwa::debug!("Response: OK {} (I)", gcode);
+                                        }
+                                        Ok(CodeExecutionSuccess::CONSUMED) => {
+                                            hwa::debug!("Response: OK {} (C)", gcode);
+                                        }
+                                        Ok(CodeExecutionSuccess::QUEUED) => {
+                                            hwa::debug!("Response: OK {} (Q)", gcode);
+                                        }
+                                        Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
+                                            hwa::debug!("Deferred {} (D)", gcode);
+                                            if subscriber.ft_wait_for(_status).await.is_err() {
+                                                // Must pause. Recoverable when SYS_ALARM go down
+                                                break;
+                                            } else {
+                                                hwa::debug!("Response: OK {} (D)", gcode);
+                                            }
+                                        }
+                                        Err(CodeExecutionFailure::BUSY) => {
+                                            fatal_error = true;
+                                            hwa::error!("Response: BUSY {}", gcode);
+                                            break;
+                                        }
+                                        Err(
+                                            CodeExecutionFailure::ERR
+                                            | CodeExecutionFailure::NumericalError,
+                                        ) => {
+                                            fatal_error = true;
+                                            hwa::error!("Response: ERR {}", gcode);
+                                            break;
+                                        }
+                                        Err(CodeExecutionFailure::NotYetImplemented) => {
+                                            hwa::warn!("Ignoring GCode not implemented {}", gcode);
+                                        }
+                                        Err(CodeExecutionFailure::HomingRequired) => {
+                                            fatal_error = true;
+                                            hwa::error!(
+                                                "Unexpected HomingRequired before {}",
+                                                gcode
+                                            );
+                                            break;
+                                        }
+                                        Err(CodeExecutionFailure::PowerRequired) => {
+                                            fatal_error = true;
+                                            hwa::error!(
+                                                "Unexpected PowerRequired before {}",
+                                                gcode
+                                            );
+                                            break;
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -175,11 +248,6 @@ pub async fn task_print_job(
                                 GCodeLineParserError::ParseError(_ln) => {
                                     hwa::warn!("Parse error at {}", current_line);
                                 }
-                                _e => {
-                                    hwa::warn!("Internal error at {} :  {:?}", current_line, _e);
-                                    fatal_error = true;
-                                    break;
-                                }
                             }
                         }
                     }
@@ -205,7 +273,10 @@ pub async fn task_print_job(
                 } else if !interrupted {
                     processor
                         .event_bus
-                        .publish_event(EventStatus::containing(EventFlags::JOB_COMPLETED))
+                        .publish_event(
+                            EventStatus::containing(EventFlags::JOB_COMPLETED)
+                                .and_not_containing(EventFlags::JOB_PAUSED),
+                        )
                         .await;
                     // Job completed or cancelled
                     match print_job_parser.take() {

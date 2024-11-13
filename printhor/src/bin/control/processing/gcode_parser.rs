@@ -41,6 +41,25 @@ impl defmt::Format for GCodeLineParserError {
     }
 }
 
+/// Represents the raw specification of a G-code command.
+///
+/// G-code is a language used to control CNC machines, 3D printers, and other similar equipment.
+/// A `RawGCodeSpec` captures the initial character of the command (e.g., 'G', 'M') and any numerical
+/// specifics associated with it, potentially including a sub-value used for more granular control.
+///
+/// # Fields
+/// - `code`: The main character of the G-code command.
+/// - `spec`: An optional numerical part that follows the main character. For example, 'G1' would have
+///   '1' as its spec.
+/// - `sub`: An optional sub-value that provides additional specificity. For example, 'G1.1' would have
+///   '1' as its spec and '1' as its sub.
+///
+/// # Example
+///
+/// ```
+/// let gcode = RawTGCodeSpec::from('G', Some((1, 0)));
+/// assert_eq!(format!("{:?}", gcode), "G1");
+/// ```
 pub struct RawGCodeSpec {
     code: char,
     spec: Option<i32>,
@@ -342,6 +361,8 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(feature = "with-motion")]
         ('g', Some((292, 1))) => Some(GCodeValue::G29_2),
         ('m', None) => Some(GCodeValue::M),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+        ('m', Some((2, 0))) => Some(GCodeValue::M2),
         ('m', Some((3, 0))) => Some(GCodeValue::M3),
         ('m', Some((5, 0))) => Some(GCodeValue::M5),
         #[cfg(feature = "with-sd-card")]

@@ -2,11 +2,11 @@ use printhor_hwa_common as hwa;
 use embassy_time::Duration;
 use crate::board;
 use crate::device;
-use crate::board::{comm, TRINAMIC_UART_BAUD_RATE};
+use crate::board::comm;
 
 // To save CPU
 pub static TRINAMIC_SIMULATOR_PARK_SIGNAL:
-    hwa::PersistentState<hwa::SyncSendMutex, device::AxisChannel> = hwa::PersistentState::new();
+    hwa::PersistentState<hwa::SyncCsMutexType, device::AxisChannel> = hwa::PersistentState::new();
 
 #[allow(unused)]
 pub struct MockedTrinamicDriver {
@@ -16,18 +16,20 @@ pub struct MockedTrinamicDriver {
 
 impl MockedTrinamicDriver {
     pub fn new(
+        baud_rate: u32,
         x_rxtx_pin: board::mocked_peripherals::MockedIOPin,
         y_rxtx_pin: board::mocked_peripherals::MockedIOPin,
         z_rxtx_pin: board::mocked_peripherals::MockedIOPin,
-        e_rxtx_pin: board::mocked_peripherals::MockedIOPin) -> Self
+        e_rxtx_pin: board::mocked_peripherals::MockedIOPin
+    ) -> Self
     {
         let uart_trinamic = comm::SingleWireSoftwareUart::new(
-            TRINAMIC_UART_BAUD_RATE,
+            baud_rate,
             x_rxtx_pin, y_rxtx_pin, z_rxtx_pin, e_rxtx_pin
         );
 
         let sample_time = Duration::from_millis(
-            (1000 / (TRINAMIC_UART_BAUD_RATE * 5)).into()
+            (1000 / (baud_rate * 5)).into()
         );
 
         Self {

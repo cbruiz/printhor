@@ -219,6 +219,7 @@ where
         channel: CommChannel,
         action: DeferAction,
         requested_temp: f32,
+        order_num: u32,
     ) -> bool {
         if requested_temp > 0.0f32 {
             let tdiff = requested_temp - self.target_temp;
@@ -227,7 +228,7 @@ where
             if tdiff.abs() > 0.1f32 * self.target_temp {
                 self.current_channel = channel;
                 self.defer_channel
-                    .send(AwaitRequested(action, channel))
+                    .send(AwaitRequested(action, channel, order_num))
                     .await;
                 true
             } else {
@@ -267,13 +268,18 @@ where
     ///   and the method returns `true`. The commander's channel is updated to the provided channel.
     /// * If the temperature difference is within the 10% range, the method returns `false`
     ///   and sets the commander's channel to `CommChannel::Internal`.
-    pub async fn ping_subscribe(&mut self, channel: CommChannel, action: DeferAction) -> bool {
+    pub async fn ping_subscribe(
+        &mut self,
+        channel: CommChannel,
+        action: DeferAction,
+        order_num: u32,
+    ) -> bool {
         if self.is_on() && self.state_machine.current_temperature > 0.0f32 {
             let tdiff = self.state_machine.current_temperature - self.target_temp;
             if tdiff.abs() > 0.1f32 * self.target_temp {
                 self.current_channel = channel;
                 self.defer_channel
-                    .send(AwaitRequested(action, channel))
+                    .send(AwaitRequested(action, channel, order_num))
                     .await;
                 true
             } else {
@@ -371,9 +377,9 @@ where
     }
 
     // Sends and consume the deferred action
-    pub async fn flush_notification(&mut self, action: DeferAction) {
+    pub async fn flush_notification(&mut self, action: DeferAction, order_num: u32) {
         self.defer_channel
-            .send(Completed(action, self.current_channel))
+            .send(Completed(action, self.current_channel, order_num))
             .await;
         self.current_channel = CommChannel::Internal;
     }
@@ -384,8 +390,8 @@ where
             #[cfg(any(
                 feature = "with-serial-usb",
                 feature = "with-serial-port-1",
-                feature = "with-serial-port-2")
-            )]
+                feature = "with-serial-port-2"
+            ))]
             _ => true,
         }
     }
@@ -505,7 +511,8 @@ where
                 State::Maintaining => {
                     #[cfg(feature = "native")]
                     hwa::debug!("Temperature reached. Firing {:?}.", self.temperature_flags);
-                    self.flush_notification(self.defer_action).await;
+                    // FIXME: proper order_num
+                    self.flush_notification(self.defer_action, 0).await;
                     event_bus
                         .publish_event(EventStatus::containing(self.temperature_flags))
                         .await;
@@ -524,7 +531,8 @@ where
         } else if self.is_awaited() {
             match new_state {
                 State::Maintaining => {
-                    self.flush_notification(self.defer_action).await;
+                    // FIXME: proper order_num
+                    self.flush_notification(self.defer_action, 0).await;
                 }
                 _ => {}
             }

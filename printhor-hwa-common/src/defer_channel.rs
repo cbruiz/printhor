@@ -139,10 +139,10 @@ pub enum DeferAction {
 /// ```
 pub enum DeferEvent {
     /// A request for defer action
-    AwaitRequested(DeferAction, CommChannel),
+    AwaitRequested(DeferAction, CommChannel, u32),
 
     /// The acknowledgment of a defer action
-    Completed(DeferAction, CommChannel),
+    Completed(DeferAction, CommChannel, u32),
 }
 
 //#endregion
@@ -270,6 +270,7 @@ pub mod tests {
             .send(hwa::DeferEvent::AwaitRequested(
                 hwa::DeferAction::Homing,
                 hwa::CommChannel::default(),
+                1,
             ))
             .await;
     }

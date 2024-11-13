@@ -1,8 +1,6 @@
 use crate as hwa;
 #[allow(unused)]
 use hwa::traits;
-#[allow(unused)]
-use hwa::RawHwiResource;
 
 use core::future;
 
@@ -26,6 +24,15 @@ pub trait HwiContract: Sized {
     const MACHINE_TYPE: &'static str;
     const MACHINE_BOARD: &'static str;
     const MACHINE_PROCESSOR: &'static str;
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature="with-motion")] {
+            /// The frequency at which MCU runs. Needed for computing motion ISR
+            ///
+            /// In native (std), embassy-executor is hard-coded to 1GHz
+            const PROCESSOR_SYS_CK_MHZ: u32;
+        }
+    }
 
     //#region "Hard-coded settings"
 
@@ -198,7 +205,7 @@ pub trait HwiContract: Sized {
             const SERIAL_USB_RX_BUFFER_SIZE: usize;
 
             type SerialUsbTx: hwa::AsyncMutexStrategy;
-            type SerialUsbRx: hwa::traits::GCodeByteStream;
+            type SerialUsbRx: traits::GCodeByteStream;
         }
     }
     cfg_if::cfg_if! {
@@ -222,9 +229,16 @@ pub trait HwiContract: Sized {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-spi")] {
+            const SPI_FREQUENCY: u32;
+            type SpiController: hwa::AsyncMutexStrategy;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             type MotionPinsMutexStrategy: hwa::SyncMutexStrategy;
-            type MotionPins: hwa::RawHwiResource + Sync + Send + 'static;
+            type MotionPins: traits::MotionPinsTrait;
         }
     }
 
@@ -276,15 +290,21 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-laser")] {
-            type LaserPowerPwm: hwa::SyncMutexStrategy;
-            type LaserPowerPwmChannel: hwa::RawHwiResource + Copy;
+            type LaserPwm: hwa::SyncMutexStrategy;
+            type LaserPwmChannel: hwa::RawHwiResource + Copy;
         }
     }
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-fan-extra-1")] {
-            type FanExtra1PowerPwm: hwa::SyncMutexStrategy;
-            type FanExtra1PowerPwmChannel: hwa::RawHwiResource;
+            type FanExtra1Pwm: hwa::SyncMutexStrategy;
+            type FanExtra1PwmChannel: hwa::RawHwiResource;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-trinamic")] {
+            const TRINAMIC_UART_BAUD_RATE: u32;
         }
     }
 
@@ -321,62 +341,62 @@ pub struct HwiContext<C>
 where
     C: HwiContract + Sized,
 {
-    pub sys_watch_dog: crate::StaticAsyncController<C::WatchDogMutexStrategy>,
+    pub sys_watch_dog: hwa::StaticAsyncController<C::WatchDogMutexStrategy>,
 
     #[cfg(feature = "with-serial-usb")]
-    pub serial_usb_tx: crate::StaticAsyncController<C::SerialUsbTx>,
+    pub serial_usb_tx: hwa::StaticAsyncController<C::SerialUsbTx>,
     #[cfg(feature = "with-serial-usb")]
     pub serial_usb_rx_stream: C::SerialUsbRx,
 
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: crate::StaticAsyncController<C::SerialPort1Tx>,
+    pub serial_port1_tx: hwa::StaticAsyncController<C::SerialPort1Tx>,
     #[cfg(feature = "with-serial-port-1")]
     pub serial_port1_rx_stream: C::SerialPort1Rx,
 
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx: crate::StaticAsyncController<C::SerialPort2Tx>,
+    pub serial_port2_tx: hwa::StaticAsyncController<C::SerialPort2Tx>,
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_rx_stream: C::SerialPort2Rx,
 
     #[cfg(feature = "with-ps-on")]
-    pub ps_on: crate::StaticSyncController<C::PSOnMutexStrategy>,
+    pub ps_on: hwa::StaticSyncController<C::PSOnMutexStrategy>,
 
     /// As of now, this mut be holdable
     #[cfg(feature = "with-motion")]
     pub motion_pins: C::MotionPins,
 
     #[cfg(feature = "with-probe")]
-    pub probe_pwm: crate::StaticSyncController<C::ProbePwm>,
+    pub probe_pwm: hwa::StaticSyncController<C::ProbePwm>,
 
     #[cfg(feature = "with-probe")]
     pub probe_pwm_channel: C::ProbePwmChannel,
 
     #[cfg(feature = "with-hot-end")]
-    pub hot_end_adc: crate::StaticAsyncController<C::HotEndAdc>,
+    pub hot_end_adc: hwa::StaticAsyncController<C::HotEndAdc>,
 
     #[cfg(feature = "with-hot-end")]
     pub hot_end_adc_pin: C::HotEndAdcPin,
 
     #[cfg(feature = "with-hot-end")]
-    pub hot_end_pwm: crate::StaticSyncController<C::HotEndPwm>,
+    pub hot_end_pwm: hwa::StaticSyncController<C::HotEndPwm>,
 
     #[cfg(feature = "with-hot-end")]
     pub hot_end_pwm_channel: C::HotEndPwmChannel,
 
     #[cfg(feature = "with-hot-bed")]
-    pub hot_bed_adc: crate::StaticAsyncController<C::HotBedAdc>,
+    pub hot_bed_adc: hwa::StaticAsyncController<C::HotBedAdc>,
 
     #[cfg(feature = "with-hot-bed")]
     pub hot_bed_adc_pin: C::HotBedAdcPin,
 
     #[cfg(feature = "with-hot-bed")]
-    pub hot_bed_pwm: crate::StaticSyncController<C::HotBedPwm>,
+    pub hot_bed_pwm: hwa::StaticSyncController<C::HotBedPwm>,
 
     #[cfg(feature = "with-hot-bed")]
     pub hot_bed_pwm_channel: C::HotBedPwmChannel,
 
     #[cfg(feature = "with-fan-layer")]
-    pub fan_layer_pwm: crate::StaticSyncController<C::FanLayerPwm>,
+    pub fan_layer_pwm: hwa::StaticSyncController<C::FanLayerPwm>,
 
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer_pwm_channel: C::FanLayerPwmChannel,
@@ -385,14 +405,14 @@ where
     pub sd_card_block_device: C::SDCardBlockDevice,
 
     #[cfg(feature = "with-laser")]
-    pub laser_pwm: crate::StaticAsyncController<C::LaserPowerPwm>,
+    pub laser_pwm: hwa::StaticSyncController<C::LaserPwm>,
 
     #[cfg(feature = "with-laser")]
-    pub laser_pwm_channel: C::LaserPowerPwmChannel,
+    pub laser_pwm_channel: C::LaserPwmChannel,
 
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra1_pwm: crate::StaticAsyncController<C::FanExtra1PowerPwm>,
+    pub fan_extra1_pwm: hwa::StaticSyncController<C::FanExtra1Pwm>,
 
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra1_pwm_channel: C::FanExtra1PowerPwmChannel,
+    pub fan_extra1_pwm_channel: C::FanExtra1PwmChannel,
 }

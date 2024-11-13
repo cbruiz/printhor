@@ -40,11 +40,11 @@ pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
     /// A movement segment.
-    Move(SegmentData),
+    Move(SegmentData, u32),
     /// A homing action.
-    Homing,
+    Homing(u32),
     /// A dwell action.
-    Dwell(Option<u32>),
+    Dwell(Option<u32>, u32),
 }
 
 /// Types of movements in the motion system.
@@ -70,27 +70,27 @@ pub enum PlanEntry {
     /// *_2: CommChannel* - The input channel requesting the move.
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
-    PlannedMove(Segment, hwa::DeferAction, hwa::CommChannel, bool),
+    PlannedMove(Segment, hwa::DeferAction, hwa::CommChannel, bool, u32),
     /// A homing action request.
     ///
     /// *_1: CommChannel* - The input channel requesting the move.
     ///
     /// *_2: bool* - Indicates if motion is deferred or not.
-    Homing(hwa::CommChannel, bool),
+    Homing(hwa::CommChannel, bool, u32),
     /// A Dwell action request.
     ///
     /// *_1: CommChannel* - The input channel requesting the move.
     ///
-    /// *_2: Option<u32>* - The number of milliseconds to delay.
+    /// *_2: Option&lt;u32&gt;* - The number of milliseconds to delay.
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
-    Dwell(hwa::CommChannel, Option<u32>, bool),
+    Dwell(hwa::CommChannel, Option<u32>, bool, u32),
     /// An executing move.
     ///
     /// *_1: MovType* - The type of the move.
     ///
     /// *_2: bool* - Indicates if motion is deferred or not.
-    Executing(MovType, bool),
+    Executing(MovType, bool, u32),
 }
 
 /// Provides the default value for `PlanEntry`, which is `PlanEntry::Empty`.

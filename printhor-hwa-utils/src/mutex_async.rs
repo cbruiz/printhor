@@ -11,12 +11,12 @@ pub use embassy_sync::mutex::MutexGuard as AsyncMutexGuard;
 /// A shortcut for [embassy_sync::blocking_mutex::raw::RawMutex]
 pub use embassy_sync::blocking_mutex::raw::RawMutex as AsyncRawMutex;
 
-/// A [core::marker::Sync] and [core::marker::Send] mutex instance type. Thread-safe even between cores.
+/// A [Sync] and [Send] mutex instance type. Thread-safe even between cores.
 /// A shortcut for [embassy_sync::mutex::Mutex] with mutex type [embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex]
 pub type AsyncCsMutex<D> =
     embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex, D>;
 
-/// A NOT [core::marker::Sync] but [core::marker::Send] mutex instance type. Safe in single thread async runtime only.
+/// A NOT [Sync] but [Send] mutex instance type. Safe in single thread async runtime only.
 /// /// A shortcut for [embassy_sync::mutex::Mutex] with mutex type [embassy_sync::blocking_mutex::raw::NoopRawMutex]
 pub type AsyncNoopMutex<D> =
     embassy_sync::mutex::Mutex<embassy_sync::blocking_mutex::raw::NoopRawMutex, D>;
@@ -47,8 +47,7 @@ where
         Self::CAN_RETAIN
     }
 
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>>
-    {
+    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> {
         async { Err(()) }
     }
 
@@ -213,8 +212,7 @@ where
     type AsyncMutexType = M;
     type Resource = D;
 
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>>
-    {
+    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> {
         async {
             self.holder.set(self.mutex.lock().await);
             Ok(())

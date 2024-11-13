@@ -109,7 +109,7 @@ impl RingBuffer {
         offset: u8,
     ) -> Result<&mut motion::Segment, ()> {
         match self.mut_entry_from_tail(offset) {
-            Some(PlanEntry::PlannedMove(_s, _, _, _)) => Ok(_s),
+            Some(PlanEntry::PlannedMove(_s, _, _, _, _)) => Ok(_s),
             _ => Err(()),
         }
     }
@@ -125,7 +125,7 @@ impl RingBuffer {
     /// * `Result<&motion::Segment, ()>` - The reference to the segment or an error if the entry is not a `PlannedMove`.
     pub fn planned_segment_from_tail(&self, offset: u8) -> Result<&motion::Segment, ()> {
         match self.entry_from_tail(offset) {
-            Some(PlanEntry::PlannedMove(_s, _, _, _)) => Ok(_s),
+            Some(PlanEntry::PlannedMove(_s, _, _, _, _)) => Ok(_s),
             _ => Err(()),
         }
     }
@@ -194,7 +194,7 @@ mod tests {
         let mut rb = RingBuffer::new();
         rb.head = 1;
         rb.used = 1;
-        rb.data[0] = PlanEntry::Executing(MovType::Homing(CommChannel::Internal), true);
+        rb.data[0] = PlanEntry::Executing(MovType::Homing(CommChannel::Internal), true, 1);
 
         let t = rb.planned_segment_from_tail(1);
         assert!(t.is_err(), "No planned entry");

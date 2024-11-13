@@ -62,8 +62,10 @@ pub enum PrinterControllerError {
     NoEffect,
 }
 
-pub type PrinterControllerSignalType =
-    embassy_sync::signal::Signal<hwa::types::PrinterControllerSignalMutexType, PrinterControllerEvent>;
+pub type PrinterControllerSignalType = embassy_sync::signal::Signal<
+    hwa::types::PrinterControllerSignalMutexType,
+    PrinterControllerEvent,
+>;
 
 /// The `PrinterController` struct represents the controller for managing printer operations.
 ///
@@ -90,12 +92,14 @@ pub struct PrinterController {
     event_bus: hwa::types::EventBus,
 
     /// The current status of the printer controller.
-    status:
-        &'static PersistentState<hwa::types::PrinterControllerSignalMutexType, PrinterControllerStatus>,
+    status: &'static PersistentState<
+        hwa::types::PrinterControllerSignalMutexType,
+        PrinterControllerStatus,
+    >,
 }
 
 impl PrinterController {
-    pub fn new( event_bus: hwa::types::EventBus ) -> PrinterController {
+    pub fn new(event_bus: hwa::types::EventBus) -> PrinterController {
         type StatusType =
             PersistentState<hwa::types::PrinterControllerSignalMutexType, PrinterControllerStatus>;
         let status_cfg = StatusType::new();
@@ -113,7 +117,6 @@ impl PrinterController {
     }
 
     #[allow(unused)]
-    #[inline]
     pub async fn something_running(&self) -> bool {
         match self.status.wait().await {
             PrinterControllerStatus::Ready(_) => false,
@@ -211,15 +214,13 @@ impl PrinterController {
         }
     }
 
-    #[inline]
-    pub(crate) async fn consume(&self) -> PrinterControllerEvent {
+    pub async fn consume(&self) -> PrinterControllerEvent {
         let evt = self.channel.wait().await;
         self.channel.reset();
         evt
     }
 
-    #[inline]
-    pub(crate) async fn signaled(&self) -> bool {
+    pub async fn signaled(&self) -> bool {
         self.channel.signaled()
     }
 }

@@ -1,6 +1,8 @@
 #![allow(stable_features)]
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
+#![doc = include_str!("../../../design/architecture.md")]
+
 extern crate alloc;
 extern crate core;
 pub mod control;
@@ -8,14 +10,15 @@ pub mod helpers;
 pub mod hwa;
 pub mod math;
 
+#[allow(unused)]
+use hwa::Contract;
 use hwa::HwiContract;
 #[allow(unused)]
 use hwa::RawHwiResource;
-#[allow(unused)]
-use hwa::Contract;
 
 //noinspection RsUnresolvedReference
-/// Entry point
+#[cfg_attr(doc, aquamarine::aquamarine)]
+///! Program entry point
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
     printhor_main(spawner, true).await;
@@ -179,25 +182,6 @@ async fn spawn_tasks(
             );
         }
     }
-    #[cfg(feature = "with-laser")]
-    let laser_controller = hwa::make_static_async_controller!(
-        "LaserPwmController",
-        hwa::types::_LaserControllerMutexStrategy_,
-        hwa::controllers::PwmController::new(
-            _context.laser_power_pwm,
-            _context.laser_power_channel.take(),
-        )
-    );
-
-    #[cfg(feature = "with-fan-extra-1")]
-    let fan_extra_1_controller = hwa::make_static_async_controller!(
-        "FanExtra1Controller",
-        hwa::types::FanExtra1MutexStrategy,
-        hwa::controllers::PwmController::new(
-            _context.fan_extra1_power_pwm,
-            _context.fan_extra1_power_channel.take(),
-        )
-    );
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-hot-end")] {
@@ -269,6 +253,34 @@ async fn spawn_tasks(
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-laser")] {
+
+            let laser_controller = hwa::make_static_async_controller!(
+                "LaserController",
+                hwa::types::LaserControllerMutexStrategy,
+                hwa::types::InnerLaserController::new(
+                    _context.laser_pwm,
+                    _context.laser_pwm_channel.take(),
+                )
+            );
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-fan-extra-1")] {
+
+            let fan_extra1_controller = hwa::make_static_async_controller!(
+                "FanExtra1Controller",
+                hwa::types::FanExtra1ControllerMutexStrategy,
+                hwa::types::InnerFanExtra1Controller::new(
+                    _context.fan_extra1_pwm,
+                    _context.fan_extra1_pwm_channel.take(),
+                )
+            );
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-sd-card")] {
 
             type SDManager = hwa::AsyncStandardStrategy<
@@ -277,6 +289,7 @@ async fn spawn_tasks(
                         <Contract as HwiContract>::SDCardBlockDevice,
                         {<Contract as HwiContract>::SD_CARD_MAX_DIRS},
                         {<Contract as HwiContract>::SD_CARD_MAX_FILES},
+                        {<Contract as HwiContract>::SD_CARD_MAX_DIRS + <Contract as HwiContract>::SD_CARD_MAX_FILES},
                     >
                 >;
 
@@ -315,7 +328,7 @@ async fn spawn_tasks(
             let motion_pins = hwa::controllers::MotionPins::new(hwa::make_static_sync_controller!(
                 "MotionPins",
                 hwa::types::MotionPinsMutexStrategy,
-                _context.motion_pins.take()
+                _context.motion_pins,
             ));
             let motion_config = hwa::controllers::MotionConfig::new(hwa::make_static_sync_controller!(
                 "MotionConfig",
@@ -340,7 +353,7 @@ async fn spawn_tasks(
                         #[cfg(feature = "with-fan-layer")]
                         fan_layer_controller.clone(),
                         #[cfg(feature = "with-fan-extra-1")]
-                        fan_extra_1_controller.clone(),
+                        fan_extra1_controller.clone(),
                         #[cfg(feature = "with-laser")]
                         laser_controller.clone(),
                     )
@@ -378,7 +391,7 @@ async fn spawn_tasks(
         #[cfg(feature = "with-fan-layer")]
         fan_layer_controller.clone(),
         #[cfg(feature = "with-fan-extra-1")]
-        fan_extra_1_controller.clone(),
+        fan_extra1_controller.clone(),
         #[cfg(feature = "with-laser")]
         laser_controller,
     );

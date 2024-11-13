@@ -148,4 +148,16 @@ cfg_if::cfg_if! {
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-laser")] {
+        pub type LaserPwmMutexStrategy = Pwm1MutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-extra-1")] {
+        pub type FanExtra1PwmMutexStrategy = Pwm1MutexStrategy;
+    }
+}
+
 //#endregion

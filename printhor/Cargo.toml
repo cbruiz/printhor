@@ -27,8 +27,11 @@ default = ["native",
     "with-hot-bed",
     "with-fan-layer",
     "with-sd-card",
-    #"with-print-job",
-    #"trace-commands",
+    "with-print-job",
+    "with-fan-extra-1",
+    "with-laser",
+    #"with-trinamic",
+    "trace-commands",
 ]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
@@ -39,26 +42,27 @@ assert-motion = []
 
 with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwi_rp_2040?/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt"]
 with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log"]
-with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb"]
-with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1"]
-with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2"]
-with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion"]
-with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on"]
+with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-usb"]
+with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-1"]
+with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-2"]
+with-spi = ["embedded-hal-1", "printhor-hwa-common/with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-spi"]
+with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion"]
+with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-ps-on"]
 
-with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe"]
-with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser", "printhor-hwi_native?/with-laser"]
-with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer", "printhor-hwi_native?/with-fan-layer"]
-with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1", "printhor-hwi_native?/with-fan-extra-1"]
+with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-probe"]
+with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser", "printhor-hwi_native?/with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-laser"]
+with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer", "printhor-hwi_native?/with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1", "printhor-hwi_native?/with-fan-extra-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-fan-extra-1"]
 
 
-with-print-job = ["printhor-hwa-common/with-print-job", "printhor-hwi_native?/with-print-job"]
-with-spi = ["embedded-hal-1", "printhor-hwi_native?/with-spi"]
-with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end"]
-with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed"]
+with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-hot-end"]
+with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-hot-bed"]
+
+with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card", "printhor-hwi_native?/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-sd-card"]
+with-print-job = ["printhor-hwa-common/with-print-job", "printhor-hwi_native?/with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-print-job"]
 
 with-endstops = []
-with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card", "printhor-hwi_native?/with-sd-card"]
-with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic"]
+with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic", "printhor-hwi_native?/with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-trinamic"]
 # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
 with-display = ["printhor-hwi_native?/with-display"]
 
@@ -123,7 +127,7 @@ integration-test = [
     #"debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
-    "trace-commands",
+    #"trace-commands",
     #"assert-motion",
     "native",
 ]
@@ -176,7 +180,6 @@ native = [
     #"with-fan-layer",
     #"with-fan-extra-1",
     #"with-laser",
-
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -262,22 +265,21 @@ nucleo64-f410rb = [
     "cornering",
     "cooperative",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    #"debug-signals",
+    "debug-signals",
     #"trace-commands",
 
     #"verbose-timings",
     "with-defmt",
-    #"with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-motion",
-    #"with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-usb", # Useless Nucleo64 attachs USART2. Broken nevertheless
-    "with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-serial-port-1",
-    #"with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-spi",
+    "with-serial-port-1",
+    "with-motion",
+    "with-spi",
     #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat/sd-card-uses-spi",
     #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
     #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
     #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
     #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
     #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
-    #"with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-laser",
+    "with-laser",
     #"with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
 
     "float-point-f32-impl",
@@ -476,6 +478,9 @@ const_env = { version = "0.1" }
 #lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
 # For very compact and fast float to string conversion
 ryu = {version = "1.0", default-features = false, features = []}
+
+aquamarine = "0.6.0"
+
 [build-dependencies]
 #proc-macro2 = "1.0."
 cfg-if = "1.0"

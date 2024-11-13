@@ -21,15 +21,9 @@ pub struct MotionDriver {
     #[cfg(feature = "with-fan-layer")]
     pub fan_layer_controller: hwa::types::FanLayerController,
     #[cfg(feature = "with-fan-extra-1")]
-    pub fan_extra_1_controller: hwa::StaticAsyncController<
-        hwa::FanExtra1ControllerMutexType,
-        hwa::controllers::FanExtra1PwmController,
-    >,
+    pub fan_extra_1_controller: hwa::types::FanExtra1Controller,
     #[cfg(feature = "with-laser")]
-    pub _laser_controller: hwa::StaticAsyncController<
-        hwa::LaserControllerMutexType,
-        hwa::controllers::LaserPwmController,
-    >,
+    pub _laser_controller: hwa::types::LaserController,
     #[cfg(all(feature = "native", feature = "plot-timings"))]
     tmon: TimingsMonitor,
 }
@@ -42,8 +36,9 @@ impl MotionDriver {
         //trinamic_controller: hwa::controllers::TrinamicController::new(params.motion_device.trinamic_uart, params.motion_config, ),
         #[cfg(feature = "with-probe")] probe_controller: hwa::types::ProbeController,
         #[cfg(feature = "with-fan-layer")] fan_layer_controller: hwa::types::FanLayerController,
-        #[cfg(feature = "with-fan-extra-1")] fan_extra_1_controller: fan_extra_1_controller,
-        #[cfg(feature = "with-laser")] _laser_controller: laser_controller,
+        #[cfg(feature = "with-fan-extra-1")]
+        fan_extra_1_controller: hwa::types::FanExtra1Controller,
+        #[cfg(feature = "with-laser")] _laser_controller: hwa::types::LaserController,
         #[cfg(all(feature = "native", feature = "plot-timings"))] tmon: TimingsMonitor::new(),
     ) -> Self {
         Self {
@@ -58,9 +53,9 @@ impl MotionDriver {
             #[cfg(feature = "with-fan-layer")]
             fan_layer_controller,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra_1_controller: params.fan_extra_1_controller,
+            fan_extra_1_controller,
             #[cfg(feature = "with-laser")]
-            _laser_controller: params.laser_controller,
+            _laser_controller,
             #[cfg(all(feature = "native", feature = "plot-timings"))]
             tmon: TimingsMonitor::new(),
         }
@@ -118,7 +113,8 @@ impl MotionDriver {
         if vdir.e.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
             dir_fwd.set(hwa::StepperChannel::E, true)
         }
-        self.pins().set_forward_direction(dir_fwd);
+        self.pins()
+            .set_forward_direction(dir_fwd, hwa::StepperChannel::all());
     }
 
     /// This method performs the homing action for the stepper motors.

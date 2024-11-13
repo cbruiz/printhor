@@ -3,7 +3,7 @@
 compile_error!("Not supported");
 
 #[cfg(feature = "with-serial-port-1")]
-pub mod uart_port1 {
+pub(crate) mod uart_port1 {
     use printhor_hwa_common as hwa;
     use hwa::HwiContract;
 

@@ -2,6 +2,8 @@ use crate::control;
 use crate::hwa;
 use async_gcode::AsyncParserState;
 use embassy_time::{with_timeout, Duration};
+#[allow(unused)]
+use printhor_hwa_common::{EventFlags, EventStatus};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-print-job")] {
@@ -158,7 +160,7 @@ Process and consume gcode commands
 A set of commands will be directly executed
 Remaining will be delegated to the processor.
  */
-pub(super) async fn execute(
+pub async fn execute(
     processor: &mut hwa::GCodeProcessor,
     channel: hwa::CommChannel,
     gc: &control::GCodeCmd,
@@ -182,6 +184,25 @@ pub(super) async fn execute(
                 )
                 .await;
             Ok(control::CodeExecutionSuccess::CONSUMED)
+        }
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+        control::GCodeValue::M2 => {
+            match _printer_controller
+                .set(hwa::controllers::PrinterControllerEvent::Abort(channel))
+                .await
+            {
+                Ok(_f) => {
+                    processor
+                        .write(channel, "echo: Print job terminated\n")
+                        .await;
+                    Ok(control::CodeExecutionSuccess::OK)
+                }
+                Err(_e) => {
+                    let s = alloc::format!("echo: M2: Unable to terminate: {:?}\n", _e);
+                    processor.write(channel, s.as_str()).await;
+                    Err(control::CodeExecutionFailure::ERR)
+                }
+            }
         }
         #[cfg(feature = "with-sd-card")]
         control::GCodeValue::M20(_path) => {
@@ -238,6 +259,10 @@ pub(super) async fn execute(
             {
                 Ok(_f) => {
                     processor.write(channel, "echo: Print job file set\n").await;
+                    processor
+                        .event_bus
+                        .publish_event(EventStatus::not_containing(EventFlags::JOB_COMPLETED))
+                        .await;
                     // TODO
                     Ok(control::CodeExecutionSuccess::DEFERRED(
                         hwa::EventStatus::new(),

@@ -1,3 +1,4 @@
+//! System control module providing I/O control, kinematics and concurrent tasks
 #[allow(unused)]
 use crate::hwa;
 use crate::math::Real;
@@ -351,14 +352,26 @@ pub enum GCodeValue {
 
     M1,
 
-    M2, // Program control
+    /// Program End
+    #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+    M2,
 
+    /// Spindle On, Clockwise
+    ///
+    /// In Laser Mode: Laser on
     M3,
 
+    /// Spindle On, Counter-Clockwise
+    ///
+    /// In Laser Mode: Laser on
     M4,
 
-    M5, // CNC/Laser
+    /// In CNC Mode: Spindle Off
+    ///
+    /// In Laser Mode: Laser off
+    M5,
 
+    /// Tool change
     M6,
 
     M7,

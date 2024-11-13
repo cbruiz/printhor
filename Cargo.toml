@@ -53,7 +53,7 @@ strip = false
 incremental = false
 debug-assertions = true
 overflow-checks = true
-opt-level = "s" # disable to play with GDB
+#opt-level = "s" # disable to play with GDB
 lto = false
 panic = "unwind"
 

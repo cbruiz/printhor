@@ -36,7 +36,7 @@ impl MockedSDCardBlockDevice {
         where
             P: AsRef<Path>,
     {
-        hwa::info!("Cwd: Opening {}/{:?}", std::env::current_dir().as_ref().unwrap().to_str().unwrap(),  device_name.as_ref().to_str().unwrap());
+        hwa::debug!("Cwd: Opening {}/{:?}", std::env::current_dir().as_ref().unwrap().to_str().unwrap(),  device_name.as_ref().to_str().unwrap());
 
         Ok(MockedSDCardBlockDevice {
             file: RefCell::new(File::open(device_name)?),

@@ -41,7 +41,7 @@
 //!
 //! Around 14KB in total
 //!
-//! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core.
+//! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core/ryu.
 
 use crate::control;
 use crate::hwa;
@@ -175,6 +175,8 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-serial-port-1")]
             CommChannel::SerialPort1 => {
+                #[allow(unused)]
+                use hwa::AsyncWrapperWriter;
                 let mut mg = self.serial_port1_tx.lock().await;
                 let _ = mg.wrapped_write(_msg.as_bytes()).await;
                 mg.wrapped_flush().await;
@@ -233,7 +235,7 @@ impl GCodeProcessor {
     ///
     /// * `channel` - The communication channel to use for the execution.
     /// * `gc` - The GCode command to execute.
-    /// * `blocking` - A boolean indicating whether the execution should be blocking or not.
+    /// * `_blocking` - A boolean indicating whether the execution should be blocking or not.
     ///
     /// # Returns
     ///
@@ -254,12 +256,11 @@ impl GCodeProcessor {
     /// # Async
     ///
     /// This is an asynchronous method and should be awaited.
-    #[allow(unused)]
-    pub(crate) async fn execute(
+    pub async fn execute(
         &mut self,
         channel: CommChannel,
         gc: &GCodeCmd,
-        blocking: bool,
+        _blocking: bool,
     ) -> CodeExecutionResult {
         let result = match &gc.value {
             #[cfg(feature = "grbl-compat")]
@@ -295,20 +296,24 @@ impl GCodeProcessor {
                 }
                 Ok(self
                     .motion_planner
-                    .plan(channel, &gc, blocking, &self.event_bus)
+                    .plan(channel, &gc, _blocking, &self.event_bus)
                     .await?)
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G4(_) => {
-                if !blocking {
+                if !_blocking {
                     self.motion_planner
                         .defer_channel
-                        .send(DeferEvent::AwaitRequested(DeferAction::Dwell, channel))
+                        .send(DeferEvent::AwaitRequested(
+                            DeferAction::Dwell,
+                            channel,
+                            gc.order_num,
+                        ))
                         .await;
                 }
                 Ok(self
                     .motion_planner
-                    .plan(channel, &gc, blocking, &self.event_bus)
+                    .plan(channel, &gc, _blocking, &self.event_bus)
                     .await?)
             }
 
@@ -334,7 +339,7 @@ impl GCodeProcessor {
                     hwa::debug!("Planing homing");
                     let result = self
                         .motion_planner
-                        .plan(channel, &gc, blocking, &self.event_bus)
+                        .plan(channel, &gc, _blocking, &self.event_bus)
                         .await;
                     hwa::debug!("Homing planned");
                     result
@@ -526,6 +531,7 @@ impl GCodeProcessor {
                     CommChannel::Internal,
                     DeferAction::HotEndTemperature,
                     val as f32,
+                    gc.order_num,
                 )
                 .await;
                 Ok(CodeExecutionSuccess::OK)
@@ -604,7 +610,12 @@ impl GCodeProcessor {
                     let mut he = self.hot_end.lock().await;
                     let value = s.s.and_then(|v| v.to_i32()).unwrap_or(0);
                     let was_deferred = he
-                        .set_target_temp(channel, DeferAction::HotEndTemperature, value as f32)
+                        .set_target_temp(
+                            channel,
+                            DeferAction::HotEndTemperature,
+                            value as f32,
+                            gc.order_num,
+                        )
                         .await;
                     value > 0 && was_deferred
                 };
@@ -713,6 +724,7 @@ impl GCodeProcessor {
                     CommChannel::Internal,
                     DeferAction::HotBedTemperature,
                     val as f32,
+                    gc.order_num,
                 )
                 .await;
                 Ok(CodeExecutionSuccess::OK)
@@ -732,7 +744,7 @@ impl GCodeProcessor {
                 }
                 let deferred = {
                     let mut he = self.hot_bed.lock().await;
-                    he.ping_subscribe(channel, DeferAction::HotBedTemperature)
+                    he.ping_subscribe(channel, DeferAction::HotBedTemperature, gc.order_num)
                         .await
                 };
                 if deferred {

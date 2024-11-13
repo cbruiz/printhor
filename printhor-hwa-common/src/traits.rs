@@ -1,3 +1,4 @@
+use crate as hwa;
 cfg_if::cfg_if! {
     if #[cfg(any(
         feature = "with-serial-usb",
@@ -6,6 +7,63 @@ cfg_if::cfg_if! {
         feature = "with-sd-card",
     ))] {
         pub use async_gcode::ByteStream as GCodeByteStream;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion")] {
+        pub trait MotionPinsTrait {
+            fn enable_all_steppers(&mut self) {
+                self.set_enabled(hwa::StepperChannel::all(), true)
+            }
+            #[cfg(feature = "with-x-axis")]
+            fn enable_x_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::X, true)
+            }
+            #[cfg(feature = "with-y-axis")]
+            fn enable_y_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::Y, true)
+            }
+            #[cfg(feature = "with-z-axis")]
+            fn enable_z_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::Z, true)
+            }
+            #[cfg(feature = "with-e-axis")]
+            fn enable_e_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::E, true)
+            }
+            #[cfg(feature = "with-x-axis")]
+            fn disable_x_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::X, false)
+            }
+            #[cfg(feature = "with-y-axis")]
+            fn disable_y_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::Y, false)
+            }
+            #[cfg(feature = "with-z-axis")]
+            fn disable_z_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::Z, false)
+            }
+            #[cfg(feature = "with-e-axis")]
+            fn disable_e_stepper(&mut self) {
+                self.set_enabled(hwa::StepperChannel::E, false)
+            }
+            fn disable_all_steppers(&mut self) {
+                self.set_enabled(hwa::StepperChannel::all(), false)
+            }
+
+            fn disable(&mut self, _channels: hwa::StepperChannel)
+            {
+                self.set_enabled(hwa::StepperChannel::all(), false)
+            }
+
+            fn set_enabled(&mut self, _channels: hwa::StepperChannel, enabled: bool);
+            fn set_forward_direction(&mut self, _channels: hwa::StepperChannel, _mask: hwa::StepperChannel);
+            fn step_toggle(&mut self, _channels: hwa::StepperChannel);
+            fn step_high(&mut self, _channels: hwa::StepperChannel);
+            fn step_low(&mut self, _channels: hwa::StepperChannel);
+            fn endstop_triggered(&mut self, _channels: hwa::StepperChannel) -> bool;
+        }
     }
 }
 
@@ -27,13 +85,13 @@ cfg_if::cfg_if! {
             type VRefPin;
             type SamplePin;
 
-            fn read_vref(&mut self) -> impl std::future::Future<Output = Result<u16, ()>> {
+            fn read_vref(&mut self) -> impl core::future::Future<Output = Result<u16, ()>> {
                 async {
                     Err(())
                 }
             }
 
-            fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl std::future::Future<Output = u16>;
+            fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl core::future::Future<Output = u16>;
         }
     }
 }

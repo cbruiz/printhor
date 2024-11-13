@@ -95,15 +95,29 @@ impl SoftTimerDriver {
                         unreachable!("Driver instance not set")
                     }
                     Some(pins) => {
-                        #[cfg(feature = "debug-signals")]
-                        pins.y_dir_pin.set_high();
+                        cfg_if::cfg_if! {
+                            if #[cfg(feature = "debug-signals")] {
+                                use core::ops::BitAnd;
+                                let dir_mask = StepperChannel::all().bitand(
+                                    (StepperChannel::Y | StepperChannel::X).complement()
+                                );
+                                pins.set_forward_direction(StepperChannel::Y, StepperChannel::Y);
+                            }
+                            else {
+                                let dir_mask = StepperChannel::all();
+                            }
+                        }
+
                         if self.current_stepper_enable_flags != self.current.stepper_enable_flags {
                             pins.enable_steppers(self.current.stepper_enable_flags);
                             self.current_stepper_enable_flags = self.current.stepper_enable_flags;
                         }
                         if self.current_stepper_dir_fwd_flags != self.current.stepper_dir_fwd_flags
                         {
-                            pins.set_forward_direction(self.current.stepper_dir_fwd_flags);
+                            pins.set_forward_direction(
+                                self.current.stepper_dir_fwd_flags,
+                                dir_mask,
+                            );
                             self.current_stepper_dir_fwd_flags = self.current.stepper_dir_fwd_flags;
                         }
                     }
@@ -197,19 +211,15 @@ impl SoftTimerDriver {
         if self.tick_count >= self.current.interval_width {
             hwa::trace!("u-segment completed in {} us", self.tick_count);
             if self.try_consume() {}
-            #[cfg(feature = "debug-signals")]
-            match &self.drv {
-                None => {
-                    unreachable!("Driver instance not set")
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "debug-signals")] {
+                    match self.pins.as_ref() {
+                        None => {}
+                        Some(pins) => {
+                            pins.set_forward_direction(StepperChannel::empty(), StepperChannel::Y);
+                        }
+                    }
                 }
-                Some(_ref) => match _ref.try_lock() {
-                    Ok(mut _drv) => {
-                        _drv.pins.y_dir_pin.set_low();
-                    }
-                    Err(_) => {
-                        unreachable!("unable to lock")
-                    }
-                },
             }
             self.notify();
         }
@@ -632,10 +642,18 @@ pub static STEP_DRIVER: SoftTimer = SoftTimer::new();
 ///
 /// # Features
 ///
-/// - If the `debug-signals` feature is enabled, this function will also
-///   manage the state of the `x_dir_pin` by setting it high at the start
-///   and low at the end of the tick operation. This can be useful for debugging
-///   stepper motor control signals by toggling an extra pin.
+/// - If the `debug-signals` feature is enabled, this function will **change
+///   the purpose** of X and Y direction pins to measure stepping timings latency.
+///   Convention is:
+///     * X_DIR is HIGH at ISR START.
+///     * X_DIR is LOW at ISR COMPLETION.
+///     * Y_DIR is HIGH at ISR activity START
+///     * Y_DIR is LOW at ISR activity COMPLETION
+///   Expectation is that:
+///     * X_DIR shall always be constant at [hwa::HwiContract::STEP_PLANNER_CLOCK_FREQUENCY] Hz with no delay
+///     * When there is step activity:
+///       * Y_DIR shall be HIGH with no relevant delay with previous X_DIR HIGH.
+///       * Y_DIR shall become LOW the sooner, the better.
 ///
 /// # Safety
 ///
@@ -659,34 +677,24 @@ pub static STEP_DRIVER: SoftTimer = SoftTimer::new();
 #[no_mangle]
 pub extern "Rust" fn do_tick() {
     critical_section::with(|cs| {
-        let mut counter = STEP_DRIVER.0.borrow_ref_mut(cs);
-        #[cfg(feature = "debug-signals")]
-        match &counter.drv {
-            None => {
-                //unreachable!("Driver instance not set")
-            }
-            Some(_ref) => {
-                match _ref.try_lock() {
-                    Ok(mut _drv) => {
-                        _drv.pins.x_dir_pin.set_high();
-                    }
-                    Err(_e) => {
-                        //unreachable!("Unable to lock")
+        let mut step_driver = STEP_DRIVER.0.borrow_ref_mut(cs);
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "debug-signals")] {
+                match &step_driver.pins {
+                    None => {}
+                    Some(pins) => {
+                        pins.set_forward_direction(StepperChannel::X, StepperChannel::X)
                     }
                 }
             }
         }
-        counter.on_interrupt();
-        #[cfg(feature = "debug-signals")]
-        match &counter.drv {
-            None => {}
-            Some(_ref) => {
-                match _ref.try_lock() {
-                    Ok(mut _drv) => {
-                        _drv.pins.x_dir_pin.set_low();
-                    }
-                    Err(_e) => {
-                        //unreachable!("Unable to lock")
+        step_driver.on_interrupt();
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "debug-signals")] {
+                match &step_driver.pins {
+                    None => {}
+                    Some(pins) => {
+                        pins.set_forward_direction(StepperChannel::empty(), StepperChannel::X)
                     }
                 }
             }

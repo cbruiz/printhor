@@ -12,43 +12,20 @@ impl MotionPins {
     }
 
     pub fn enable_steppers(&self, channels: StepperChannel) {
-        self.pins.apply_mut(|pins| {
-            if channels.contains(StepperChannel::X) {
-                pins.enable_x_stepper()
-            }
-            if channels.contains(StepperChannel::Y) {
-                pins.enable_y_stepper()
-            }
-            if channels.contains(StepperChannel::Z) {
-                pins.enable_z_stepper()
-            }
-            if channels.contains(StepperChannel::E) {
-                pins.enable_e_stepper()
-            }
-        })
+        use hwa::traits::MotionPinsTrait;
+        self.pins.apply_mut(|pins| pins.set_enabled(channels, true))
     }
 
-    pub fn set_forward_direction(&self, channels: StepperChannel) {
+    pub fn set_forward_direction(&self, channels: StepperChannel, mask: StepperChannel) {
+        use hwa::traits::MotionPinsTrait;
         self.pins.apply_mut(|pins| {
-            pins.set_forward_direction(channels);
+            pins.set_forward_direction(channels, mask);
         })
     }
 
     pub fn disable_steppers(&self, channels: StepperChannel) {
-        self.pins.apply_mut(|pins| {
-            if channels.contains(StepperChannel::X) {
-                pins.disable_x_stepper()
-            }
-            if channels.contains(StepperChannel::Y) {
-                pins.disable_y_stepper()
-            }
-            if channels.contains(StepperChannel::Z) {
-                pins.disable_z_stepper()
-            }
-            if channels.contains(StepperChannel::E) {
-                pins.disable_e_stepper()
-            }
-        })
+        use hwa::traits::MotionPinsTrait;
+        self.pins.apply_mut(|pins| pins.disable(channels))
     }
 
     #[cfg(feature = "native")]
@@ -67,39 +44,13 @@ impl MotionPins {
     }
 
     pub fn end_stop_triggered(&self, channels: StepperChannel) -> bool {
-        self.pins.apply_mut(|pins| {
-            let mut triggered = false;
-            if channels.contains(StepperChannel::X) {
-                triggered |= pins.endstop_triggered(StepperChannel::X)
-            }
-            if channels.contains(StepperChannel::Y) {
-                triggered |= pins.endstop_triggered(StepperChannel::Y)
-            }
-            if channels.contains(StepperChannel::Z) {
-                triggered |= pins.endstop_triggered(StepperChannel::Z)
-            }
-            if channels.contains(StepperChannel::E) {
-                triggered |= pins.endstop_triggered(StepperChannel::E)
-            }
-            triggered
-        })
+        use hwa::traits::MotionPinsTrait;
+        self.pins.apply_mut(|pins| pins.endstop_triggered(channels))
     }
 
     pub fn step_toggle(&self, channels: StepperChannel) {
-        self.pins.apply_mut(|pins| {
-            if channels.contains(StepperChannel::X) {
-                pins.x_step_pin.toggle();
-            }
-            if channels.contains(StepperChannel::Y) {
-                pins.y_step_pin.toggle();
-            }
-            if channels.contains(StepperChannel::Z) {
-                pins.z_step_pin.toggle();
-            }
-            if channels.contains(StepperChannel::E) {
-                pins.e_step_pin.toggle();
-            }
-        });
+        use hwa::traits::MotionPinsTrait;
+        self.pins.apply_mut(|pins| pins.step_toggle(channels));
     }
 }
 

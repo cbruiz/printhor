@@ -35,14 +35,17 @@ impl Subscriptions {
         }
     }
 
-    fn update(&mut self, action: DeferAction, channel: CommChannel, increment: i8) -> bool {
+    fn update(
+        &mut self,
+        action: DeferAction,
+        channel: CommChannel,
+        increment: i8,
+    ) -> Result<bool, ()> {
         if let Some(counts) = self.channel_counts.get_mut(CommChannel::index_of(channel)) {
             if increment == 1 {
                 self.total_counts += 1;
             } else if increment == -1 {
                 self.total_counts -= 1;
-            } else {
-                panic!("WTF AYD?");
             }
 
             let counter = match action {
@@ -60,15 +63,16 @@ impl Subscriptions {
                 DeferAction::HotBedTemperature => &mut counts.num_hotbed,
             };
             let new_value = *counter as i8 + increment;
-            return if new_value < 0 {
+            if new_value < 0 {
                 *counter = 0;
-                false
+                Ok(false)
             } else {
                 *counter = new_value as u8;
-                true
-            };
+                Ok(true)
+            }
+        } else {
+            Err(())
         }
-        false
     }
 }
 
@@ -79,7 +83,7 @@ pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::type
     let mut subscriptions = Subscriptions::new();
 
     loop {
-        match with_timeout(Duration::from_secs(30), defer_channel.receive()).await {
+        match with_timeout(Duration::from_secs(10), defer_channel.receive()).await {
             Err(_) => {
                 #[cfg(feature = "trace-commands")]
                 hwa::info!(
@@ -93,25 +97,34 @@ pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::type
                 }
             }
 
-            Ok(DeferEvent::AwaitRequested(action, channel)) => {
-                hwa::debug!("AwaitRequested {:?}", action);
+            Ok(DeferEvent::AwaitRequested(action, channel, order_num)) => {
+                hwa::info!("AwaitRequested {:?} {}", action, order_num);
                 let _ = subscriptions.update(action, channel, 1);
+                hwa::info!(
+                    "[task_defer] Actual subscriptions count: {}",
+                    subscriptions.total_counts
+                );
             }
 
-            Ok(DeferEvent::Completed(action, channel)) => {
-                hwa::debug!("AwaitCompleted {:?}", action);
-                if subscriptions.update(action, channel, -1) {
+            Ok(DeferEvent::Completed(action, channel, order_num)) => {
+                hwa::info!("AwaitCompleted {:?} {}", action, order_num);
+                if subscriptions.update(action, channel, -1).unwrap_or(false) {
                     cfg_if::cfg_if! {
                         if #[cfg(feature="trace-commands")] {
                             let msg = alloc::format!("ok; [trace-commands] {:?} completed @{:?}\n", action, channel);
                             hwa::info!("{}", msg.trim_end());
                             processor.write(channel, msg.as_str()).await;
+
                         }
                         else {
                             processor.write_ok(channel).await;
                         }
                     }
                 }
+                hwa::info!(
+                    "[task_defer] Actual subscriptions count: {}",
+                    subscriptions.total_counts
+                );
             }
         }
     }

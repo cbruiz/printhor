@@ -5,7 +5,7 @@
 //!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`], disable all steppers
 //!   - If motion segment is execution-ready, dequeue it and then:
 //!     - Enable all steppers
-//!     - Evaluate the motion profile displacement at [`crate::hwa::STEPPER_PLANNER_CLOCK_FREQUENCY`]
+//!     - Evaluate the motion profile displacement at [`hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY`]
 //!     - Compute number of steps to do in each axis (independently)
 //!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`](hwa::controllers::motion::MultiTimer)
 //!     - Consume a micro-segment until iterator is exhausted
@@ -25,7 +25,7 @@ use hwa::controllers::ExecPlan;
 use hwa::controllers::LinearMicrosegmentStepInterpolator;
 use hwa::HwiContract;
 use hwa::StepperChannel;
-use hwa::{DeferAction, DeferEvent, EventFlags, EventStatus};
+use hwa::{EventFlags, EventStatus};
 use num_traits::ToPrimitive;
 
 ///
@@ -54,7 +54,7 @@ use num_traits::ToPrimitive;
 ///     // Disable steppers here
 /// }
 /// ```
-const STEPPER_INACTIVITY_TIMEOUT: embassy_time::Duration = embassy_time::Duration::from_secs(10);
+const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(10);
 
 // This constant defines the period for generating the stepper planner micro segments.
 //
@@ -118,6 +118,7 @@ const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
 pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 =
     1_000_000 / hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY;
 
+#[cfg_attr(doc, aquamarine::aquamarine)]
 /// This asynchronous task manages the steps of the stepper motors
 /// based on motion segments from the motion queue.
 ///
@@ -205,7 +206,7 @@ pub async fn task_stepper(
                 }
                 moves_left
             }
-            Ok(ExecPlan::Segment(segment, channel)) => {
+            Ok(ExecPlan::Segment(segment, _channel)) => {
                 // Process segment plan
                 #[cfg(feature = "with-ps-on")]
                 match _s
@@ -493,10 +494,6 @@ pub async fn task_stepper(
                         let moves_left = motion_planner
                             .consume_current_segment_data(&event_bus)
                             .await;
-                        motion_planner
-                            .defer_channel
-                            .send(DeferEvent::Completed(DeferAction::LinearMove, channel))
-                            .await;
                         event_bus
                             .publish_event(EventStatus::not_containing(EventFlags::MOVING))
                             .await;
@@ -529,7 +526,7 @@ pub async fn task_stepper(
                     }
                 }
             }
-            Ok(ExecPlan::Dwell(sleep_ms, channel)) => {
+            Ok(ExecPlan::Dwell(sleep_ms, _channel, _order_num)) => {
                 // Dwell
                 if let Some(millis) = sleep_ms {
                     hwa::info!("G4: Sleeping {} millis", millis);
@@ -540,16 +537,12 @@ pub async fn task_stepper(
                 let moves_left = motion_planner
                     .consume_current_segment_data(&event_bus)
                     .await;
-                motion_planner
-                    .defer_channel
-                    .send(DeferEvent::Completed(DeferAction::Dwell, channel))
-                    .await;
                 event_bus
                     .publish_event(EventStatus::not_containing(EventFlags::MOVING))
                     .await;
                 moves_left
             }
-            Ok(ExecPlan::Homing(_channel)) => {
+            Ok(ExecPlan::Homing(_channel, _order_num)) => {
                 // Homing
                 hwa::debug!("Homing init");
 

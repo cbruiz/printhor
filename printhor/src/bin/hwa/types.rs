@@ -57,17 +57,6 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-fan-extra-1")] {
-        pub type FanExtra1Device = hwi::device::PwmFanExtra1;
-        pub type FanExtra1MutexStrategy = hwi::FanExtra1ControllerMutexStrategyType<
-            hwa::controllers::PwmController<
-                hwi::PwmFanExtra1MutexStrategyType<FanExtra1Device>
-            >
-        >;
-        pub type FanExtra1Controller = hwa::StaticAsyncController<FanExtra1MutexStrategy>;
-    }
-}
-cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-usb")] {
         pub type SerialUsbInputStream = <hwa::Contract as HwiContract>::SerialUsbRx;
         pub type SerialUsbTxController = hwa::StaticAsyncController<<hwa::Contract as HwiContract>::SerialUsbTx>;
@@ -90,18 +79,6 @@ cfg_if::cfg_if! {
         pub type PSOnController = hwa::StaticSyncController<
             <hwa::Contract as HwiContract>::PSOnMutexStrategy
         >;
-    }
-}
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-laser")] {
-        // A nested controller
-        type _LaserDeviceMutexStrategy_ = hwi::PwmLaserMutexStrategyType<hwi::device::PwmLaser>;
-        pub type _LaserControllerMutexStrategy_ = hwi::LaserControllerMutexStrategyType<
-            hwa::controllers::PwmController<
-                _LaserDeviceMutexStrategy_
-            >
-        >;
-        pub type LaserController = hwa::StaticAsyncController<_LaserControllerMutexStrategy_>;
     }
 }
 
@@ -186,6 +163,44 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-laser")] {
+
+        // A nested controller
+        pub type InnerLaserController = hwa::controllers::GenericPwmController<
+            <hwa::Contract as HwiContract>::LaserPwm
+        >;
+
+        pub type LaserControllerMutexStrategy = hwa::AsyncStandardStrategy<
+            hwa::AsyncNoopMutexType,
+            InnerLaserController,
+        >;
+
+        pub type LaserController = hwa::StaticAsyncController<
+            LaserControllerMutexStrategy
+        >;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-extra-1")] {
+
+        // A nested controller
+        pub type InnerFanExtra1Controller = hwa::controllers::GenericPwmController<
+            <hwa::Contract as HwiContract>::FanExtra1Pwm
+        >;
+
+        pub type FanExtra1ControllerMutexStrategy = hwa::AsyncStandardStrategy<
+            hwa::AsyncNoopMutexType,
+            InnerFanExtra1Controller,
+        >;
+
+        pub type FanExtra1Controller = hwa::StaticAsyncController<
+            FanExtra1ControllerMutexStrategy
+        >;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-sd-card")] {
         // A nested controller
 
@@ -193,6 +208,7 @@ cfg_if::cfg_if! {
             <hwa::Contract as HwiContract>::SDCardBlockDevice,
             {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
             {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
         >;
 
         pub type SDCardControllerMutexStrategy = hwa::AsyncStandardStrategy<
@@ -204,6 +220,7 @@ cfg_if::cfg_if! {
             <hwa::Contract as HwiContract>::SDCardBlockDevice,
             {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
             {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
         >;
 
     }
@@ -220,6 +237,7 @@ cfg_if::cfg_if! {
                 <hwa::Contract as HwiContract>::SDCardBlockDevice,
                 {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
                 {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+                {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES}
             >
         >;
     }
