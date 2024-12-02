@@ -39,11 +39,6 @@ cfg_if::cfg_if! {
         pub type MotionDriverMutexType = hwa::AsyncNoopMutexType;
     }
 }
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-ps-on")] {
-        pub type PSOnLockType = hwa::AsyncNoopMutexType;
-    }
-}
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-probe", feature = "with-hot-end",feature = "with-hot-bed",
@@ -93,6 +88,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
+        pub type PSOnLockType = hwa::SyncNoopMutexType;
         pub type PSOnMutexStrategy = hwa::SyncStandardStrategy<PSOnLockType, super::device::PsOnPin>;
     }
 }

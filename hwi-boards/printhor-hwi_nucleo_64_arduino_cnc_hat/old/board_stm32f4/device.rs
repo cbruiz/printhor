@@ -1,10 +1,3 @@
-#[allow(unused)]
-use embassy_stm32::{
-    exti::ExtiInput,
-    gpio::{Input, Output},
-    timer::simple_pwm::SimplePwm,
-    wdg,
-};
 use printhor_hwa_common as hwa;
 
 cfg_if::cfg_if! {
@@ -94,7 +87,7 @@ pub type PwmLaser = SimplePwm<'static, embassy_stm32::peripherals::TIM1>;
 
 pub type PwmChannel = embassy_stm32::timer::Channel;
 
-pub type Watchdog = wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
+pub type WatchDog = embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
 #[cfg(feature = "with-probe")]
 pub struct ProbePeripherals {

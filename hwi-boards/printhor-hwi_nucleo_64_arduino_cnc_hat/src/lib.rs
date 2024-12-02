@@ -8,7 +8,6 @@ cfg_if::cfg_if! {
     }
     else if #[cfg(feature="nucleo64-l476rg")] {
         mod board_stm32l4;
-        pub use board_stm32l4::*;
-        pub use board_stm32l4::device;
+        pub use board_stm32l4::Contract;
     }
 }

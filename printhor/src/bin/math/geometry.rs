@@ -1,14 +1,12 @@
 //! A computing geometry Q&D API to make facilitate vector operations and provide numerically stability ('undef', etc...).
 //! It implies a cost, of course
-#[cfg(not(feature = "native"))]
-use crate::alloc::string::ToString;
 #[allow(unused)]
 use crate::hwa;
 use crate::math::Real;
 use bitflags::bitflags;
 use core::ops::Mul;
 use num_traits::float::FloatCore;
-use printhor_hwa_common::StepperChannel;
+use hwa::StepperChannel;
 
 bitflags! {
     #[derive(PartialEq, Clone, Copy, Eq, Debug)]
@@ -943,42 +941,43 @@ where
     }
 }
 
+
 #[cfg(feature = "with-defmt")]
 impl<T> defmt::Format for TVector<T>
 where
-    T: ArithmeticOps + ToString,
+    T: ArithmeticOps + defmt::Format,
 {
     // TODO: reimplement to be more efficient
     fn format(&self, fmt: defmt::Formatter) {
         let mut spacing = false;
         if let Some(v) = &self.x {
-            defmt::write!(fmt, "X {}", v.to_string().as_str());
+            defmt::write!(fmt, "X {:?}", v);
             spacing = true;
         }
         if let Some(v) = &self.y {
             defmt::write!(
                 fmt,
-                "{}Y {}",
+                "{:?}Y {}",
                 if spacing { " " } else { "" },
-                v.to_string().as_str()
+                v
             );
             spacing = true;
         }
         if let Some(v) = &self.z {
             defmt::write!(
                 fmt,
-                "{}Z {}",
+                "{:?}Z {}",
                 if spacing { " " } else { "" },
-                v.to_string().as_str()
+                v
             );
             spacing = true;
         }
         if let Some(v) = &self.e {
             defmt::write!(
                 fmt,
-                "{}E {}",
+                "{:?}E {}",
                 if spacing { " " } else { "" },
-                v.to_string().as_str()
+                v
             );
         }
     }

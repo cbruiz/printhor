@@ -1,4 +1,6 @@
+#[allow(unused)]
 use crate as hwa;
+
 cfg_if::cfg_if! {
     if #[cfg(any(
         feature = "with-serial-usb",

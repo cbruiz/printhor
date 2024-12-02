@@ -72,7 +72,7 @@ where
                 "Computing power: ({} * {}) / {:?} = {:?}",
                 pwm.get_duty(self.pwm_chan).into() as f32,
                 100f32,
-                pwm.get_max_duty(),
+                pwm.get_max_duty().into(),
                 duty_result,
             );
             duty_result.unwrap_or(0.0f32)

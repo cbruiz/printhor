@@ -1,6 +1,10 @@
+//! Hardware Interface implementation for nucleo64-F410RB (STM32F410RB)
+//!
+//! https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32F410RB.json
+//!
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
-use printhor_hwa_common::HwiResource;
+use hwa::HwiResource;
 
 mod device;
 mod types;
@@ -257,7 +261,10 @@ impl HwiContract for Contract {
         #[link_section = ".bss"]
         static mut HEAP_MEM: [MaybeUninit<u8>; Contract::MAX_HEAP_SIZE_BYTES] =
             [MaybeUninit::uninit(); Contract::MAX_HEAP_SIZE_BYTES];
-        unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, Contract::MAX_HEAP_SIZE_BYTES) }
+        unsafe {
+            #[allow(static_mut_refs)]
+            HEAP.init(HEAP_MEM.as_ptr() as usize, Contract::MAX_HEAP_SIZE_BYTES)
+        }
     }
 
     async fn init(_spawner: embassy_executor::Spawner) -> hwa::HwiContext<Self> {

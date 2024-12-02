@@ -20,7 +20,7 @@ use embassy_stm32::usart::{DataBits, Parity, StopBits};
 static HEAP: CortexMHeap = CortexMHeap::empty();
 
 pub const MACHINE_TYPE: &str = "NUCLEO64";
-pub const MACHINE_BOARD: &str = "NUCLEO64_Arduino_CNC_Hat_v3.x";
+pub const MACHINE_BOARD: &str = "NUCLEO64-F410RB+Arduino_CNC_Hat_v3.x";
 
 /// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
 pub const MACHINE_PROCESSOR: &str = "STM32F410RB";
@@ -71,7 +71,7 @@ pub fn init() -> embassy_stm32::Peripherals {
     init_heap();
 
     let config = {
-        let mut config = Config::default();
+        let mut config = embassy_stm32::Config::default();
         config.rcc.hsi = true;
         config.rcc.hse = None;
         config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;

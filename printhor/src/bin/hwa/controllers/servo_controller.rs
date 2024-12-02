@@ -17,31 +17,31 @@ pub trait ProbeTrait {
     ///
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after lowering the pin.
-    fn probe_pin_down(&mut self, sleep_us: u64) -> impl std::future::Future<Output = ()>;
+    fn probe_pin_down(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 
     /// Raises the probe pin, moving it away from contact. The operation waits for a specified duration.
     ///
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after raising the pin.
-    fn probe_pin_up(&mut self, sleep_us: u64) -> impl std::future::Future<Output = ()>;
+    fn probe_pin_up(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 
     /// Initiates a self-test sequence for the probe. The operation waits for a specified duration.
     ///
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after performing the self-test.
-    fn probe_self_test(&mut self, sleep_us: u64) -> impl std::future::Future<Output = ()>;
+    fn probe_self_test(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 
     /// Releases any active probe alarms. The operation waits for a specified duration.
     ///
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after releasing the alarm.
-    fn probe_alarm_release(&mut self, sleep_us: u64) -> impl std::future::Future<Output = ()>;
+    fn probe_alarm_release(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 
     /// Sets the probe into test mode. The operation waits for a specified duration.
     ///
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after entering test mode.
-    fn probe_test_mode(&mut self, sleep_us: u64) -> impl std::future::Future<Output = ()>;
+    fn probe_test_mode(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 }
 
 /// The `GenericServoController` structure is responsible for managing a servo motor
