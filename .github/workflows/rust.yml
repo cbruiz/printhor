@@ -15,17 +15,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository and submodules
-      uses: actions/checkout@v4.2.2
-      with:
-        submodules: recursive
-    - name: Build
-      run: cargo build --features native --package prinThor --bin printhor
-    - name: Run tests
-      run: cargo test --features native --package prinThor --bin printhor
-    - name: Install Tarpaulin
-      run: cargo install cargo-tarpaulin
-    - name: Run tests with coverage
-      run: cargo tarpaulin --out Lcov --packages printhor-hwa-common printhor-hwa-utils prinThor --exclude-files "libs/*" "hwi-boards/printhor-hwi_mks*" "hwi-boards/printhor-hwi_nucleo*" "hwi-boards/printhor-hwi_rp*" "hwi-boards/printhor-hwi_skr*" -- --test-threads 1
-    - name: Upload coverage to Coveralls
-      uses: coverallsapp/github-action@v2
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v4.2.2
+        with:
+          submodules: recursive
+      - name: Build
+        run: cargo build --features native --package prinThor --bin printhor
+      - name: Run tests
+        run: cargo test --features native --package prinThor --bin printhor
+      - name: Run cargo-tarpaulin
+        uses: actions-rs/tarpaulin@v0.1
+        with:
+          version: '0.15.0'
+          args: '--packages printhor-hwa-common printhor-hwa-utils prinThor --exclude-files "libs/*" "hwi-boards/printhor-hwi_mks*" "hwi-boards/printhor-hwi_nucleo*" "hwi-boards/printhor-hwi_rp*" "hwi-boards/printhor-hwi_skr*" -- --test-threads 1'
+      - name: Coveralls
+        uses: coverallsapp/github-action@v2
