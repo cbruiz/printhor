@@ -2,10 +2,6 @@
 
 use crate::hwa;
 use embassy_time::{Duration, Ticker};
-#[cfg(not(feature = "native"))]
-use num_traits::float::FloatCore;
-#[allow(unused)]
-use num_traits::ToPrimitive;
 
 ///
 /// # Asynchronous Task Entry Point

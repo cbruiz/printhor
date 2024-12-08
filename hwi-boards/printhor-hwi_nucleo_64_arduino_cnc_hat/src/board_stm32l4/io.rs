@@ -1,9 +1,9 @@
-
+//! IO device wrappers for nucleo64-L476RG (STM32L476RG)
 #[cfg(feature = "with-serial-usb")]
 compile_error!("Not supported");
 
 #[cfg(feature = "with-serial-port-1")]
-pub(crate) mod uart_port1 {
+pub mod uart_port1 {
     use printhor_hwa_common as hwa;
     use hwa::HwiContract;
 
@@ -46,3 +46,59 @@ pub(crate) mod uart_port1 {
 
 #[cfg(feature = "with-serial-port-2")]
 compile_error!("Not implemented");
+
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+pub mod adc {
+
+    // Hard-coded ADC1 sample time (6.5 cycles): Around 1us
+    const ADC1_SAMPLE_TIME:embassy_stm32::adc::SampleTime = embassy_stm32::adc::SampleTime::CYCLES6_5;
+
+    use printhor_hwa_common as hwa;
+
+    pub struct AdcWrapper<T, RxDma>
+    where
+        T: embassy_stm32::adc::Instance,
+        RxDma: embassy_stm32::adc::RxDma<T>,
+    {
+        adc: embassy_stm32::adc::Adc<'static, T>,
+        dma: RxDma
+    }
+
+    impl<T, RxDma> AdcWrapper<T, RxDma>
+    where
+        T: embassy_stm32::adc::Instance,
+        RxDma: embassy_stm32::adc::RxDma<T>,
+    {
+        pub fn new(adc_peripheral: T, dma: RxDma) -> Self {
+            let mut adc = embassy_stm32::adc::Adc::new(adc_peripheral);
+            adc.set_resolution(embassy_stm32::adc::Resolution::BITS12);
+            adc.set_sample_time(ADC1_SAMPLE_TIME);
+            Self {
+                adc,
+                dma,
+            }
+        }
+    }
+
+    impl<T, RxDma> hwa::traits::UnifiedAdc16 for AdcWrapper<T, RxDma>
+    where
+        T: embassy_stm32::adc::Instance,
+        RxDma: embassy_stm32::adc::RxDma<T>,
+    {
+        type VRefPin = ();
+        type SamplePin = embassy_stm32::adc::AnyAdcChannel<T>;
+
+        fn read_adc(&mut self, _pin: &mut Self::SamplePin) -> impl core::future::Future<Output=u16> {
+            async {
+                let sequence = [(_pin, ADC1_SAMPLE_TIME)];
+                let mut readings = [0u16];
+                self.adc.read(
+                    &mut self.dma,
+                    sequence.into_iter(),
+                    &mut readings
+                ).await;
+                readings[0]
+            }
+        }
+    }
+}

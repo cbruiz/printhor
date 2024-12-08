@@ -81,6 +81,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+
         /// A work in progress unified trait for `ADC`s
         pub trait UnifiedAdc16 {
 

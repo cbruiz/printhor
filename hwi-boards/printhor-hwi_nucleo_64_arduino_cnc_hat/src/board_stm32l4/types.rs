@@ -73,4 +73,28 @@ cfg_if::cfg_if! {
         pub type ProbePwmMutexStrategy = hwa::SyncStandardStrategy<ProbeMutexType, super::device::PwmProbe>;
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature="with-hot-end", feature = "with-hot-bed"))] {
+        pub type HotEndHotBedAdcMutexType = hwa::SyncCsMutexType;
+        pub type HotEndHotBedAdcMutexStrategy = hwa::AsyncStandardStrategy<HotEndHotBedAdcMutexType, super::device::HotEndHotBedAdc>;
+
+        pub type HotEndHotBedPwmMutexType = hwa::SyncNoopMutexType;
+        pub type HotEndHotBedPwmMutexStrategy = hwa::SyncStandardStrategy<HotEndHotBedPwmMutexType, super::device::HotEndHotBedPwm>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-end")] {
+        pub type HotEndAdcMutexStrategy = HotEndHotBedAdcMutexStrategy;
+        pub type HotEndPwmMutexStrategy = HotEndHotBedPwmMutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-hot-bed")] {
+        pub type HotBedAdcMutexStrategy = HotEndHotBedAdcMutexStrategy;
+        pub type HotBedPwmMutexStrategy = HotEndHotBedPwmMutexStrategy;
+    }
+}
 //#endregion

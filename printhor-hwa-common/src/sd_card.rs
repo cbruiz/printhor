@@ -65,10 +65,10 @@ impl RefCounts {
         Self {
             ref_count: 0,
             parent_idx: 0,
-            entry_name: std::string::String::new(),
+            entry_name: alloc::string::String::new(),
         }
     }
-    const fn new(parent_idx: u8, entry_name: std::string::String) -> Self {
+    const fn new(parent_idx: u8, entry_name: alloc::string::String) -> Self {
         Self {
             ref_count: 1,
             parent_idx,
@@ -84,7 +84,7 @@ pub struct SDStateManager<
     const MAX_FILES: usize,
     const MAX_OPENED_ENTRIES: usize,
 > where
-    D: hwa::traits::AsyncSDBlockDevice, //+ hwa::AsyncMutexStrategy + 'static,
+    D: hwa::traits::AsyncSDBlockDevice,
 {
     mgr: VolumeManager<D, DummyTimeSource, MAX_DIRS, MAX_FILES>,
     vol: Option<RawVolume>,
@@ -95,7 +95,7 @@ pub struct SDStateManager<
 impl<D, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_OPENED_ENTRIES: usize>
     SDStateManager<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>
 where
-    D: hwa::traits::AsyncSDBlockDevice, //+ hwa::AsyncMutexStrategy + 'static
+    D: hwa::traits::AsyncSDBlockDevice,
 {
     pub async fn new(device: D, partition: usize) -> Self
     where
@@ -132,7 +132,8 @@ where
     pub fn open_path(
         &mut self,
         path: &str,
-    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError> {
+    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError>
+    {
         // First, it's mandatory to open or increment the reference count of the root directory.
 
         match self.raw_open_root_dir() {
@@ -272,7 +273,8 @@ where
         &mut self,
         parent_ref: &EntryRef,
         entry_name: &str,
-    ) -> Result<EntryRef, SDCardError> {
+    ) -> Result<EntryRef, SDCardError>
+    {
         if self.opened_entries_ref_counts[parent_ref.0 as usize].ref_count == 0 {
             return Err(SDCardError::InconsistencyError);
         }
@@ -322,6 +324,7 @@ where
                                         }
                                     }
                                     Err(_reason) => {
+                                        #[cfg(feature = "with-defmt")]
                                         hwa::error!("unable to open entry: {:?}", _reason);
                                         Err(SDCardError::InternalError)
                                     }
@@ -387,7 +390,8 @@ where
     pub fn open_file_path(
         &mut self,
         _path: &str,
-    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError> {
+    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError>
+    {
         match self.open_path(_path) {
             Ok(_path_stack) => Ok(_path_stack),
             Err(_e) => Err(_e),

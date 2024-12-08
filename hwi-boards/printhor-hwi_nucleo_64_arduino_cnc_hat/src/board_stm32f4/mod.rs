@@ -385,7 +385,7 @@ impl HwiContract for Contract {
             feature = "with-fan-layer",
             feature = "with-fan-extra-1",
         ))]
-        let pwm_any = hwa::make_static_controller!(
+        let pwm_any = hwa::make_static_sync_controller!(
             "Pwm1Controller",
             crate::Pwm1ControllerMutexStrategyType<device::PwmAny>,
             device::PwmAny::new(20, _pin_state)
@@ -402,7 +402,7 @@ impl HwiContract for Contract {
         hwa::debug!("motion_planner done");
 
         #[cfg(feature = "with-ps-on")]
-        let ps_on = hwa::make_static_controller!(
+        let ps_on = hwa::make_static_sync_controller!(
             "PSOn",
             crate::PSOnMutexStrategyType<device::PsOnPin>,
             device::PsOnPin::new(21, _pin_state)

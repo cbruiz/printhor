@@ -40,15 +40,15 @@ impl ChannelStatus {
 
 cfg_if::cfg_if! {
     if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis", feature = "with-e-axis"))] {
-        /// The number of multitimer channels when all axes (x, y, z, and e) are enabled.
+        /// The number of multi-timer channels when all axes (x, y, z, and e) are enabled.
         pub const MULTITIMER_CHANNELS: usize = 4;
     }
     else if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))] {
-        /// The number of multitimer channels when x, y, and z axes are enabled.
+        /// The number of multi-timer channels when x, y, and z axes are enabled.
         pub const MULTITIMER_CHANNELS: usize = 3;
     }
     else if #[cfg(all(feature = "with-z-axis"))]  {
-        /// The number of multitimer channels when only the z axis is enabled.
+        /// The number of multi-timer channels when only the z axis is enabled.
         pub const MULTITIMER_CHANNELS: usize = 1;
     }
     else {

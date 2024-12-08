@@ -243,12 +243,12 @@ nucleo64-l476rg = [
     "with-serial-port-1",
     #"with-serial-port-2", # Not implemented
     "with-spi",
-    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat/sd-card-uses-spi",
-    #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
+    #"with-sd-card", "sd-card-uses-spi",
+    #"with-print-job",
     "with-probe",
-    #"with-hot-end", # CNC Hat does not have it
-    #"with-hot-bed", # CNC Hat does not have it
-    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
+    "with-hot-end", # CNC Hat does not have it
+    "with-hot-bed", # CNC Hat does not have it
+    #"with-fan-layer",
     "with-laser",
     "with-ps-on",
 
@@ -267,20 +267,19 @@ nucleo64-f410rb = [
     "with-x-axis", "with-y-axis", "with-z-axis",
     "debug-signals",
     #"trace-commands",
-
     #"verbose-timings",
     "with-defmt",
     "with-serial-port-1",
     "with-motion",
     "with-spi",
-    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat/sd-card-uses-spi",
-    #"with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-print-job",
-    #"with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-probe",
-    #"with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-end", # CNC Hat does not have it
-    #"with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-hot-bed", # CNC Hat does not have it
-    #"with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-fan-layer",
+    #"with-sd-card", "sd-card-uses-spi",
+    #"with-print-job",
+    #"with-probe",
+    #"with-hot-end", # CNC Hat does not have it
+    #"with-hot-bed", # CNC Hat does not have it
+    #"with-fan-layer",
     "with-laser",
-    #"with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat/with-ps-on",
+    #"with-ps-on",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",

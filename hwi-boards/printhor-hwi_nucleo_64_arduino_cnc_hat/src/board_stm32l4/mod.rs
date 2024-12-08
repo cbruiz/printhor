@@ -292,10 +292,14 @@ impl HwiContract for Contract {
             });
 
             config.rcc.mux.clk48sel = embassy_stm32::rcc::mux::Clk48sel::PLLSAI1_Q;
-            config.rcc.mux.adcsel = embassy_stm32::rcc::mux::Adcsel::SYS;
             config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
             config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
             config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+            cfg_if::cfg_if! {
+                if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+                    config.rcc.mux.adcsel = embassy_stm32::rcc::mux::Adcsel::SYS;
+                }
+            }
             config
         };
         //#endregion
@@ -402,16 +406,6 @@ impl HwiContract for Contract {
             }
         }
 
-        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-        let adc_any = hwa::make_static_controller!(
-            "Adc1Controller",
-            crate::Adc1ControllerMutexStrategyType<device::Adc1>,
-            device::AdcHotEnd::new(0)
-        );
-
-        #[cfg(feature = "with-motion")]
-        hwa::debug!("motion_planner done");
-
         #[cfg(feature = "with-ps-on")]
         let ps_on = hwa::make_static_sync_controller!(
             "PSOn",
@@ -463,14 +457,59 @@ impl HwiContract for Contract {
         }
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-fan-extra-1")] {
+                compile_error!("Not implemented");
             }
         }
+
+        cfg_if::cfg_if!{
+            if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+                use embassy_stm32::adc::AdcChannel;
+                let hotend_hotbed_adc = hwa::make_static_async_controller!(
+                    "AdcHotendHotbedController",
+                    types::HotEndHotBedAdcMutexStrategy,
+                    device::HotEndHotBedAdc::new(p.ADC1, p.DMA1_CH1)
+                );
+                let hotend_hotbed_pwm = hwa::make_static_sync_controller!(
+                    "PwmHotendHotbedController",
+                    types::HotEndHotBedPwmMutexStrategy,
+                    device::HotEndHotBedPwm::new(
+                        p.TIM15,
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(
+                            p.PB14,
+                            embassy_stm32::gpio::OutputType::PushPull,
+                        )),
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(
+                            p.PB15,
+                            embassy_stm32::gpio::OutputType::PushPull,
+                        )),
+                        None,
+                        None,
+                        embassy_stm32::time::hz(5_000),
+                        embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                    ),
+                );
+            }
+        }
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-hot-end")] {
-                let hot_end_adc = adc_any.clone();
-                let hot_end_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(23, _pin_state));
-                let hot_end_power_pwm= pwm_any.clone();
-                let hot_end_power_channel = hwa::HwiResource::new(0u8);
+                let hot_end_adc = hotend_hotbed_adc.clone();
+                let hot_end_adc_pin = hwa::HwiResource::new(
+                    p.PC2.degrade_adc()
+                );
+                let hot_end_pwm= hotend_hotbed_pwm.clone();
+                let hot_end_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch1);
+            }
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-hot-bed")] {
+                let hot_bed_adc = hotend_hotbed_adc.clone();
+                let hot_bed_adc_pin = hwa::HwiResource::new(
+                    p.PC3.degrade_adc()
+                );
+                let hot_bed_pwm= hotend_hotbed_pwm.clone();
+                let hot_bed_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch2);
             }
         }
 
@@ -530,6 +569,14 @@ impl HwiContract for Contract {
             hot_end_pwm,
             #[cfg(feature = "with-hot-end")]
             hot_end_pwm_channel,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_adc,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_adc_pin,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_pwm,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_pwm_channel,
         }
     }
 
