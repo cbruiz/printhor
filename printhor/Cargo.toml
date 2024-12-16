@@ -258,6 +258,8 @@ nucleo64-l476rg = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
+    "printhor-hwi_nucleo_64_arduino_cnc_hat/with-i2c-pwm-motion",
+
     "printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg",
 ]
 

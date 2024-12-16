@@ -371,6 +371,7 @@ impl HwiContract for Contract {
                 }
             }
         }
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
                 let motion_pins = device::MotionPins {
@@ -385,6 +386,31 @@ impl HwiContract for Contract {
                     y_dir_pin: embassy_stm32::gpio::Output::new(p.PB10, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                     z_dir_pin: embassy_stm32::gpio::Output::new(p.PA8, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                 };
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-i2c-pwm-motion")] {
+
+                        embassy_stm32::bind_interrupts!(struct I2C1Irqs {
+                            I2C1_EV => embassy_stm32::i2c::EventInterruptHandler<embassy_stm32::peripherals::I2C1>;
+                            I2C1_ER => embassy_stm32::i2c::ErrorInterruptHandler<embassy_stm32::peripherals::I2C1>;
+                        });
+
+                        let i2c_freq = embassy_stm32::time::hz(16_000);
+                        let i2c_conf = embassy_stm32::i2c::Config::default();
+
+                        let _i2c_dev = embassy_stm32::i2c::I2c::new(
+                            p.I2C1,
+                            // SCL
+                            p.PB8,
+                            // SDA
+                            p.PB9,
+                            I2C1Irqs,
+                            p.DMA2_CH7,
+                            p.DMA2_CH6,
+                            i2c_freq,
+                            i2c_conf,
+                        );
+                    }
+                }
                 hwa::debug!("motion_driver done");
             }
         }

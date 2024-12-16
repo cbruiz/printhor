@@ -37,6 +37,7 @@ with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/wi
 with-trinamic = []
 with-ps-on = []
 without-ringbuffer = []
+with-i2c-pwm-motion = []
 
 with-x-axis = []
 with-y-axis = []
