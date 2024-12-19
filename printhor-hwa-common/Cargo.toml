@@ -48,8 +48,8 @@ printhor-hwa-utils = { version = "0",  path = "../printhor-hwa-utils", default-f
 const_env = { version = "0.1.2"}
 
 embassy-sync = { version = "0.6", features = [] }
-embassy-executor = { version = "0.6", features = [] }
-embassy-time = { version = "0.3", features = [] }
+embassy-executor = { version = "0.7", features = [] }
+embassy-time = { version = "0.4", features = [] }
 
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven"], optional = true }

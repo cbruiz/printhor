@@ -46,7 +46,7 @@ with-z-axis = []
 with-e-axis = []
 
 nightly = []
-cooperative = ["embassy-executor/integrated-timers"]
+cooperative = []
 executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue", "embassy-time/generic-queue-128"]
 verbose-timings = []
 sd-card-uses-spi = []
@@ -60,11 +60,11 @@ defmt = {version = "0.3", default-features = false }
 
 printhor-hwa-common = { version = "0.0"}
 
-embassy-stm32 = { version = "*", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
-embassy-executor = { version = "0.6.0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
-embassy-sync = { version = "*", features = ["defmt"] }
-embassy-time = { version = "*", features = ["defmt", "defmt-timestamp-uptime"] }
-embassy-futures = { version = "*", features = [] }
+embassy-stm32 = { version = "0", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
+embassy-executor = { version = "0.7", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
+embassy-sync = { version = "0", features = ["defmt"] }
+embassy-time = { version = "0", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-futures = { version = "0", features = [] }
 embassy-usb = { version = "*", features = [], optional = true }
 
 cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }

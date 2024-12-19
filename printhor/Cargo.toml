@@ -246,8 +246,8 @@ nucleo64-l476rg = [
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
     "with-probe",
-    "with-hot-end", # CNC Hat does not have it
-    "with-hot-bed", # CNC Hat does not have it
+    #"with-hot-end", # CNC Hat does not have it
+    #"with-hot-bed", # CNC Hat does not have it
     #"with-fan-layer",
     "with-laser",
     "with-ps-on",
@@ -430,9 +430,9 @@ alloc-cortex-m = { version = "0.4", optional = true}
 critical-section = {version = "1.2", default-features = false}
 
 embassy-stm32 = { version = "0.1", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.6", default-features = false, features = ["executor-thread"], optional = true }
+embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread"], optional = true }
 embassy-sync = { version = "0.6", features = [] }
-embassy-time = { version = "0.3", features = [] }
+embassy-time = { version = "0.4", features = [] }
 embassy-futures = { version = "0.1", features = [] }
 embassy-embedded-hal = { version = "0.2", features = [], optional = true }
 embassy-usb = { version = "0.3", features = [], optional = true }

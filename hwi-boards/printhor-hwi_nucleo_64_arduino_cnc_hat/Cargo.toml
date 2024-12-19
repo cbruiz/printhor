@@ -59,12 +59,12 @@ cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single
 cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4", default-features = false, features = [] }
 
-embassy-stm32 = { version = "0.1", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0.6", default-features = false, features = ["arch-cortex-m"] }
-embassy-sync = { version = "0.6", features = [] }
-embassy-time = { version = "0.3", features = [] }
-embassy-futures = { version = "0.1", features = [] }
-embassy-usb = { version = "0.3", features = [], optional = true }
+embassy-stm32 = { version = "0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "0", default-features = false, features = ["arch-cortex-m"] }
+embassy-sync = { version = "0", features = [] }
+embassy-time = { version = "0", features = [] }
+embassy-futures = { version = "0", features = [] }
+embassy-usb = { version = "0", features = [], optional = true }
 
 printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-utils" }

@@ -51,10 +51,10 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
-embassy-stm32 = { version = "*", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "*", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
-embassy-sync = { version = "*", features = [] }
-embassy-time = { version = "*", features = ["tick-hz-1_000_000"] }
+embassy-stm32 = { version = "0", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
+embassy-executor = { version = "0", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
+embassy-sync = { version = "0", features = [] }
+embassy-time = { version = "0", features = ["tick-hz-1_000_000"] }
 embassy-futures = { version = "*", features = [] }
 embassy-usb = { version = "*", features = [], optional = true }
 

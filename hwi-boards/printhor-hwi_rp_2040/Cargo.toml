@@ -58,7 +58,7 @@ cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-rp = { version = "0", default-features = false, features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
-embassy-executor = { version = "0", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m", "integrated-timers"] }
+embassy-executor = { version = "0.7", default-features = false, features = ["defmt", "arch-cortex-m", "executor-thread"] }
 embassy-sync = { version = "0", features = ["defmt"] }
 embassy-time = { version = "0", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }
