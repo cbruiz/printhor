@@ -1,0 +1,20 @@
+[package]
+name = "printhor-hwa-common-macros"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+proc-macro2 = "1.0"
+
+[dev-dependencies]
+printhor-hwa-common = {version = "0", path = "../printhor-hwa-common"}
+printhor-hwa-utils = {version = "0", path = "../printhor-hwa-utils"}
+
+[lib]
+proc-macro = true

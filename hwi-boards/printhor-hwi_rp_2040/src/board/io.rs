@@ -4,7 +4,8 @@ pub mod usbserial {
 
     pub type USBSerialDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
     pub type USBSerialDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, USBDrv>;
-    pub type USBSerialTxControllerRef = printhor_hwa_common::StandardControllerRef<USBSerialDeviceSender>;
+    pub type USBSerialTxControllerRef =
+        printhor_hwa_common::StandardControllerRef<USBSerialDeviceSender>;
 
     pub struct USBSerialDevice {
         pub builder: Option<embassy_usb::Builder<'static, USBDrv>>,
@@ -12,7 +13,7 @@ pub mod usbserial {
         pub receiver: USBSerialDeviceReceiver,
     }
 
-    #[embassy_executor::task(pool_size=1)]
+    #[embassy_executor::task(pool_size = 1)]
     #[allow(unreachable_code)]
     pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
         defmt::info!("Running usb task...");
@@ -22,7 +23,6 @@ pub mod usbserial {
 
     impl USBSerialDevice {
         pub fn new(driver: USBDrv) -> Self {
-
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
             config.manufacturer = Some("Printor");
             config.product = Some("Printor-USBSerial");
@@ -33,22 +33,40 @@ pub mod usbserial {
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
             #[link_section = ".bss"]
-            static DEVICE_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let device_descriptor = DEVICE_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
+            static DEVICE_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> =
+                crate::board::TrackedStaticCell::new();
+            let device_descriptor =
+                DEVICE_DESCRIPTOR_ST.init::<{ crate::MAX_STATIC_MEMORY }>("", [0; 256]);
             #[link_section = ".bss"]
-            static CONFIG_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let config_descriptor = CONFIG_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
+            static CONFIG_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> =
+                crate::board::TrackedStaticCell::new();
+            let config_descriptor =
+                CONFIG_DESCRIPTOR_ST.init::<{ crate::MAX_STATIC_MEMORY }>("", [0; 256]);
             #[link_section = ".bss"]
-            static BOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> = crate::board::TrackedStaticCell::new();
-            let bos_descriptor = BOS_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 256]);
+            static BOS_DESCRIPTOR_ST: crate::board::TrackedStaticCell<[u8; 256]> =
+                crate::board::TrackedStaticCell::new();
+            let bos_descriptor =
+                BOS_DESCRIPTOR_ST.init::<{ crate::MAX_STATIC_MEMORY }>("", [0; 256]);
             #[link_section = ".bss"]
-            static CONTROL_BUF_ST: crate::board::TrackedStaticCell<[u8; 64]> = crate::board::TrackedStaticCell::new();
-            let control_buf = CONTROL_BUF_ST.init::<{crate::MAX_STATIC_MEMORY}>("", [0; 64]);
+            static CONTROL_BUF_ST: crate::board::TrackedStaticCell<[u8; 64]> =
+                crate::board::TrackedStaticCell::new();
+            let control_buf = CONTROL_BUF_ST.init::<{ crate::MAX_STATIC_MEMORY }>("", [0; 64]);
 
             #[link_section = ".bss"]
-            static STATE_ST: crate::board::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = crate::board::TrackedStaticCell::new();
-            let state = STATE_ST.init::<{crate::MAX_STATIC_MEMORY}>("", embassy_usb::class::cdc_acm::State::new());
-            let mut builder = embassy_usb::Builder::new(driver, config, device_descriptor, config_descriptor, bos_descriptor, control_buf);
+            static STATE_ST: crate::board::TrackedStaticCell<embassy_usb::class::cdc_acm::State> =
+                crate::board::TrackedStaticCell::new();
+            let state = STATE_ST.init::<{ crate::MAX_STATIC_MEMORY }>(
+                "",
+                embassy_usb::class::cdc_acm::State::new(),
+            );
+            let mut builder = embassy_usb::Builder::new(
+                driver,
+                config,
+                device_descriptor,
+                config_descriptor,
+                bos_descriptor,
+                control_buf,
+            );
 
             //crate::info!("Creating USB CLASS");
 
@@ -65,23 +83,18 @@ pub mod usbserial {
         }
 
         pub fn spawn(&mut self, spawner: crate::board::Spawner) {
-            self.builder.take().map(|builder| {
-                match spawner.spawn(usb_task(builder.build())) {
-                    Ok(_) => {
-                        ()
-                    }
+            self.builder
+                .take()
+                .map(|builder| match spawner.spawn(usb_task(builder.build())) {
+                    Ok(_) => (),
                     Err(_) => {
                         panic!("Unable to spawn USB task")
                     }
-                }
-            });
+                });
         }
 
         pub fn split(self) -> (USBSerialDeviceReceiver, USBSerialDeviceSender) {
-            (
-                self.receiver,
-                self.sender,
-            )
+            (self.receiver, self.sender)
         }
     }
 
@@ -103,18 +116,15 @@ pub mod usbserial {
         }
     }
 
-    impl async_gcode::ByteStream for USBSerialDeviceInputStream
-    {
+    impl async_gcode::ByteStream for USBSerialDeviceInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
-
             if self.current_byte_index < self.bytes_read {
                 let byte = self.buffer[self.current_byte_index as usize];
                 self.current_byte_index += 1;
                 Some(Ok(byte))
-            }
-            else {
+            } else {
                 self.current_byte_index = 0;
                 self.bytes_read = 0;
                 self.receiver.wait_connection().await;
@@ -127,14 +137,11 @@ pub mod usbserial {
                             let byte = self.buffer[self.current_byte_index as usize];
                             self.current_byte_index += 1;
                             Some(Ok(byte))
-                        }
-                        else {
+                        } else {
                             None
                         }
                     }
-                    Err(_e) => {
-                        None
-                    }
+                    Err(_e) => None,
                 }
             }
         }
@@ -143,8 +150,8 @@ pub mod usbserial {
 
 #[cfg(feature = "with-serial-port-1")]
 pub mod uart_port1 {
-    use crate::board::device::UartPort1RxDevice;
     use crate::board::device::UartPort1RingBufferedRxDevice;
+    use crate::board::device::UartPort1RxDevice;
     use printhor_hwa_common::TrackedStaticCell;
 
     pub struct UartPort1RxInputStream {
@@ -153,9 +160,13 @@ pub mod uart_port1 {
 
     impl UartPort1RxInputStream {
         pub fn new(receiver: UartPort1RxDevice) -> Self {
-            #[link_section =".bss"]
-            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
-            let buffer = BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]);
+            #[link_section = ".bss"]
+            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> =
+                TrackedStaticCell::new();
+            let buffer = BUFF.init::<{ crate::board::MAX_STATIC_MEMORY }>(
+                "UartPort1RXRingBuff",
+                [0; crate::UART_PORT1_BUFFER_SIZE],
+            );
 
             Self {
                 receiver: receiver.into_ring_buffered(buffer),
@@ -163,12 +174,10 @@ pub mod uart_port1 {
         }
     }
 
-    impl async_gcode::ByteStream for UartPort1RxInputStream
-    {
+    impl async_gcode::ByteStream for UartPort1RxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
-
             let mut buff: [u8; 1] = [0; 1];
 
             match self.receiver.read(&mut buff).await {
@@ -180,8 +189,8 @@ pub mod uart_port1 {
 }
 #[cfg(feature = "with-serial-port-2")]
 pub mod uart_port2 {
-    use crate::board::device::UartPort2RxDevice;
     use crate::board::device::UartPort2RingBufferedRxDevice;
+    use crate::board::device::UartPort2RxDevice;
     use printhor_hwa_common::TrackedStaticCell;
 
     pub struct UartPort2RxInputStream {
@@ -190,9 +199,13 @@ pub mod uart_port2 {
 
     impl UartPort2RxInputStream {
         pub fn new(receiver: UartPort2RxDevice) -> Self {
-            #[link_section =".bss"]
-            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT2_BUFFER_SIZE]> = TrackedStaticCell::new();
-            let buffer = BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort2RXRingBuff", [0; crate::UART_PORT2_BUFFER_SIZE]);
+            #[link_section = ".bss"]
+            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT2_BUFFER_SIZE]> =
+                TrackedStaticCell::new();
+            let buffer = BUFF.init::<{ crate::board::MAX_STATIC_MEMORY }>(
+                "UartPort2RXRingBuff",
+                [0; crate::UART_PORT2_BUFFER_SIZE],
+            );
 
             Self {
                 receiver: receiver.into_ring_buffered(buffer),
@@ -200,12 +213,10 @@ pub mod uart_port2 {
         }
     }
 
-    impl async_gcode::ByteStream for UartPort2RxInputStream
-    {
+    impl async_gcode::ByteStream for UartPort2RxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
-
             let mut buff: [u8; 1] = [0; 1];
 
             match self.receiver.read(&mut buff).await {

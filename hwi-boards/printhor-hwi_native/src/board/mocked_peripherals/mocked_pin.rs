@@ -1,9 +1,6 @@
 use embassy_time::{Duration, Timer};
-use printhor_hwa_common::TrackedStaticCell;
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-use crate::device::AdcPinTrait;
 
-type PinsCell<T> = std::sync::Mutex<T>;
+pub(crate) type PinsCell<T> = std::sync::Mutex<T>;
 
 pub type PinStateRef = &'static PinsCell<PinState>;
 
@@ -14,7 +11,7 @@ pub(crate) struct PinState {
     digital: [bool; NUM_PINS],
 }
 impl PinState {
-    const fn new() -> Self {
+   pub(crate)  const fn new() -> Self {
         Self {
             digital: [false; NUM_PINS]
         }
@@ -29,13 +26,6 @@ impl PinState {
     pub(crate) fn get(&self, id: u8) -> bool {
         self.digital[id as usize]
     }
-}
-#[link_section = "__DATA,.bss"]
-static GLOBAL_PIN_STATE: TrackedStaticCell<PinsCell<PinState>> = TrackedStaticCell::new();
-
-#[inline]
-pub(crate) fn init_pin_state() -> PinStateRef {
-    GLOBAL_PIN_STATE.init::<{crate::MAX_STATIC_MEMORY}>("GlobaPinState", PinsCell::new(PinState::new()))
 }
 
 pub struct MockedIOPin {
@@ -122,47 +112,19 @@ impl MockedIOPin {
     }
 }
 
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for MockedIOPin {
 
-}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-spi")] {
+        use embedded_hal_02::digital::v2;
+        impl v2::OutputPin for MockedIOPin {
+            type Error = core::convert::Infallible;
+            fn set_low(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
 
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl<T> AdcPinTrait<crate::board::mocked_peripherals::MockedAdc<T>> for u8 {
-
-}
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl AdcPinTrait<u8> for u8 {
-
-}
-
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-impl AdcPinTrait<u8> for MockedIOPin {
-
-}
-
-#[cfg(feature = "with-hot-bed")]
-impl<'a, ADC, Word, PIN> embedded_hal_02::adc::OneShot<ADC, Word, PIN> for MockedIOPin
-where PIN: embedded_hal_02::adc::Channel<ADC>
-{
-
-    type Error = u8;
-    fn read(&mut self, _: &mut PIN) -> Result<Word, nb::Error<u8>> {
-        todo!()
-    }
-
-}
-
-
-#[cfg(feature = "with-spi")]
-impl<T> embedded_hal::digital::v2::OutputPin for MockedIOPin<'_, T> {
-    type Error = core::convert::Infallible;
-    fn set_low(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    fn set_high(&mut self) -> Result<(), Self::Error> {
-        Ok(())
+            fn set_high(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
+        }
     }
 }

@@ -4,3 +4,6 @@
 [submodule "libs/async-gcode"]
 	path = libs/async-gcode
 	url = https://github.com/cbruiz/async-gcode.git
+[submodule "libs/unix-fifo-async"]
+	path = libs/unix-fifo-async
+	url = https://github.com/cbruiz/unix-fifo-async.git

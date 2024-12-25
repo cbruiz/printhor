@@ -1,0 +1,5 @@
+[toolchain]
+channel = "stable"
+components = [ "rustfmt", "rustc-dev" ]
+#targets = [ "thumbv6m-none-eabi", "thumbv7em-none-eabi", "thumbv7em-none-eabihf", "thumbv7m-none-eabi" ]
+profile = "minimal"

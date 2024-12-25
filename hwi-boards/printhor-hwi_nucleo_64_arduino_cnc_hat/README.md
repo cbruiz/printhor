@@ -11,7 +11,7 @@
 
 There are two base boards supported in this category.
 The assumption/requirement is to use any of these generic purpose development board with the Arduino CNC Shield v3 (hat):
-![alt text](../../datasheets/NUCLEO-L476RG_CNC_SHIELD_V3/Arduino-CNC-Shield-Pinout-V3.XX.jpeg "Arduino CNC Shield v3")
+![alt text](../../datasheets/NUCLEO-L476RG/Arduino-CNC-Shield-Pinout-V3.XX.jpeg "Arduino CNC Shield v3")
 
 In these development boards, flash and run can be directly performed with probe-rs just connecting USB as they have a built-in SWD/JTAG interface:
 
