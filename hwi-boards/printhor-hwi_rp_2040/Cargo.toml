@@ -39,6 +39,15 @@ with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 nightly = ["embassy-executor/nightly"]
 cooperative = ["embassy-time/generic-queue-128"]
@@ -59,8 +68,8 @@ alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embassy-rp = { version = "0", default-features = false, features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
 embassy-executor = { version = "0.7", default-features = false, features = ["defmt", "arch-cortex-m", "executor-thread"] }
-embassy-sync = { version = "0", features = ["defmt"] }
-embassy-time = { version = "0", features = ["defmt"] }
+embassy-sync = { version = "0.6", features = ["defmt"] }
+embassy-time = { version = "0.4", features = ["defmt"] }
 embassy-futures = { version = "0", features = ["defmt"] }
 embassy-usb = { version = "0", features = [], optional = true }
 
@@ -70,11 +79,11 @@ async-gcode = {version = "0", default-features = false, features=["parse-trailin
 futures = { version = "0.3", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
 
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
-embedded-hal-02 = { package = "embedded-hal", version = "0", features = ["unproven", ] }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
 embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
 
 cfg-if = { version = "1" }
-const_env = { version = "0" }
+const_env = { version = "0.1" }
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }

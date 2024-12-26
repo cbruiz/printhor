@@ -1,4 +1,9 @@
 //! IO device wrappers for nucleo64-L476RG (STM32L476RG)
+use printhor_hwa_common as hwa;
+use hwa::math::CoordSel;
+use printhor_hwa_common::math;
+use printhor_hwa_common::math::Real;
+
 #[cfg(feature = "with-serial-usb")]
 compile_error!("Not supported");
 
@@ -100,5 +105,74 @@ pub mod adc {
                 readings[0]
             }
         }
+    }
+}
+
+pub struct MotionI2c {
+    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Blocking>>,
+    state: [pwm_pca9685::ChannelOnOffControl; 16],
+}
+
+impl MotionI2c {
+    pub fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Blocking>) -> Self {
+
+        let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
+        let mut pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();
+
+        pwm.disable().unwrap();
+        hwa::info!("setting i2c prescale...");
+        pwm.set_prescale(125).unwrap();
+        //pwm.set_prescale(255).unwrap();
+        hwa::info!("enabling i2c...");
+        pwm.enable().unwrap();
+
+        // period = 20 ms = 4095 count
+        // dmin(-90) = 1ms = 204.75 count
+        // dmax(+90) = 2ms = 409.50 count
+        // dmed(0) = 1.5ms = (204.75 + 409.50)/2 = 307.125 count ~= 307
+        // count_per_deg = (409.50 - 204.75) / 180 = 1.13750000
+        // count_per_deg = (409 - 205) / 180 = 1.13750000
+
+        // count(angle) = round(307.125 + (1.13750000 * angle))
+
+        let mut instance = Self {
+            pwm,
+            state: [pwm_pca9685::ChannelOnOffControl{
+                on: 0,
+                off: 0,
+                full_on: false,
+                full_off: false,
+            }; 16],
+        };
+        for _servo in CoordSel::all_axis().iter() {
+            instance.set_angle(_servo, &math::ZERO);
+        }
+        instance.apply();
+        hwa::info!("setting i2c done");
+        instance
+    }
+
+    pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
+        let pwm = (
+            (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
+        ).max(205).min(409) as u16;
+        let index = axis.index();
+        if index < 16 {
+            if self.state[index].off != pwm {
+                //hwa::info!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
+                self.state[index].off = pwm;
+                true
+            }
+            else {
+                false
+            }
+        }
+        else {
+            false
+        }
+    }
+
+    pub fn apply(&mut self) {
+        let _ = self.pwm.set_all_channels(&self.state);
     }
 }

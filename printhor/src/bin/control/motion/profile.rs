@@ -3,8 +3,9 @@
 //! \[1\] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)
 
 use crate::control::CodeExecutionFailure;
-use crate::math::*;
-use crate::{hwa, math};
+use crate::hwa;
+use hwa::math;
+use hwa::math::*;
 
 /// The `MotionProfile` trait provides methods for evaluating motion profiles.
 pub trait MotionProfile {
@@ -1335,7 +1336,7 @@ pub mod test {
 
     use crate::control::motion::{Constraints, SCurveMotionProfile};
     use crate::control::CodeExecutionFailure;
-    use crate::math::Real;
+    use crate::hwa::math::Real;
     use num_traits::ToPrimitive;
 
     pub fn do_compute(

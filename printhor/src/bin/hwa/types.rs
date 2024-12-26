@@ -18,6 +18,18 @@ cfg_if::cfg_if! {
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+        pub type MotionBroadcastChannel = hwa::GenericMotionBroadcastChannel<
+            <hwa::Contract as HwiContract>::MotionBroadcastChannelMutexType
+        >;
+
+        pub type MotionSender = hwa::StaticAsyncController<
+            <hwa::Contract as HwiContract>::MotionSenderMutexStrategy
+        >;
+    }
+}
+
 pub type WatchDogController =
     hwa::StaticAsyncController<<hwa::Contract as HwiContract>::WatchDogMutexStrategy>;
 
@@ -41,11 +53,13 @@ cfg_if::cfg_if! {
             hwa::controllers::MotionConfigContent
         >;
 
+        pub type MotionConfig = hwa::StaticSyncController<MotionConfigMutexStrategy>;
+
         pub type MotionStatusMutexStrategy = hwa::SyncStandardStrategy<
             <hwa::Contract as HwiContract>::MotionStatusMutexType,
             hwa::controllers::MotionStatusContent
         >;
-        pub type MotionStatus = hwa::StaticAsyncController<MotionStatusMutexStrategy>;
+        pub type MotionStatus = hwa::StaticSyncController<MotionStatusMutexStrategy>;
 
         pub type MotionDriverMutexStrategy = hwa::AsyncStandardStrategy<
             <hwa::Contract as HwiContract>::MotionDriverMutexType,
@@ -74,6 +88,14 @@ cfg_if::cfg_if! {
         pub type SerialPort2InputStream = <hwa::Contract as HwiContract>::SerialPort2Rx;
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-i2c")] {
+        pub type I2CMotionMutexStrategy = <hwa::Contract as HwiContract>::I2cMotionMutexStrategy;
+        pub type I2CMotionController = hwa::StaticSyncController<I2CMotionMutexStrategy>;
+    }
+}
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
         pub type PSOnController = hwa::StaticSyncController<

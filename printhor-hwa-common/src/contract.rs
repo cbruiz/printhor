@@ -78,6 +78,11 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
+
+            /// The world unit magnitude. by default: mm
+            #[const_env::from_env("WORLD_UNIT_MAGNITUDE")]
+            const WORLD_UNIT_MAGNITUDE: &'static str = "mm";
+
             /// The frequency at which a segment is sampled for the motion planner.
             /// For instance:
             ///
@@ -96,6 +101,18 @@ pub trait HwiContract: Sized {
             /// The queue size of Motion Planner RingBuffer
             /// Should be not very high, so capped to u8
             const SEGMENT_QUEUE_SIZE: u8;
+
+            /// Default max speed in world units by second
+            const DEFAULT_MAX_SPEED: hwa::math::TVector<u32>;
+            const DEFAULT_MAX_ACCEL: hwa::math::TVector<u32>;
+            const DEFAULT_MAX_JERK: hwa::math::TVector<u32>;
+            const DEFAULT_TRAVEL_SPEED: u16;
+
+            const DEFAULT_UNITS_PER_MM: hwa::math::TVector<f32>;
+
+            const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16>;
+
+            const DEFAULT_MACHINE_BOUNDS: hwa::math::TVector<f32>;
         }
     }
 
@@ -175,6 +192,14 @@ pub trait HwiContract: Sized {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+            type MotionBroadcastChannelMutexType: hwa::AsyncRawMutex;
+
+            type MotionSenderMutexStrategy: hwa::AsyncMutexStrategy;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             type MotionPinsMutexType: hwa::SyncRawMutex;
             type MotionRingBufferMutexType: hwa::AsyncRawMutex;
@@ -232,6 +257,13 @@ pub trait HwiContract: Sized {
         if #[cfg(feature = "with-spi")] {
             const SPI_FREQUENCY: u32;
             type SpiController: hwa::AsyncMutexStrategy;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-i2c")] {
+            const I2C_FREQUENCY: u32;
+            type I2cMotionMutexStrategy: hwa::AsyncMutexStrategy;
         }
     }
 
@@ -335,6 +367,15 @@ pub trait HwiContract: Sized {
 
     #[cfg(feature = "with-motion")]
     fn resume_ticker();
+
+    #[cfg(feature = "with-motion-broadcast")]
+    type HighPriorityCore;
+
+    #[cfg(feature = "with-motion-broadcast")]
+    fn launch_high_priotity<S: 'static + Sized + Send>(
+        _core: Self::HighPriorityCore,
+        token: embassy_executor::SpawnToken<S>,
+    ) -> Result<(), ()>;
 }
 
 pub struct HwiContext<C>
@@ -358,12 +399,21 @@ where
     #[cfg(feature = "with-serial-port-2")]
     pub serial_port2_rx_stream: C::SerialPort2Rx,
 
+    #[cfg(feature = "with-spi")]
+    pub spi: hwa::StaticAsyncController<C::SpiController>,
+
+    #[cfg(feature = "with-i2c")]
+    pub i2c: hwa::StaticAsyncController<C::I2cMotionMutexStrategy>,
+
     #[cfg(feature = "with-ps-on")]
     pub ps_on: hwa::StaticSyncController<C::PSOnMutexStrategy>,
 
     /// As of now, this mut be holdable
     #[cfg(feature = "with-motion")]
     pub motion_pins: C::MotionPins,
+
+    #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
+    pub motion_sender: hwa::StaticAsyncController<C::MotionSenderMutexStrategy>,
 
     #[cfg(feature = "with-probe")]
     pub probe_pwm: hwa::StaticSyncController<C::ProbePwm>,
@@ -415,4 +465,7 @@ where
 
     #[cfg(feature = "with-fan-extra-1")]
     pub fan_extra1_pwm_channel: C::FanExtra1PwmChannel,
+
+    #[cfg(feature = "with-motion-broadcast")]
+    pub high_priority_core: C::HighPriorityCore,
 }

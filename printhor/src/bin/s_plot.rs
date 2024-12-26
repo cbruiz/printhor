@@ -1,3 +1,5 @@
+fn main() {}
+/*
 cfg_if::cfg_if! {if #[cfg(feature="broken")] {
 extern crate alloc;
 extern crate core;
@@ -299,7 +301,7 @@ async fn main(spawner: embassy_executor::Spawner) {
     motion_planner.start(&event_bus).await;
 
     {
-        let units_per_mm = motion_planner.get_steps_per_mm_as_vector().await;
+        let units_per_wu_s = motion_planner.get_steps_per_world_unit_as_vector().await;
         let mm_per_unit = units_per_mm * motion_planner.get_usteps_as_vector().await;
         let mm_per_step = TVector::one() / mm_per_unit;
         hwa::info!("* mm_per_step: [{}] (== min speed mm/s)", mm_per_step);
@@ -747,3 +749,4 @@ pub fn initialization_error() {
     fn main() {}
 }
 }
+*/

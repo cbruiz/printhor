@@ -5,7 +5,6 @@ use core::future::{poll_fn, Future};
 use core::task::{Context, Poll};
 use critical_section::Mutex as CsMutex;
 use embassy_sync::waitqueue::WakerRegistration;
-use printhor_hwa_common::StepperChannel;
 
 /// The size of the timer queue.
 const TIMER_QUEUE_SIZE: usize = 4;
@@ -47,14 +46,14 @@ pub struct SoftTimerDriver {
     waker: WakerRegistration,
 
     /// Flags indicating the current enabled stepper channels.
-    current_stepper_enable_flags: StepperChannel,
+    current_stepper_enable_flags: hwa::CoordSel,
 
     /// Flags indicating the current forward direction stepper channels.
-    current_stepper_dir_fwd_flags: StepperChannel,
+    current_stepper_dir_fwd_flags: hwa::CoordSel,
 
     /// The number of pulses generated for each stepper channel (for debugging/testing).
     #[cfg(any(feature = "assert-motion", test))]
-    pub pulses: [u32; 4],
+    pub pulses: hwa::math::TVector<u32>,
 }
 
 impl SoftTimerDriver {
@@ -96,15 +95,26 @@ impl SoftTimerDriver {
                     }
                     Some(pins) => {
                         cfg_if::cfg_if! {
+                            if #[cfg(feature = "with-motion-broadcast")] {
+                                if pins.broadcast_channel.try_send(
+                                    hwa::MotionBroadcastEvent::Delta(self.current.delta)
+                                ).is_err() {
+                                    hwa::warn!("Unable to broadcast: Overflow");
+                                }
+                                self.current.ref_time_us += self.current.interval_width
+                            }
+                        }
+
+                        cfg_if::cfg_if! {
                             if #[cfg(feature = "debug-signals")] {
                                 use core::ops::BitAnd;
-                                let dir_mask = StepperChannel::all().bitand(
-                                    (StepperChannel::Y | StepperChannel::X).complement()
+                                let dir_mask = hwa::CoordSel::all_axis().bitand(
+                                    (hwa::CoordSel::Y | hwa::CoordSel::X).complement()
                                 );
-                                pins.set_forward_direction(StepperChannel::Y, StepperChannel::Y);
+                                pins.set_forward_direction(hwa::CoordSel::Y, hwa::CoordSel::Y);
                             }
                             else {
-                                let dir_mask = StepperChannel::all();
+                                let dir_mask = hwa::CoordSel::all_axis();
                             }
                         }
 
@@ -209,14 +219,14 @@ impl SoftTimerDriver {
         }
 
         if self.tick_count >= self.current.interval_width {
-            hwa::trace!("u-segment completed in {} us", self.tick_count);
+            //hwa::info!("u-segment completed in {} us", self.tick_count);
             if self.try_consume() {}
             cfg_if::cfg_if! {
                 if #[cfg(feature = "debug-signals")] {
                     match self.pins.as_ref() {
                         None => {}
                         Some(pins) => {
-                            pins.set_forward_direction(StepperChannel::empty(), StepperChannel::Y);
+                            pins.set_forward_direction(hwa::CoordSel::empty(), hwa::CoordSel::Y);
                         }
                     }
                 }
@@ -254,7 +264,7 @@ impl SoftTimerDriver {
     /// // Assuming a `StepperChannel` instance named `channel` and a mutable reference of `SoftTimerDriver` named `driver`
     /// let is_applied = driver.apply(channel);
     /// ```
-    fn apply(&mut self, channels: StepperChannel) -> bool {
+    fn apply(&mut self, channels: hwa::CoordSel) -> bool {
         if channels.is_empty() {
             true
         } else {
@@ -274,18 +284,15 @@ impl SoftTimerDriver {
                     }
                     cfg_if::cfg_if! {
                         if #[cfg(feature = "assert-motion")] {
-                            if _channel.contains(StepperChannel::X) {
-                                self.pulses[0] += 1;
-                            }
-                            if _channel.contains(StepperChannel::Y) {
-                                self.pulses[1] += 1;
-                            }
-                            if _channel.contains(StepperChannel::Z) {
-                                self.pulses[2] += 1;
-                            }
-                            if _channel.contains(StepperChannel::E) {
-                                self.pulses[3] += 1;
-                            }
+                            self.pulses.apply(|c, val| {
+                                let v = val.unwrap_or(0);
+                                if channels.contains(c.into()) {
+                                    Some(v + 1)
+                                }
+                                else {
+                                    Some(v)
+                                }
+                            });
                         }
                     }
                     true
@@ -362,7 +369,7 @@ impl SoftTimer {
     /// ```
     pub const fn new() -> Self {
         Self(CsMutex::new(RefCell::new(SoftTimerDriver {
-            current: StepPlanner::new(),
+            current: StepPlanner::new(hwa::MotionDelta::new()),
             state: State::Idle,
             queue: [None; TIMER_QUEUE_SIZE],
             head: 0,
@@ -371,10 +378,10 @@ impl SoftTimer {
             num_queued: 0,
             tail: 0,
             pins: None,
-            current_stepper_enable_flags: StepperChannel::empty(),
-            current_stepper_dir_fwd_flags: StepperChannel::empty(),
+            current_stepper_enable_flags: hwa::CoordSel::empty(),
+            current_stepper_dir_fwd_flags: hwa::CoordSel::empty(),
             #[cfg(any(feature = "assert-motion", test))]
-            pulses: [0, 0, 0, 0],
+            pulses: hwa::math::TVector::new(),
         })))
     }
 
@@ -440,12 +447,19 @@ impl SoftTimer {
     /// A future that resolves to `()` once the segment has been successfully queued.
     pub fn push(
         &self,
+        delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
-        stepper_enable_flags: StepperChannel,
-        stepper_dir_fwd_flags: StepperChannel,
+        stepper_enable_flags: hwa::CoordSel,
+        stepper_dir_fwd_flags: hwa::CoordSel,
     ) -> impl Future<Output = ()> + '_ {
         poll_fn(move |cx| {
-            self.poll_push(cx, multi_timer, stepper_enable_flags, stepper_dir_fwd_flags)
+            self.poll_push(
+                cx,
+                delta,
+                multi_timer,
+                stepper_enable_flags,
+                stepper_dir_fwd_flags,
+            )
         })
     }
 
@@ -465,9 +479,10 @@ impl SoftTimer {
     fn poll_push(
         &self,
         cx: &mut Context<'_>,
+        delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
-        stepper_enable_flags: StepperChannel,
-        stepper_dir_fwd_flags: StepperChannel,
+        stepper_enable_flags: hwa::CoordSel,
+        stepper_dir_fwd_flags: hwa::CoordSel,
     ) -> Poll<()> {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
@@ -479,6 +494,7 @@ impl SoftTimer {
                 let current_tail = r.tail;
                 hwa::trace!("u-segment queued at {}", current_tail);
                 r.queue[current_tail as usize] = Some(StepPlanner::from(
+                    delta,
                     multi_timer,
                     stepper_enable_flags,
                     stepper_dir_fwd_flags,
@@ -547,8 +563,8 @@ impl SoftTimer {
     pub fn reset(&self) {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
-            r.current_stepper_dir_fwd_flags = StepperChannel::UNSET;
-            r.current_stepper_dir_fwd_flags = StepperChannel::UNSET;
+            r.current_stepper_dir_fwd_flags = hwa::CoordSel::UNSET;
+            r.current_stepper_dir_fwd_flags = hwa::CoordSel::UNSET;
         });
     }
 
@@ -582,14 +598,9 @@ impl SoftTimer {
             } else {
                 cfg_if::cfg_if! {
                     if #[cfg(any(feature = "assert-motion", test))] {
-                        let pulses = crate::math::TVector::from_coords(
-                            Some(r.pulses[0]), Some(r.pulses[1]), Some(r.pulses[2]), Some(r.pulses[3])
-                        );
-                        hwa::trace!("Pulses: {:?}", pulses);
-                        r.pulses[0] = 0;
-                        r.pulses[1] = 0;
-                        r.pulses[2] = 0;
-                        r.pulses[3] = 0;
+                        hwa::trace!("Pulses: {:?}", r.pulses);
+                        let pulses = r.pulses;
+                        r.pulses.set_coord(hwa::CoordSel::all_axis(), Some(0));
                         Poll::Ready(pulses)
                     }
                     else {
@@ -683,7 +694,7 @@ pub extern "Rust" fn do_tick() {
                 match &step_driver.pins {
                     None => {}
                     Some(pins) => {
-                        pins.set_forward_direction(StepperChannel::X, StepperChannel::X)
+                        pins.set_forward_direction(CoordSel::X, CoordSel::X)
                     }
                 }
             }
@@ -694,7 +705,7 @@ pub extern "Rust" fn do_tick() {
                 match &step_driver.pins {
                     None => {}
                     Some(pins) => {
-                        pins.set_forward_direction(StepperChannel::empty(), StepperChannel::X)
+                        pins.set_forward_direction(hwa::CoordSel::empty(), hwa::CoordSel::X)
                     }
                 }
             }

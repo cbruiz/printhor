@@ -44,6 +44,15 @@ with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 nightly = []
 cooperative = []
@@ -60,10 +69,10 @@ defmt = {version = "0.3", default-features = false }
 
 printhor-hwa-common = { version = "0.0"}
 
-embassy-stm32 = { version = "0", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
+embassy-stm32 = { version = "0.2", default-features = false, features = ["defmt", "rt", "unstable-pac"] }
 embassy-executor = { version = "0.7", default-features = false, features = ["defmt", "executor-thread", "arch-cortex-m"] }
 embassy-sync = { version = "0", features = ["defmt"] }
-embassy-time = { version = "0", features = ["defmt", "defmt-timestamp-uptime"] }
+embassy-time = { version = "0.4", features = ["defmt", "defmt-timestamp-uptime"] }
 embassy-futures = { version = "0", features = [] }
 embassy-usb = { version = "*", features = [], optional = true }
 
@@ -72,7 +81,7 @@ cortex-m-rt = { version = "0.7.3", default-features = false, features = [] }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
 
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.17", default-features = false, features = [] }

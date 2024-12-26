@@ -35,6 +35,15 @@ with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 nightly = []
 cooperative = ["embassy-time/generic-queue-128"]
@@ -51,18 +60,18 @@ cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-sing
 cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 
-embassy-stm32 = { version = "0", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "0", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
-embassy-sync = { version = "0", features = [] }
-embassy-time = { version = "0", features = ["tick-hz-1_000_000"] }
-embassy-futures = { version = "*", features = [] }
-embassy-usb = { version = "*", features = [], optional = true }
+embassy-stm32 = { version = "0.2", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
+embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
+embassy-sync = { version = "0.6", features = [] }
+embassy-time = { version = "0.4", features = ["tick-hz-1_000_000"] }
+embassy-futures = { version = "0.1", features = [] }
+embassy-usb = { version = "0.3", features = [], optional = true }
 
 printhor-hwa-common = { version = "0.0"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 futures = { version = "0.3.30", default-features = false, features = [] }
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven", ] }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
 
 cfg-if = {version = "1.0.0"}
 const_env = { version = "0.1" }

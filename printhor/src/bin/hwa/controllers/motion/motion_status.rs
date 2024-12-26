@@ -1,6 +1,6 @@
-use crate::{hwa, math};
+use crate::hwa;
+use hwa::math::{CoordSel, Real, TVector};
 use hwa::SyncMutexStrategy;
-use math::{CoordSel, Real, TVector};
 
 pub struct MotionStatus {
     cfg: hwa::StaticSyncController<hwa::types::MotionStatusMutexStrategy>,
@@ -11,14 +11,14 @@ impl MotionStatus {
         Self { cfg }
     }
 
-    pub fn set_last_planned_position(&self, position: &math::TVector<Real>) {
+    pub fn set_last_planned_position(&self, position: &hwa::math::TVector<Real>) {
         self.cfg.apply_mut(|m| {
             m.last_planned_pos.replace(*position);
         })
     }
 
     pub fn set_last_planned_real_position(&self, pos: &TVector<Real>) {
-        let p = pos.map_nan(&crate::math::ZERO);
+        let p = pos.map_nan(&hwa::math::ZERO);
         self.cfg.apply_mut(|m| {
             m.last_real_pos.replace(p);
         });
@@ -36,7 +36,14 @@ impl MotionStatus {
     pub fn update_last_planned_position(&self, updated_position_coords: &TVector<Real>) {
         self.cfg.apply_mut(|m| {
             if let Some(last_position) = &mut m.last_planned_pos {
-                last_position.assign_if_set(CoordSel::XYZ, updated_position_coords);
+                cfg_if::cfg_if! {
+                    if #[cfg(feature="with-e-axis")] {
+                        last_position.assign_if_set(CoordSel::all().difference(CoordSel::E), updated_position_coords);
+                    }
+                    else {
+                        last_position.assign_if_set(CoordSel::all(), updated_position_coords);
+                    }
+                }
             }
         });
     }

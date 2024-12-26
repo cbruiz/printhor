@@ -13,18 +13,18 @@
 //! TODO: This is a work still in progress
 
 use crate::control;
+use crate::control::motion::MotionProfile;
 use crate::hwa;
-use crate::math;
-use crate::math::Real;
-use crate::math::{CoordSel, TVector};
 use control::motion::SCurveMotionProfile;
 use embassy_time::Duration;
 use hwa::controllers::motion::SegmentIterator;
 use hwa::controllers::motion::STEP_DRIVER;
 use hwa::controllers::ExecPlan;
 use hwa::controllers::LinearMicrosegmentStepInterpolator;
-use hwa::HwiContract;
-use hwa::StepperChannel;
+use hwa::math;
+use hwa::math::{CoordSel, Real, TVector};
+#[allow(unused)]
+use hwa::{Contract, HwiContract};
 use hwa::{EventFlags, EventStatus};
 use num_traits::ToPrimitive;
 
@@ -149,8 +149,8 @@ pub async fn task_stepper(
     let mut real_steppper_pos: TVector<i32> = TVector::zero();
 
     let micro_segment_period_secs: Real =
-        Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6);
-    let sampling_time: Real = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6);
+        Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6).rdp(6);
+    let _sampling_time: Real = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6).rdp(6);
 
     motion_planner.start(&event_bus).await;
 
@@ -160,7 +160,8 @@ pub async fn task_stepper(
     let mut _s = event_bus.subscriber().await;
 
     hwa::info!(
-        "[task_stepper] Segment sampling: {} Hz ({} us period). Micro-segment interpolation: {} Hz ({} us period)",
+        "[task_stepper] Number of axis: {}. Segment sampling: {} Hz ({} us period). Micro-segment interpolation: {} Hz ({} us period)",
+        CoordSel::num_axis(),
         hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY,
         STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
         hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY,
@@ -206,7 +207,7 @@ pub async fn task_stepper(
                 }
                 moves_left
             }
-            Ok(ExecPlan::Segment(segment, _channel)) => {
+            Ok(ExecPlan::Segment(segment, _channel, _order_num)) => {
                 // Process segment plan
                 #[cfg(feature = "with-ps-on")]
                 match _s
@@ -226,81 +227,36 @@ pub async fn task_stepper(
 
                 hwa::trace!("SEGMENT START");
 
+                //#[cfg(feature = "verbose-timings")]
+                hwa::info!("[task_stepper] order_num:{:?} Dequeued Plan. vector displacement: [{:?}] speed: [ vin: {:?}, vout: {:?} ]",
+                    _order_num,
+                    segment.unit_vector_dir * segment.displacement_wu,
+                    segment.speed_enter_wu_s,
+                    segment.speed_exit_wu_s,
+                );
+
                 #[cfg(feature = "verbose-timings")]
                 let tx = embassy_time::Instant::now();
                 event_bus
                     .publish_event(EventStatus::containing(EventFlags::MOVING))
                     .await;
 
-                // Vector helper to filter out irrelevant axes
-                let neutral_element = segment.segment_data.unit_vector_dir.map_val(&math::ZERO);
                 // Compute the Motion Profile
                 match SCurveMotionProfile::compute(
-                    segment.segment_data.displacement_mm,
-                    segment.segment_data.speed_enter_mms,
-                    segment.segment_data.speed_exit_mms,
-                    &segment.segment_data.constraints,
+                    segment.displacement_wu,
+                    segment.speed_enter_wu_s,
+                    segment.speed_exit_wu_s,
+                    &segment.constraints,
                     false,
                 ) {
                     Ok(motion_profile) => {
-                        cfg_if::cfg_if! {
-                            if #[cfg(feature="assert-motion")] {
-                                let mut steps_to_advance: TVector<u32> = TVector::zero();
-                                let mut steps_advanced: TVector<u32> = TVector::zero();
-                            }
-                        }
-
-                        // First, translate displacement in mm to steps
-                        let (units_per_mm, micro_steps) = {
-                            let motion_config = motion_planner.motion_config();
-                            (
-                                neutral_element + motion_config.get_units_per_mm(),
-                                neutral_element + motion_config.get_micro_steps_as_vector(),
-                            )
-                        };
-
-                        let steps_per_mm: TVector<Real> = units_per_mm * micro_steps;
-
-                        // The relative real time position (starting after first micro-segment)
-                        let mut micro_segment_real_time_rel = micro_segment_period_secs;
-                        let mut microsegment_iterator =
-                            SegmentIterator::new(&motion_profile, math::ZERO);
-
-                        let mut microsegment_interpolator = LinearMicrosegmentStepInterpolator::new(
-                            segment.segment_data.unit_vector_dir.abs(),
-                            segment.segment_data.displacement_mm,
-                            steps_per_mm,
+                        hwa::info!("[task_stepper] order_num:{:?} Computed Plan. linear displacement: {:?} time: {:?} vlim: {:?}",
+                            _order_num,
+                            motion_profile.end_pos(),
+                            motion_profile.end_time(),
+                            motion_profile.v_lim,
                         );
 
-                        // Prepare enable and dir flags
-                        let mut stepper_enable_flags = StepperChannel::empty();
-                        let mut stepper_dir_fwd_flags = StepperChannel::empty();
-                        segment.segment_data.unit_vector_dir.apply_coords(|cs| {
-                            #[cfg(feature = "with-x-axis")]
-                            if cs.0.contains(CoordSel::X) {
-                                stepper_enable_flags.set(StepperChannel::X, true);
-                                stepper_dir_fwd_flags
-                                    .set(StepperChannel::X, cs.1.is_defined_positive());
-                            }
-                            #[cfg(feature = "with-y-axis")]
-                            if cs.0.contains(CoordSel::Y) {
-                                stepper_enable_flags.set(StepperChannel::Y, true);
-                                stepper_dir_fwd_flags
-                                    .set(StepperChannel::Y, cs.1.is_defined_positive());
-                            }
-                            #[cfg(feature = "with-z-axis")]
-                            if cs.0.contains(CoordSel::Z) {
-                                stepper_enable_flags.set(StepperChannel::Z, true);
-                                stepper_dir_fwd_flags
-                                    .set(StepperChannel::Z, cs.1.is_defined_positive());
-                            }
-                            #[cfg(feature = "with-e-axis")]
-                            if cs.0.contains(CoordSel::E) {
-                                stepper_enable_flags.set(StepperChannel::E, true);
-                                stepper_dir_fwd_flags
-                                    .set(StepperChannel::E, cs.1.is_defined_positive());
-                            }
-                        });
                         if steppers_off {
                             #[cfg(feature = "trace-commands")]
                             hwa::info!("[trace-commands] Powering steppers on");
@@ -308,19 +264,64 @@ pub async fn task_stepper(
                         }
                         steppers_off = false;
 
-                        //#[cfg(feature = "verbose-timings")]
-                        //let leap = global_timer.elapsed();
+                        // The relevant coords (those that will move)
+                        let mut relevant_coords = CoordSel::empty();
+                        // The relevant coords that will move forward
+                        let mut relevant_coords_dir_fwd = CoordSel::empty();
+
+                        segment.unit_vector_dir.foreach_values(|coord, val| {
+                            relevant_coords.set(coord, !val.is_negligible());
+                            relevant_coords_dir_fwd.set(coord, val.is_defined_positive());
+                        });
+                        hwa::debug!("Relevant coords: [{:?}]", relevant_coords);
+                        hwa::debug!("Relevant coords_dir_fwd: [{:?}]", relevant_coords_dir_fwd);
+
+                        hwa::debug!(
+                            "[task_stepper] MOVE [{:?}] -> [{:?}]",
+                            segment
+                                .src_pos
+                                .with_coord(relevant_coords.complement(), None),
+                            segment
+                                .dest_pos
+                                .with_coord(relevant_coords.complement(), None),
+                        );
+
+                        cfg_if::cfg_if! {
+                            if #[cfg(feature="assert-motion")] {
+                                let mut steps_to_advance: TVector<u32> = TVector::zero();
+                                let mut steps_advanced: TVector<u32> = TVector::zero();
+                            }
+                        }
+
+                        // Steps per world unit ratio
+                        let steps_per_wu: TVector<Real> = motion_planner
+                            .motion_config()
+                            .get_units_per_world_magnitude()
+                            * motion_planner.motion_config().get_micro_steps_as_vector();
+
+                        let mut delta = hwa::MotionDelta::new();
+
+                        let mut segment_iterator =
+                            SegmentIterator::new(&motion_profile, micro_segment_period_secs);
+
+                        let mut micro_segment_interpolator =
+                            LinearMicrosegmentStepInterpolator::new(
+                                segment
+                                    .unit_vector_dir
+                                    .with_coord(relevant_coords.complement(), None)
+                                    .abs(),
+                                segment.displacement_wu,
+                                steps_per_wu.with_coord(relevant_coords.complement(), None),
+                            );
 
                         #[cfg(feature = "verbose-timings")]
                         hwa::debug!("\tCalculation elapsed: {} us", tx.elapsed().as_micros());
 
                         ////
-                        //// MICRO-SEGMENTS INTERP START
+                        //// MICRO-SEGMENTS INTERPOLATION START
                         ////
                         hwa::debug!("Segment interpolation START");
 
-                        let mut prev_time = math::ZERO;
-                        let mut p0 = math::ZERO;
                         // Micro-segments interpolation along segment
                         loop {
                             // Microsegment start
@@ -331,61 +332,59 @@ pub async fn task_stepper(
                             }
                             hwa::trace!("Micro-segment START");
 
-                            if let Some((estimated_position, _)) =
-                                microsegment_iterator.next(micro_segment_real_time_rel)
-                            {
-                                let ds = estimated_position - p0;
-                                let tprev = micro_segment_real_time_rel - prev_time;
-                                let tmax = motion_profile.i7_end() - prev_time;
-                                let _dt = tmax.min(tprev);
+                            if let Some((estimated_position, _)) = segment_iterator.next() {
+                                delta.pos_wu = segment.src_pos
+                                    + segment.unit_vector_dir * segment_iterator.current_position();
+                                delta.micro_segment_id += 1;
+                                delta.micro_segment_time =
+                                    segment_iterator.current_time() - segment_iterator.dt();
 
-                                hwa::trace!(
-                                    "at [{:?}] dt = {:?} ds = {:?} v = {:?}",
-                                    micro_segment_real_time_rel.rdp(4),
-                                    _dt.rdp(4),
-                                    ds.rdp(4),
-                                    (ds / _dt).rdp(4)
+                                #[cfg(feature = "verbose-timings")]
+                                hwa::info!(
+                                    "[task_stepper] order_num: {}|{} at {:?} secs. dt = {:?} ds = {:?} v = {:?}",
+                                    _order_num, delta.micro_segment_id, segment_iterator.current_time(),
+                                    segment_iterator.dt(), segment_iterator.ds(),
+                                    segment_iterator.speed(),
                                 );
 
-                                p0 = estimated_position;
-                                let current_period_width_0 = if tprev < tmax {
-                                    tprev
-                                } else {
-                                    if segment.segment_data.speed_exit_mms > math::ZERO {
-                                        (ds / segment.segment_data.speed_exit_mms)
-                                            .max(sampling_time)
-                                    } else {
-                                        tmax.max(sampling_time)
-                                    }
-                                };
-
-                                let current_period_width = current_period_width_0; //(current_period_width_0 / sampling_time).ceil() * sampling_time;
-
-                                hwa::trace!(
-                                    "  current_period_width = {:?}",
-                                    current_period_width.rdp(6)
-                                );
-
-                                prev_time += current_period_width;
-                                micro_segment_real_time_rel += current_period_width;
-
-                                let w = (current_period_width * math::ONE_MILLION).round();
+                                let w = (segment_iterator.dt() * math::ONE_MILLION).round();
                                 let _has_more =
-                                    microsegment_interpolator.advance_to(estimated_position, w);
+                                    micro_segment_interpolator.advance_to(estimated_position, w);
+
+                                #[cfg(feature = "verbose-timings")]
+                                hwa::info!(
+                                    "[task_stepper] order_num: {:?}|{:?} advanced: {:?} {}",
+                                    _order_num,
+                                    delta.micro_segment_id,
+                                    micro_segment_interpolator.advanced_world_units(),
+                                    Contract::WORLD_UNIT_MAGNITUDE
+                                );
+
+                                #[cfg(feature = "verbose-timings")]
+                                hwa::info!(
+                                    "[task_stepper] order_num: {:?}|{:?} advanced: {:?} steps",
+                                    _order_num,
+                                    delta.micro_segment_id,
+                                    micro_segment_interpolator.advanced_steps().map_values(
+                                        |_c, _v| if _v.is_zero() { None } else { Some(_v) }
+                                    ),
+                                );
 
                                 cfg_if::cfg_if! {
                                     if #[cfg(feature="assert-motion")] {
-                                        steps_to_advance += microsegment_interpolator.delta;
+                                        steps_to_advance += micro_segment_interpolator.delta;
                                     }
                                 }
 
                                 #[cfg(feature = "verbose-timings")]
                                 let t1 = embassy_time::Instant::now();
+
                                 STEP_DRIVER
                                     .push(
-                                        microsegment_interpolator.state().clone(),
-                                        stepper_enable_flags,
-                                        stepper_dir_fwd_flags,
+                                        delta,
+                                        micro_segment_interpolator.state().clone(),
+                                        relevant_coords,
+                                        relevant_coords_dir_fwd,
                                     )
                                     .await;
                                 cfg_if::cfg_if! {
@@ -404,16 +403,17 @@ pub async fn task_stepper(
                                 // No advance
                                 break;
                             }
+                            delta.micro_segment_id += 1;
                             hwa::trace!("Micro-segment END");
                             // Microsegment end
                         }
                         hwa::debug!(
-                            "\t\t+Advanced: {:?}",
-                            microsegment_interpolator.advanced_mm()
+                            " + Advanced: {:?}",
+                            micro_segment_interpolator.advanced_world_units()
                         );
                         hwa::debug!(
                             " + segment advanced: {:?}",
-                            microsegment_interpolator.advanced_steps()
+                            micro_segment_interpolator.advanced_steps()
                         );
 
                         ////
@@ -429,66 +429,30 @@ pub async fn task_stepper(
                             }
                         }
 
-                        {
-                            let adv_steps = microsegment_interpolator.advanced_steps();
-                            if let Some(c) = segment.segment_data.unit_vector_dir.x {
-                                if c.is_defined_positive() {
-                                    real_steppper_pos.set_coord(
-                                        CoordSel::X,
-                                        Some(
-                                            real_steppper_pos.x.unwrap()
-                                                + adv_steps.x.unwrap().to_i32().unwrap(),
-                                        ),
-                                    );
+                        let adv_steps = micro_segment_interpolator.advanced_steps();
+                        real_steppper_pos = real_steppper_pos.map_values(|coord, pos| {
+                            if let Some(dir_value) = segment.unit_vector_dir.get_coord(coord) {
+                                if dir_value.is_defined_positive() {
+                                    Some(
+                                        pos + adv_steps
+                                            .get_coord(coord)
+                                            .unwrap_or(0)
+                                            .to_i32()
+                                            .unwrap_or(0),
+                                    )
                                 } else {
-                                    real_steppper_pos.set_coord(
-                                        CoordSel::X,
-                                        Some(
-                                            real_steppper_pos.x.unwrap()
-                                                - adv_steps.x.unwrap().to_i32().unwrap(),
-                                        ),
-                                    );
+                                    Some(
+                                        pos - adv_steps
+                                            .get_coord(coord)
+                                            .unwrap_or(0)
+                                            .to_i32()
+                                            .unwrap_or(0),
+                                    )
                                 }
+                            } else {
+                                None
                             }
-                            if let Some(c) = segment.segment_data.unit_vector_dir.y {
-                                if c.is_defined_positive() {
-                                    real_steppper_pos.set_coord(
-                                        CoordSel::Y,
-                                        Some(
-                                            real_steppper_pos.y.unwrap()
-                                                + adv_steps.y.unwrap().to_i32().unwrap(),
-                                        ),
-                                    );
-                                } else {
-                                    real_steppper_pos.set_coord(
-                                        CoordSel::Y,
-                                        Some(
-                                            real_steppper_pos.y.unwrap()
-                                                - adv_steps.y.unwrap().to_i32().unwrap(),
-                                        ),
-                                    );
-                                }
-                            }
-                            if let Some(c) = segment.segment_data.unit_vector_dir.z {
-                                if c.is_defined_positive() {
-                                    real_steppper_pos.set_coord(
-                                        CoordSel::Z,
-                                        Some(
-                                            real_steppper_pos.z.unwrap()
-                                                + adv_steps.z.unwrap().to_i32().unwrap(),
-                                        ),
-                                    );
-                                } else {
-                                    real_steppper_pos.set_coord(
-                                        CoordSel::Z,
-                                        Some(
-                                            real_steppper_pos.z.unwrap()
-                                                - adv_steps.z.unwrap().to_i32().unwrap(),
-                                        ),
-                                    );
-                                }
-                            }
-                        }
+                        });
 
                         hwa::debug!(" + POS: {:?}", real_steppper_pos);
                         let moves_left = motion_planner
@@ -503,14 +467,16 @@ pub async fn task_stepper(
                                 use crate::control::motion::profile::MotionProfile;
 
                                 //global_timer = embassy_time::Instant::now();
-                                hwa::info!("\t[v_0 = {:?}, v_lim = {:?}, v_1 = {:?}, t = {:?} d = {:?} mm = {:?} stp = {:?}]; {:?} moves left",
-                                    segment.segment_data.speed_enter_mms.rdp(3).inner(),
+                                hwa::info!("[task_stepper] v_0: {:?}, v_lim: {:?}, v_1: {:?}; t: {:?}; dist: {{ [{:?}] {}, |dist|: {:?} {}, steps: [{:?}] }}; [{:?} moves left]",
+                                    segment.speed_enter_wu_s.rdp(3).inner(),
                                     motion_profile.v_lim.rdp(3).inner(),
-                                    segment.segment_data.speed_exit_mms.rdp(3).inner(),
+                                    segment.speed_exit_wu_s.rdp(3).inner(),
                                     motion_profile.end_time(),
-                                    microsegment_interpolator.advanced_mm(),
-                                    microsegment_interpolator.advanced_mm().norm2().unwrap(),
-                                    microsegment_interpolator.advanced_steps(),
+                                    micro_segment_interpolator.advanced_world_units(),
+                                    Contract::WORLD_UNIT_MAGNITUDE,
+                                    micro_segment_interpolator.advanced_world_units().norm2().unwrap_or(math::ZERO).rdp(4),
+                                    Contract::WORLD_UNIT_MAGNITUDE,
+                                    micro_segment_interpolator.advanced_steps(),
                                     moves_left,
                                 );
                                 let t_tot = t0.elapsed().as_micros() as f32 / 1000000.0;
@@ -567,7 +533,7 @@ pub async fn task_stepper(
                     hwa::debug!("dry_run: Skipping homing");
                     break;
                 }
-                real_steppper_pos.set_coord(CoordSel::all(), Some(0));
+                real_steppper_pos.set_coord(CoordSel::all_axis(), Some(0));
                 let moves_left = motion_planner
                     .consume_current_segment_data(&event_bus)
                     .await;
@@ -587,7 +553,7 @@ async fn park(motion_planner: &hwa::controllers::MotionPlanner) {
         .lock()
         .await
         .pins()
-        .disable_steppers(StepperChannel::all());
+        .disable_steppers(CoordSel::all_axis());
     STEP_DRIVER.reset();
     hwa::Contract::pause_ticker();
 }
@@ -601,7 +567,7 @@ async fn unpark(motion_planner: &hwa::controllers::MotionPlanner, enable_stepper
             .lock()
             .await
             .pins()
-            .enable_steppers(StepperChannel::all());
+            .enable_steppers(CoordSel::all_axis());
         STEP_DRIVER.reset();
     }
     #[cfg(feature = "trace-commands")]

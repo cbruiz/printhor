@@ -14,17 +14,17 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-default = []
+default = ["printhor-hwa-common/float-point-f32-impl"]
 # Hardware device features
 with-log = ["env_logger"]
 with-serial-usb = ["async-std"]
 with-serial-port-1 = ["async-std"]
-with-serial-port-2 = []
-with-serial-port-usb = []
+with-serial-port-2 = ["async-std"]
 with-print-job = []
 with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end"]
 with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
+with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
 with-probe = ["embedded-hal-0"]
 with-endstops = []
 with-sd-card = ["embedded-sdmmc"]
@@ -34,6 +34,7 @@ with-laser = ["embedded-hal-1"]
 with-trinamic = ["tmc2209"]
 with-ps-on = []
 with-spi = []
+with-i2c = ["pwm-pca9685"]
 
 with-display = []
 
@@ -41,6 +42,15 @@ with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 nightly = ["embassy-executor/nightly"]
 executor-interrupt = []
@@ -49,12 +59,11 @@ sd-card-uses-spi = []
 without-vref-int = []
 
 [dependencies]
-
 embassy-executor = { version = "0.7", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
-embassy-sync = { version = "0", features = ["std"] }
-embassy-time = { version = "0", features = ["std", "generic-queue-128"] }
-embassy-futures = { version = "0", features = [] }
-embassy-embedded-hal = { version = "0.2", features = [] }
+embassy-sync = { version = "0.6", features = ["std"] }
+embassy-time = { version = "0.4", features = ["std", "generic-queue-128"] }
+embassy-futures = { version = "0.1", features = [] }
+#embassy-embedded-hal = { version = "0.3", features = [] }
 
 embedded-io-async = { version = "0.6", optional = true }
 embedded-io = { version = "0.6", optional = true }
@@ -71,6 +80,8 @@ embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unpro
 futures = { version = "0.3", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 
+pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
+
 #lvgl = { version="0", default-features = false, features =[], optional = true }
 nb = {version = "1.1", default-features = false, features = []}
 tmc2209 = { version = "0.2", optional = true }
@@ -82,9 +93,9 @@ const_env = { version = "0.1" }
 [patch.crates-io]
 printhor-hwa-common = { path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { path = "../../printhor-hwa-utils" }
-embassy-executor = { path = "../../libs/embassy" }
-embassy-sync = { path = "../../libs/embassy" }
-embassy-time = { path = "../../libs/embassy" }
-embassy-futures = { path = "../../libs/embassy" }
-embassy-embedded-hal = { path = "../../libs/embassy" }
+embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+embassy-time = { path = "../../libs/embassy/embassy-time" }
+embassy-futures = { path = "../../libs/embassy/embassy-futures" }
+embassy-embedded-hal = { path = "../../libs/embassy/embassy-embedded-hal" }
 async-gcode = { path = "../../libs/async-gcode" }

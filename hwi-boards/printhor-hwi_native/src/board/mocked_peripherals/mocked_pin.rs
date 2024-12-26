@@ -115,7 +115,7 @@ impl MockedIOPin {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-spi")] {
-        use embedded_hal_02::digital::v2;
+        use embedded_hal_0::digital::v2;
         impl v2::OutputPin for MockedIOPin {
             type Error = core::convert::Infallible;
             fn set_low(&mut self) -> Result<(), Self::Error> {

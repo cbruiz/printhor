@@ -16,55 +16,55 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         pub trait MotionPinsTrait {
             fn enable_all_steppers(&mut self) {
-                self.set_enabled(hwa::StepperChannel::all(), true)
+                self.set_enabled(hwa::CoordSel::all_axis(), true)
             }
             #[cfg(feature = "with-x-axis")]
             fn enable_x_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::X, true)
+                self.set_enabled(hwa::CoordSel::X, true)
             }
             #[cfg(feature = "with-y-axis")]
             fn enable_y_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::Y, true)
+                self.set_enabled(hwa::CoordSel::Y, true)
             }
             #[cfg(feature = "with-z-axis")]
             fn enable_z_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::Z, true)
+                self.set_enabled(hwa::CoordSel::Z, true)
             }
             #[cfg(feature = "with-e-axis")]
             fn enable_e_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::E, true)
+                self.set_enabled(hwa::CoordSel::E, true)
             }
             #[cfg(feature = "with-x-axis")]
             fn disable_x_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::X, false)
+                self.set_enabled(hwa::CoordSel::X, false)
             }
             #[cfg(feature = "with-y-axis")]
             fn disable_y_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::Y, false)
+                self.set_enabled(hwa::CoordSel::Y, false)
             }
             #[cfg(feature = "with-z-axis")]
             fn disable_z_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::Z, false)
+                self.set_enabled(hwa::CoordSel::Z, false)
             }
             #[cfg(feature = "with-e-axis")]
             fn disable_e_stepper(&mut self) {
-                self.set_enabled(hwa::StepperChannel::E, false)
+                self.set_enabled(hwa::CoordSel::E, false)
             }
             fn disable_all_steppers(&mut self) {
-                self.set_enabled(hwa::StepperChannel::all(), false)
+                self.set_enabled(hwa::CoordSel::all_axis(), false)
             }
 
-            fn disable(&mut self, _channels: hwa::StepperChannel)
+            fn disable(&mut self, _channels: hwa::CoordSel)
             {
-                self.set_enabled(hwa::StepperChannel::all(), false)
+                self.set_enabled(hwa::CoordSel::all_axis(), false)
             }
 
-            fn set_enabled(&mut self, _channels: hwa::StepperChannel, enabled: bool);
-            fn set_forward_direction(&mut self, _channels: hwa::StepperChannel, _mask: hwa::StepperChannel);
-            fn step_toggle(&mut self, _channels: hwa::StepperChannel);
-            fn step_high(&mut self, _channels: hwa::StepperChannel);
-            fn step_low(&mut self, _channels: hwa::StepperChannel);
-            fn endstop_triggered(&mut self, _channels: hwa::StepperChannel) -> bool;
+            fn set_enabled(&mut self, _channels: hwa::CoordSel, enabled: bool);
+            fn set_forward_direction(&mut self, _channels: hwa::CoordSel, _mask: hwa::CoordSel);
+            fn step_toggle(&mut self, _channels: hwa::CoordSel);
+            fn step_high(&mut self, _channels: hwa::CoordSel);
+            fn step_low(&mut self, _channels: hwa::CoordSel);
+            fn endstop_triggered(&mut self, _channels: hwa::CoordSel) -> bool;
         }
     }
 }

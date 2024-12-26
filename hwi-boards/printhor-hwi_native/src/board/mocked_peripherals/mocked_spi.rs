@@ -1,4 +1,4 @@
-use embedded_hal_02::blocking::spi;
+use embedded_hal_0::blocking::spi;
 
 pub struct MockedSpi {
 }

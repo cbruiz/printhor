@@ -1,14 +1,13 @@
 use crate::hwa;
-use crate::math;
-use crate::math::TVector;
 use hwa::controllers::MultiTimer;
-use hwa::StepperChannel;
+use hwa::math;
+use hwa::math::TVector;
 use math::Real;
 
 /// A struct for interpolating microsteps along linear trajectories.
 pub struct LinearMicrosegmentStepInterpolator {
     vdir_abs: TVector<Real>,
-    usteps_per_mm: TVector<Real>,
+    usteps_per_world_magnitude: TVector<Real>,
 
     /// Number of discrete steps along vector already advanced.
     usteps_advanced: TVector<u32>,
@@ -36,13 +35,18 @@ impl LinearMicrosegmentStepInterpolator {
     /// # Returns
     ///
     /// A new `LinearMicrosegmentStepInterpolator`.
-    pub fn new(vdir_abs: TVector<Real>, distance: Real, usteps_per_mm: TVector<Real>) -> Self {
+    pub fn new(
+        vdir_abs: TVector<Real>,
+        distance: Real,
+        usteps_per_world_magnitude: TVector<Real>,
+    ) -> Self {
         Self {
             vdir_abs,
-            usteps_per_mm,
+            usteps_per_world_magnitude,
             usteps_advanced: TVector::zero(),
             axis_steps_advanced_precise: TVector::zero(),
-            axis_steps_to_advance_precise: (vdir_abs * distance * usteps_per_mm).floor(),
+            axis_steps_to_advance_precise: (vdir_abs * distance * usteps_per_world_magnitude)
+                .floor(),
             multi_timer: MultiTimer::new(),
             #[cfg(any(test, feature = "assert-motion"))]
             delta: TVector::zero(),
@@ -61,18 +65,19 @@ impl LinearMicrosegmentStepInterpolator {
     /// A boolean indicating whether advancement is successful.
     pub fn advance_to(&mut self, estimated_position: Real, width: Real) -> bool {
         let axial_pos: TVector<Real> = self.vdir_abs * estimated_position;
-        let step_pos: TVector<Real> = axial_pos * self.usteps_per_mm;
+        let step_pos: TVector<Real> = axial_pos * self.usteps_per_world_magnitude;
+
         let steps_to_advance = (step_pos - self.axis_steps_advanced_precise)
-            .clamp_min(TVector::zero())
-            .clamp(self.axis_steps_to_advance_precise);
+            .clamp_higher_than(TVector::zero())
+            .clamp_lower_than(self.axis_steps_to_advance_precise);
         let steps_to_advance_precise_1: TVector<Real> = steps_to_advance;
         let steps_to_advance_precise = steps_to_advance_precise_1.floor();
         self.axis_steps_advanced_precise += steps_to_advance_precise;
 
         #[cfg(any(test, feature = "assert-motion"))]
         {
-            self.delta = steps_to_advance_precise.map_all(|c| {
-                c.unwrap_or(math::ZERO)
+            self.delta = steps_to_advance_precise.map(|_c, v| {
+                v.unwrap_or(math::ZERO)
                     .to_i32()
                     .and_then(|i| Some(i as u32))
             });
@@ -89,8 +94,8 @@ impl LinearMicrosegmentStepInterpolator {
         if numerator == 0 {
             panic!("bad advance");
         }
-        let tick_period_by_axis = steps_to_advance_precise.map_all(|c| {
-            c.unwrap_or(math::ZERO).to_i32().and_then(|i| {
+        let tick_period_by_axis = steps_to_advance_precise.map(|_c, v| {
+            v.unwrap_or(math::ZERO).to_i32().and_then(|i| {
                 if i > 0 {
                     Some(numerator / (i as u32))
                 } else {
@@ -100,10 +105,10 @@ impl LinearMicrosegmentStepInterpolator {
         });
 
         let step_increment =
-            steps_to_advance_precise.map_coords(|cv| cv.to_i32().and_then(|c| Some(c as u32)));
+            steps_to_advance_precise.map_values(|_, cv| cv.to_i32().and_then(|c| Some(c as u32)));
 
         self.usteps_advanced += step_increment;
-        self.multi_timer.set_width(numerator);
+        self.multi_timer.displace_width(numerator);
         self.multi_timer.set_max_count(&step_increment);
 
         #[cfg(test)]
@@ -125,19 +130,8 @@ impl LinearMicrosegmentStepInterpolator {
                 tick_period_by_axis
             );
         }
-
-        #[cfg(feature = "with-x-axis")]
-        self.multi_timer
-            .set_channel_ticks(StepperChannel::X, tick_period_by_axis.x);
-        #[cfg(feature = "with-y-axis")]
-        self.multi_timer
-            .set_channel_ticks(StepperChannel::Y, tick_period_by_axis.y);
-        #[cfg(feature = "with-z-axis")]
-        self.multi_timer
-            .set_channel_ticks(StepperChannel::Z, tick_period_by_axis.z);
-        #[cfg(feature = "with-e-axis")]
-        self.multi_timer
-            .set_channel_ticks(StepperChannel::E, tick_period_by_axis.e);
+        tick_period_by_axis
+            .foreach(|coord, v| self.multi_timer.set_channel_ticks(coord.into(), *v));
         //can_advance_more
         true
     }
@@ -156,21 +150,19 @@ impl LinearMicrosegmentStepInterpolator {
     /// # Returns
     ///
     /// A `TVector` containing the number of advanced steps.
-    #[inline]
     pub fn advanced_steps(&self) -> TVector<u32> {
         self.usteps_advanced
     }
 
-    /// Returns the number of advanced millimeters.
+    /// Returns the number of advanced [hwa::Contract::WORLD_UNIT_MAGNITUDE] units.
     ///
     /// # Returns
     ///
-    /// A `TVector` containing the number of advanced millimeters.
-    #[allow(unused)]
-    pub fn advanced_mm(&self) -> TVector<Real> {
+    /// A `TVector` containing the number of advanced [hwa::Contract::WORLD_UNIT_MAGNITUDE] units.
+    pub fn advanced_world_units(&self) -> TVector<Real> {
         self.advanced_steps()
-            .map_coords(|c| Some(Real::from_lit(c.into(), 0)))
-            / self.usteps_per_mm
+            .map_values(|_, c| Some(Real::from_lit(c.into(), 0)))
+            / self.usteps_per_world_magnitude
     }
 
     /// Returns the width of the multi timer.

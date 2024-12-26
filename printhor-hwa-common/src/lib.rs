@@ -3,7 +3,8 @@
 extern crate alloc;
 extern crate core;
 
-use bitflags::bitflags;
+pub mod math;
+
 pub use printhor_hwa_common_macros::*;
 pub use printhor_hwa_utils::*;
 use strum::EnumCount;
@@ -13,6 +14,13 @@ pub use event_bus::*;
 
 mod defer_channel;
 pub use defer_channel::*;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion-broadcast")] {
+        mod motion_broadcast;
+        pub use motion_broadcast::*;
+    }
+}
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature = "with-serial-port-2"))] {
@@ -44,6 +52,7 @@ cfg_if::cfg_if! {
     }
 }
 
+pub use crate::math::CoordSel;
 pub use event_bus_channel::*;
 
 /// Represents a logical channel where the request(s) come from
@@ -243,66 +252,6 @@ impl NoDevice {
     }
 }
 
-bitflags! {
-    /// A bitmask structure representing different stepper channels.
-    ///
-    /// This structure uses bitflags to define constant values for each
-    /// stepper channel. Each flag represents a specific axis or state.
-    ///
-    /// Flags:
-    /// - `X`: Represents the X-axis stepper channel. This flag is only available if the `with-x-axis` feature is enabled.
-    /// - `Y`: Represents the Y-axis stepper channel. This flag is only available if the `with-y-axis` feature is enabled.
-    /// - `Z`: Represents the Z-axis stepper channel. This flag is only available if the `with-z-axis` feature is enabled.
-    /// - `E`: Represents the E-axis stepper channel. This flag is only available if the `with-e-axis` feature is enabled.
-    /// - `UNSET`: Represents an unset or undefined channel. This flag is always available.
-    ///
-    /// Example usage:
-    ///
-    /// ```rust
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::StepperChannel;
-    ///
-    /// // Assuming the appropriate feature flags are set...
-    /// let mut channels = StepperChannel::empty();
-    ///
-    /// // Check if a specific channel is set:
-    /// #[cfg(feature = "with-x-axis")]
-    /// if channels.contains(StepperChannel::X) {
-    ///     // Do something with the X channel
-    /// }
-    ///
-    /// // Set another channel:
-    /// #[cfg(feature = "with-z-axis")]
-    /// channels.insert(StepperChannel::Z);
-    ///
-    /// // Remove a channel:
-    /// #[cfg(feature = "with-y-axis")]
-    /// channels.remove(StepperChannel::Y);
-    ///
-    /// // Check if no channel is set:
-    /// if channels.contains(StepperChannel::UNSET) {
-    ///     // Handle unset channel
-    /// }
-    /// ```
-    #[derive(Clone, Copy, PartialEq, Debug)]
-    pub struct StepperChannel: u8 {
-        /// Represents the X-axis stepper channel. This flag is only available if the `with-x-axis` feature is enabled.
-        #[cfg(feature = "with-x-axis")]
-        const X    = 0b00000001;
-        /// Represents the Y-axis stepper channel. This flag is only available if the `with-y-axis` feature is enabled.
-        #[cfg(feature = "with-y-axis")]
-        const Y    = 0b00000010;
-        /// Represents the Z-axis stepper channel. This flag is only available if the `with-z-axis` feature is enabled.
-        #[cfg(feature = "with-z-axis")]
-        const Z    = 0b00000100;
-        /// Represents the E-axis stepper channel. This flag is only available if the `with-e-axis` feature is enabled.
-        #[cfg(feature = "with-e-axis")]
-        const E    = 0b00001000;
-        /// Represents an unset or undefined channel. This flag is always available.
-        const UNSET  = 0b10000000;
-    }
-}
-
 /// Covers a device directly imported from HWI
 pub struct HwiResource<D> {
     inner: D,
@@ -344,6 +293,7 @@ impl<D> Copy for HwiResource<D> where D: Copy {}
 mod test {
     #[allow(unused)]
     use crate as hwa;
+    use crate::CoordSel;
 
     #[cfg(all(
         feature = "with-serial-usb",
@@ -352,16 +302,14 @@ mod test {
     ))]
     #[test]
     fn test_some_objects() {
-        use crate::StepperChannel;
-
         let _nd = hwa::NoDevice::new();
-        let ch1 = StepperChannel::E;
+        let ch1 = hwa::CoordSel::E;
         hwa::info!("{:?}", ch1);
         let mut ch2 = ch1.clone();
         assert_eq!(ch1, ch2);
         let ch3 = ch2;
         assert_eq!(ch2, ch3);
-        ch2.set(StepperChannel::Y, true);
+        ch2.set(CoordSel::Y, true);
         hwa::info!("{:?}", ch2);
         assert_ne!(ch2, ch3);
 

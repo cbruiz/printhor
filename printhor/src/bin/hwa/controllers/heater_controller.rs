@@ -80,9 +80,9 @@
 //!
 use crate::hwa;
 #[allow(unused)]
-use crate::math::ArithmeticOps;
+use hwa::math::ArithmeticOps;
 #[allow(unused)]
-use crate::math::Real;
+use hwa::math::Real;
 use hwa::DeferEvent::{AwaitRequested, Completed};
 use hwa::{AsyncMutexStrategy, SyncMutexStrategy};
 use hwa::{CommChannel, DeferAction};

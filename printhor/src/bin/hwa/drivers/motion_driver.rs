@@ -1,15 +1,15 @@
 #[cfg(all(feature = "native", feature = "plot-timings"))]
 use super::timing_monitor::*;
 use crate::hwa;
-use crate::math;
-use crate::math::Real;
-use crate::math::{ArithmeticOps, CoordSel, TVector};
 #[allow(unused)]
 use core::ops::Neg;
 use embassy_time::Duration;
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
+use hwa::math;
+use math::Real;
+use math::{ArithmeticOps, CoordSel, TVector};
 
 pub struct MotionDriver {
     #[cfg(feature = "with-motion")]
@@ -93,28 +93,12 @@ impl MotionDriver {
     }
 
     pub fn enable_and_set_dir(&mut self, vdir: &TVector<Real>) {
-        self.pins().enable_steppers(hwa::StepperChannel::all());
+        self.pins().enable_steppers(hwa::CoordSel::all_axis());
+        let mut dir_fwd = hwa::CoordSel::empty();
 
-        let mut dir_fwd = hwa::StepperChannel::empty();
-
-        #[cfg(feature = "with-x-axis")]
-        if vdir.x.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
-            dir_fwd.set(hwa::StepperChannel::X, true)
-        }
-        #[cfg(feature = "with-y-axis")]
-        if vdir.y.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
-            dir_fwd.set(hwa::StepperChannel::Y, true)
-        }
-        #[cfg(feature = "with-z-axis")]
-        if vdir.z.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
-            dir_fwd.set(hwa::StepperChannel::Z, true)
-        }
-        #[cfg(feature = "with-e-axis")]
-        if vdir.e.and_then(|v| Some(v.is_positive())).unwrap_or(false) {
-            dir_fwd.set(hwa::StepperChannel::E, true)
-        }
+        vdir.foreach_values(|coord, v| dir_fwd.set(coord, v.is_defined_positive()));
         self.pins()
-            .set_forward_direction(dir_fwd, hwa::StepperChannel::all());
+            .set_forward_direction(dir_fwd, CoordSel::all_axis());
     }
 
     /// This method performs the homing action for the stepper motors.
@@ -158,20 +142,40 @@ impl MotionDriver {
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] [Homing]");
 
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-motion-broadcast")] {
+                if self.pins.broadcast_channel.try_send(hwa::MotionBroadcastEvent::Reset).is_err() {
+                    todo!("...");
+                }
+            }
+        }
+
+        #[allow(unused_mut)]
         let mut homming_position = TVector::zero();
 
-        let steps_per_mm = motion_config
-            .get_steps_per_unit_as_vector()
-            .with_coord(CoordSel::E, None);
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-e-axis")] {
+                let _steps_per_world_unit = motion_config
+                    .get_steps_per_world_unit_as_vector()
+                    .with_coord(CoordSel::E, None);
+            }
+            else {
+                let _steps_per_world_unit = motion_config.get_steps_per_world_unit_as_vector();
+            }
+        }
 
         #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Steps per mm: {:?}", steps_per_mm);
-        let machine_bounds = motion_config.get_machine_bounds();
+        hwa::info!(
+            "[trace-commands] [Homing] Steps per {}: {:?}",
+            Contract::WORLD_UNIT_MAGNITUDE,
+            _steps_per_world_unit
+        );
+        let _machine_bounds = motion_config.get_machine_bounds();
 
         #[cfg(feature = "trace-commands")]
         hwa::info!(
             "[trace-commands] [Homing] Machine bounds: {:?}",
-            machine_bounds
+            _machine_bounds
         );
 
         #[cfg(feature = "trace-commands")]
@@ -180,174 +184,194 @@ impl MotionDriver {
             homming_position
         );
 
-        // Raise Z axis 10mm to avoid obstacles during X and Y homing
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Raise Z +10mm");
-        self.shabbily_move_to(
-            TVector::from_coords(None, None, Some(math::ONE), None),
-            Real::from_lit(10, 0),
-            steps_per_mm,
-            2000,
-            false,
-            Some(&mut homming_position),
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        // Home the X axis quickly
-        #[cfg(feature = "trace-commands")]
-        hwa::info!(
-            "[trace-commands] [Homing] Quick Homing X axis with a max of -{:?} mm",
-            machine_bounds.x.unwrap_or(math::ZERO)
-        );
-        self.shabbily_move_to(
-            TVector::from_coords(Some(math::ONE.neg()), None, None, None),
-            machine_bounds.x.unwrap_or(Real::zero()),
-            steps_per_mm,
-            2000,
-            true,
-            None,
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Quick Separate X axis 5 mm");
-        // Home the X axis precisely
-        self.shabbily_move_to(
-            TVector::from_coords(Some(math::ONE), None, None, None),
-            Real::from_lit(5, 0),
-            steps_per_mm,
-            1000,
-            false,
-            Some(&mut homming_position),
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [trace-commands] [Homing] Slow approximate X axis up to 6 mm");
-
-        // Home the X axis precisely
-        self.shabbily_move_to(
-            TVector::from_coords(Some(math::ONE.neg()), None, None, None),
-            Real::from_lit(6, 0),
-            steps_per_mm,
-            1000,
-            true,
-            Some(&mut homming_position),
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        // Home the Y axis quickly
-        #[cfg(feature = "trace-commands")]
-        hwa::info!(
-            "[trace-commands] [Homing] Quick Homing Y axis with a max of -{:?} mm",
-            machine_bounds.y.unwrap_or(math::ZERO)
-        );
-        self.shabbily_move_to(
-            TVector::from_coords(None, Some(math::ONE.neg()), None, None),
-            machine_bounds.y.unwrap_or(Real::zero()),
-            steps_per_mm,
-            2000,
-            true,
-            None,
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Quick Separate Y axis 5 mm");
-        // Home the Y axis precisely
-        self.shabbily_move_to(
-            TVector::from_coords(None, Some(math::ONE), None, None),
-            Real::from_lit(5, 0),
-            steps_per_mm,
-            2000,
-            false,
-            Some(&mut homming_position),
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Slow approximate Y axis up to 6 mm");
-        // Home the X axis precisely
-        self.shabbily_move_to(
-            TVector::from_coords(None, Some(math::ONE.neg()), None, None),
-            Real::from_lit(6, 0),
-            steps_per_mm,
-            1000,
-            true,
-            Some(&mut homming_position),
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
-        // TODO:
-        // Go to center
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Upper Z + 10mm");
-        self.shabbily_move_to(
-            TVector::from_coords(None, None, Some(math::ONE.neg()), None),
-            Real::from_lit(10, 0),
-            steps_per_mm,
-            1000,
-            false,
-            Some(&mut homming_position),
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
         cfg_if::cfg_if! {
-            if #[cfg(feature = "with-probe")] {
-                self.probe_controller.lock().await.probe_pin_down(100).await;
+            if #[cfg(feature = "with-z-axis")] {
+                // Raise Z axis 10mm to avoid obstacles during X and Y homing
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Raise Z +10mm");
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Z, Some(math::ONE)),
+                    Real::from_lit(10, 0),
+                    _steps_per_world_unit,
+                    2000,
+                    false,
+                    Some(&mut homming_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
             }
         }
 
-        // FIXME: As of now, until tested in real hardware, for safety
-        let zbounds = homming_position.z.unwrap_or(math::ZERO)
-            + machine_bounds.z.unwrap_or(math::ONE) / Real::from_lit(16, 0);
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Lower Z up to {:?} mm", zbounds); // reduced for safety
-        self.shabbily_move_to(
-            TVector::from_coords(None, None, Some(math::ONE.neg()), None),
-            zbounds,
-            steps_per_mm,
-            1000,
-            true,
-            None,
-        )
-        .await;
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
-
         cfg_if::cfg_if! {
-            if #[cfg(feature = "with-probe")] {
-                self.probe_controller.lock().await.probe_pin_up(100).await;
+            if #[cfg(feature = "with-x-axis")] {
+                // Home the X axis quickly
+                #[cfg(feature = "trace-commands")]
+                hwa::info!(
+                    "[trace-commands] [Homing] Quick Homing X axis with a max of -{:?} mm",
+                    _machine_bounds.x.unwrap_or(math::ZERO)
+                );
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::X, Some(math::ONE.neg())),
+                    _machine_bounds.x.unwrap_or(Real::zero()),
+                    _steps_per_world_unit,
+                    2000,
+                    true,
+                    None,
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Quick Separate X axis 5 mm");
+                // Home the X axis precisely
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::X, Some(math::ONE)),
+                    Real::from_lit(5, 0),
+                    _steps_per_world_unit,
+                    1000,
+                    false,
+                    Some(&mut homming_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [trace-commands] [Homing] Slow approximate X axis up to 6 mm");
+
+                // Home the X axis precisely
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::X, Some(math::ONE.neg())),
+                    Real::from_lit(6, 0),
+                    _steps_per_world_unit,
+                    1000,
+                    true,
+                    Some(&mut homming_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
             }
         }
 
-        #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing] Upper Z + 10mm again por safety");
-        self.shabbily_move_to(
-            TVector::from_coords(None, None, Some(math::ONE), None),
-            Real::from_lit(10, 0),
-            steps_per_mm,
-            2000,
-            false,
-            Some(&mut homming_position),
-        )
-        .await;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-y-axis")] {
+                // Home the Y axis quickly
+                #[cfg(feature = "trace-commands")]
+                hwa::info!(
+                    "[trace-commands] [Homing] Quick Homing Y axis with a max of -{:?} mm",
+                    _machine_bounds.y.unwrap_or(math::ZERO)
+                );
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Y, Some(math::ONE.neg())),
+                    _machine_bounds.y.unwrap_or(Real::zero()),
+                    _steps_per_world_unit,
+                    2000,
+                    true,
+                    None,
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Quick Separate Y axis 5 mm");
+                // Home the Y axis precisely
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Y, Some(math::ONE)),
+                    Real::from_lit(5, 0),
+                    _steps_per_world_unit,
+                    2000,
+                    false,
+                    Some(&mut homming_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Slow approximate Y axis up to 6 mm");
+                // Home the X axis precisely
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::X, Some(math::ONE.neg())),
+                    Real::from_lit(6, 0),
+                    _steps_per_world_unit,
+                    1000,
+                    true,
+                    Some(&mut homming_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+            }
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))] {
+                // TODO:
+                // Go to center
+            }
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-z-axis")] {
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Upper Z + 10mm");
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Z, Some(math::ONE.neg())),
+                    Real::from_lit(10, 0),
+                    _steps_per_world_unit,
+                    1000,
+                    false,
+                    Some(&mut homming_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-probe")] {
+                        self.probe_controller.lock().await.probe_pin_down(100).await;
+                    }
+                }
+
+                // FIXME: As of now, until tested in real hardware, for safety
+                let zbounds = homming_position.z.unwrap_or(math::ZERO)
+                    + _machine_bounds.z.unwrap_or(math::ONE) / Real::from_lit(16, 0);
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Lower Z up to {:?} mm", zbounds); // reduced for safety
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Z, Some(math::ONE.neg())),
+                    zbounds,
+                    _steps_per_world_unit,
+                    1000,
+                    true,
+                    None,
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at: {:?}", homming_position);
+
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-probe")] {
+                        self.probe_controller.lock().await.probe_pin_up(100).await;
+                    }
+                }
+
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Upper Z + 10mm again por safety");
+                self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Z, Some(math::ONE)),
+                    Real::from_lit(10, 0),
+                    _steps_per_world_unit,
+                    2000,
+                    false,
+                    Some(&mut homming_position),
+                )
+                .await;
+            }
+        }
 
         #[cfg(feature = "trace-commands")]
         hwa::info!(
@@ -357,7 +381,7 @@ impl MotionDriver {
 
         Ok(homming_position)
     }
-
+    #[allow(unused)]
     async fn shabbily_move_to(
         &mut self,
         vdir: TVector<Real>,
@@ -370,27 +394,17 @@ impl MotionDriver {
         let steps_to_advance: TVector<u32> = (vdir * module * steps_per_mm)
             .abs()
             .round()
-            .map_coords(|c| c.to_i32().and_then(|c| Some(c as u32)));
+            .map_values(|_, v| v.to_i32().and_then(|vi| Some(vi as u32)));
         let mut steps_advanced: TVector<u32> = TVector::zero();
 
         self.enable_and_set_dir(&vdir);
 
-        let mut channel = hwa::StepperChannel::empty();
+        let mut channel = hwa::CoordSel::empty();
         let mut coord_sel = CoordSel::empty();
-        steps_to_advance.apply_coords(|(coord, v)| {
+        steps_to_advance.foreach_values(|coord, v| {
             let applied = v.is_defined_positive();
-            if coord.contains(CoordSel::X) {
-                channel.set(hwa::StepperChannel::X, applied);
-                coord_sel.set(CoordSel::X, applied);
-            }
-            if coord.contains(CoordSel::Y) {
-                channel.set(hwa::StepperChannel::Y, applied);
-                coord_sel.set(CoordSel::Y, applied);
-            }
-            if coord.contains(CoordSel::Z) {
-                channel.set(hwa::StepperChannel::Z, applied);
-                coord_sel.set(CoordSel::Z, applied);
-            }
+            channel.set(coord.into(), applied);
+            coord_sel.set(coord, applied);
         });
 
         let mut ticker = embassy_time::Ticker::every(Duration::from_hz(step_frequency));
@@ -409,7 +423,7 @@ impl MotionDriver {
                 match position {
                     Some(mut _p) => {
                         *_p += vdir
-                            * steps_advanced.map_coords(|c| Some(Real::from_lit(c.into(), 0)))
+                            * steps_advanced.map_values(|_, c| Some(Real::from_lit(c.into(), 0)))
                             / steps_per_mm;
                     }
                     None => {}

@@ -5,7 +5,6 @@ use crate::board as board;
 #[allow(unused)]
 use hwa::HwiContract;
 
-
 pub type WatchDog = board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
 cfg_if::cfg_if! {
@@ -33,6 +32,19 @@ cfg_if::cfg_if! {
 
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-spi")] {
+        pub type Spi = board::mocked_peripherals::MockedSpi;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-i2c")] {
+        pub type I2c = board::mocked_peripherals::MockedI2c;
+    }
+}
+
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
@@ -63,11 +75,12 @@ pub struct MotionPins {
     pub e_dir_pin: board::mocked_peripherals::MockedIOPin,
 }
 
+#[cfg(feature = "with-motion")]
 impl hwa::traits::MotionPinsTrait for MotionPins {
-    fn set_enabled(&mut self, _channels: StepperChannel, enabled: bool) {
+    fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool) {
         #[cfg(feature = "with-x-axis")]
-        if _channels.contains(StepperChannel::X) {
-            if enabled {
+        if _channels.contains(hwa::CoordSel::X) {
+            if _enabled {
                 self.x_enable_pin.set_low();
             }
             else {
@@ -75,8 +88,8 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
             }
         }
         #[cfg(feature = "with-y-axis")]
-        if _channels.contains(StepperChannel::Y) {
-            if enabled {
+        if _channels.contains(hwa::CoordSel::Y) {
+            if _enabled {
                 self.y_enable_pin.set_low();
             }
             else {
@@ -84,8 +97,8 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
             }
         }
         #[cfg(feature = "with-z-axis")]
-        if _channels.contains(StepperChannel::Z) {
-            if enabled {
+        if _channels.contains(hwa::CoordSel::Z) {
+            if _enabled {
                 self.z_enable_pin.set_low();
             }
             else {
@@ -93,8 +106,8 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
             }
         }
         #[cfg(feature = "with-e-axis")]
-        if _channels.contains(StepperChannel::E) {
-            if enabled {
+        if _channels.contains(hwa::CoordSel::E) {
+            if _enabled {
                 self.e_enable_pin.set_low();
             }
             else {
@@ -103,10 +116,10 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
         }
     }
 
-    fn set_forward_direction(&mut self, _channels: StepperChannel, _mask: StepperChannel) {
+    fn set_forward_direction(&mut self, _channels: hwa::CoordSel, _mask: hwa::CoordSel) {
         #[cfg(feature = "with-x-axis")]
-        if _mask.contains(StepperChannel::X) {
-            if _channels.contains(StepperChannel::X) {
+        if _mask.contains(hwa::CoordSel::X) {
+            if _channels.contains(hwa::CoordSel::X) {
                 self.x_enable_pin.set_low();
             }
             else {
@@ -114,8 +127,8 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
             }
         }
         #[cfg(feature = "with-y-axis")]
-        if _mask.contains(StepperChannel::Y) {
-            if _channels.contains(StepperChannel::Y) {
+        if _mask.contains(hwa::CoordSel::Y) {
+            if _channels.contains(hwa::CoordSel::Y) {
                 self.y_enable_pin.set_low();
             }
             else {
@@ -123,8 +136,8 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
             }
         }
         #[cfg(feature = "with-z-axis")]
-        if _mask.contains(StepperChannel::Z) {
-            if _channels.contains(StepperChannel::Z) {
+        if _mask.contains(hwa::CoordSel::Z) {
+            if _channels.contains(hwa::CoordSel::Z) {
                 self.z_enable_pin.set_low();
             }
             else {
@@ -132,8 +145,8 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
             }
         }
         #[cfg(feature = "with-e-axis")]
-        if _mask.contains(StepperChannel::E) {
-            if _channels.contains(StepperChannel::E) {
+        if _mask.contains(hwa::CoordSel::E) {
+            if _channels.contains(hwa::CoordSel::E) {
                 self.e_enable_pin.set_low();
             }
             else {
@@ -142,83 +155,89 @@ impl hwa::traits::MotionPinsTrait for MotionPins {
         }
     }
 
-    fn step_toggle(&mut self, _channels: StepperChannel) {
+    fn step_toggle(&mut self, _channels: hwa::CoordSel) {
         #[cfg(feature = "with-x-axis")]
-        if _channels.contains(StepperChannel::X) {
+        if _channels.contains(hwa::CoordSel::X) {
             self.x_step_pin.toggle();
         }
         #[cfg(feature = "with-y-axis")]
-        if _channels.contains(StepperChannel::Y) {
+        if _channels.contains(hwa::CoordSel::Y) {
             self.y_step_pin.toggle();
         }
         #[cfg(feature = "with-z-axis")]
-        if _channels.contains(StepperChannel::Z) {
+        if _channels.contains(hwa::CoordSel::Z) {
             self.z_step_pin.toggle();
         }
         #[cfg(feature = "with-e-axis")]
-        if _channels.contains(StepperChannel::E) {
+        if _channels.contains(hwa::CoordSel::E) {
             self.e_step_pin.toggle();
         }
     }
 
-    fn step_high(&mut self, _channels: StepperChannel) {
+    fn step_high(&mut self, _channels: hwa::CoordSel) {
         #[cfg(feature = "with-x-axis")]
-        if _channels.contains(StepperChannel::X) {
+        if _channels.contains(hwa::CoordSel::X) {
             self.x_step_pin.set_high();
         }
         #[cfg(feature = "with-y-axis")]
-        if _channels.contains(StepperChannel::Y) {
+        if _channels.contains(hwa::CoordSel::Y) {
             self.y_step_pin.set_high();
         }
         #[cfg(feature = "with-z-axis")]
-        if _channels.contains(StepperChannel::Z) {
+        if _channels.contains(hwa::CoordSel::Z) {
             self.z_step_pin.set_high();
         }
         #[cfg(feature = "with-e-axis")]
-        if _channels.contains(StepperChannel::E) {
+        if _channels.contains(hwa::CoordSel::E) {
             self.e_step_pin.set_high();
         }
     }
 
-    fn step_low(&mut self, _channels: StepperChannel) {
+    fn step_low(&mut self, _channels: hwa::CoordSel) {
         #[cfg(feature = "with-x-axis")]
-        if _channels.contains(StepperChannel::X) {
+        if _channels.contains(hwa::CoordSel::X) {
             self.x_step_pin.set_low();
         }
         #[cfg(feature = "with-y-axis")]
-        if _channels.contains(StepperChannel::Y) {
+        if _channels.contains(hwa::CoordSel::Y) {
             self.y_step_pin.set_low();
         }
         #[cfg(feature = "with-z-axis")]
-        if _channels.contains(StepperChannel::Z) {
+        if _channels.contains(hwa::CoordSel::Z) {
             self.z_step_pin.set_low();
         }
         #[cfg(feature = "with-e-axis")]
-        if _channels.contains(StepperChannel::E) {
+        if _channels.contains(hwa::CoordSel::E) {
             self.e_step_pin.set_low();
         }
     }
 
-    fn endstop_triggered(&mut self, _channels: StepperChannel) -> bool {
+    fn endstop_triggered(&mut self, _channels: hwa::CoordSel) -> bool {
         #[allow(unused_mut)]
         let mut triggered = false;
         #[cfg(feature = "with-x-axis")]
-        if _channels.contains(StepperChannel::X) {
+        if _channels.contains(hwa::CoordSel::X) {
             triggered |= self.x_endstop_pin.is_high();
         }
         #[cfg(feature = "with-y-axis")]
-        if _channels.contains(StepperChannel::Y) {
+        if _channels.contains(hwa::CoordSel::Y) {
             triggered |= self.y_endstop_pin.is_high();
         }
         #[cfg(feature = "with-z-axis")]
-        if _channels.contains(StepperChannel::Z) {
+        if _channels.contains(hwa::CoordSel::Z) {
             triggered |= self.z_endstop_pin.is_high();
         }
         #[cfg(feature = "with-e-axis")]
-        if _channels.contains(StepperChannel::E) {
+        if _channels.contains(hwa::CoordSel::E) {
             triggered |= self.e_endstop_pin.is_high();
         }
         triggered
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+        pub type MotionSender = board::mocked_peripherals::MockedI2c;
     }
 }
 
@@ -304,7 +323,6 @@ pub use board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simula
 
 #[cfg(feature = "with-trinamic")]
 pub use board::comm::AxisChannel;
-use printhor_hwa_common::StepperChannel;
 
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh1Pin = board::mocked_peripherals::MockedIOPin;
@@ -314,11 +332,6 @@ pub type TMCUartCh2Pin = board::mocked_peripherals::MockedIOPin;
 pub type TMCUartCh3Pin = board::mocked_peripherals::MockedIOPin;
 #[cfg(feature = "with-trinamic")]
 pub type TMCUartCh4Pin = board::mocked_peripherals::MockedIOPin;
-
-
-
-#[cfg(feature = "with-spi")]
-pub type Spi = board::mocked_peripherals::MockedSpi;
 
 
 #[cfg(feature = "with-display")]

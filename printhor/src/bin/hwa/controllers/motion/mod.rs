@@ -40,7 +40,7 @@ pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
     /// A movement segment.
-    Move(SegmentData, u32),
+    Move(Segment, u32),
     /// A homing action.
     Homing(u32),
     /// A dwell action.

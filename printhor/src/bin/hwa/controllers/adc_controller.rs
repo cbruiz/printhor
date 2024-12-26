@@ -1,6 +1,6 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use crate::math;
+use hwa::math;
 use hwa::traits::UnifiedAdc16;
 use hwa::AsyncMutexStrategy;
 use hwa::StaticAsyncController;

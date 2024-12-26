@@ -1,6 +1,5 @@
 use crate::hwa;
-use crate::math::{CoordSel, TVector};
-use hwa::StepperChannel;
+use hwa::math::{CoordSel, TVector};
 
 /// Represents the status of a stepper channel.
 /// This struct maintains the status for a specific stepper channel,
@@ -15,7 +14,7 @@ use hwa::StepperChannel;
 pub struct ChannelStatus {
     next_tick: u32,
     width: u32,
-    name: StepperChannel,
+    name: CoordSel,
 }
 
 impl ChannelStatus {
@@ -29,30 +28,12 @@ impl ChannelStatus {
     /// # Returns
     ///
     /// A new ChannelStatus instance.
-    pub const fn new(name: StepperChannel, width: u32) -> Self {
+    pub const fn new(name: CoordSel, width: u32) -> Self {
         Self {
             next_tick: 0,
             width,
             name,
         }
-    }
-}
-
-cfg_if::cfg_if! {
-    if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis", feature = "with-e-axis"))] {
-        /// The number of multi-timer channels when all axes (x, y, z, and e) are enabled.
-        pub const MULTITIMER_CHANNELS: usize = 4;
-    }
-    else if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))] {
-        /// The number of multi-timer channels when x, y, and z axes are enabled.
-        pub const MULTITIMER_CHANNELS: usize = 3;
-    }
-    else if #[cfg(all(feature = "with-z-axis"))]  {
-        /// The number of multi-timer channels when only the z axis is enabled.
-        pub const MULTITIMER_CHANNELS: usize = 1;
-    }
-    else {
-        compile_error!("Unsupported axis configuration");
     }
 }
 
@@ -68,9 +49,13 @@ cfg_if::cfg_if! {
 ///
 #[derive(Clone, Copy)]
 pub struct MultiTimer {
-    width: u32,
+    #[cfg(feature = "with-motion-broadcast")]
+    /// The reference time in micro-seconds
+    ref_time_us: u32,
+    /// The interval width in micro-seconds
+    width_us: u32,
     max_count: TVector<u32>,
-    channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+    channels: [Option<ChannelStatus>; CoordSel::num_axis()],
 }
 
 impl MultiTimer {
@@ -81,18 +66,11 @@ impl MultiTimer {
     /// A new MultiTimer instance.
     pub const fn new() -> Self {
         Self {
-            width: 0,
+            #[cfg(feature = "with-motion-broadcast")]
+            ref_time_us: 0,
+            width_us: 0,
             max_count: TVector::new(),
-            channels: [
-                #[cfg(feature = "with-x-axis")]
-                None,
-                #[cfg(feature = "with-y-axis")]
-                None,
-                #[cfg(feature = "with-z-axis")]
-                None,
-                #[cfg(feature = "with-e-axis")]
-                None,
-            ],
+            channels: [None; CoordSel::num_axis()],
         }
     }
 
@@ -102,49 +80,25 @@ impl MultiTimer {
     ///
     /// * `channel` - The stepper channel to set the ticks for.
     /// * `ticks` - The optional number of ticks to set. If `None`, the channel is disabled.
-    pub fn set_channel_ticks(&mut self, channel: StepperChannel, ticks: Option<u32>) {
-        #[cfg(feature = "with-x-axis")]
-        if channel.contains(StepperChannel::X) {
-            match ticks {
-                Some(_t) => {
-                    self.channels[0] = Some(ChannelStatus::new(StepperChannel::X, _t));
+    pub fn set_channel_ticks(&mut self, channel: CoordSel, ticks: Option<u32>) {
+        for ch in channel.iter() {
+            let index = ch.index();
+            if index < self.channels.len() {
+                match ticks {
+                    Some(_t) => {
+                        self.channels[index] = Some(ChannelStatus::new(ch, _t));
+                    }
+                    None => {
+                        self.channels[index] = None;
+                    }
                 }
-                None => {
-                    self.channels[0] = None;
-                }
-            }
-        }
-        #[cfg(feature = "with-y-axis")]
-        if channel.contains(StepperChannel::Y) {
-            match ticks {
-                Some(_t) => {
-                    self.channels[1] = Some(ChannelStatus::new(StepperChannel::Y, _t));
-                }
-                None => {
-                    self.channels[1] = None;
-                }
-            }
-        }
-        #[cfg(feature = "with-z-axis")]
-        if channel.contains(StepperChannel::Z) {
-            match ticks {
-                Some(_t) => {
-                    self.channels[2] = Some(ChannelStatus::new(StepperChannel::Z, _t));
-                }
-                None => {
-                    self.channels[2] = None;
-                }
-            }
-        }
-        #[cfg(feature = "with-e-axis")]
-        if channel.contains(StepperChannel::E) {
-            match ticks {
-                Some(_t) => {
-                    self.channels[3] = Some(ChannelStatus::new(StepperChannel::E, _t));
-                }
-                None => {
-                    self.channels[3] = None;
-                }
+            } else {
+                hwa::error!(
+                    "OUT OF BOUNDS channel: {:?} index: {}, len: {} !!!",
+                    channel,
+                    index,
+                    self.channels.len()
+                );
             }
         }
     }
@@ -163,8 +117,12 @@ impl MultiTimer {
     /// # Arguments
     ///
     /// * `width` - The width to set.
-    pub fn set_width(&mut self, width: u32) {
-        self.width = width;
+    pub fn displace_width(&mut self, width_us: u32) {
+        #[cfg(feature = "with-motion-broadcast")]
+        {
+            self.ref_time_us += width_us;
+        }
+        self.width_us = width_us;
     }
 
     /// Gets the width of the MultiTimer.
@@ -173,7 +131,7 @@ impl MultiTimer {
     ///
     /// The width of the MultiTimer.
     pub fn width(&self) -> u32 {
-        self.width
+        self.width_us
     }
 }
 
@@ -190,18 +148,19 @@ impl MultiTimer {
 ///
 #[derive(Clone, Copy)]
 pub struct StepPlanner {
-    /// The interval width for the step planner.
+    /// The interval width for the step planner in microseconds
     pub interval_width: u32,
-    /// The reference time for the step planner.
-    ref_time: u32,
+    pub delta: hwa::MotionDelta,
+    // The current time in step-planner
+    pub(crate) ref_time_us: u32,
     /// Channels being managed by the step planner.
-    channels: [Option<ChannelStatus>; MULTITIMER_CHANNELS],
+    channels: [Option<ChannelStatus>; CoordSel::num_axis()],
     /// Maximum count vector for each channel.
-    max_count: TVector<u32>,
+    pub max_count: TVector<u32>,
     /// Flags to enable stepper channels.
-    pub stepper_enable_flags: StepperChannel,
+    pub stepper_enable_flags: CoordSel,
     /// Flags to set the direction forward for stepper channels.
-    pub stepper_dir_fwd_flags: StepperChannel,
+    pub stepper_dir_fwd_flags: CoordSel,
 }
 
 impl StepPlanner {
@@ -210,23 +169,15 @@ impl StepPlanner {
     /// # Returns
     ///
     /// A new StepPlanner instance.
-    pub const fn new() -> Self {
+    pub const fn new(delta: hwa::MotionDelta) -> Self {
         Self {
+            delta,
+            ref_time_us: 0,
             interval_width: 0,
             max_count: TVector::new(),
-            ref_time: 0,
-            channels: [
-                #[cfg(feature = "with-x-axis")]
-                None,
-                #[cfg(feature = "with-y-axis")]
-                None,
-                #[cfg(feature = "with-z-axis")]
-                None,
-                #[cfg(feature = "with-e-axis")]
-                None,
-            ],
-            stepper_enable_flags: StepperChannel::UNSET,
-            stepper_dir_fwd_flags: StepperChannel::UNSET,
+            channels: [None; CoordSel::num_axis()],
+            stepper_enable_flags: CoordSel::UNSET,
+            stepper_dir_fwd_flags: CoordSel::UNSET,
         }
     }
 
@@ -242,14 +193,16 @@ impl StepPlanner {
     ///
     /// A new StepPlanner instance.
     pub fn from(
+        delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
-        stepper_enable_flags: StepperChannel,
-        stepper_dir_fwd_flags: StepperChannel,
+        stepper_enable_flags: CoordSel,
+        stepper_dir_fwd_flags: CoordSel,
     ) -> Self {
         let mut instance = Self {
-            interval_width: multi_timer.width,
+            delta,
+            ref_time_us: 0,
+            interval_width: multi_timer.width_us,
             max_count: multi_timer.max_count,
-            ref_time: 0,
             channels: multi_timer.channels,
             stepper_enable_flags,
             stepper_dir_fwd_flags,
@@ -260,7 +213,7 @@ impl StepPlanner {
 
     /// Resets the StepPlanner to its initial state.
     fn reset(&mut self) {
-        self.ref_time = 0;
+        self.ref_time_us = 0;
         for channel in self.channels.iter_mut() {
             match channel.as_mut() {
                 None => {}
@@ -278,17 +231,21 @@ impl StepPlanner {
     /// # Returns
     ///
     /// An Option containing the stepper channels that were triggered in this step.
-    pub fn next(&mut self, step_width: u32) -> Option<StepperChannel> {
-        self.ref_time += step_width;
-        let mut triggered_channels = StepperChannel::empty();
+    pub fn next(&mut self, step_width: u32) -> Option<CoordSel> {
+        self.ref_time_us += step_width;
+        let mut triggered_channels = CoordSel::empty();
         for channel in self.channels.iter_mut() {
             if let Some(_ch) = channel.as_mut() {
-                if _ch.next_tick <= self.ref_time {
+                if _ch.next_tick <= self.ref_time_us {
                     if _ch.width < step_width {
-                        unreachable!(
-                            "Feedrate exceeded: width: {} max: {}",
-                            _ch.width, step_width
-                        );
+                        cfg_if::cfg_if! {
+                            if #[cfg(not(feature = "with-motion-broadcast"))] {
+                                unreachable!(
+                                    "Feedrate exceeded: width: {} min: {}",
+                                    _ch.width, step_width
+                                );
+                            }
+                        }
                     }
                     _ch.next_tick += _ch.width;
                     let coord: CoordSel = _ch.name.into();

@@ -1,5 +1,5 @@
 #[allow(unused)]
-use crate::control::{GCodeCmd, GCodeValue, N, S, XYZE, XYZEFS, XYZF};
+use crate::control::{GCodeCmd, GCodeValue, EFSXYZ, EXYZ, FXYZ, N, S};
 use crate::helpers;
 use crate::hwa;
 
@@ -177,7 +177,7 @@ where
                                     //crate::debug!("BlockDelete");
                                 }
                                 async_gcode::GCode::LineNumber(n) => {
-                                    tagged_line_num = Some(n);
+                                    tagged_line_num = n;
                                 }
                                 async_gcode::GCode::Word(ch, fv) => {
                                     if skip_gcode {
@@ -328,9 +328,9 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('$', None) => Some(GCodeValue::GRBLCmd),
         ('g', None) => Some(GCodeValue::G),
         #[cfg(feature = "with-motion")]
-        ('g', Some((0, 0))) => Some(GCodeValue::G0(XYZF::new())),
+        ('g', Some((0, 0))) => Some(GCodeValue::G0(FXYZ::new())),
         #[cfg(feature = "with-motion")]
-        ('g', Some((1, 0))) => Some(GCodeValue::G1(XYZEFS::new())),
+        ('g', Some((1, 0))) => Some(GCodeValue::G1(EFSXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((4, 0))) => Some(GCodeValue::G4(S::new())),
         #[cfg(feature = "with-motion")]
@@ -340,7 +340,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(feature = "with-motion")]
         ('g', Some((21, 0))) => Some(GCodeValue::G21),
         #[cfg(feature = "with-motion")]
-        ('g', Some((28, 0))) => Some(GCodeValue::G28(XYZE::new())),
+        ('g', Some((28, 0))) => Some(GCodeValue::G28(EXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((29, 0))) => Some(GCodeValue::G29),
         #[cfg(feature = "with-probe")]
@@ -353,7 +353,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(feature = "with-motion")]
         ('g', Some((91, 0))) => Some(GCodeValue::G91),
         #[cfg(feature = "with-motion")]
-        ('g', Some((92, 0))) => Some(GCodeValue::G92(XYZE::new())),
+        ('g', Some((92, 0))) => Some(GCodeValue::G92(EXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((94, 0))) => Some(GCodeValue::G94),
         #[cfg(feature = "with-motion")]
@@ -443,34 +443,127 @@ fn update_current(
         },
         #[cfg(feature = "with-motion")]
         GCodeValue::G0(coord) => match (ch, frx) {
+            ('f', Some(val)) => {
+                coord.f.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-x-axis")]
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-y-axis")]
             ('y', Some(val)) => {
                 coord.y.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-z-axis")]
             ('z', Some(val)) => {
                 coord.z.replace(helpers::to_fixed(val));
             }
-            ('f', Some(val)) => {
-                coord.f.replace(helpers::to_fixed(val));
+            //
+            #[cfg(feature = "with-a-axis")]
+            ('a', Some(val)) => {
+                coord.a.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-b-axis")]
+            ('b', Some(val)) => {
+                coord.b.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-c-axis")]
+            ('c', Some(val)) => {
+                coord.c.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-i-axis")]
+            ('i', Some(val)) => {
+                coord.i.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-j-axis")]
+            ('j', Some(val)) => {
+                coord.j.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-k-axis")]
+            ('k', Some(val)) => {
+                coord.k.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-u-axis")]
+            ('u', Some(val)) => {
+                coord.u.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-v-axis")]
+            ('v', Some(val)) => {
+                coord.v.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-w-axis")]
+            ('w', Some(val)) => {
+                coord.w.replace(helpers::to_fixed(val));
             }
             _ => {}
         },
 
         #[cfg(feature = "with-motion")]
         GCodeValue::G1(coord) => match (ch, frx) {
+            #[cfg(feature = "with-e-axis")]
+            ('e', Some(val)) => {
+                coord.e.replace(helpers::to_fixed(val));
+            }
+            ('f', Some(val)) => {
+                coord.f.replace(helpers::to_fixed(val));
+            }
+            ('s', Some(val)) => {
+                coord.s.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-x-axis")]
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-y-axis")]
             ('y', Some(val)) => {
                 coord.y.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-z-axis")]
             ('z', Some(val)) => {
                 coord.z.replace(helpers::to_fixed(val));
             }
-            ('e', Some(val)) => {
-                coord.e.replace(helpers::to_fixed(val));
+            //
+            #[cfg(feature = "with-a-axis")]
+            ('a', Some(val)) => {
+                coord.a.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-b-axis")]
+            ('b', Some(val)) => {
+                coord.b.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-c-axis")]
+            ('c', Some(val)) => {
+                coord.c.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-i-axis")]
+            ('i', Some(val)) => {
+                coord.i.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-j-axis")]
+            ('j', Some(val)) => {
+                coord.j.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-k-axis")]
+            ('k', Some(val)) => {
+                coord.k.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-u-axis")]
+            ('u', Some(val)) => {
+                coord.u.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-v-axis")]
+            ('v', Some(val)) => {
+                coord.v.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-w-axis")]
+            ('w', Some(val)) => {
+                coord.w.replace(helpers::to_fixed(val));
             }
             _ => {}
         },
@@ -483,30 +576,119 @@ fn update_current(
         },
         #[cfg(feature = "with-motion")]
         GCodeValue::G28(coord) => match (ch, frx) {
+            #[cfg(feature = "with-e-axis")]
+            ('e', Some(val)) => {
+                coord.e.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-x-axis")]
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-y-axis")]
             ('y', Some(val)) => {
                 coord.y.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-z-axis")]
             ('z', Some(val)) => {
                 coord.z.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-a-axis")]
+            ('a', Some(val)) => {
+                coord.a.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-b-axis")]
+            ('b', Some(val)) => {
+                coord.b.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-c-axis")]
+            ('c', Some(val)) => {
+                coord.c.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-i-axis")]
+            ('i', Some(val)) => {
+                coord.i.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-j-axis")]
+            ('j', Some(val)) => {
+                coord.j.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-k-axis")]
+            ('k', Some(val)) => {
+                coord.k.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-u-axis")]
+            ('u', Some(val)) => {
+                coord.u.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-v-axis")]
+            ('v', Some(val)) => {
+                coord.v.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-w-axis")]
+            ('w', Some(val)) => {
+                coord.w.replace(helpers::to_fixed(val));
             }
             _ => {}
         },
         #[cfg(feature = "with-motion")]
         GCodeValue::G92(coord) => match (ch, frx) {
+            #[cfg(feature = "with-e-axis")]
+            ('e', Some(val)) => {
+                coord.e.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-x-axis")]
             ('x', Some(val)) => {
                 coord.x.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-y-axis")]
             ('y', Some(val)) => {
                 coord.y.replace(helpers::to_fixed(val));
             }
+            #[cfg(feature = "with-z-axis")]
             ('z', Some(val)) => {
                 coord.z.replace(helpers::to_fixed(val));
             }
-            ('e', Some(val)) => {
-                coord.e.replace(helpers::to_fixed(val));
+            //
+            #[cfg(feature = "with-a-axis")]
+            ('a', Some(val)) => {
+                coord.a.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-b-axis")]
+            ('b', Some(val)) => {
+                coord.b.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-c-axis")]
+            ('c', Some(val)) => {
+                coord.c.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-i-axis")]
+            ('i', Some(val)) => {
+                coord.i.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-j-axis")]
+            ('j', Some(val)) => {
+                coord.j.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-k-axis")]
+            ('k', Some(val)) => {
+                coord.k.replace(helpers::to_fixed(val));
+            }
+            //
+            #[cfg(feature = "with-u-axis")]
+            ('u', Some(val)) => {
+                coord.u.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-v-axis")]
+            ('v', Some(val)) => {
+                coord.v.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-w-axis")]
+            ('w', Some(val)) => {
+                coord.w.replace(helpers::to_fixed(val));
             }
             _ => {}
         },

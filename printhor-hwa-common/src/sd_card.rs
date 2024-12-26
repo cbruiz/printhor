@@ -132,8 +132,7 @@ where
     pub fn open_path(
         &mut self,
         path: &str,
-    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError>
-    {
+    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError> {
         // First, it's mandatory to open or increment the reference count of the root directory.
 
         match self.raw_open_root_dir() {
@@ -273,8 +272,7 @@ where
         &mut self,
         parent_ref: &EntryRef,
         entry_name: &str,
-    ) -> Result<EntryRef, SDCardError>
-    {
+    ) -> Result<EntryRef, SDCardError> {
         if self.opened_entries_ref_counts[parent_ref.0 as usize].ref_count == 0 {
             return Err(SDCardError::InconsistencyError);
         }
@@ -390,8 +388,7 @@ where
     pub fn open_file_path(
         &mut self,
         _path: &str,
-    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError>
-    {
+    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError> {
         match self.open_path(_path) {
             Ok(_path_stack) => Ok(_path_stack),
             Err(_e) => Err(_e),

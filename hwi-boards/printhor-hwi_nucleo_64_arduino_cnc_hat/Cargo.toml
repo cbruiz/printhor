@@ -24,9 +24,11 @@ with-print-job = []
 with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]
 with-serial-port-2 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-2"]
 with-spi = ["embedded-hal-1"]
+with-i2c = ["embedded-hal-1", "pwm-pca9685"]
 with-hot-end = ["embedded-hal-1"]
 with-hot-bed = ["embedded-hal-1"]
 with-motion = []
+with-motion-broadcast = []
 with-probe = ["embedded-hal-1"]
 with-endstops = []
 with-sd-card = []
@@ -37,12 +39,20 @@ with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/wi
 with-trinamic = []
 with-ps-on = []
 without-ringbuffer = []
-with-i2c-pwm-motion = []
 
 with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 debug-signals = []
 
@@ -59,11 +69,11 @@ cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single
 cortex-m-rt = { version = "0.7.3", default-features = false }
 alloc-cortex-m = { version = "0.4", default-features = false, features = [] }
 
-embassy-stm32 = { version = "0", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
-embassy-executor = { version = "0", default-features = false, features = ["arch-cortex-m"] }
-embassy-sync = { version = "0", features = [] }
-embassy-time = { version = "0", features = [] }
-embassy-futures = { version = "0", features = [] }
+embassy-stm32 = { version = "0.2", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
+embassy-executor = { version = "0.7", default-features = false, features = ["arch-cortex-m", "executor-interrupt"] }
+embassy-sync = { version = "0.6", features = [] }
+embassy-time = { version = "0.4", features = [] }
+embassy-futures = { version = "0.1", features = [] }
 embassy-usb = { version = "0", features = [], optional = true }
 
 printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-common" }
@@ -73,6 +83,9 @@ futures = { version = "0.3", default-features = false, features = [] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true, features = [] }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
 embedded-io-async = { version = "0.6", default-features = false, optional = true, features = [] }
+
+pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
+
 
 cfg-if = { version = "1.0" }
 const_env = { version = "0.1" }

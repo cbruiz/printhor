@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std", "embassy-time/generic-queue-128"]
-default = ["std", "with-log"]
+default = ["std", "with-log", "float-point-f32-impl"]
 nightly = []
 executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
@@ -25,27 +25,42 @@ with-serial-usb = ["async-gcode", "embedded-io-async"]
 with-serial-port-1 = ["async-gcode", "embedded-io-async"]
 with-serial-port-2 = ["async-gcode", "embedded-io-async"]
 with-spi = ["embedded-hal-0"]
+with-i2c = ["embedded-hal-0"]
 with-ps-on = ["embedded-hal-1"]
 with-probe = ["embedded-hal-0"]
 with-laser = ["embedded-hal-0"]
 with-fan-layer = ["embedded-hal-0"]
 with-fan-extra-1 = ["embedded-hal-0"]
 with-motion = ["embedded-hal-0"]
+with-motion-broadcast = []
 with-hot-end = ["embedded-hal-0"]
 with-hot-bed = ["embedded-hal-0"]
 with-sd-card = ["async-gcode", "embedded-sdmmc", "heapless"]
 with-print-job = []
 with-trinamic = []
 
+fixed-point-128-impl = []
+float-point-f32-impl = []
+float-point-f64-impl = []
+
 with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 [dependencies]
 printhor-hwa-common-macros = { version = "0", path = "../printhor-hwa-common-macros" }
 printhor-hwa-utils = { version = "0",  path = "../printhor-hwa-utils", default-features = false, features = [] }
-const_env = { version = "0.1.2"}
+const_env = { version = "0.1"}
 
 embassy-sync = { version = "0.6", features = [] }
 embassy-executor = { version = "0.7", features = [] }
@@ -64,6 +79,10 @@ cfg-if = { version = "1.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }
 strum = { version = "0.26", default-features = false, features = ["derive"] }
+
+num-traits = { version = "0.2", default-features = false, features = [] }
+micromath = { version = "2.1", default-features = false, features = [] }
+ryu = {version = "1.0", default-features = false}
 
 [dev-dependencies]
 futures-test = { version = "0.3", default-features = false}

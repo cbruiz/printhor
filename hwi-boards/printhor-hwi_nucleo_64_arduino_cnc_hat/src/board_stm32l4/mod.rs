@@ -3,6 +3,7 @@
 //! https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32L476RG.json
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
+use printhor_hwa_common::CoordSel;
 
 mod device;
 mod types;
@@ -11,6 +12,11 @@ pub(crate) mod io;
 
 #[global_allocator]
 static HEAP: alloc_cortex_m::CortexMHeap = alloc_cortex_m::CortexMHeap::empty();
+
+const DEFAULT_SPEED_DEG_SEG: u32 = 360*1000;
+const DEFAULT_ACCEL_DEG_SEG: u32 = DEFAULT_SPEED_DEG_SEG * 2;
+const DEFAULT_JERK_DEG_SEG: u32 = DEFAULT_ACCEL_DEG_SEG * 2;
+
 
 pub struct Contract;
 impl HwiContract for Contract {
@@ -54,15 +60,202 @@ impl HwiContract for Contract {
     //#region Constant settings for with-motion feature [...]
 
     cfg_if::cfg_if! {
-        if #[cfg(feature="with-motion")] {
-            #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
-            const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 400;
+        if #[cfg(feature = "with-motion")] {
 
-            #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
-            const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 40_000;
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "with-motion-broadcast")] {
 
-            #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
-            const SEGMENT_QUEUE_SIZE: u8 = 10;
+                    #[const_env::from_env("WORLD_UNIT_MAGNITUDE")]
+                    const WORLD_UNIT_MAGNITUDE: &'static str = "º";
+
+                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 50;
+
+                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100;
+
+                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    const SEGMENT_QUEUE_SIZE: u8 = 10;
+
+                    const DEFAULT_MAX_SPEED: hwa::math::TVector<u32> = hwa::math::TVector::new_with_coord(
+                        CoordSel::all(),
+                        Some(DEFAULT_SPEED_DEG_SEG)
+                    );
+                    const DEFAULT_MAX_ACCEL: hwa::math::TVector<u32> = hwa::math::TVector::new_with_coord(
+                        CoordSel::all(),
+                        Some(DEFAULT_ACCEL_DEG_SEG)
+                    );
+                    const DEFAULT_MAX_JERK: hwa::math::TVector<u32> = hwa::math::TVector::new_with_coord(
+                        CoordSel::all(),
+                        Some(DEFAULT_JERK_DEG_SEG)
+                    );
+
+                    const DEFAULT_TRAVEL_SPEED: u16 = DEFAULT_SPEED_DEG_SEG as u16;
+
+                    const DEFAULT_UNITS_PER_MM: hwa::math::TVector<f32> = hwa::math::TVector::new_with_coord(
+                        CoordSel::all(),
+                        Some(1.0f32)
+                    );
+
+                    const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = hwa::math::TVector::new_with_coord(
+                        CoordSel::all(),
+                        Some(1)
+                    );
+
+                    const DEFAULT_MACHINE_BOUNDS: hwa::math::TVector<f32> = hwa::math::TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] None,
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(90.0),
+                        #[cfg(feature = "with-y-axis")] Some(90.0),
+                        #[cfg(feature = "with-z-axis")] Some(90.0),
+                        //
+                        #[cfg(feature = "with-a-axis")] Some(90.0),
+                        #[cfg(feature = "with-b-axis")] Some(90.0),
+                        #[cfg(feature = "with-c-axis")] Some(90.0),
+                        //
+                        #[cfg(feature = "with-i-axis")] Some(90.0),
+                        #[cfg(feature = "with-j-axis")] Some(90.0),
+                        #[cfg(feature = "with-k-axis")] Some(90.0),
+                        //
+                        #[cfg(feature = "with-u-axis")] Some(90.0),
+                        #[cfg(feature = "with-v-axis")] Some(90.0),
+                        #[cfg(feature = "with-w-axis")] Some(90.0),
+                    );
+
+                }
+                else {
+                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
+
+                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
+                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    const SEGMENT_QUEUE_SIZE: u8 = 10;
+
+                    const DEFAULT_MAX_SPEED: hwa::math::TVector<u32> = TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] Some(600),
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(600),
+                        #[cfg(feature = "with-y-axis")] Some(600),
+                        #[cfg(feature = "with-z-axis")] Some(100),
+                        //
+                        #[cfg(feature = "with-a-axis")] None,
+                        #[cfg(feature = "with-b-axis")] None,
+                        #[cfg(feature = "with-c-axis")] None,
+                        //
+                        #[cfg(feature = "with-i-axis")] None,
+                        #[cfg(feature = "with-j-axis")] None,
+                        #[cfg(feature = "with-k-axis")] None,
+                        //
+                        #[cfg(feature = "with-u-axis")] None,
+                        #[cfg(feature = "with-v-axis")] None,
+                        #[cfg(feature = "with-w-axis")] None,
+                    );
+
+                    const DEFAULT_MAX_ACCEL: TVector<u32> = TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] Some(9800),
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(9800),
+                        #[cfg(feature = "with-y-axis")] Some(9800),
+                        #[cfg(feature = "with-z-axis")] Some(9800),
+                        //
+                        #[cfg(feature = "with-a-axis")] None,
+                        #[cfg(feature = "with-b-axis")] None,
+                        #[cfg(feature = "with-c-axis")] None,
+                        //
+                        #[cfg(feature = "with-i-axis")] None,
+                        #[cfg(feature = "with-j-axis")] None,
+                        #[cfg(feature = "with-k-axis")] None,
+                        //
+                        #[cfg(feature = "with-u-axis")] None,
+                        #[cfg(feature = "with-v-axis")] None
+                        #[cfg(feature = "with-w-axis")] None,
+                    );
+
+                    const DEFAULT_MAX_ACCEL: TVector<u32> = TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] Some(19600),
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(19600),
+                        #[cfg(feature = "with-y-axis")] Some(19600),
+                        #[cfg(feature = "with-z-axis")] Some(6400),
+                        //
+                        #[cfg(feature = "with-a-axis")] None,
+                        #[cfg(feature = "with-b-axis")] None,
+                        #[cfg(feature = "with-c-axis")] None,
+                        //
+                        #[cfg(feature = "with-i-axis")] None,
+                        #[cfg(feature = "with-j-axis")] None,
+                        #[cfg(feature = "with-k-axis")] None,
+                        //
+                        #[cfg(feature = "with-u-axis")] None,
+                        #[cfg(feature = "with-v-axis")] None,
+                        #[cfg(feature = "with-w-axis")] None,
+                    );
+
+                    const DEFAULT_TRAVEL_SPEED: u16 = 600;
+
+                    const DEFAULT_UNITS_PER_MM: TVector<f32> = TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] Some(50.0),
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(10.0),
+                        #[cfg(feature = "with-y-axis")] Some(10.0),
+                        #[cfg(feature = "with-z-axis")] Some(50.0),
+                        //
+                        #[cfg(feature = "with-a-axis")] None,
+                        #[cfg(feature = "with-b-axis")] None,
+                        #[cfg(feature = "with-c-axis")] None,
+                        //
+                        #[cfg(feature = "with-i-axis")] None,
+                        #[cfg(feature = "with-j-axis")] None,
+                        #[cfg(feature = "with-k-axis")] None,
+                        //
+                        #[cfg(feature = "with-u-axis")] None,
+                        #[cfg(feature = "with-v-axis")] None,
+                        #[cfg(feature = "with-w-axis")] None,
+                    );
+
+                    const DEFAULT_MICRO_STEPS_PER_AXIS: TVector<u16> = TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] Some(2),
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(2),
+                        #[cfg(feature = "with-y-axis")] Some(2),
+                        #[cfg(feature = "with-z-axis")] Some(2),
+                        //
+                        #[cfg(feature = "with-a-axis")] None,
+                        #[cfg(feature = "with-b-axis")] None,
+                        #[cfg(feature = "with-c-axis")] None,
+                        //
+                        #[cfg(feature = "with-i-axis")] None,
+                        #[cfg(feature = "with-j-axis")] None,
+                        #[cfg(feature = "with-k-axis")] None,
+                        //
+                        #[cfg(feature = "with-u-axis")] None,
+                        #[cfg(feature = "with-v-axis")] None,
+                        #[cfg(feature = "with-w-axis")] None,
+                    );
+
+                    const DEFAULT_MACHINE_BOUNDS: TVector<f32> = TVector::from_coords(
+                        #[cfg(feature = "with-e-axis")] None,
+                        //
+                        #[cfg(feature = "with-x-axis")] Some(200.0),
+                        #[cfg(feature = "with-y-axis")] Some(200.0),
+                        #[cfg(feature = "with-z-axis")] Some(200.0),
+                        //
+                        #[cfg(feature = "with-a-axis")] None,
+                        #[cfg(feature = "with-b-axis")] None,
+                        #[cfg(feature = "with-c-axis")] None,
+                        //
+                        #[cfg(feature = "with-i-axis")] None,
+                        #[cfg(feature = "with-j-axis")] None,
+                        #[cfg(feature = "with-k-axis")] None,
+                        //
+                        #[cfg(feature = "with-u-axis")] None,
+                        #[cfg(feature = "with-v-axis")] None,
+                        #[cfg(feature = "with-w-axis")] None,
+                    );
+                }
+            }
         }
     }
 
@@ -172,9 +365,25 @@ impl HwiContract for Contract {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-i2c")] {
+            #[const_env::from_env("I2C_FREQUENCY")]
+            const I2C_FREQUENCY: u32 = 100_000;
+            type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             type MotionPinsMutexStrategy = types::MotionPinsMuxtexStrategy;
             type MotionPins = device::MotionPins;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+            type MotionBroadcastChannelMutexType = types::MotionBroadcastChannelMutexType;
+
+            type MotionSenderMutexStrategy = types::MotionSenderMutexStrategy;
         }
     }
 
@@ -346,9 +555,9 @@ impl HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
                 let mut cfg = embassy_stm32::spi::Config::default();
-                cfg.frequency = embassy_stm32::time::Hertz(Contract::SPI_FREQUENCY);
+                cfg.frequency = embassy_stm32::time::Hertz(Self::SPI_FREQUENCY);
 
-                let _spi1_device = hwa::make_static_async_controller!(
+                let spi = hwa::make_static_async_controller!(
                     "SPI3",
                     types::Spi1MutexStrategyType,
                     device::Spi::new(
@@ -363,7 +572,7 @@ impl HwiContract for Contract {
             if #[cfg(feature = "with-sd-card")] {
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-spi")] {
-                        let sd_card_device = _spi1_device.clone();
+                        let sd_card_device = spi.clone();
                     }
                     else {
                         compile_error!("with-sd-card requires with-spi in this board");
@@ -387,27 +596,32 @@ impl HwiContract for Contract {
                     z_dir_pin: embassy_stm32::gpio::Output::new(p.PA8, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                 };
                 cfg_if::cfg_if! {
-                    if #[cfg(feature = "with-i2c-pwm-motion")] {
+                    if #[cfg(any(feature = "with-i2c", feature = "with-motion-broadcast"))] {
 
                         embassy_stm32::bind_interrupts!(struct I2C1Irqs {
                             I2C1_EV => embassy_stm32::i2c::EventInterruptHandler<embassy_stm32::peripherals::I2C1>;
                             I2C1_ER => embassy_stm32::i2c::ErrorInterruptHandler<embassy_stm32::peripherals::I2C1>;
                         });
 
-                        let i2c_freq = embassy_stm32::time::hz(16_000);
+                        let i2c_freq = embassy_stm32::time::hz(Self::I2C_FREQUENCY);
                         let i2c_conf = embassy_stm32::i2c::Config::default();
 
-                        let _i2c_dev = embassy_stm32::i2c::I2c::new(
-                            p.I2C1,
-                            // SCL
-                            p.PB8,
-                            // SDA
-                            p.PB9,
-                            I2C1Irqs,
-                            p.DMA2_CH7,
-                            p.DMA2_CH6,
-                            i2c_freq,
-                            i2c_conf,
+                        let i2c = hwa::make_static_async_controller!(
+                            "I2C1",
+                            types::I2cMutexStrategyType,
+
+                            io::MotionI2c::new(embassy_stm32::i2c::I2c::new_blocking(
+                                p.I2C1,
+                                // SCL
+                                p.PB8,
+                                // SDA
+                                p.PB9,
+                                //I2C1Irqs,
+                                //p.DMA2_CH7,
+                                //p.DMA2_CH6,
+                                i2c_freq,
+                                i2c_conf,
+                            ))
                         );
                     }
                 }
@@ -567,10 +781,16 @@ impl HwiContract for Contract {
             serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_rx_stream,
+            #[cfg(feature = "with-spi")]
+            spi,
+            #[cfg(feature = "with-i2c")]
+            i2c: i2c.clone(),
             #[cfg(feature = "with-ps-on")]
             ps_on,
             #[cfg(feature = "with-motion")]
             motion_pins,
+            #[cfg(feature = "with-motion-broadcast")]
+            motion_sender: i2c,
             #[cfg(feature = "with-probe")]
             probe_pwm,
             #[cfg(feature = "with-probe")]
@@ -603,6 +823,8 @@ impl HwiContract for Contract {
             hot_bed_pwm,
             #[cfg(feature = "with-hot-bed")]
             hot_bed_pwm_channel,
+            #[cfg(feature = "with-motion-broadcast")]
+            high_priority_core: hwa::NoDevice,
         }
     }
 
@@ -647,9 +869,34 @@ impl HwiContract for Contract {
             }
         }
     }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-motion-broadcast")] {
+
+            type HighPriorityCore = hwa::NoDevice;
+
+            fn launch_high_priotity<S: 'static + Sized + Send>(_core: Self::HighPriorityCore, _token: embassy_executor::SpawnToken<S>) -> Result<(),()>
+            {
+                pub static EXECUTOR_HIGH: embassy_executor::InterruptExecutor = embassy_executor::InterruptExecutor::new();
+
+                #[interrupt]
+                unsafe fn RCC() {
+                    EXECUTOR_HIGH.on_interrupt()
+                }
+
+                use embassy_stm32::interrupt;
+                use embassy_stm32::interrupt::InterruptExt;
+                interrupt::RCC.set_priority(interrupt::Priority::P2);
+
+                let spawner = EXECUTOR_HIGH.start(interrupt::RCC);
+                spawner.spawn(_token).map_err(|_| ())
+            }
+        }
+    }
+
 }
 
-cfg_if::cfg_if! {
+    cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         extern "Rust" {
             fn do_tick();

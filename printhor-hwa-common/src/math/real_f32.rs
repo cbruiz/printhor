@@ -395,8 +395,6 @@ cfg_if::cfg_if! {
         impl RealInclusiveRange {
             pub fn new(start: Real, end: Real, step_size: Real) -> Self {
                 let num_steps = ((end - start) / step_size).ceil();
-                #[cfg(feature = "native")]
-                println!("RealInclusiveRange: start={:?} end={:?} step_size={:?}, num_steps={:?}", start, end, step_size, num_steps);
                 RealInclusiveRange {
                     current: start,
                     current_back: start,

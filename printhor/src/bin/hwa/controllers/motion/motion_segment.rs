@@ -2,18 +2,18 @@
 
 use crate::control::motion::{Constraints, MotionProfile};
 use crate::hwa;
-use crate::math::Real;
-use crate::math::TVector;
+use hwa::math::Real;
+use hwa::math::TVector;
 
 /// Represents the data for a motion segment.
 ///
 /// # Fields
-/// - `speed_enter_mms`: Initial speed at the entry of the segment in millimeters per second (mm/s).
-/// - `speed_exit_mms`: Speed at the exit of the segment in millimeters per second (mm/s).
-/// - `speed_target_mms`: Target speed for the segment in millimeters per second (mm/s).
-/// - `displacement_mm`: Total displacement to complete the movement in millimeters (mm).
-/// - `speed_enter_constrained_mms`: Constrained initial speed at the entry of the segment in millimeters per second (mm/s).
-/// - `speed_exit_constrained_mms`: Constrained speed at the exit of the segment in millimeters per second (mm/s).
+/// - `speed_enter_mms`: Initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+/// - `speed_exit_mms`: Speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+/// - `speed_target_mms`: Target speed for the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+/// - `displacement_mm`: Total displacement to complete the movement in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
+/// - `speed_enter_constrained_mms`: Constrained initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+/// - `speed_exit_constrained_mms`: Constrained speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
 /// - `proj_prev`: Projection of the previous segment.
 /// - `proj_next`: Projection of the next segment.
 /// - `unit_vector_dir`: Unit vector for the direction of movement.
@@ -21,20 +21,20 @@ use crate::math::TVector;
 /// - `tool_power`: Tool power utilized in the segment.
 /// - `constraints`: Motion constraints applicable to the segment.
 #[derive(Clone, Copy)]
-pub struct SegmentData {
-    /// Initial speed at the entry of the segment in millimeters per second (mm/s).
-    pub speed_enter_mms: Real,
-    /// Speed at the exit of the segment in millimeters per second (mm/s).
-    pub speed_exit_mms: Real,
-    /// Target speed for the segment in millimeters per second (mm/s).
-    pub speed_target_mms: Real,
-    /// Total displacement to complete the movement in millimeters (mm).
-    pub displacement_mm: Real,
+pub struct Segment {
+    /// Initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+    pub speed_enter_wu_s: Real,
+    /// Speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+    pub speed_exit_wu_s: Real,
+    /// Target speed for the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+    pub speed_target_wu: Real,
+    /// Total displacement to complete the movement in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
+    pub displacement_wu: Real,
 
-    /// Constrained initial speed at the entry of the segment in millimeters per second (mm/s).
-    pub speed_enter_constrained_mms: Real,
-    /// Constrained speed at the exit of the segment in millimeters per second (mm/s).
-    pub speed_exit_constrained_mms: Real,
+    /// Constrained initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+    pub speed_enter_constrained_wu_s: Real,
+    /// Constrained speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+    pub speed_exit_constrained_wu_s: Real,
     /// Projection of the previous segment.
     pub proj_prev: Real,
     /// Projection of the next segment.
@@ -42,7 +42,11 @@ pub struct SegmentData {
 
     /// Unit vector for the direction of movement.
     pub unit_vector_dir: TVector<Real>,
-    /// Destination position vector in millimeters.
+
+    /// Source position vector in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
+    pub src_pos: TVector<Real>,
+
+    /// Destination position vector in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
     pub dest_pos: TVector<Real>,
 
     #[allow(unused)]
@@ -50,42 +54,6 @@ pub struct SegmentData {
     pub tool_power: Real,
     /// Motion constraints applicable to the segment.
     pub constraints: Constraints, // Should remove this?
-}
-
-/// Represents a motion segment.
-///
-/// # Fields
-/// - `segment_data`: Data for the segment, encapsulated in [SegmentData].
-/// - `id`: Segment ID, available only when the "native" feature is enabled.
-#[derive(Clone, Copy)]
-pub struct Segment {
-    pub segment_data: SegmentData,
-    #[cfg(feature = "native")]
-    pub id: u32,
-}
-
-impl Segment {
-    /// Creates a new Segment with the given data.
-    ///
-    /// # Parameters
-    /// - `segment_data`: Data for the segment.
-    ///
-    /// # Returns
-    /// A new instance of `Segment`.
-    pub fn new(segment_data: SegmentData) -> Self {
-        cfg_if::cfg_if! {
-            if #[cfg(feature="native")] {
-                use std::sync::atomic::AtomicU32;
-
-                static COUNTER: AtomicU32 = AtomicU32::new(0);
-                let id = COUNTER.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                Self {segment_data, id}
-            }
-            else {
-                Self {segment_data}
-            }
-        }
-    }
 }
 
 /// Iterator over motion segments.
@@ -99,8 +67,14 @@ where
 {
     /// Reference to the motion profile.
     profile: &'a P,
-    /// Reference time for the iterator.
-    ref_time: Real,
+    /// The time step in secs to increment in each iteration.
+    sampling_period_s: Real,
+    /// Last evaluation position in world units.
+    last_evaluated_position_wu: Real,
+    /// Last evaluation time instant.
+    last_evaluated_time_s: Real,
+    ds: Real,
+    dt: Real,
     /// State flag indicating whether the iterator is exhausted.
     exhausted: bool,
 }
@@ -113,50 +87,79 @@ where
     ///
     /// # Parameters
     /// - `profile`: Reference to the motion profile.
-    /// - `ref_time`: Reference time for the iterator.
+    /// - `sampling_period`: The sampling period in seconds.
     ///
     /// # Returns
     /// A new instance of `SegmentIterator`.
-    pub const fn new(profile: &'a P, ref_time: Real) -> Self {
+    pub const fn new(profile: &'a P, sampling_period_s: Real) -> Self {
         SegmentIterator {
             profile,
-            ref_time,
+            sampling_period_s,
+            last_evaluated_position_wu: Real::zero(),
+            last_evaluated_time_s: Real::zero(),
+            ds: Real::zero(),
+            dt: Real::zero(),
             exhausted: false,
         }
     }
 
-    /// Advances the iterator and returns the next segment.
-    ///
-    /// # Parameters
-    /// - `now`: Current time.
+    pub fn current_position(&self) -> Real {
+        self.last_evaluated_position_wu
+    }
+
+    pub fn current_time(&self) -> Real {
+        self.last_evaluated_time_s
+    }
+
+    pub fn ds(&self) -> Real {
+        self.ds
+    }
+
+    pub fn dt(&self) -> Real {
+        self.dt
+    }
+
+    pub fn speed(&self) -> Real {
+        if self.dt.is_negligible() {
+            Real::zero()
+        } else {
+            self.ds / self.dt
+        }
+    }
+
+    /// Advances the iterator and returns the next micro-segment position.
     ///
     /// # Returns
-    /// An `Option` containing the next segment's position and a u8 value, or `None` if exhausted.
-    pub fn next(&mut self, now: Real) -> Option<(Real, u8)> {
+    /// An `Option` containing:
+    /// - A tuple of `(Real: Position, u8: segment piecewise id)`
+    /// - `None` if exhausted.
+    pub fn next(&mut self) -> Option<(Real, u8)> {
         if self.exhausted {
             None
         } else {
-            let relative_time = now - self.ref_time;
-            if relative_time > self.profile.end_time() {
+            let now = self.last_evaluated_time_s + self.sampling_period_s;
+            if now >= self.profile.end_time() {
                 self.exhausted = true;
+                self.dt = self.profile.end_time() - self.last_evaluated_time_s;
+                self.last_evaluated_time_s = self.profile.end_time();
+            } else {
+                self.dt = now - self.last_evaluated_time_s;
+                self.last_evaluated_time_s = now;
             }
-            match self.profile.eval_position(relative_time) {
+            match self.profile.eval_position(self.last_evaluated_time_s) {
                 None => None,
                 Some(p) => {
                     let end_pos = self.profile.end_pos();
 
-                    // FIXME: Do it in a better way. Use half step length as margin
-                    if p.0 + Real::from_f32(0.00001f32) >= end_pos {
+                    if p.0 >= end_pos {
                         self.exhausted = true;
-                        hwa::trace!(
-                            "pos exhausted at t={:?} / {:?}",
-                            relative_time,
-                            self.profile.end_time()
-                        );
-                        Some((end_pos, p.1))
+                        self.ds = end_pos - self.last_evaluated_position_wu;
+                        self.last_evaluated_position_wu = end_pos;
                     } else {
-                        Some((p.0, p.1))
+                        self.ds = p.0 - self.last_evaluated_position_wu;
+                        self.last_evaluated_position_wu = p.0;
                     }
+                    Some((self.last_evaluated_position_wu, p.1))
                 }
             }
         }
@@ -171,17 +174,18 @@ mod tests {
     use crate::math::Real;
     use crate::math::TVector;
 
-    fn dummy_segment() -> SegmentData {
-        SegmentData {
-            speed_enter_mms: Real::from_f32(10.0),
-            speed_exit_mms: Real::from_f32(15.0),
-            speed_target_mms: Real::from_f32(20.0),
-            displacement_mm: Real::from_f32(100.0),
-            speed_enter_constrained_mms: Real::from_f32(10.0),
-            speed_exit_constrained_mms: Real::from_f32(15.0),
+    fn dummy_segment() -> Segment {
+        Segment {
+            speed_enter_wu_s: Real::from_f32(10.0),
+            speed_exit_wu_s: Real::from_f32(15.0),
+            speed_target_wu: Real::from_f32(20.0),
+            displacement_wu: Real::from_f32(100.0),
+            speed_enter_constrained_wu_s: Real::from_f32(10.0),
+            speed_exit_constrained_wu_s: Real::from_f32(15.0),
             proj_prev: Real::from_f32(0.0),
             proj_next: Real::from_f32(100.0),
             unit_vector_dir: TVector::one(),
+            src_pos: TVector::zero(),
             dest_pos: TVector::one() * math::ONE_HUNDRED,
             tool_power: Real::from_f32(5.0),
             constraints: Constraints {
@@ -194,26 +198,14 @@ mod tests {
 
     #[test]
     fn test_segment_creation() {
-        let segment = Segment::new(dummy_segment());
-        assert_eq!(segment.segment_data.speed_enter_mms, Real::from_f32(10.0));
-        assert_eq!(segment.segment_data.speed_exit_mms, Real::from_f32(15.0));
-        assert_eq!(segment.segment_data.speed_target_mms, Real::from_f32(20.0));
-    }
-
-    #[test]
-    #[cfg(feature = "native")]
-    fn test_segment_creation_with_id() {
-        let segment = Segment::new(dummy_segment());
-        assert_eq!(segment.segment_data.speed_enter_mms, Real::from_f32(10.0));
-        assert_eq!(segment.segment_data.speed_exit_mms, Real::from_f32(15.0));
-        assert_eq!(segment.segment_data.speed_target_mms, Real::from_f32(20.0));
-        // Check if the ID is incremented correctly
-        assert!(segment.id > 0);
+        let segment = dummy_segment();
+        assert_eq!(segment.speed_enter_wu_s, Real::from_f32(10.0));
+        assert_eq!(segment.speed_exit_wu_s, Real::from_f32(15.0));
+        assert_eq!(segment.speed_target_wu, Real::from_f32(20.0));
     }
 
     #[test]
     fn test_segment_iterator() {
-        let ref_time = Real::from_f32(0.0);
 
         let constraints = Constraints {
             v_max: Real::from_f32(10.0),
@@ -228,17 +220,20 @@ mod tests {
             true,
         )
         .unwrap();
+        // Set sampling time to 60% of profile time
+        let sampling_period = motion_profile.end_time() * Real::from_f32(0.6);
+        let mut segment_iter = SegmentIterator::new(&motion_profile, sampling_period);
 
-        let mut segment_iter = SegmentIterator::new(&motion_profile, ref_time);
-
-        // Test iterator before exhaustion
-        let now = Real::from_f32(5.0);
-        let segment = segment_iter.next(now);
+        // Test iterator before exhaustion (expected to be at 60%)
+        let segment = segment_iter.next();
         assert!(segment.is_some());
 
-        // Exhaust the iterator
-        segment_iter.exhausted = true;
-        let segment = segment_iter.next(now);
+        // Test iterator at exhaustion (expected to be at 120%), truncated to motion_profile.end_time() and exhausted
+        let segment = segment_iter.next();
+        assert!(segment.is_some());
+
+        // Test iterator after exhaustion, expected to return None
+        let segment = segment_iter.next();
         assert!(segment.is_none());
     }
 
@@ -259,15 +254,14 @@ mod tests {
             true,
         )
         .unwrap();
-        let ref_time = Real::from_f32(0.0);
-        let mut segment_iter = SegmentIterator::new(&motion_profile, ref_time);
+        let sampling_period = Real::from_f32(100.0);
+        let mut segment_iter = SegmentIterator::new(&motion_profile, sampling_period);
 
         // Set to a time past the end of the profile
-        let now = Real::from_f32(100.0);
-        let micro_segment = segment_iter.next(now);
+        let micro_segment = segment_iter.next();
 
         assert_eq!(micro_segment.unwrap().0, motion_profile.end_pos(), "At end");
-        let micro_segment = segment_iter.next(now);
+        let micro_segment = segment_iter.next();
         assert!(micro_segment.is_none(), "Does not avance more");
         assert!(segment_iter.exhausted, "Is exhausted");
     }

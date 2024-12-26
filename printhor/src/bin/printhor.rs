@@ -8,13 +8,14 @@ extern crate core;
 pub mod control;
 pub mod helpers;
 pub mod hwa;
-pub mod math;
 
-#[allow(unused)]
-use hwa::Contract;
 use hwa::HwiContract;
 #[allow(unused)]
 use hwa::RawHwiResource;
+
+use hwa::math;
+#[allow(unused)]
+use math::{Real, TVector};
 
 //noinspection RsUnresolvedReference
 #[cfg_attr(doc, aquamarine::aquamarine)]
@@ -22,7 +23,6 @@ use hwa::RawHwiResource;
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
     printhor_main(spawner, true).await;
-    unreachable!("Main should not end");
 }
 
 pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: bool) {
@@ -58,12 +58,22 @@ pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: boo
 async fn sys_start(
     spawner: embassy_executor::Spawner,
 ) -> Result<hwa::types::WatchDogController, ()> {
+    //#region "Init contract"
+
     let context = hwa::Contract::init(spawner).await;
 
     hwa::info!(
         "HWI setup completed. Allocated {} bytes for context.",
         core::mem::size_of_val(&context)
     );
+    hwa::info!(
+        "Vector<Real> size: {} bytes",
+        core::mem::size_of::<TVector<Real>>()
+    );
+
+    //#endregion
+
+    //#region "Setup event bus"
 
     type EventBusMutexStrategyType = <hwa::Contract as HwiContract>::EventBusMutexStrategy;
     type EventBusPubSubMutexType = <hwa::Contract as HwiContract>::EventBusPubSubMutexType;
@@ -83,11 +93,14 @@ async fn sys_start(
         .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_BOOTING))
         .await;
 
+    //#endregion
+
+    //#region "Setup defer channel (if hotends or motion are enabled)"
+
     cfg_if::cfg_if! {
         if #[cfg(any(feature = "with-motion", feature = "with-hot-end", feature = "with-hot-bed"))] {
             type DeferChannelMutexType = <hwa::Contract as HwiContract>::DeferChannelMutexType;
             let defer_channel: hwa::GenericDeferChannel<DeferChannelMutexType> = {
-                type DeferChannelMutexType = <hwa::Contract as HwiContract>::DeferChannelMutexType;
                 hwa::GenericDeferChannel::new(hwa::make_static_ref!(
                     "DeferChannel",
                     hwa::DeferChannelChannelType<DeferChannelMutexType>,
@@ -97,14 +110,35 @@ async fn sys_start(
         }
     }
 
+    //#endregion
+
+    //#region "Setup motion broadcast channel (if with-motion-broadcast is enabled)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+            type MotionBroadcastChannelMutexType = <hwa::Contract as HwiContract>::MotionBroadcastChannelMutexType;
+            let motion_broadcast_channel: hwa::GenericMotionBroadcastChannel<MotionBroadcastChannelMutexType> = {
+                hwa::GenericMotionBroadcastChannel::new(hwa::make_static_ref!(
+                    "MotionBroadcastChannel",
+                    hwa::MotionBroadcastChannelType<MotionBroadcastChannelMutexType>,
+                    hwa::MotionBroadcastChannelType::new()
+                ))
+            };
+        }
+    }
+
+    //#endregion
+
+    //#region "Setup System WatchDog"
+
     let sys_watch_dog = context.sys_watch_dog.clone();
     sys_watch_dog.lock().await.unleash();
 
     //#endregion
 
-    //#region "Task Spawning"
+    //#region "Init controllers and spawn Tasks"
 
-    if spawn_tasks(
+    if init_controllers_and_spawn_tasks(
         spawner,
         event_bus.clone(),
         #[cfg(any(
@@ -113,6 +147,8 @@ async fn sys_start(
             feature = "with-hot-bed"
         ))]
         defer_channel,
+        #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
+        motion_broadcast_channel,
         context,
         sys_watch_dog.clone(),
     )
@@ -151,10 +187,11 @@ async fn sys_start(
         hwa::error!("Unable start. Any task launch failed");
         Err(())
     }
-    //#enregion
+
+    //#endregion
 }
 
-async fn spawn_tasks(
+async fn init_controllers_and_spawn_tasks(
     spawner: embassy_executor::Spawner,
     event_bus: hwa::types::EventBus,
     #[cfg(any(
@@ -163,11 +200,22 @@ async fn spawn_tasks(
         feature = "with-hot-bed"
     ))]
     _defer_channel: hwa::types::DeferChannel,
+    #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
+    _motion_broadcast_channel: hwa::types::MotionBroadcastChannel,
     _context: hwa::HwiContext<hwa::Contract>,
     _wd: hwa::types::WatchDogController,
 ) -> Result<(), ()> {
-    #[cfg(feature = "with-print-job")]
-    let printer_controller = hwa::controllers::PrinterController::new(event_bus.clone());
+    //#region "Init printer controller (if with-print-job is set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-print-job")] {
+            let printer_controller = hwa::controllers::PrinterController::new(event_bus.clone());
+        }
+    }
+
+    //#endregion
+
+    //#region "Init Probe controller (if with-probe is set)"
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-probe")] {
@@ -183,6 +231,10 @@ async fn spawn_tasks(
         }
     }
 
+    //#endregion
+
+    //#region "Init HotEnd controller (if with-hot-end is set)"
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-hot-end")] {
             let hot_end_controller: hwa::types::HotEndController = hwa::make_static_async_controller!(
@@ -192,24 +244,29 @@ async fn spawn_tasks(
                     hwa::types::HotEndAdcController::new(
                         _context.hot_end_adc,
                         _context.hot_end_adc_pin.take(),
-                        <Contract as HwiContract>::HOT_END_ADC_V_REF_DEFAULT_SAMPLE,
+                        <hwa::Contract as HwiContract>::HOT_END_ADC_V_REF_DEFAULT_SAMPLE,
                     ),
                     hwa::types::HotEndPwmController::new(
                         _context.hot_end_pwm,
                         _context.hot_end_pwm_channel.take(),
                     ),
-                    <Contract as HwiContract>::HOT_END_THERM_BETA,
-                    <Contract as HwiContract>::HOT_END_THERM_NOMINAL_RESISTANCE,
-                    <Contract as HwiContract>::HOT_END_THERM_PULL_UP_RESISTANCE,
+                    <hwa::Contract as HwiContract>::HOT_END_THERM_BETA,
+                    <hwa::Contract as HwiContract>::HOT_END_THERM_NOMINAL_RESISTANCE,
+                    <hwa::Contract as HwiContract>::HOT_END_THERM_PULL_UP_RESISTANCE,
                     _defer_channel.clone(),
                     hwa::DeferAction::HotEndTemperature,
                     hwa::EventFlags::HOT_END_TEMP_OK,
                 )
             );
             hot_end_controller.lock().await
-                .init(<Contract as HwiContract>::HOT_END_ADC_V_REF_DEFAULT_MV).await;
+                .init(<hwa::Contract as HwiContract>::HOT_END_ADC_V_REF_DEFAULT_MV).await;
         }
     }
+
+    //#endregion
+
+    //#region "Init HotBed controller (if with-hot-bed is set)"
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-hot-bed")] {
             let hot_bed_controller: hwa::types::HotBedController = hwa::make_static_async_controller!(
@@ -219,38 +276,28 @@ async fn spawn_tasks(
                     hwa::types::HotBedAdcController::new(
                         _context.hot_bed_adc,
                         _context.hot_bed_adc_pin.take(),
-                        <Contract as HwiContract>::HOT_BED_ADC_V_REF_DEFAULT_SAMPLE,
+                        <hwa::Contract as HwiContract>::HOT_BED_ADC_V_REF_DEFAULT_SAMPLE,
                     ),
                     hwa::types::HotBedPwmController::new(
                         _context.hot_bed_pwm,
                         _context.hot_bed_pwm_channel.take(),
                     ),
-                    <Contract as HwiContract>::HOT_BED_THERM_BETA,
-                    <Contract as HwiContract>::HOT_BED_THERM_NOMINAL_RESISTANCE,
-                    <Contract as HwiContract>::HOT_BED_THERM_PULL_UP_RESISTANCE,
+                    <hwa::Contract as HwiContract>::HOT_BED_THERM_BETA,
+                    <hwa::Contract as HwiContract>::HOT_BED_THERM_NOMINAL_RESISTANCE,
+                    <hwa::Contract as HwiContract>::HOT_BED_THERM_PULL_UP_RESISTANCE,
                     _defer_channel.clone(),
                     hwa::DeferAction::HotBedTemperature,
                     hwa::EventFlags::HOT_BED_TEMP_OK,
                 )
             );
             hot_bed_controller.lock().await
-                .init(<Contract as HwiContract>::HOT_BED_ADC_V_REF_DEFAULT_MV).await;
+                .init(<hwa::Contract as HwiContract>::HOT_BED_ADC_V_REF_DEFAULT_MV).await;
         }
     }
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-fan-layer")] {
+    //#endregion
 
-            let fan_layer_controller = hwa::make_static_async_controller!(
-                "FanLayerController",
-                hwa::types::FanLayerControllerMutexStrategy,
-                hwa::types::InnerFanLayerController::new(
-                    _context.fan_layer_pwm,
-                    _context.fan_layer_pwm_channel.take(),
-                )
-            );
-        }
-    }
+    //#region "Init Laser controller (if with-laser is set)"
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-laser")] {
@@ -266,6 +313,28 @@ async fn spawn_tasks(
         }
     }
 
+    //#endregion
+
+    //#region "Init FanLayer controller (if with-fan-layer is set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-fan-layer")] {
+
+            let fan_layer_controller = hwa::make_static_async_controller!(
+                "FanLayerController",
+                hwa::types::FanLayerControllerMutexStrategy,
+                hwa::types::InnerFanLayerController::new(
+                    _context.fan_layer_pwm,
+                    _context.fan_layer_pwm_channel.take(),
+                )
+            );
+        }
+    }
+
+    //#endregion
+
+    //#region "Init FanExtra controller (if with-fan-extra-1 is set)"
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-fan-extra-1")] {
 
@@ -280,16 +349,20 @@ async fn spawn_tasks(
         }
     }
 
+    //#endregion
+
+    //#region "Init SD-Card controller (if with-sd-card is set)"
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-sd-card")] {
 
             type SDManager = hwa::AsyncStandardStrategy<
                     hwa::AsyncNoopMutexType,
                     hwa::sd_card::SDStateManager<
-                        <Contract as HwiContract>::SDCardBlockDevice,
-                        {<Contract as HwiContract>::SD_CARD_MAX_DIRS},
-                        {<Contract as HwiContract>::SD_CARD_MAX_FILES},
-                        {<Contract as HwiContract>::SD_CARD_MAX_DIRS + <Contract as HwiContract>::SD_CARD_MAX_FILES},
+                        <hwa::Contract as HwiContract>::SDCardBlockDevice,
+                        {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
+                        {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+                        {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
                     >
                 >;
 
@@ -304,32 +377,24 @@ async fn spawn_tasks(
                     card
                 )
             ).await;
-
-
-            /*
-
-            let mut sd_card_controller: hwa::types::SDCardController = {
-                hwa::make_static_async_controller!(
-                    "SDCardController",
-                    hwa::types::SDCardControllerMutexStrategy,
-                    c
-                )
-            };
-
-            let cc = sd_card_controller.lock().await;
-            cc.list_dir("/").await;
-
-             */
         }
     }
 
+    //#endregion
+
+    //#region "Init motion Controllers (if with-motion is set)"
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            let motion_pins = hwa::controllers::MotionPins::new(hwa::make_static_sync_controller!(
-                "MotionPins",
-                hwa::types::MotionPinsMutexStrategy,
-                _context.motion_pins,
-            ));
+            let motion_pins = hwa::controllers::MotionPins::new(
+                hwa::make_static_sync_controller!(
+                    "MotionPins",
+                    hwa::types::MotionPinsMutexStrategy,
+                    _context.motion_pins,
+                ),
+                #[cfg(feature = "with-motion-broadcast")]
+                _motion_broadcast_channel.clone(),
+            );
             let motion_config = hwa::controllers::MotionConfig::new(hwa::make_static_sync_controller!(
                 "MotionConfig",
                 hwa::types::MotionConfigMutexStrategy,
@@ -370,6 +435,10 @@ async fn spawn_tasks(
         }
     }
 
+    //#endregion
+
+    //#region "Init Gcode processor"
+
     let processor: hwa::GCodeProcessor = hwa::GCodeProcessor::new(
         event_bus.clone(),
         #[cfg(feature = "with-serial-usb")]
@@ -396,66 +465,129 @@ async fn spawn_tasks(
         laser_controller,
     );
 
-    #[cfg(feature = "with-motion")]
-    {
-        motion_config.set_max_speed(math::TVector::from_coords(
-            Some(600),
-            Some(600),
-            Some(100),
-            Some(600),
-        ));
-        motion_config.set_max_accel(math::TVector::from_coords(
-            Some(9800),
-            Some(9800),
-            Some(3200),
-            Some(9800),
-        ));
-        motion_config.set_max_jerk(math::TVector::from_coords(
-            Some(19600),
-            Some(19600),
-            Some(6400),
-            Some(19600),
-        ));
-        motion_config.set_default_travel_speed(600);
-        // Homing unneeded
-        motion_status.set_last_planned_position(&math::TVector::zero());
+    //#endregion
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "native")] {
-                motion_config.set_units_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0));
-                motion_config.set_micro_steps_per_axis(8, 8, 8, 8);
-            }
-            else {
-                motion_config.set_units_per_mm(math::Real::new(10, 0), math::Real::new(10, 0), math::Real::new(50, 0), math::Real::new(50, 0));
-                motion_config.set_micro_steps_per_axis(8, 8, 8, 8);
-            }
+    //#region "Configure Motion defaults (if with-motion is set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-motion")] {
+
+            // Max speed
+            motion_config.set_max_speed(hwa::Contract::DEFAULT_MAX_SPEED);
+
+            motion_config.set_max_accel(hwa::Contract::DEFAULT_MAX_ACCEL);
+
+            motion_config.set_max_jerk(hwa::Contract::DEFAULT_MAX_JERK);
+
+            motion_config.set_default_travel_speed(hwa::Contract::DEFAULT_TRAVEL_SPEED);
+
+            motion_config.set_units_per_world_magnitude(
+                hwa::Contract::DEFAULT_UNITS_PER_MM.map_values(
+                    |_c, _v| Some(Real::from_f32(_v))
+                )
+            );
+
+            motion_config.set_micro_steps_per_axis(
+                hwa::Contract::DEFAULT_MICRO_STEPS_PER_AXIS
+            );
+
+            motion_config.set_machine_bounds(
+                hwa::Contract::DEFAULT_MACHINE_BOUNDS.map_values(
+                    |_c, _v| Some(Real::from_f32(_v))
+                )
+            );
+
+            motion_config.set_flow_rate(100);
+            motion_config.set_speed_rate(100);
+
+            // Homing unneeded
+            motion_status.set_last_planned_position(&TVector::zero());
         }
-
-        motion_config.set_machine_bounds(200, 200, 200);
-        motion_config.set_flow_rate(100);
-        motion_config.set_speed_rate(100);
-
-        spawner
-            .spawn(control::task_stepper::task_stepper(
-                event_bus.clone(),
-                processor.motion_planner.clone(),
-                _wd,
-            ))
-            .map_err(|_| ())?;
     }
 
-    #[cfg(any(test, feature = "integration-test"))]
-    spawner
-        .spawn(control::task_integration::task_integration(
-            processor.clone(),
-            #[cfg(feature = "with-sd-card")]
-            sd_card_controller.clone(),
-            #[cfg(feature = "with-print-job")]
-            printer_controller.clone(),
-        ))
-        .map_err(|_| ())?;
+    //#endregion
 
     hwa::info!("HWA setup completed. Spawning tasks...");
+
+    //#region "Spawn print-job task (if with-print-job is set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-print-job")] {
+            spawner.spawn(
+                control::task_print_job::task_print_job(
+                    processor.clone(),
+                    printer_controller.clone(),
+                    sd_card_controller.clone(),
+                )
+            ).map_err(|_| ())?;
+        }
+    }
+
+    //#endregion
+
+    //#region "Spawn motion tasks (if with-motion and with-motion-broadcast are set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-motion")] {
+            spawner.spawn(
+                control::task_stepper::task_stepper(
+                    event_bus.clone(),
+                    processor.motion_planner.clone(),
+                    _wd,
+                )
+            ).map_err(|_| ())?;
+
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "with-motion-broadcast")] {
+                    hwa::Contract::launch_high_priotity(
+                        _context.high_priority_core,
+                        control::task_motion_broadcast::task_motion_broadcast(
+                            _motion_broadcast_channel,
+                            motion_config,
+                            _context.motion_sender
+                        )
+                    ).map_err(|_| ())?;
+                }
+            }
+        }
+    }
+
+    //#endregion
+
+    //#region "Spawn temperature task (if with-hot-end or with-hot-bed are set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+            spawner.spawn(
+                control::task_temperature::task_temperature(
+                    event_bus.clone(),
+                    #[cfg(feature = "with-hot-end")]
+                    hot_end_controller,
+                    #[cfg(feature = "with-hot-bed")]
+                    hot_bed_controller,
+                )
+            ).map_err(|_| ())?;
+        }
+    }
+
+    //#endregion
+
+    //#region "Spawn defer-event task (if motion or temperature features are set)"
+
+    cfg_if::cfg_if! {
+        if #[cfg(any(
+            feature = "with-motion", feature = "with-hot-end", feature = "with-hot-bed"
+        ))] {
+            spawner.spawn(
+                control::task_defer::task_defer(processor.clone(), _defer_channel)
+            ).map_err(|_| ())?;
+        }
+    }
+
+    //#endregion
+
+    //#region "Spawn control task"
+
     spawner
         .spawn(control::task_control::task_control(
             processor.clone(),
@@ -474,34 +606,25 @@ async fn spawn_tasks(
         ))
         .map_err(|_| ())?;
 
-    #[cfg(feature = "with-print-job")]
-    spawner
-        .spawn(control::task_print_job::task_print_job(
-            processor.clone(),
-            printer_controller,
-            sd_card_controller,
-        ))
-        .map_err(|_| ())?;
+    //#endregion
 
-    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-    spawner
-        .spawn(control::task_temperature::task_temperature(
-            event_bus.clone(),
-            #[cfg(feature = "with-hot-end")]
-            hot_end_controller,
-            #[cfg(feature = "with-hot-bed")]
-            hot_bed_controller,
-        ))
-        .map_err(|_| ())?;
+    //#region "Spawn integration task (if integration-test is set)"
 
-    #[cfg(any(
-        feature = "with-motion",
-        feature = "with-hot-end",
-        feature = "with-hot-bed"
-    ))]
-    spawner
-        .spawn(control::task_defer::task_defer(processor, _defer_channel))
-        .map_err(|_| ())?;
+    cfg_if::cfg_if! {
+        if #[cfg(any(test, feature = "integration-test"))] {
+            spawner.spawn(
+                control::task_integration::task_integration(
+                    processor.clone(),
+                    #[cfg(feature = "with-sd-card")]
+                    sd_card_controller.clone(),
+                    #[cfg(feature = "with-print-job")]
+                    printer_controller.clone()
+                )
+            ).map_err(|_| ())?;
+        }
+    }
+
+    //#endregion
 
     Ok(())
 }
@@ -511,15 +634,16 @@ pub fn initialization_error() {
     hwa::error!("{}", msg);
     panic!("{}", msg);
 }
+
+//#region "Panic handling"
+
 cfg_if::cfg_if! {
     if #[cfg(not(feature = "native"))] {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-defmt")] {
                 #[allow(unused)]
-                #[cfg(feature = "with-defmt")]
                 use defmt_rtt as _;
                 #[allow(unused)]
-                #[cfg(feature = "with-defmt")]
                 use panic_probe as _;
             }
             else {
@@ -531,3 +655,5 @@ cfg_if::cfg_if! {
         }
     }
 }
+
+//#endregion

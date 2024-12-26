@@ -1,6 +1,7 @@
 //
 #[allow(unused)]
 use printhor_hwa_common as hwa;
+use crate::board_stm32l4::io;
 
 pub type Watchdog = embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
@@ -14,6 +15,12 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-spi")] {
         pub type Spi = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-i2c")] {
+        pub type I2c = io::MotionI2c;
     }
 }
 
@@ -36,7 +43,7 @@ cfg_if::cfg_if! {
         }
 
         impl hwa::traits::MotionPinsTrait for MotionPins {
-            fn set_enabled(&mut self, _channels: hwa::StepperChannel, _enabled: bool) {
+            fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool) {
                 if _enabled {
                     self.all_enable_pin.set_low();
                 }
@@ -44,10 +51,10 @@ cfg_if::cfg_if! {
                     self.all_enable_pin.set_high();
                 }
             }
-            fn set_forward_direction(&mut self, _channels: hwa::StepperChannel, _mask: hwa::StepperChannel) {
+            fn set_forward_direction(&mut self, _channels: hwa::CoordSel, _mask: hwa::CoordSel) {
                 #[cfg(feature = "with-x-axis")]
-                if _mask.contains(hwa::StepperChannel::X) {
-                    if _channels.contains(hwa::StepperChannel::X) {
+                if _mask.contains(hwa::CoordSel::X) {
+                    if _channels.contains(hwa::CoordSel::X) {
                         self.x_dir_pin.set_high();
                     }
                     else {
@@ -55,8 +62,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _mask.contains(hwa::StepperChannel::Y) {
-                    if _channels.contains(hwa::StepperChannel::Y) {
+                if _mask.contains(hwa::CoordSel::Y) {
+                    if _channels.contains(hwa::CoordSel::Y) {
                         self.y_dir_pin.set_high();
                     }
                     else {
@@ -64,8 +71,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _mask.contains(hwa::StepperChannel::Z) {
-                    if _channels.contains(hwa::StepperChannel::Z) {
+                if _mask.contains(hwa::CoordSel::Z) {
+                    if _channels.contains(hwa::CoordSel::Z) {
                         self.z_dir_pin.set_high();
                     }
                     else {
@@ -73,86 +80,92 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _mask.contains(hwa::StepperChannel::E) {
+                if _mask.contains(hwa::CoordSel::E) {
                     unreachable!()
                 }
             }
-            fn step_toggle(&mut self, _channels: hwa::StepperChannel) {
+            fn step_toggle(&mut self, _channels: hwa::CoordSel) {
                 #[cfg(feature = "with-x-axis")]
-                if _channels.contains(hwa::StepperChannel::X) {
+                if _channels.contains(hwa::CoordSel::X) {
                     self.x_step_pin.toggle();
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _channels.contains(hwa::StepperChannel::Y) {
+                if _channels.contains(hwa::CoordSel::Y) {
                     self.y_step_pin.toggle();
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _channels.contains(hwa::StepperChannel::Z) {
+                if _channels.contains(hwa::CoordSel::Z) {
                     self.z_step_pin.toggle();
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _channels.contains(hwa::StepperChannel::E) {
+                if _channels.contains(hwa::CoordSel::E) {
                     unreachable!()
                 }
             }
-            fn step_high(&mut self, _channels: hwa::StepperChannel) {
+            fn step_high(&mut self, _channels: hwa::CoordSel) {
                 #[cfg(feature = "with-x-axis")]
-                if _channels.contains(hwa::StepperChannel::X) {
+                if _channels.contains(hwa::CoordSel::X) {
                     self.x_step_pin.set_high();
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _channels.contains(hwa::StepperChannel::Y) {
+                if _channels.contains(hwa::CoordSel::Y) {
                     self.y_step_pin.set_high();
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _channels.contains(hwa::StepperChannel::Z) {
+                if _channels.contains(hwa::CoordSel::Z) {
                     self.z_step_pin.set_high();
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _channels.contains(hwa::StepperChannel::E) {
+                if _channels.contains(hwa::CoordSel::E) {
                     unreachable!()
                 }
             }
-            fn step_low(&mut self, _channels: hwa::StepperChannel) {
+            fn step_low(&mut self, _channels: hwa::CoordSel) {
                 #[cfg(feature = "with-x-axis")]
-                if _channels.contains(hwa::StepperChannel::X) {
+                if _channels.contains(hwa::CoordSel::X) {
                     self.x_step_pin.set_low();
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _channels.contains(hwa::StepperChannel::Y) {
+                if _channels.contains(hwa::CoordSel::Y) {
                     self.y_step_pin.set_low();
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _channels.contains(hwa::StepperChannel::Z) {
+                if _channels.contains(hwa::CoordSel::Z) {
                     self.z_step_pin.set_low();
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _channels.contains(hwa::StepperChannel::E) {
+                if _channels.contains(hwa::CoordSel::E) {
                     unreachable!()
                 }
             }
-            fn endstop_triggered(&mut self, _channels: hwa::StepperChannel) -> bool {
+            fn endstop_triggered(&mut self, _channels: hwa::CoordSel) -> bool {
                 #[allow(unused_mut)]
                 let mut triggered = false;
                 #[cfg(feature = "with-x-axis")]
-                if _channels.contains(hwa::StepperChannel::X) {
+                if _channels.contains(hwa::CoordSel::X) {
                     triggered |= self.x_endstop_pin.is_high();
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _channels.contains(hwa::StepperChannel::Y) {
+                if _channels.contains(hwa::CoordSel::Y) {
                     triggered |= self.y_endstop_pin.is_high();
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _channels.contains(hwa::StepperChannel::Z) {
+                if _channels.contains(hwa::CoordSel::Z) {
                     triggered |= self.z_endstop_pin.is_high();
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _channels.contains(hwa::StepperChannel::E) {
+                if _channels.contains(hwa::CoordSel::E) {
                     unreachable!()
                 }
                 triggered
             }
         }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+        pub type MotionSender = io::MotionI2c;
     }
 }
 

@@ -9,7 +9,6 @@ use printhor_hwa_common::HwiContract;
 use crate::board::TERMINATION;
 
 pub static SERIAL_PIPE: Pipe<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}> = Pipe::<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}>::new();
-
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_mocked_uart() {
 

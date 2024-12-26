@@ -1,4 +1,4 @@
-use crate::math::Real;
+use crate::hwa::math::Real;
 
 #[allow(unused)]
 #[inline]

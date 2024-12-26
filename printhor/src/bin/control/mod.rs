@@ -1,11 +1,12 @@
 //! System control module providing I/O control, kinematics and concurrent tasks
-#[allow(unused)]
 use crate::hwa;
-use crate::math::Real;
+use hwa::math::Real;
 
+use printhor_hwa_common::math::TVector;
 #[cfg(feature = "native")]
 use strum::Display;
 use strum::{AsRefStr, VariantNames};
+
 #[cfg(feature = "with-motion")]
 pub mod motion;
 
@@ -20,6 +21,10 @@ pub mod task_control;
     feature = "with-hot-bed"
 ))]
 pub mod task_defer;
+
+#[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
+pub mod task_motion_broadcast;
+
 #[cfg(any(test, feature = "integration-test"))]
 pub mod task_integration;
 #[cfg(feature = "with-print-job")]
@@ -41,7 +46,6 @@ impl S {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct N {
     pub n: Option<Real>,
@@ -52,123 +56,343 @@ impl N {
         Self { n: None }
     }
 }
-
-#[allow(dead_code)]
+#[non_exhaustive]
 #[derive(Clone, Debug)]
-pub struct XYZE {
-    pub x: Option<Real>,
-    pub y: Option<Real>,
-    pub z: Option<Real>,
+pub struct EXYZ {
+    #[cfg(feature = "with-e-axis")]
     pub e: Option<Real>,
+    //
+    #[cfg(feature = "with-x-axis")]
+    pub x: Option<Real>,
+    #[cfg(feature = "with-y-axis")]
+    pub y: Option<Real>,
+    #[cfg(feature = "with-z-axis")]
+    pub z: Option<Real>,
+    //
+    #[cfg(feature = "with-a-axis")]
+    pub a: Option<Real>,
+    #[cfg(feature = "with-b-axis")]
+    pub b: Option<Real>,
+    #[cfg(feature = "with-c-axis")]
+    pub c: Option<Real>,
+    //
+    #[cfg(feature = "with-i-axis")]
+    pub i: Option<Real>,
+    #[cfg(feature = "with-j-axis")]
+    pub j: Option<Real>,
+    #[cfg(feature = "with-k-axis")]
+    pub k: Option<Real>,
+    //
+    #[cfg(feature = "with-u-axis")]
+    pub u: Option<Real>,
+    #[cfg(feature = "with-v-axis")]
+    pub v: Option<Real>,
+    #[cfg(feature = "with-w-axis")]
+    pub w: Option<Real>,
 }
 
-impl XYZE {
+impl EXYZ {
     pub const fn new() -> Self {
         Self {
-            x: None,
-            y: None,
-            z: None,
+            #[cfg(feature = "with-e-axis")]
             e: None,
+            //
+            #[cfg(feature = "with-x-axis")]
+            x: None,
+            #[cfg(feature = "with-y-axis")]
+            y: None,
+            #[cfg(feature = "with-z-axis")]
+            z: None,
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: None,
+            #[cfg(feature = "with-b-axis")]
+            b: None,
+            #[cfg(feature = "with-c-axis")]
+            c: None,
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: None,
+            #[cfg(feature = "with-j-axis")]
+            j: None,
+            #[cfg(feature = "with-k-axis")]
+            k: None,
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: None,
+            #[cfg(feature = "with-v-axis")]
+            v: None,
+            #[cfg(feature = "with-w-axis")]
+            w: None,
         }
+    }
+
+    pub fn as_vector(&self) -> TVector<Real> {
+        TVector::from_coords(
+            #[cfg(feature = "with-e-axis")]
+            self.e,
+            //
+            #[cfg(feature = "with-x-axis")]
+            self.x,
+            #[cfg(feature = "with-y-axis")]
+            self.y,
+            #[cfg(feature = "with-z-axis")]
+            self.z,
+            //
+            #[cfg(feature = "with-a-axis")]
+            self.a,
+            #[cfg(feature = "with-b-axis")]
+            self.b,
+            #[cfg(feature = "with-c-axis")]
+            self.c,
+            //
+            #[cfg(feature = "with-i-axis")]
+            self.i,
+            #[cfg(feature = "with-j-axis")]
+            self.j,
+            #[cfg(feature = "with-k-axis")]
+            self.k,
+            //
+            #[cfg(feature = "with-u-axis")]
+            self.u,
+            #[cfg(feature = "with-v-axis")]
+            self.v,
+            #[cfg(feature = "with-w-axis")]
+            self.w,
+        )
     }
 }
 
 #[cfg(feature = "with-defmt")]
-impl defmt::Format for XYZE {
+impl defmt::Format for EXYZ {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "X_Y_Z_E")
     }
 }
 
-#[derive(Clone)]
-pub struct XYZF {
-    pub x: Option<Real>,
-    pub y: Option<Real>,
-    pub z: Option<Real>,
+#[derive(Clone, Debug)]
+pub struct FXYZ {
     pub f: Option<Real>,
+    //
+    #[cfg(feature = "with-x-axis")]
+    pub x: Option<Real>,
+    #[cfg(feature = "with-y-axis")]
+    pub y: Option<Real>,
+    #[cfg(feature = "with-z-axis")]
+    pub z: Option<Real>,
+    #[cfg(feature = "with-a-axis")]
+    //
+    pub a: Option<Real>,
+    #[cfg(feature = "with-b-axis")]
+    pub b: Option<Real>,
+    #[cfg(feature = "with-c-axis")]
+    pub c: Option<Real>,
+    //
+    #[cfg(feature = "with-i-axis")]
+    pub i: Option<Real>,
+    #[cfg(feature = "with-j-axis")]
+    pub j: Option<Real>,
+    #[cfg(feature = "with-k-axis")]
+    pub k: Option<Real>,
+    //
+    #[cfg(feature = "with-u-axis")]
+    pub u: Option<Real>,
+    #[cfg(feature = "with-v-axis")]
+    pub v: Option<Real>,
+    #[cfg(feature = "with-w-axis")]
+    pub w: Option<Real>,
 }
 
-impl XYZF {
+impl FXYZ {
     pub const fn new() -> Self {
         Self {
-            x: None,
-            y: None,
-            z: None,
             f: None,
+            //
+            #[cfg(feature = "with-x-axis")]
+            x: None,
+            #[cfg(feature = "with-y-axis")]
+            y: None,
+            #[cfg(feature = "with-z-axis")]
+            z: None,
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: None,
+            #[cfg(feature = "with-b-axis")]
+            b: None,
+            #[cfg(feature = "with-c-axis")]
+            c: None,
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: None,
+            #[cfg(feature = "with-j-axis")]
+            j: None,
+            #[cfg(feature = "with-k-axis")]
+            k: None,
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: None,
+            #[cfg(feature = "with-v-axis")]
+            v: None,
+            #[cfg(feature = "with-w-axis")]
+            w: None,
         }
+    }
+
+    pub fn as_vector(&self) -> TVector<Real> {
+        TVector::from_coords(
+            #[cfg(feature = "with-e-axis")]
+            None,
+            //
+            #[cfg(feature = "with-x-axis")]
+            self.x,
+            #[cfg(feature = "with-y-axis")]
+            self.y,
+            #[cfg(feature = "with-z-axis")]
+            self.z,
+            //
+            #[cfg(feature = "with-a-axis")]
+            self.a,
+            #[cfg(feature = "with-b-axis")]
+            self.b,
+            #[cfg(feature = "with-c-axis")]
+            self.c,
+            //
+            #[cfg(feature = "with-i-axis")]
+            self.i,
+            #[cfg(feature = "with-j-axis")]
+            self.j,
+            #[cfg(feature = "with-k-axis")]
+            self.k,
+            //
+            #[cfg(feature = "with-u-axis")]
+            self.u,
+            #[cfg(feature = "with-v-axis")]
+            self.v,
+            #[cfg(feature = "with-w-axis")]
+            self.w,
+        )
     }
 }
 
 #[cfg(feature = "with-defmt")]
-impl defmt::Format for XYZF {
+impl defmt::Format for FXYZ {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "X_Y_Z_F")
     }
 }
 
-impl core::fmt::Debug for XYZF {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(fmt, "X ")?;
-        match &self.x {
-            Some(v) => write!(fmt, "{:?}", v)?,
-            None => write!(fmt, "NaN")?,
-        }
-        core::write!(fmt, "Y ")?;
-        match &self.y {
-            Some(v) => write!(fmt, "{:?}", v)?,
-            None => write!(fmt, "NaN")?,
-        }
-        core::write!(fmt, "Z ")?;
-        match &self.z {
-            Some(v) => write!(fmt, "{:?}", v)?,
-            None => write!(fmt, "NaN")?,
-        }
-        core::write!(fmt, "F ")?;
-        match &self.f {
-            Some(v) => write!(fmt, "{:?}", v)?,
-            None => write!(fmt, "NaN")?,
-        }
-        Ok(())
-    }
-}
-
-#[allow(dead_code)]
 #[derive(Clone, Default, Debug)]
-pub struct XYZEFS {
-    pub x: Option<Real>,
-    pub y: Option<Real>,
-    pub z: Option<Real>,
-    pub e: Option<Real>,
+pub struct EFSXYZ {
     pub f: Option<Real>,
     pub s: Option<Real>,
+    #[cfg(feature = "with-e-axis")]
+    pub e: Option<Real>,
+    //
+    #[cfg(feature = "with-x-axis")]
+    pub x: Option<Real>,
+    #[cfg(feature = "with-y-axis")]
+    pub y: Option<Real>,
+    #[cfg(feature = "with-z-axis")]
+    pub z: Option<Real>,
+    //
+    #[cfg(feature = "with-a-axis")]
+    pub a: Option<Real>,
+    #[cfg(feature = "with-b-axis")]
+    pub b: Option<Real>,
+    #[cfg(feature = "with-c-axis")]
+    pub c: Option<Real>,
+    //
+    #[cfg(feature = "with-i-axis")]
+    pub i: Option<Real>,
+    #[cfg(feature = "with-j-axis")]
+    pub j: Option<Real>,
+    #[cfg(feature = "with-k-axis")]
+    pub k: Option<Real>,
+    //
+    #[cfg(feature = "with-u-axis")]
+    pub u: Option<Real>,
+    #[cfg(feature = "with-v-axis")]
+    pub v: Option<Real>,
+    #[cfg(feature = "with-w-axis")]
+    pub w: Option<Real>,
 }
 
-impl XYZEFS {
+impl EFSXYZ {
     pub const fn new() -> Self {
         Self {
-            x: None,
-            y: None,
-            z: None,
+            #[cfg(feature = "with-e-axis")]
             e: None,
             f: None,
             s: None,
+            //
+            #[cfg(feature = "with-x-axis")]
+            x: None,
+            #[cfg(feature = "with-y-axis")]
+            y: None,
+            #[cfg(feature = "with-z-axis")]
+            z: None,
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: None,
+            #[cfg(feature = "with-b-axis")]
+            b: None,
+            #[cfg(feature = "with-c-axis")]
+            c: None,
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: None,
+            #[cfg(feature = "with-j-axis")]
+            j: None,
+            #[cfg(feature = "with-k-axis")]
+            k: None,
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: None,
+            #[cfg(feature = "with-v-axis")]
+            v: None,
+            #[cfg(feature = "with-w-axis")]
+            w: None,
         }
     }
-    #[allow(unused)]
-    pub fn with_x(&self, pos: i32) -> Self {
-        Self {
-            e: self.e,
-            f: self.f,
-            s: self.s,
-            x: Some(Real::from_lit(pos as i64, 0)),
-            y: self.y,
-            z: self.z,
-        }
+
+    pub fn as_vector(&self) -> TVector<Real> {
+        TVector::from_coords(
+            #[cfg(feature = "with-e-axis")]
+            self.e,
+            //
+            #[cfg(feature = "with-x-axis")]
+            self.x,
+            #[cfg(feature = "with-y-axis")]
+            self.y,
+            #[cfg(feature = "with-z-axis")]
+            self.z,
+            //
+            #[cfg(feature = "with-a-axis")]
+            self.a,
+            #[cfg(feature = "with-b-axis")]
+            self.b,
+            #[cfg(feature = "with-c-axis")]
+            self.c,
+            //
+            #[cfg(feature = "with-i-axis")]
+            self.i,
+            #[cfg(feature = "with-j-axis")]
+            self.j,
+            #[cfg(feature = "with-k-axis")]
+            self.k,
+            //
+            #[cfg(feature = "with-u-axis")]
+            self.u,
+            #[cfg(feature = "with-v-axis")]
+            self.v,
+            #[cfg(feature = "with-w-axis")]
+            self.w,
+        )
     }
 }
 
 #[cfg(feature = "with-defmt")]
-impl defmt::Format for XYZEFS {
+impl defmt::Format for EFSXYZ {
     fn format(&self, fmt: defmt::Formatter) {
         defmt::write!(fmt, "XYZEFS")
     }
@@ -235,11 +459,11 @@ pub enum GCodeValue {
 
     /// Rapid move
     #[cfg(feature = "with-motion")]
-    G0(XYZF),
+    G0(FXYZ),
 
     /// Linear move
     #[cfg(feature = "with-motion")]
-    G1(XYZEFS),
+    G1(EFSXYZ),
 
     /// Dwell
     #[cfg(feature = "with-motion")]
@@ -272,7 +496,7 @@ pub enum GCodeValue {
 
     #[cfg(feature = "with-motion")]
     /// Move to Origin (Home)
-    G28(XYZE),
+    G28(EXYZ),
 
     /// Detailed Z-Probe
     #[cfg(feature = "with-motion")]
@@ -329,7 +553,7 @@ pub enum GCodeValue {
 
     /// Set position
     #[cfg(feature = "with-motion")]
-    G92(XYZE),
+    G92(EXYZ),
 
     #[cfg(feature = "with-motion")]
     #[strum(serialize = "G92.1")]

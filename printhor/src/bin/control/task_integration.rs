@@ -2,9 +2,9 @@
 use crate::control;
 use crate::hwa;
 use crate::hwa::GCodeProcessor;
-#[allow(unused)]
-use crate::math;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use hwa::math;
+use hwa::CoordSel;
 #[allow(unused)]
 use hwa::HwiContract;
 use hwa::PersistentState;
@@ -12,7 +12,6 @@ use hwa::PersistentState;
 use hwa::{CommChannel, EventBusSubscriber, EventFlags, EventStatus};
 #[allow(unused)]
 use math::Real;
-use printhor_hwa_common::StepperChannel;
 
 // A global static notifier to indicate when task_integration is completed
 #[cfg(any(test, feature = "integration-test"))]
@@ -68,7 +67,7 @@ pub async fn task_integration(
     {
         let dg = processor.motion_planner.motion_driver().lock().await;
         dg.pins
-            .set_end_stop_high(StepperChannel::X | StepperChannel::Y | StepperChannel::Z)
+            .set_end_stop_high(CoordSel::X | CoordSel::Y | CoordSel::Z)
     }
 
     {
@@ -159,16 +158,8 @@ pub async fn task_integration(
     #[cfg(feature = "with-motion")]
     {
         let test_name = "T4 [G28 (Homming)]";
-        let homing_gcode = control::GCodeCmd::new(
-            0,
-            None,
-            control::GCodeValue::G28(control::XYZE {
-                x: None,
-                y: None,
-                z: None,
-                e: None,
-            }),
-        );
+        let homing_gcode =
+            control::GCodeCmd::new(0, None, control::GCodeValue::G28(control::EXYZ::new()));
 
         hwa::info!("## {} - BEGIN", test_name);
         let _t0 = embassy_time::Instant::now();
@@ -199,10 +190,14 @@ pub async fn task_integration(
         let set_pos_gcode = control::GCodeCmd::new(
             5,
             Some(5),
-            control::GCodeValue::G92(control::XYZE {
+            control::GCodeValue::G92(control::EXYZ {
+                #[cfg(feature = "with-x-axis")]
                 x: Some(math::ZERO),
+                #[cfg(feature = "with-y-axis")]
                 y: Some(math::ZERO),
+                #[cfg(feature = "with-z-axis")]
                 z: Some(math::ZERO),
+                #[cfg(feature = "with-e-axis")]
                 e: Some(math::ZERO),
             }),
         );

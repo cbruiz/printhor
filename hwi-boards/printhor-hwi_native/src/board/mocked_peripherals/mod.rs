@@ -4,8 +4,6 @@ mod mocked_adc;
 pub(crate) mod mocked_pin;
 #[cfg(any(feature = "with-probe", feature = "with-hot-bed", feature = "with-hot-end", feature = "with-fan-layer", feature = "with-laser", feature = "with-fan-extra-1"))]
 mod mocked_pwm;
-#[cfg(feature = "with-spi")]
-mod mocked_spi;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-usb")] {
@@ -25,6 +23,21 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-2")] {
         mod mocked_uart_sink;
         pub use mocked_uart_sink::*;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-spi")] {
+        mod mocked_spi;
+        #[allow(unused)]
+        pub use mocked_spi::*;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-i2c")] {
+        mod mocked_i2c;
+        pub use mocked_i2c::*;
     }
 }
 

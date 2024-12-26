@@ -45,9 +45,9 @@
 
 use crate::control;
 use crate::hwa;
-use crate::math;
 use control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use control::{GCodeCmd, GCodeValue};
+use hwa::math;
 #[allow(unused)]
 use hwa::AsyncMutexStrategy;
 use hwa::Contract;
@@ -55,12 +55,10 @@ use hwa::HwiContract;
 #[allow(unused)]
 use hwa::SyncMutexStrategy;
 
-#[cfg(feature = "with-motion")]
-use crate::math::TVector;
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
-#[allow(unused)]
-use hwa::StepperChannel;
+#[cfg(feature = "with-motion")]
+use hwa::math::TVector;
 #[allow(unused)]
 use hwa::{CommChannel, DeferAction, DeferEvent, EventFlags, EventStatus};
 use strum::VariantNames;
@@ -267,10 +265,10 @@ impl GCodeProcessor {
             GCodeValue::GRBLCmd => {
                 let str = format!(
                     "[VER:1.1 {} v{}:]\n[MSG: Machine: {} {}]\n",
-                    MACHINE_INFO.firmware_name,
-                    MACHINE_INFO.firmware_version,
-                    MACHINE_INFO.machine_board,
-                    MACHINE_INFO.machine_type,
+                    Contract::FIRMWARE_NAME,
+                    Contract::FIRMWARE_VERSION,
+                    Contract::MACHINE_BOARD,
+                    Contract::MACHINE_TYPE,
                 );
                 self.write(channel, str.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
@@ -301,16 +299,6 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G4(_) => {
-                if !_blocking {
-                    self.motion_planner
-                        .defer_channel
-                        .send(DeferEvent::AwaitRequested(
-                            DeferAction::Dwell,
-                            channel,
-                            gc.order_num,
-                        ))
-                        .await;
-                }
                 Ok(self
                     .motion_planner
                     .plan(channel, &gc, _blocking, &self.event_bus)
@@ -401,12 +389,7 @@ impl GCodeProcessor {
             GCodeValue::G92(_pos) => {
                 self.motion_planner
                     .motion_status()
-                    .set_last_planned_position(&TVector {
-                        x: _pos.x,
-                        y: _pos.y,
-                        z: _pos.z,
-                        e: _pos.e,
-                    });
+                    .set_last_planned_position(&(_pos.as_vector()));
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
@@ -640,16 +623,8 @@ impl GCodeProcessor {
                     .motion_status()
                     .get_last_planned_real_position()
                     .unwrap_or(TVector::zero());
-                let z = alloc::format!(
-                    "X:{:?} Y:{:?} Z:{:?} E:{:?} Count X:{:?} Y:{:?} Z:{:?}\n",
-                    _pos.x.unwrap_or(math::ZERO),
-                    _pos.y.unwrap_or(math::ZERO),
-                    _pos.z.unwrap_or(math::ZERO),
-                    _pos.e.unwrap_or(math::ZERO),
-                    _spos.x.unwrap_or(math::ZERO),
-                    _spos.y.unwrap_or(math::ZERO),
-                    _spos.z.unwrap_or(math::ZERO),
-                );
+                // TODO: Use display
+                let z = alloc::format!("{} Count {}\n", _pos, _spos);
                 let _ = self.write(channel, z.as_str()).await;
 
                 Ok(CodeExecutionSuccess::OK)

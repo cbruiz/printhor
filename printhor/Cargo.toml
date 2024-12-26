@@ -20,8 +20,11 @@ default = ["native",
     "with-serial-usb",
     "with-serial-port-1",
     "with-serial-port-2",
-    "with-motion",
-    "with-ps-on",
+    "with-spi",
+    "with-i2c",
+    "with-motion", "with-motion-cartessian",
+    "with-motion-broadcast",
+    #"with-ps-on",
     "with-probe",
     "with-hot-end",
     "with-hot-bed",
@@ -31,12 +34,17 @@ default = ["native",
     "with-fan-extra-1",
     "with-laser",
     #"with-trinamic",
-    "trace-commands",
+    #"trace-commands",
 ]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
+
+with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast"]
+with-motion-cartessian = []
+with-motion-delta = []
+with-motion-scara = []
 
 # Hardware device features
 
@@ -45,7 +53,8 @@ with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "prin
 with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-1"]
 with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-2"]
-with-spi = ["embedded-hal-1", "printhor-hwa-common/with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-spi"]
+with-spi = ["embedded-hal-1", "printhor-hwa-common/with-spi", "printhor-hwi_native?/with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-spi"]
+with-i2c = ["embedded-hal-1", "printhor-hwa-common/with-i2c", "printhor-hwi_native?/with-i2c", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-i2c"]
 with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion"]
 with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-ps-on"]
 
@@ -83,6 +92,19 @@ with-x-axis = ["printhor-hwa-common/with-x-axis", "printhor-hwi_native?/with-x-a
 with-y-axis = ["printhor-hwa-common/with-y-axis", "printhor-hwi_native?/with-y-axis", "printhor-hwi_skr_mini_e3?/with-y-axis", "printhor-hwi_mks_robin_nano?/with-y-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-y-axis", "printhor-hwi_rp_2040?/with-y-axis"]
 with-z-axis = ["printhor-hwa-common/with-z-axis", "printhor-hwi_native?/with-z-axis", "printhor-hwi_skr_mini_e3?/with-z-axis", "printhor-hwi_mks_robin_nano?/with-z-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-z-axis", "printhor-hwi_rp_2040?/with-z-axis"]
 with-e-axis = ["printhor-hwa-common/with-e-axis", "printhor-hwi_native?/with-e-axis", "printhor-hwi_skr_mini_e3?/with-e-axis", "printhor-hwi_mks_robin_nano?/with-e-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-e-axis", "printhor-hwi_rp_2040?/with-e-axis"]
+with-a-axis = ["printhor-hwa-common/with-a-axis", "printhor-hwi_native?/with-a-axis", "printhor-hwi_skr_mini_e3?/with-a-axis", "printhor-hwi_mks_robin_nano?/with-a-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-a-axis", "printhor-hwi_rp_2040?/with-a-axis"]
+with-b-axis = ["printhor-hwa-common/with-b-axis", "printhor-hwi_native?/with-b-axis", "printhor-hwi_skr_mini_e3?/with-b-axis", "printhor-hwi_mks_robin_nano?/with-b-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-b-axis", "printhor-hwi_rp_2040?/with-b-axis"]
+with-c-axis = ["printhor-hwa-common/with-c-axis", "printhor-hwi_native?/with-c-axis", "printhor-hwi_skr_mini_e3?/with-c-axis", "printhor-hwi_mks_robin_nano?/with-c-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-c-axis", "printhor-hwi_rp_2040?/with-c-axis"]
+with-i-axis = ["printhor-hwa-common/with-i-axis", "printhor-hwi_native?/with-i-axis", "printhor-hwi_skr_mini_e3?/with-i-axis", "printhor-hwi_mks_robin_nano?/with-i-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-i-axis", "printhor-hwi_rp_2040?/with-i-axis"]
+with-j-axis = ["printhor-hwa-common/with-j-axis", "printhor-hwi_native?/with-j-axis", "printhor-hwi_skr_mini_e3?/with-j-axis", "printhor-hwi_mks_robin_nano?/with-j-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-j-axis", "printhor-hwi_rp_2040?/with-j-axis"]
+with-k-axis = ["printhor-hwa-common/with-k-axis", "printhor-hwi_native?/with-k-axis", "printhor-hwi_skr_mini_e3?/with-k-axis", "printhor-hwi_mks_robin_nano?/with-k-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-k-axis", "printhor-hwi_rp_2040?/with-k-axis"]
+with-u-axis = ["printhor-hwa-common/with-u-axis", "printhor-hwi_native?/with-u-axis", "printhor-hwi_skr_mini_e3?/with-u-axis", "printhor-hwi_mks_robin_nano?/with-u-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-u-axis", "printhor-hwi_rp_2040?/with-u-axis"]
+with-v-axis = ["printhor-hwa-common/with-v-axis", "printhor-hwi_native?/with-v-axis", "printhor-hwi_skr_mini_e3?/with-v-axis", "printhor-hwi_mks_robin_nano?/with-v-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-v-axis", "printhor-hwi_rp_2040?/with-v-axis"]
+with-w-axis = ["printhor-hwa-common/with-w-axis", "printhor-hwi_native?/with-w-axis", "printhor-hwi_skr_mini_e3?/with-w-axis", "printhor-hwi_mks_robin_nano?/with-w-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-w-axis", "printhor-hwi_rp_2040?/with-w-axis"]
+
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl"]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 
 # Wheter motion task is preemtive (takes exclusively the CPU when driving segments) or not
 # The optimal case is NOT preemtive, but MCU must be powerful enough to provide very short response times.
@@ -146,9 +168,7 @@ integration-test-move-boundaries = []
 integration-test-move-boundaries-1 = []
 integration-test-trinamic = []
 
-fixed-point-128-impl = []
-float-point-f32-impl = []
-float-point-f64-impl = []
+
 
 # baremetal
 std = []
@@ -185,7 +205,14 @@ native = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
+    "with-e-axis",
+    "with-x-axis", "with-y-axis", "with-z-axis",
+    #"with-a-axis", "with-b-axis", "with-c-axis",
+    #"with-i-axis", "with-j-axis", "with-k-axis",
+    #"with-u-axis", "with-v-axis", "with-w-axis",
+
+    #"verbose-timings",
+    #"assert-motion",
 
     #"plot-motion-plan",
     #"itertools",
@@ -236,29 +263,33 @@ nucleo64-l476rg = [
     #"nightly",
     #"executor-interrupt",
     "cooperative",
+    #"with-e-axis",
     "with-x-axis", "with-y-axis", "with-z-axis",
+    "with-a-axis", "with-b-axis", "with-c-axis",
+    #"with-i-axis", "with-j-axis", "with-k-axis",
+    #"with-u-axis", "with-v-axis", "with-w-axis",
     "with-defmt",
-    "with-motion",
+    "with-motion", "with-motion-cartessian",
+    "with-motion-broadcast",
     #"with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1",
     #"with-serial-port-2", # Not implemented
     "with-spi",
+    "with-i2c",
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
-    "with-probe",
+    #"with-probe",
     #"with-hot-end", # CNC Hat does not have it
     #"with-hot-bed", # CNC Hat does not have it
     #"with-fan-layer",
-    "with-laser",
-    "with-ps-on",
+    #"with-laser",
+    #"with-ps-on",
 
     #"enable_vrefint-with-delay",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
-
-    "printhor-hwi_nucleo_64_arduino_cnc_hat/with-i2c-pwm-motion",
 
     "printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-l476rg",
 ]
@@ -272,7 +303,7 @@ nucleo64-f410rb = [
     #"verbose-timings",
     "with-defmt",
     "with-serial-port-1",
-    "with-motion",
+    "with-motion", "with-motion-cartessian",
     "with-spi",
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
@@ -429,16 +460,16 @@ cortex-m-rt = { version = "0.7.3", optional = true}
 alloc-cortex-m = { version = "0.4", optional = true}
 critical-section = {version = "1.2", default-features = false}
 
-embassy-stm32 = { version = "0.1", default-features = false, features = [], optional = true }
+embassy-stm32 = { version = "0.2", default-features = false, features = [], optional = true }
 embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread"], optional = true }
 embassy-sync = { version = "0.6", features = [] }
 embassy-time = { version = "0.4", features = [] }
 embassy-futures = { version = "0.1", features = [] }
-embassy-embedded-hal = { version = "0.2", features = [], optional = true }
+#embassy-embedded-hal = { version = "0.3", features = [], optional = true }
 embassy-usb = { version = "0.3", features = [], optional = true }
 embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
-embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven", ], optional = true }
+embedded-hal-0 = { package = "embedded-hal", version = "0", features = ["unproven", ], optional = true }
 
 futures = { version = "0.3", default-features = false, features = [] }
 futures-util = { version = "0.3", default-features = false, features = [] }
@@ -450,10 +481,18 @@ strum = { version = "0.26", default-features = false, features = ["derive"] }
 
 rust_decimal = { version = "1", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { version = "1" }
-pid = { version = "4.0", default-features = false, features = []}
-num-traits = {version = "0.2", default-features = false, features = [] }
-micromath = { version = "2.1", default-features = false, features = []}
-embedded-io-async = {version = "0.6", default-features = false, features = []}
+pid = { version = "4.0", default-features = false, features = [] }
+num-traits = { version = "0.2", default-features = false, features = [] }
+micromath = { version = "2.1", default-features = false, features = [] }
+# For light and fast float parsing
+#fast-float = { version = "0.2", default-features = false, features = [], path = "libs/fast-float"}
+# For light and fast float striong formatting
+#lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
+# For very compact and fast float to string conversion
+ryu = {version = "1.0", default-features = false}
+
+
+embedded-io-async = { version = "0.6", default-features = false, features = [] }
 
 # Steppers
 tmc2209 = { version = "0.2", optional = true }
@@ -481,13 +520,6 @@ bitflags = { version = "2.6", default-features = false, features = [] }
 
 cfg-if = { version = "1.0", features = [] }
 const_env = { version = "0.1" }
-
-# For light and fast float parsing
-#fast-float = { version = "0.2", default-features = false, features = [], path = "libs/fast-float"}
-# For light and fast float striong formatting
-#lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
-# For very compact and fast float to string conversion
-ryu = {version = "1.0", default-features = false}
 
 aquamarine = "0.6.0"
 
