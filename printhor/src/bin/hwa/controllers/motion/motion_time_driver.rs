@@ -7,6 +7,7 @@ use critical_section::Mutex as CsMutex;
 use embassy_sync::waitqueue::WakerRegistration;
 
 /// The size of the timer queue.
+#[const_env::from_env("TIMER_QUEUE_SIZE")]
 const TIMER_QUEUE_SIZE: usize = 4;
 
 /// Represents the state of the soft timer driver.

@@ -489,7 +489,7 @@ impl SCurveMotionProfile {
                 j_max,
                 a_lim_a: math::ZERO,
                 a_lim_d: math::ZERO,
-                v_lim: v_1,
+                v_lim: v_1.max(v_0),
                 q1: q_1,
                 cache: Cache::default(),
                 constraints: *constraints,

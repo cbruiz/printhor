@@ -269,7 +269,7 @@ impl MotionPlanner {
     /// This function is typically called after the execution of a movement has been completed to update the state
     /// of the ring buffer and signal the availability of slots for new commands. It is an integral part of the system
     /// to ensure that the motion planner operates smoothly and consistently by managing the state of planned and executed movements.
-    pub async fn consume_current_segment_data(&self, event_bus: &hwa::types::EventBus) -> u8 {
+    pub async fn consume_current_plan(&self, event_bus: &hwa::types::EventBus) -> u8 {
         let mut rb = self.ring_buffer.lock().await;
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
@@ -491,13 +491,15 @@ impl MotionPlanner {
                                     _ => {}
                                 }
                             }
-                            self.motion_status
-                                .update_last_planned_position(&curr_segment.dest_pos);
                             hwa::info!(
-                                "[motion_planner] order_num:{:?} L:{:?} Queueing plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
+                                "[MotionPlanner] order_num:{:?} L:{:?} MotionPlan queued. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
                                 order_num, line_tag.unwrap_or(0),
                                 curr_segment.src_pos, curr_segment.dest_pos, curr_segment.speed_target_wu,
                                 curr_segment.unit_vector_dir.abs() * curr_segment.speed_target_wu
+                            );
+                            self.motion_status.update_last_planned_position(
+                                order_num,
+                                &curr_segment.dest_pos
                             );
                             (
                                 PlanEntry::PlannedMove(
@@ -778,7 +780,7 @@ impl MotionPlanner {
 
         let move_result = if module_target_distance.is_negligible() {
             hwa::info!(
-                "[motion_planner] order_num:{:?} L:{:?} Discarding plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
+                "[MotionPlanner] order_num:{:?} L:{:?} Discarding plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
                 num, line.unwrap_or(0), p0, p1, module_target_speed, speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
@@ -831,7 +833,7 @@ impl MotionPlanner {
             return Ok(r);
         } else {
             hwa::warn!(
-                "[motion_planner] order_num:{:?} L:{:?} Bad plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
+                "[MotionPlanner] order_num:{:?} L:{:?} Bad plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
                 num, line.unwrap_or(0), p0, p1, module_target_speed, speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
@@ -850,7 +852,7 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn do_homing(&self, event_bus: &hwa::types::EventBus) -> Result<(), ()> {
+    pub async fn do_homing(&self, order_num: u32, event_bus: &hwa::types::EventBus) -> Result<(), ()> {
         match self
             .motion_driver
             .lock()
@@ -859,10 +861,10 @@ impl MotionPlanner {
             .await
         {
             Ok(_pos) => {
-                self.motion_status().set_last_planned_position(&_pos);
+                self.motion_status().update_last_planned_position(order_num, &_pos);
             }
             Err(_pos) => {
-                self.motion_status().set_last_planned_position(&_pos);
+                self.motion_status().update_last_planned_position(order_num, &_pos);
                 // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
                 // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
                 // return Err(())

@@ -387,9 +387,23 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
+                let pos = _pos.as_vector();
                 self.motion_planner
                     .motion_status()
-                    .set_last_planned_position(&(_pos.as_vector()));
+                    .update_last_planned_position(gc.order_num, &pos);
+                // FIXME: Push "position" move into move queue
+                loop {
+                    if self.event_bus.has_flags(EventFlags::MOV_QUEUE_EMPTY).await {
+                        self.motion_planner
+                            .motion_status()
+                            .update_current_real_position(gc.order_num, &pos);
+                        break;
+                    }
+                    else {
+                        hwa::debug!("Spinning until move queue empty");
+                        embassy_time::Timer::after_millis(500).await;
+                    }
+                }
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
@@ -405,14 +419,21 @@ impl GCodeProcessor {
             GCodeValue::M3 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M5 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M37(t) => {
+                let dry_run_set = !t.s.unwrap_or(math::ZERO).is_zero();
                 let _ = self
                     .event_bus
-                    .publish_event(if t.s.unwrap_or(math::ZERO).is_zero() {
-                        EventStatus::not_containing(EventFlags::DRY_RUN)
-                    } else {
+                    .publish_event(if dry_run_set {
                         EventStatus::containing(EventFlags::DRY_RUN)
+                    } else {
+                        EventStatus::not_containing(EventFlags::DRY_RUN)
                     })
                     .await;
+                if dry_run_set {
+                    let _ = self.write(channel, "echo: DRY_RUN mode enabled\n").await;
+                }
+                else {
+                    let _ = self.write(channel, "echo: DRY_RUN mode disabled\n").await;
+                }
                 Ok(CodeExecutionSuccess::OK)
             }
             GCodeValue::M73 => Ok(CodeExecutionSuccess::OK),
@@ -621,7 +642,7 @@ impl GCodeProcessor {
                 let _spos = self
                     .motion_planner
                     .motion_status()
-                    .get_last_planned_real_position()
+                    .get_current_real_position()
                     .unwrap_or(TVector::zero());
                 // TODO: Use display
                 let z = alloc::format!("{} Count {}\n", _pos, _spos);

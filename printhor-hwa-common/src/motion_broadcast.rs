@@ -46,7 +46,7 @@ impl MotionDelta {
 
 /// The queue size of the motion broadcast channel
 #[const_env::from_env("MOTION_BROADCAST_CHANNEL_SIZE")]
-pub const MOTION_BROADCAST_CHANNEL_SIZE: usize = 1;
+pub const MOTION_BROADCAST_CHANNEL_SIZE: usize = 2;
 
 pub type MotionBroadcastChannelType<M> =
     Channel<M, MotionBroadcastEvent, MOTION_BROADCAST_CHANNEL_SIZE>;

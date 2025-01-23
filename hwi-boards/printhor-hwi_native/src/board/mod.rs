@@ -898,7 +898,7 @@ impl hwa::HwiContract for Contract {
                 let tk = Arc::new(Mutex::new(Some(SendWrapper::new(token))));
 
                 let _ = thread_priority::ThreadBuilder::default()
-                    .name("T")
+                    .name("Broadcaster")
                     .priority(thread_priority::ThreadPriority::Max)
                     .spawn(move |_result| {
                         // This is printed out from within the spawned thread.

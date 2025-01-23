@@ -161,8 +161,15 @@ impl LinearMicrosegmentStepInterpolator {
     /// A `TVector` containing the number of advanced [hwa::Contract::WORLD_UNIT_MAGNITUDE] units.
     pub fn advanced_world_units(&self) -> TVector<Real> {
         self.advanced_steps()
-            .map_values(|_, c| Some(Real::from_lit(c.into(), 0)))
-            / self.usteps_per_world_magnitude
+            .map_values(
+                |_, c|
+                    if c > 0 {
+                        Some(Real::from_lit(c.into(), 0))
+                    }
+                    else {
+                        None
+                    }
+            ) / self.usteps_per_world_magnitude
     }
 
     /// Returns the width of the multi timer.

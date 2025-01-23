@@ -546,6 +546,22 @@ where
         }
     }
 
+    pub fn sign(&self) -> TVector<T>
+    where
+        T: ArithmeticOps + core::ops::Sub<Output = T>,
+    {
+        self.map_values(
+            |_c, _v| {
+                if !_v.is_defined_positive() {
+                    Some(T::zero() - T::one())
+                }
+                else {
+                    Some(T::one())
+                }
+            }
+        )
+    }
+
     pub fn map<U, F>(&self, _f: F) -> TVector<U>
     where
         F: Fn(CoordSel, &Option<T>) -> Option<U>,
@@ -2306,7 +2322,6 @@ where
         (*self).scalar_product(other) / (self.pow(2).sum().abs())
     }
 
-    #[allow(unused)]
     pub fn unit(&self) -> Self {
         match self.norm2() {
             None => Self::nan(),
@@ -2323,7 +2338,6 @@ where
     /***
     custom behavior
      */
-    #[allow(unused)]
     pub fn decompose_normal(&self) -> (Self, T)
     where
         TVector<T>: core::ops::Div<T, Output = TVector<T>>,

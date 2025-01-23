@@ -143,7 +143,7 @@ impl PrinterController {
                         Err(PrinterControllerError::AlreadyPrinting)
                     }
                     PrinterControllerStatus::Paused(_channel) => {
-                        Err(PrinterControllerError::NoEffect)
+                        Err(PrinterControllerError::AlreadyPrinting)
                     }
                 }
             }

@@ -122,18 +122,8 @@ impl MotionI2c {
         pwm.disable().unwrap();
         hwa::info!("setting i2c prescale...");
         pwm.set_prescale(125).unwrap();
-        //pwm.set_prescale(255).unwrap();
         hwa::info!("enabling i2c...");
         pwm.enable().unwrap();
-
-        // period = 20 ms = 4095 count
-        // dmin(-90) = 1ms = 204.75 count
-        // dmax(+90) = 2ms = 409.50 count
-        // dmed(0) = 1.5ms = (204.75 + 409.50)/2 = 307.125 count ~= 307
-        // count_per_deg = (409.50 - 204.75) / 180 = 1.13750000
-        // count_per_deg = (409 - 205) / 180 = 1.13750000
-
-        // count(angle) = round(307.125 + (1.13750000 * angle))
 
         let mut instance = Self {
             pwm,
@@ -153,9 +143,16 @@ impl MotionI2c {
     }
 
     pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
+        //Theoretically, should be:
+        // let pwm = (
+        //             (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
+        //         ).max(205).min(409) as u16;
+        // that is: (100 ... 300 ... 500) for -90, 0 and 90º respectively
+        // but your mileage may vary, because (100, ..., 300, .. 500) is the best accuracy result
+        // with some analog servos (tested with TowerPro SG90 and brand-less MG90S)
         let pwm = (
-            (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
-        ).max(205).min(409) as u16;
+            (Real::from_f32(300.0) + (Real::from_f32(10.0/3.0) * (*angle))).round().to_i32().unwrap()
+        ).max(100).min(500) as u16;
         let index = axis.index();
         if index < 16 {
             if self.state[index].off != pwm {

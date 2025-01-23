@@ -4,6 +4,7 @@ use crate::control::motion::{Constraints, MotionProfile};
 use crate::hwa;
 use hwa::math::Real;
 use hwa::math::TVector;
+use printhor_hwa_common::CoordSel;
 
 /// Represents the data for a motion segment.
 ///
@@ -54,6 +55,25 @@ pub struct Segment {
     pub tool_power: Real,
     /// Motion constraints applicable to the segment.
     pub constraints: Constraints, // Should remove this?
+}
+
+impl Segment {
+    pub fn fix_deviation(&mut self, deviation: &TVector<Real>, flow_rate: Real) {
+        self.src_pos -= *deviation;
+        (self.unit_vector_dir, self.displacement_wu) = (self.dest_pos - self.src_pos)
+            .map_values(|coord, coord_value| match coord {
+                #[cfg(feature = "with-e-axis")]
+                CoordSel::E => match coord_value.is_zero() {
+                    true => None,
+                    false => Some(coord_value * flow_rate),
+                },
+                _ => match coord_value.is_zero() {
+                    true => None,
+                    false => Some(coord_value),
+                },
+            })
+            .decompose_normal();
+    }
 }
 
 /// Iterator over motion segments.

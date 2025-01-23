@@ -501,7 +501,7 @@ async fn init_controllers_and_spawn_tasks(
             motion_config.set_speed_rate(100);
 
             // Homing unneeded
-            motion_status.set_last_planned_position(&TVector::zero());
+            motion_status.update_last_planned_position(0, &TVector::zero());
         }
     }
 

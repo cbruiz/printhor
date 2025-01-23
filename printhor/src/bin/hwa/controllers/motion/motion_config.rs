@@ -150,11 +150,11 @@ impl MotionConfig {
         self.get_units_per_world_magnitude() * self.get_micro_steps_as_vector()
     }
 
-    pub fn get_flow_rate(&self) -> u8 {
+    fn get_flow_rate(&self) -> u8 {
         self.cfg.apply(|m| m.flow_rate)
     }
 
-    pub fn get_speed_rate(&self) -> u8 {
+    fn get_speed_rate(&self) -> u8 {
         self.cfg.apply(|m| m.speed_rate)
     }
 
