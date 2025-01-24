@@ -17,11 +17,11 @@ cfg_if::cfg_if! {
         #[allow(dead_code)]
         impl Real {
             #[inline]
-            pub(crate) fn new(num: i64, scale: u32) -> Self {
+            pub fn new(num: i64, scale: u32) -> Self {
                 Self::from_lit(num, scale)
             }
             #[inline]
-            pub(crate) fn from_lit(num: i64, scale: u32) -> Self {
+            pub fn from_lit(num: i64, scale: u32) -> Self {
                 let s = F::powi(10.0, scale as i32);
                 Self((num as F) / s)
             }
@@ -38,11 +38,11 @@ cfg_if::cfg_if! {
                 self.0
             }
             #[inline]
-            pub(crate) fn abs(self) -> Self {
+            pub fn abs(self) -> Self {
                 Self(self.0.abs())
             }
             #[inline]
-            pub(crate) fn powi(self, x: i32) -> Self {
+            pub fn powi(self, x: i32) -> Self {
                 Self(self.0.powi(x))
             }
 
@@ -56,7 +56,7 @@ cfg_if::cfg_if! {
                 Self(0.0)
             }
             #[inline]
-            pub(crate) fn is_zero(&self) -> bool {
+            pub fn is_zero(&self) -> bool {
                 F::is_zero(&self.0)
             }
 
@@ -70,46 +70,39 @@ cfg_if::cfg_if! {
                 FloatCore::abs(self.0) < <f64 as FloatCore>::epsilon()
             }
 
-            pub(crate) fn is_defined_positive(&self) -> bool {
+            pub fn is_defined_positive(&self) -> bool {
                 self.0 > 0.0
             }
 
             #[inline]
-            pub(crate) fn is_positive(&self) -> bool {
+            pub fn is_positive(&self) -> bool {
                 !(self.0 < 0.0)
             }
             #[inline]
-            pub(crate) const fn one() -> Self {
+            pub const fn one() -> Self {
                 Self(1.0)
             }
-            #[inline]
-            pub(crate) fn round(&self) -> Self {
+            pub fn round(&self) -> Self {
                 Real(self.0.round())
             }
-            #[inline]
-            pub(crate) fn round_dp(&self, decimals: u32) -> Self {
+            pub fn round_dp(&self, decimals: u32) -> Self {
                 let s = F::powi(10.0, decimals as i32);
                 Self((self.0 * s).round() / s)
             }
             /// Round to decimal digits
-            #[inline]
             pub fn rdp(&self, digits: u32) -> Self {
                 self.round_dp(digits)
             }
-            #[inline]
-            pub(crate) fn ceil(&self) -> Self {
+            pub fn ceil(&self) -> Self {
                 Real(self.0.ceil())
             }
-            #[inline]
-            pub(crate) fn floor(&self) -> Self {
+            pub fn floor(&self) -> Self {
                 Real(self.0.floor())
             }
-            #[inline]
             pub fn to_f64(&self) -> f64 {
                 self.0 as f64
             }
 
-            #[inline]
             pub fn to_i32(&self) -> Option<i32> {
                 self.0.to_i32()
             }
@@ -125,10 +118,10 @@ cfg_if::cfg_if! {
             }
 
             #[inline]
-            pub(crate) fn sqrt(self) -> Option<Self> {
+            pub fn sqrt(self) -> Option<Self> {
                 //#[cfg(feature = "native")]
-                let v = self.0.sqrt();
-                //let v = 1.0f64 / Self::quake_isqrt(self.0);
+                //let v = self.0.sqrt();
+                let v = 1.0f64 / Self::quake_isqrt(self.0);
                 //let v = 1.0f64 / core::intrinsics::sqrt(self.0);
                 //let x = micromath::F32Ext::sqrt(self.0 as f32);
                 //#[cfg(not(feature = "native"))]
@@ -149,27 +142,27 @@ cfg_if::cfg_if! {
             }
 
             #[inline]
-            pub(crate) fn cos(self) -> Self {
+            pub fn cos(self) -> Self {
                 Real(micromath::F32(self.0 as f32).cos().0 as f64)
             }
 
             #[inline]
-            pub(crate) fn ln(self) -> Self {
+            pub fn ln(self) -> Self {
                 Real(micromath::F32(self.0 as f32).ln().0 as f64)
             }
 
             #[inline]
-            pub(crate) fn exp(self) -> Self {
+            pub fn exp(self) -> Self {
                 Real(micromath::F32(self.0 as f32).exp().0 as f64)
             }
 
             #[inline]
-            pub(crate) fn sign(self) -> Self {
+            pub fn sign(self) -> Self {
                 let s = self.0.signum();
                 if s.is_zero() {Real::one()} else {Real(s)}
             }
 
-            pub(crate) fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);
@@ -184,7 +177,7 @@ cfg_if::cfg_if! {
                 m
             }
 
-            pub(crate) fn vmax(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
+            pub fn vmax(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
                 let mut m: Option<Real> = None;
                 if let Some(x) = r1 {
                     m = Some(x);
@@ -322,93 +315,6 @@ cfg_if::cfg_if! {
         impl Format for Real {
             fn format(&self, fmt: defmt::Formatter) {
                 defmt::write!(fmt, "{:?}", self.0.to_f64());
-            }
-        }
-
-        #[derive(Clone)]
-        pub struct RealInclusiveRange {
-            current: Real,
-            current_back: Real,
-            step_size: Real,
-            start: Real,
-            end: Real,
-            num_steps: Real,
-        }
-
-        impl RealInclusiveRange {
-            pub fn new(start: Real, end: Real, step_size: Real) -> Self {
-                let num_steps = ((end - start) / step_size).ceil();
-                #[cfg(feature = "native")]
-                println!("RealInclusiveRange: start={} end={} step_size={}, num_steps={}", start, end, step_size, num_steps);
-                RealInclusiveRange {
-                    current: start,
-                    current_back: start,
-                    step_size,
-                    start,
-                    end,
-                    num_steps,
-                }
-            }
-
-            #[allow(unused)]
-            #[inline]
-            pub fn width(&self) -> Real {
-                self.end - self.start
-            }
-
-            #[inline]
-            #[allow(unused)]
-            pub fn step_size(&self) -> Real {
-                self.step_size
-            }
-
-            #[allow(unused)]
-            pub fn reset(&mut self) {
-                self.current = self.start;
-                self.current_back = self.start;
-            }
-
-            /// panics (in debug) when len doesn't fit in usize
-            fn usize_len(&self) -> usize {
-                self.num_steps.0.to_usize().unwrap()
-            }
-
-            /// Does scale
-            #[allow(unused)]
-            pub fn scale(&self, scale: Real) -> Self {
-                RealInclusiveRange::new(self.start * scale, self.end * scale, self.num_steps)
-            }
-        }
-
-        impl Iterator for RealInclusiveRange {
-            type Item = Real;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                if !self.step_size.is_zero() && self.current <= self.end {
-                    self.current_back = self.current.clone();
-                    self.current += self.step_size.clone();
-                    Some(self.current_back.clone())
-                }
-                else {
-                    None
-                }
-            }
-
-            fn count(self) -> usize {
-                self.usize_len()
-            }
-        }
-
-        impl DoubleEndedIterator for RealInclusiveRange {
-            fn next_back(&mut self) -> Option<Self::Item> {
-                if self.current_back >= self.end {
-                    self.current = self.current_back;
-                    self.current_back -= self.step_size;
-                    Some(self.current)
-                }
-                else {
-                    None
-                }
             }
         }
     }

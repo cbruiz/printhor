@@ -239,4 +239,7 @@ impl async_gcode::ByteStream for MockedUartNamedPipeRxInputStream
         }
     }
 
+    async fn recovery_check(&mut self) {
+    }
+
 }

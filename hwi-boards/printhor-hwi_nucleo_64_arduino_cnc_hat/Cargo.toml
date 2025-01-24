@@ -14,20 +14,25 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-default = ["nucleo64-f410rb", "with-serial-port-1"]
+#default = ["nucleo64-l476rg", "with-motion", "printhor-hwa-common/with-motion", "printhor-hwa-common/with-x-axis", "with-serial-port-1", "printhor-hwa-common/float-point-f32-impl"]
+default = ["nucleo64-f410rb", "with-motion", "with-i2c", "printhor-hwa-common/with-i2c", "printhor-hwa-common/with-motion", "with-x-axis", "printhor-hwa-common/with-x-axis", "with-serial-port-1", "printhor-hwa-common/float-point-f32-impl"]
 # Board kind
-nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
-nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
+nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
+nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
 # Hardware device features
 with-serial-usb = ["embassy-usb"]
 with-print-job = []
 with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]
 with-serial-port-2 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-2"]
 with-spi = ["embedded-hal-1"]
-with-i2c = ["embedded-hal-1", "pwm-pca9685"]
+with-i2c = ["embedded-hal-1", "pwm-pca9685/async"]
 with-hot-end = ["embedded-hal-1"]
 with-hot-bed = ["embedded-hal-1"]
-with-motion = []
+with-motion = ["printhor-hwa-common/with-motion"]
+with-motion-stepper = []
+with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian-kinematics"]
+with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
 with-motion-broadcast = []
 with-probe = ["embedded-hal-1"]
 with-endstops = []
@@ -38,7 +43,7 @@ with-laser = ["embedded-hal-1"]
 with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = []
 with-ps-on = []
-without-ringbuffer = []
+uart-uses-ring-buffer = []
 
 with-x-axis = []
 with-y-axis = []
@@ -57,11 +62,15 @@ with-w-axis = []
 debug-signals = []
 
 nightly = []
-cooperative = ["embassy-time/generic-queue-128"]
+cooperative = ["embassy-time/generic-queue-64"]
 verbose-timings = []
 sd-card-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
+
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 
 [dependencies]
 defmt = { version = "0.3", default-features = false, optional = true }
@@ -90,6 +99,9 @@ pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
 cfg-if = { version = "1.0" }
 const_env = { version = "0.1" }
 pin-project = "1.1"
+
+rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1" }
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }

@@ -362,13 +362,6 @@ impl SCurveMotionProfile {
         let v_min = v_0.max(v_1);
         let mut v_max = v_min.max(constraints.v_max);
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature="verbose-timings")] {
-                hwa::info!("compute q_{{1}} = {:?} v_{{0}} = {:?} v_{{1}} = {:?}", q_1, v_0, v_1);
-                let _t0 = embassy_time::Instant::now();
-            }
-        }
-
         // First, compute the displacement
 
         // [[1]] First necessary to verify whether a trajectory can be actually performed or not.
@@ -405,7 +398,7 @@ impl SCurveMotionProfile {
 
         if not_feasible {
             #[cfg(feature = "verbose-timings")]
-            hwa::warn!("Movement NOT FEASIBLE. Performing unconstrained parabolic blends");
+            hwa::warn!("[SCurveMotionProfile] Movement NOT FEASIBLE. Performing unconstrained parabolic blends");
 
             // y := j_max
             // e1: q1 = (y * t^3) / 6 + v0 * t
@@ -494,11 +487,6 @@ impl SCurveMotionProfile {
                 cache: Cache::default(),
                 constraints: *constraints,
             };
-            cfg_if::cfg_if! {
-                if #[cfg(feature="verbose-timings")] {
-                    hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                }
-            }
             profile.compute_cache();
             if error_correction {
                 let final_pos = profile.s_i7(&profile.i7_end());
@@ -631,11 +619,6 @@ impl SCurveMotionProfile {
                                     cache: Cache::default(),
                                     constraints: *constraints,
                                 };
-                                cfg_if::cfg_if! {
-                                if #[cfg(feature="verbose-timings")] {
-                                        hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                                    }
-                                }
                                 profile.compute_cache();
                                 if error_correction {
                                     let final_pos =
@@ -670,11 +653,6 @@ impl SCurveMotionProfile {
                                         cache: Cache::default(),
                                         constraints: *constraints,
                                     };
-                                    cfg_if::cfg_if! {
-                                    if #[cfg(feature="verbose-timings")] {
-                                            hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                                        }
-                                    }
                                     profile.compute_cache();
                                     if error_correction {
                                         let final_pos = profile.s_i7(&profile.i7_end());
@@ -724,11 +702,6 @@ impl SCurveMotionProfile {
                                         cache: Cache::default(),
                                         constraints: *constraints,
                                     };
-                                    cfg_if::cfg_if! {
-                                    if #[cfg(feature="verbose-timings")] {
-                                            hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                                        }
-                                    }
                                     profile.compute_cache();
                                     if error_correction {
                                         let final_pos = profile.s_i7(&profile.i7_end());
@@ -876,11 +849,6 @@ impl SCurveMotionProfile {
                                 cache: Cache::default(),
                                 constraints: *constraints,
                             };
-                            cfg_if::cfg_if! {
-                                if #[cfg(feature="verbose-timings")] {
-                                    hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                                }
-                            }
                             profile.compute_cache();
                             if error_correction {
                                 let final_pos = profile.s_i7(&profile.i7_end());

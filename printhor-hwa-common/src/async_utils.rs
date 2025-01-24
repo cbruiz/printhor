@@ -10,17 +10,17 @@ pub trait AsyncWrapperWriter<E> {
 
 pub struct SerialTxWrapper<P> {
     peri: P,
-    ticks_by_word: u64,
+    _ticks_by_word: u64,
     last_write_len: usize,
 }
 
 impl<P> SerialTxWrapper<P> {
     pub const fn new(peri: P, baud_rate: u32) -> Self {
-        let ticks_by_word =
+        let _ticks_by_word =
             embassy_time::Duration::from_micros(((1000000 / baud_rate) * 10) as u64).as_ticks();
         Self {
             peri,
-            ticks_by_word,
+            _ticks_by_word,
             last_write_len: 0,
         }
     }
@@ -36,16 +36,29 @@ where
     ) -> impl core::future::Future<Output = Result<usize, E>> {
         async {
             self.last_write_len = data.len();
-            self.peri.write(data).await
+            let r = self.peri.write_all(data).await;
+            match &r {
+                Ok(()) => {
+                    crate::trace!("Wrote {} bytes", data.len());
+                }
+                Err(_e) => {
+                    crate::warn!("Error sending")
+                }
+            }
+            //embassy_time::Timer::after(embassy_time::Duration::from_millis(1)).await;
+            Ok(data.len())
         }
     }
     fn wrapped_flush(&mut self) -> impl core::future::Future<Output = ()> {
         async {
             if self.last_write_len > 0 {
+                let _ = self.peri.flush().await;
+
                 let d = embassy_time::Duration::from_ticks(
-                    self.ticks_by_word * (self.last_write_len as u64),
+                    self._ticks_by_word * ((self.last_write_len + 1) as u64),
                 );
                 embassy_time::Timer::after(d).await;
+
                 self.last_write_len = 0;
             }
         }

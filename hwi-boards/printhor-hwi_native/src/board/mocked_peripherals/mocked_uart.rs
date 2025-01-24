@@ -164,4 +164,7 @@ impl<const BUFF_SIZE: usize> async_gcode::ByteStream for MockedUartRxInputStream
         }
     }
 
+    async fn recovery_check(&mut self) {
+    }
+
 }

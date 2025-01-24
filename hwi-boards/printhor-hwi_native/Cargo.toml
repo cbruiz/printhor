@@ -14,7 +14,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-default = ["printhor-hwa-common/float-point-f32-impl"]
+default = []
 # Hardware device features
 with-log = ["env_logger"]
 with-serial-usb = ["async-std"]
@@ -24,6 +24,10 @@ with-print-job = []
 with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end"]
 with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
+with-motion-stepper = []
+with-motion-cartessian-kinematics = []
+with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
 with-probe = ["embedded-hal-0"]
 with-endstops = []
@@ -58,10 +62,14 @@ verbose-timings = []
 sd-card-uses-spi = []
 without-vref-int = []
 
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
+
 [dependencies]
-embassy-executor = { version = "0.7", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
+embassy-executor = { version = "0.7", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-196608"] }
 embassy-sync = { version = "0.6", features = ["std"] }
-embassy-time = { version = "0.4", features = ["std", "generic-queue-128"] }
+embassy-time = { version = "0.4", features = ["std", "generic-queue-64"] }
 embassy-futures = { version = "0.1", features = [] }
 #embassy-embedded-hal = { version = "0.3", features = [] }
 
@@ -86,6 +94,9 @@ pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
 nb = {version = "1.1", default-features = false, features = []}
 tmc2209 = { version = "0.2", optional = true }
 thread-priority = { version = "1.1"}
+
+rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1" }
 
 cfg-if = {version = "1.0"}
 const_env = { version = "0.1" }

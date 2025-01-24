@@ -11,7 +11,7 @@ pub struct MockedI2c {
 }
 
 impl MockedI2c {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
 
         let dev = I2CDevice();
 
@@ -43,7 +43,7 @@ impl MockedI2c {
         for _servo in CoordSel::all_axis().iter() {
             instance.set_angle(_servo, &hwa::math::ZERO);
         }
-        instance.apply();
+        instance.apply().await;
         hwa::debug!("[mocked_i2c] setting done");
         instance
     }
@@ -68,7 +68,7 @@ impl MockedI2c {
         }
     }
 
-    pub fn apply(&mut self) {
+    pub async fn apply(&mut self) -> () {
         self.pwm.set_all_channels(&self.state).unwrap();
     }
 }

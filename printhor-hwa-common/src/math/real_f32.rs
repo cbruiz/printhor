@@ -1,5 +1,7 @@
 cfg_if::cfg_if! {
     if #[cfg(feature="float-point-f32-impl")] {
+        #[allow(unused)]
+        use crate as hwa;
         use core::cmp::Ordering;
         use core::ops::*;
         use core::fmt::{Debug, Formatter};
@@ -60,69 +62,74 @@ cfg_if::cfg_if! {
                 f32::is_zero(&self.0)
             }
 
-            #[inline]
             pub const fn epsilon() -> Self {
                 crate::math::EPSILON
             }
 
-            #[inline]
             pub fn is_negligible(&self) -> bool {
                 FloatCore::abs(self.0) < <f32 as FloatCore>::epsilon()
             }
 
-            #[inline]
             pub fn is_defined_positive(&self) -> bool {
                 self.0 > f32::zero()
             }
 
-            #[inline]
             pub fn is_positive(&self) -> bool {
                 !self.0.is_sign_negative()
             }
-            #[inline]
+
             pub const fn one() -> Self {
                 Self(1.0f32)
             }
-            #[inline]
+
             pub fn round(&self) -> Self {
                 Real(FloatCore::round(self.0))
             }
-            #[inline]
+
             pub fn round_dp(&self, decimals: u32) -> Self {
                 let s = FloatCore::powi(10.0f32, decimals as i32);
                 Self(FloatCore::round(self.0 * s) / s)
             }
             /// Round to decimal digits
-            #[inline]
+
             pub fn rdp(&self, digits: u32) -> Self {
                 self.round_dp(digits)
             }
-            #[inline]
+
             pub fn ceil(&self) -> Self {
                 Real(FloatCore::ceil(self.0))
             }
-            #[inline]
+
             pub fn floor(&self) -> Self {
                 Real(FloatCore::floor(self.0))
             }
-            #[inline]
+
             pub fn to_f64(&self) -> f64 {
                 self.0 as f64
             }
 
-            #[inline]
             pub fn to_i32(&self) -> Option<i32> {
                 self.0.to_i32()
             }
 
-            #[inline]
             pub fn to_i64(&self) -> Option<i64> {
                 self.0.to_i64()
             }
 
-            #[inline]
             pub fn int(&self) -> i64 {
                 self.0.to_i64().unwrap()
+            }
+
+            /// Radians to degrees
+            pub fn r2d(&self) -> Real {
+                (*self) * hwa::make_real!(180.0) / hwa::math::PI
+            }
+
+            /// Degrees to radians
+            /// 360 -> 2pi
+            /// x ->
+            pub fn d2r(&self) -> Real {
+                (*self) * hwa::math::PI / hwa::make_real!(180.0)
             }
 
             pub fn sqrt(self) -> Option<Self> {
@@ -190,9 +197,26 @@ cfg_if::cfg_if! {
                 todo!("Not implemented")
             }
 
-            #[inline]
+            pub fn sin(self) -> Self {
+                Real(self.0.sin())
+            }
+
             pub fn cos(self) -> Self {
                 Real(self.0.cos())
+            }
+
+            pub fn tan(self) -> Self {
+                Real(self.0.tan())
+            }
+
+            /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
+            pub fn atan2(self, other:Real) -> Self {
+                Real(self.0.atan2(other.0))
+            }
+
+            /// Computes the arccosine of a number. Return value is in radians in the range [0, pi] or NaN if the number is outside the range [-1, 1].
+            pub fn acos(self) -> Self {
+                Real(self.0.acos())
             }
 
             #[inline]

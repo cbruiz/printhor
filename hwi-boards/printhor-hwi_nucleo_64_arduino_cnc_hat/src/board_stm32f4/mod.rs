@@ -4,7 +4,6 @@
 //!
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
-use hwa::HwiResource;
 
 mod device;
 mod types;
@@ -17,36 +16,31 @@ static HEAP: alloc_cortex_m::CortexMHeap = alloc_cortex_m::CortexMHeap::empty();
 pub struct Contract;
 impl HwiContract for Contract {
 
-    //#region "Common constants"
+    //#region "Board specific constants"
 
     const MACHINE_TYPE: &'static str = "NUCLEO64";
     const MACHINE_BOARD: &'static str = "NUCLEO64_Arduino_CNC_Hat_v3.x";
     /// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
     const MACHINE_PROCESSOR: &'static str = "STM32F410RB";
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature="with-motion")] {
-            #[const_env::from_env("PROCESSOR_SYS_CK_MHZ")]
-            const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
-        }
-    }
+    const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
 
-    //#enregion
+    //#endregion
 
-    //#region Hard-coded settings [...]
+    //#region "Watchdog settings"
 
     #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
     const WATCHDOG_TIMEOUT_US: u32 = 10_000_000;
 
-    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
-    const MAX_HEAP_SIZE_BYTES: usize = 1024;
-
-    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
-    const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 12384;
-
     //#endregion
 
-    //#region "Memory management"
+    //#region "Memory management/tracking settings"
+
+    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
+    const MAX_HEAP_SIZE_BYTES: usize = 256;
+
+    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
+    const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 8096;
 
     fn heap_current_size() -> usize {
         HEAP.used()
@@ -54,18 +48,61 @@ impl HwiContract for Contract {
 
     //#endregion
 
-    //#region Constant settings for with-motion feature [...]
+    //#region "Feature [with-motion] settings"
 
     cfg_if::cfg_if! {
-        if #[cfg(feature="with-motion")] {
-            #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
-            const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 400;
+        if #[cfg(feature = "with-motion")] {
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
+                    compile_error!("Not implemented");
+                }
+                else if #[cfg(feature = "with-motion-delta-kinematics")] {
+                    compile_error!("Work in progress");
+                }
+                else { // Implicitly Assume with-motion-cartessian-kinematic
+                    const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=200.0, y=200.0, z=200.0)
+                    };
 
-            #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
-            const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 40_000;
+                    const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=100.0, y=100.0, z=100.0)
+                    };
 
-            #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
-            const SEGMENT_QUEUE_SIZE: u8 = 10;
+                    const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=600.0, y=600.0, z=100.0, e=300.0)
+                    };
+
+                    const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=9800.0, y=9800.0, z=4800.0, e=9800.0)
+                    };
+
+                    const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=19600.0, y=19600.0, z=9600.0, e=19600.0)
+                    };
+
+                    const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
+                        hwa::make_real!(600.0)
+                    };
+
+                    const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=50.0, y=50.0, z=10.0, e=50.0)
+                    };
+
+
+                    const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
+                        hwa::make_vector!(x=2, y=2, z=2, e=2)
+                    };
+
+                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
+
+                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
+                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    const SEGMENT_QUEUE_SIZE: u8 = 10;
+                }
+            }
         }
     }
 
@@ -77,38 +114,38 @@ impl HwiContract for Contract {
         if #[cfg(feature="with-hot-end")] {
 
             #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_MV")]
-            const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = 4096;
+            const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = todo!("not implemented");
 
             #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
-            const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
+            const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("not implemented");
 
             #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
-            const HOT_END_THERM_BETA: f32 = 3950.0;
+            const HOT_END_THERM_BETA: f32 = todo!("not implemented");
 
             #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
-            const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+            const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = todo!("not implemented");
 
             #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
-            const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+            const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = todo!("not implemented");
         }
     }
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
 
             #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_MV")]
-            const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = 4096;
+            const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = todo!("not implemented");
 
             #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
-            const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
+            const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("not implemented");
 
             #[const_env::from_env("HOT_BED_THERM_BETA")]
-            const HOT_BED_THERM_BETA: f32 = 3950.0;
+            const HOT_BED_THERM_BETA: f32 = todo!("not implemented");
 
             #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
-            const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100000.0;
+            const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = todo!("not implemented");
 
             #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
-            const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 4685.0;
+            const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = todo!("not implemented");
         }
     }
 
@@ -143,7 +180,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            compile_error!("not implemented")
+            compile_error!("not implemented");
         }
     }
 
@@ -162,15 +199,23 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            compile_error!("Not implemented")
+            compile_error!("Not implemented");
         }
     }
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-spi")] {
             #[const_env::from_env("SPI_FREQUENCY")]
-            const SPI_FREQUENCY: u32 = 2_000_000;
+            const SPI_FREQUENCY: u32 = 20_000_000;
             type SpiController = types::Spi1MutexStrategyType;
+        }
+    }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-i2c")] {
+            #[const_env::from_env("I2C_FREQUENCY")]
+            const I2C_FREQUENCY: u32 = 100_000;
+            type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
         }
     }
 
@@ -182,6 +227,14 @@ impl HwiContract for Contract {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+            type MotionBroadcastChannelMutexType = types::MotionBroadcastChannelMutexType;
+
+            type MotionSenderMutexStrategy = types::MotionSenderMutexStrategy;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-ps-on")] {
             type PSOnMutexStrategy = types::PSOnMutexStrategy;
         }
@@ -189,8 +242,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-probe")] {
-            type ProbePwm = types::ProbeMutexStrategy;
-            type ProbePwmChannel = hwa::HwiResource<device::ProbePwmChannel>;
+            type ProbePwm = types::ProbePwmMutexStrategy;
+            type ProbePwmChannel = hwa::HwiResource<device::PwmProbeChannel>;
         }
     }
 
@@ -222,7 +275,7 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-laser")] {
             type LaserPwm = types::LaserPwmMutexStrategy;
-            type LaserPwmChannel = hwa::HwiResource<device::LaserPwmChannel>;
+            type LaserPwmChannel = hwa::HwiResource<device::PwmLaserChannel>;
         }
     }
 
@@ -269,7 +322,13 @@ impl HwiContract for Contract {
 
     async fn init(_spawner: embassy_executor::Spawner) -> hwa::HwiContext<Self> {
 
-        //#region "RCC"
+
+        //#region "Init RCC"
+
+        // HSI = 16Mhz
+        // SYSCLK = ((HSI / M) * N) / P => ((16 / 8) * 100) / 2 = 100Mhz
+        // HCLK = SYSCLK / ahb_pre => 100 / 1 =  100MHz
+
         let config = {
             let mut config = embassy_stm32::Config::default();
             config.rcc.hsi = true;
@@ -277,8 +336,8 @@ impl HwiContract for Contract {
             config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;
             config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSI;
             config.rcc.pll = Some(embassy_stm32::rcc::Pll {
-                prediv: embassy_stm32::rcc::PllPreDiv::DIV16,
-                mul: embassy_stm32::rcc::PllMul::MUL200,
+                prediv: embassy_stm32::rcc::PllPreDiv::DIV8,
+                mul: embassy_stm32::rcc::PllMul::MUL100,
                 divp: Some(embassy_stm32::rcc::PllPDiv::DIV2),
                 divq: None,
                 divr: None,
@@ -288,7 +347,11 @@ impl HwiContract for Contract {
             config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
             config
         };
+        hwa::info!("embassy init...");
         let p = embassy_stm32::init(config);
+        hwa::info!("embassy init done");
+
+        //#endregion
 
         //#region "Prepare shared peripherals"
 
@@ -296,8 +359,15 @@ impl HwiContract for Contract {
             if #[cfg(all(feature = "with-serial-port-1"))] {
 
                 embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
-                    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+                    USART2 => embassy_stm32::usart::BufferedInterruptHandler<embassy_stm32::peripherals::USART2>;
                 });
+                {
+                    use embassy_stm32::interrupt::InterruptExt;
+                    embassy_stm32::interrupt::USART2.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    //uses DMA1_CH6 (TX), p.DMA1_CH7 (RX),
+                    embassy_stm32::interrupt::DMA1_STREAM7.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_STREAM6.set_priority(embassy_stm32::interrupt::Priority::P3);
+                }
 
                 let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
@@ -305,12 +375,27 @@ impl HwiContract for Contract {
                 cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
                 cfg.parity = embassy_stm32::usart::Parity::ParityNone;
                 cfg.detect_previous_overrun = true;
+                type TxBuffType = [u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE];
+                type RxBuffType = [u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE];
 
-                let (uart_port1_tx_device, uart_port1_rx_device) = embassy_stm32::usart::Uart::new(
+                let txb = hwa::make_static_ref!(
+                    "txbuff",
+                    TxBuffType,
+                    [0u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE]
+                );
+                let rxb = hwa::make_static_ref!(
+                    "txbuff",
+                    RxBuffType,
+                    [0u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE]
+                );
+
+                let (uart_port1_tx_device, uart_port1_rx_device) = embassy_stm32::usart::BufferedUart::new(
                     p.USART2,
-                    p.PA3, p.PA2,
                     UartPort1Irqs,
-                    p.DMA1_CH6, p.DMA1_CH7, cfg,
+                    p.PA3, p.PA2,
+                    txb,
+                    rxb,
+                    cfg,
                 ).expect("Ready").split();
                 let serial_port1_tx = hwa::make_static_async_controller!(
                     "UartPort1Tx",
@@ -318,50 +403,50 @@ impl HwiContract for Contract {
                     hwa::SerialTxWrapper::new(uart_port1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
                 );
                 let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device);
+                hwa::info!("serial-port-1 DONE");
             }
         }
 
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
-            device::TrinamicUart::new(
-                TRINAMIC_UART_BAUD_RATE,
-                mocked_peripherals::MockedIOPin::new(0, _pin_state),
-                mocked_peripherals::MockedIOPin::new(1, _pin_state),
-                mocked_peripherals::MockedIOPin::new(2, _pin_state),
-                mocked_peripherals::MockedIOPin::new(3, _pin_state),
-            )
+            todo!("Not implemented")
         };
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
+                hwa::info!("spi...");
                 let mut cfg = embassy_stm32::spi::Config::default();
-                cfg.frequency = embassy_stm32::time::Hertz(Contract::SPI_FREQUENCY);
+                cfg.frequency = embassy_stm32::time::Hertz(Self::SPI_FREQUENCY);
 
-                let _spi1_device = hwa::make_static_async_controller!(
-                    "SPI1",
+                let spi = hwa::make_static_async_controller!(
+                    "SPI2",
                     types::Spi1MutexStrategyType,
                     device::Spi::new(
                         p.SPI2, p.PB13, p.PB15, p.PB14, p.DMA1_CH4, p.DMA1_CH3, cfg,
                     )
                 );
-                hwa::debug!("SPI done");
+                hwa::info!("with-spi done");
             }
         }
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
+                hwa::info!("with-sd-card...");
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-spi")] {
-                        let sd_card_device = _spi1_device.clone();
+                        let sd_card_device = spi.clone();
                     }
                     else {
                         compile_error!("with-sd-card requires with-spi in this board");
                     }
                 }
+                hwa::info!("with-sd-card DONE");
             }
         }
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
+                hwa::info!("with-motion...");
                 let motion_pins = device::MotionPins {
                     all_enable_pin: embassy_stm32::gpio::Output::new(p.PA9, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                     x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC7, embassy_stm32::gpio::Pull::Down),
@@ -374,44 +459,86 @@ impl HwiContract for Contract {
                     y_dir_pin: embassy_stm32::gpio::Output::new(p.PB10, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                     z_dir_pin: embassy_stm32::gpio::Output::new(p.PA8, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                 };
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-i2c")] {
+                        hwa::info!("with-i2c...");
+
+                        embassy_stm32::bind_interrupts!(struct I2C1Irqs {
+                            I2C1_EV => embassy_stm32::i2c::EventInterruptHandler<embassy_stm32::peripherals::I2C1>;
+                            I2C1_ER => embassy_stm32::i2c::ErrorInterruptHandler<embassy_stm32::peripherals::I2C1>;
+                        });
+
+                        let i2c_freq = embassy_stm32::time::hz(Self::I2C_FREQUENCY);
+                        let i2c_conf = embassy_stm32::i2c::Config::default();
+
+                        let i2c = hwa::make_static_async_controller!(
+                            "I2C1",
+                            types::I2cMutexStrategyType,
+
+                            io::MotionI2c::new(embassy_stm32::i2c::I2c::new(
+                                p.I2C1,
+                                // SCL
+                                p.PB8,
+                                // SDA
+                                p.PB9,
+                                I2C1Irqs,
+                                p.DMA1_CH1,
+                                p.DMA1_CH0,
+                                i2c_freq,
+                                i2c_conf,
+                            )).await
+                        );
+                        hwa::info!("with-motion-broadcast DONE");
+                    }
+                }
+
                 hwa::debug!("motion_driver done");
             }
         }
 
-        #[cfg(any(
-            feature = "with-probe",
-            feature = "with-hot-end",
-            feature = "with-hot-bed",
-            feature = "with-fan-layer",
-            feature = "with-fan-extra-1",
-        ))]
-        let pwm_any = hwa::make_static_sync_controller!(
-            "Pwm1Controller",
-            crate::Pwm1ControllerMutexStrategyType<device::PwmAny>,
-            device::PwmAny::new(20, _pin_state)
-        );
-
-        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-        let adc_any = hwa::make_static_controller!(
-            "Adc1Controller",
-            crate::Adc1ControllerMutexStrategyType<device::Adc1>,
-            device::AdcHotEnd::new(0)
-        );
-
-        #[cfg(feature = "with-motion")]
-        hwa::debug!("motion_planner done");
+        cfg_if::cfg_if!{
+            if #[cfg(feature = "with-fan-layer")] {
+                let fan_layer_pwm = device::PwmFanLayer::new(
+                    p.TIM2,
+                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(
+                        p.PA15,
+                        embassy_stm32::gpio::OutputType::PushPull,
+                    )),
+                    None,
+                    None,
+                    None,
+                    embassy_stm32::time::hz(5_000),
+                    embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                );
+            }
+        }
 
         #[cfg(feature = "with-ps-on")]
         let ps_on = hwa::make_static_sync_controller!(
             "PSOn",
-            crate::PSOnMutexStrategyType<device::PsOnPin>,
-            device::PsOnPin::new(21, _pin_state)
+            types::PSOnMutexStrategy,
+            device::PsOnPin::new(p.PA4, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::Low)
         );
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
-                let probe_power_pwm = pwm_any.clone();
-                let probe_power_channel = hwa::HwiResource::new(0u8);
+                let probe_pwm = hwa::make_static_sync_controller!(
+                    "ProbeController",
+                    types::ProbePwmMutexStrategy,
+                    device::PwmProbe::new(
+                        p.TIM3,
+                        None,
+                        None,
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch3(
+                            p.PC8,
+                            embassy_stm32::gpio::OutputType::PushPull,
+                        )),
+                        None,
+                        embassy_stm32::time::hz(50),
+                        embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                    ),
+                );
+                let probe_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch3);
             }
         }
         cfg_if::cfg_if! {
@@ -432,27 +559,64 @@ impl HwiContract for Contract {
                     laser_pwm_device
                 );
 
-                let laser_pwm_channel = HwiResource::new(embassy_stm32::timer::Channel::Ch4);
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-fan-layer")] {
-                let fan_layer_power_pwm = pwm_any.clone();
-                let fan_layer_power_channel = hwa::HwiResource::new(0u8);
+                let laser_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch4);
             }
         }
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-fan-extra-1")] {
-                let fan_extra1_power_pwm = pwm_any.clone();
-                let fan_extra1_power_channel = hwa::HwiResource::new(0u8);
+                compile_error!("Not implemented");
             }
         }
+
+        cfg_if::cfg_if!{
+            if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+                use embassy_stm32::adc::AdcChannel;
+                let hotend_hotbed_adc = hwa::make_static_async_controller!(
+                    "AdcHotendHotbedController",
+                    types::HotEndHotBedAdcMutexStrategy,
+                    device::HotEndHotBedAdc::new(p.ADC1, p.DMA1_CH1)
+                );
+                let hotend_hotbed_pwm = hwa::make_static_sync_controller!(
+                    "PwmHotendHotbedController",
+                    types::HotEndHotBedPwmMutexStrategy,
+                    device::HotEndHotBedPwm::new(
+                        p.TIM15,
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(
+                            p.PB14,
+                            embassy_stm32::gpio::OutputType::PushPull,
+                        )),
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(
+                            p.PB15,
+                            embassy_stm32::gpio::OutputType::PushPull,
+                        )),
+                        None,
+                        None,
+                        embassy_stm32::time::hz(5_000),
+                        embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                    ),
+                );
+            }
+        }
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-hot-end")] {
-                let hot_end_adc = adc_any.clone();
-                let hot_end_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(23, _pin_state));
-                let hot_end_power_pwm= pwm_any.clone();
-                let hot_end_power_channel = hwa::HwiResource::new(0u8);
+                let hot_end_adc = hotend_hotbed_adc.clone();
+                let hot_end_adc_pin = hwa::HwiResource::new(
+                    p.PC2.degrade_adc()
+                );
+                let hot_end_pwm= hotend_hotbed_pwm.clone();
+                let hot_end_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch1);
+            }
+        }
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-hot-bed")] {
+                let hot_bed_adc = hotend_hotbed_adc.clone();
+                let hot_bed_adc_pin = hwa::HwiResource::new(
+                    p.PC3.degrade_adc()
+                );
+                let hot_bed_pwm= hotend_hotbed_pwm.clone();
+                let hot_bed_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch2);
             }
         }
 
@@ -484,14 +648,16 @@ impl HwiContract for Contract {
             serial_port1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
             serial_port2_rx_stream,
+            #[cfg(feature = "with-spi")]
+            spi,
+            #[cfg(feature = "with-i2c")]
+            i2c: i2c.clone(),
             #[cfg(feature = "with-ps-on")]
-            ps_on: hwa::make_static_sync_controller!(
-                "PSOnController",
-                types::PSOnMutexStrategy,
-                device::PsOnPin::new(21, _pin_state)
-            ),
+            ps_on,
             #[cfg(feature = "with-motion")]
             motion_pins,
+            #[cfg(feature = "with-motion-broadcast")]
+            motion_sender: i2c,
             #[cfg(feature = "with-probe")]
             probe_pwm,
             #[cfg(feature = "with-probe")]
@@ -516,6 +682,16 @@ impl HwiContract for Contract {
             hot_end_pwm,
             #[cfg(feature = "with-hot-end")]
             hot_end_pwm_channel,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_adc,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_adc_pin,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_pwm,
+            #[cfg(feature = "with-hot-bed")]
+            hot_bed_pwm_channel,
+            #[cfg(feature = "with-motion-broadcast")]
+            high_priority_core: hwa::NoDevice,
         }
     }
 
@@ -560,6 +736,31 @@ impl HwiContract for Contract {
             }
         }
     }
+
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-motion-broadcast")] {
+
+            type HighPriorityCore = hwa::NoDevice;
+
+            fn launch_high_priotity<S: 'static + Sized + Send>(_core: Self::HighPriorityCore, _token: embassy_executor::SpawnToken<S>) -> Result<(),()>
+            {
+                pub static EXECUTOR_HIGH: embassy_executor::InterruptExecutor = embassy_executor::InterruptExecutor::new();
+
+                #[interrupt]
+                unsafe fn RCC() {
+                    EXECUTOR_HIGH.on_interrupt()
+                }
+
+                use embassy_stm32::interrupt;
+                use embassy_stm32::interrupt::InterruptExt;
+                interrupt::RCC.set_priority(interrupt::Priority::P2);
+
+                let spawner = EXECUTOR_HIGH.start(interrupt::RCC);
+                spawner.spawn(_token).map_err(|_| ())
+            }
+        }
+    }
+
 }
 
 cfg_if::cfg_if! {

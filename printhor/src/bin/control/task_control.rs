@@ -1,7 +1,7 @@
 use crate::control;
 use crate::hwa;
 use async_gcode::AsyncParserState;
-use embassy_time::{with_timeout, Duration};
+use embassy_time::{Duration, TimeoutError};
 #[allow(unused)]
 use printhor_hwa_common::{EventFlags, EventStatus};
 
@@ -13,6 +13,14 @@ cfg_if::cfg_if! {
             }
         }
     }
+}
+
+pub async fn do_with_timeout<F: core::future::Future>(
+    _timeout: Duration,
+    fut: F,
+) -> Result<F::Output, TimeoutError> {
+    //Ok(fut.await)
+    embassy_time::with_timeout(_timeout, fut).await
 }
 
 #[embassy_executor::task(pool_size = 1)]
@@ -39,7 +47,7 @@ pub async fn task_control(
 
     // The task loop
     loop {
-        match with_timeout(Duration::from_secs(30), gcode_input_stream.next_gcode()).await {
+        match do_with_timeout(Duration::from_secs(30), gcode_input_stream.next_gcode()).await {
             // Timeout
             Err(_) => {
                 cfg_if::cfg_if! {
@@ -118,7 +126,7 @@ async fn manage_timeout<M>(
 
     #[cfg(feature = "trace-commands")]
     hwa::info!(
-        "[trace-commands] Timeout at {:?}: [State: {:?} Line: {} TaggedLine: {:?}]",
+        "[trace-commands] [task_control] Timeout at {:?}: [State: {:?} Line: {} TaggedLine: {:?}]",
         comm_channel,
         alloc::format!("{:?}", current_parser_state).as_str(),
         gcode_input_stream.get_line(comm_channel),
@@ -127,12 +135,15 @@ async fn manage_timeout<M>(
 
     match current_parser_state {
         // Parser is currently ready to accept a gcode. Nothing to do
-        AsyncParserState::Start(_) => {}
+        AsyncParserState::Start(_) => {
+            gcode_input_stream.reset(comm_channel).await;
+        }
         // Parser is at any other intermediate state
         _ => {
             // Notify there is a timeout on [CommChannel::Internal] channel
+            #[cfg(feature = "trace-commands")]
             processor
-                .write(hwa::CommChannel::Internal, "echo: Control timeout.")
+                .write(hwa::CommChannel::Internal, "echo: Control timeout.\n")
                 .await;
             // Dumps the relevant status for a more easy troubleshooting
             let z3 = alloc::format!("echo: EventBus status: {:?}", subscriber.get_status().await);
@@ -141,7 +152,7 @@ async fn manage_timeout<M>(
                 .await;
 
             let z = alloc::format!(
-                "echo: Will reset channel: {:?} state was: {:?}",
+                "echo: Will reset channel: {:?} state was: {:?}\n",
                 comm_channel,
                 current_parser_state
             );
@@ -150,9 +161,13 @@ async fn manage_timeout<M>(
                 .await;
             gcode_input_stream.reset(comm_channel);
             // Submit an err to give up the intermediate state.
-            processor.write(comm_channel, "err").await;
+            processor.write(comm_channel, "err\n").await;
         }
     }
+    #[cfg(feature = "trace-commands")]
+    processor
+        .write(comm_channel, "echo: Control timeout.\n")
+        .await;
 }
 
 /*

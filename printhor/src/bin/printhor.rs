@@ -9,6 +9,7 @@ pub mod control;
 pub mod helpers;
 pub mod hwa;
 
+use hwa::Contract;
 use hwa::HwiContract;
 #[allow(unused)]
 use hwa::RawHwiResource;
@@ -28,6 +29,7 @@ async fn main(spawner: embassy_executor::Spawner) {
 pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: bool) {
     hwa::Contract::init_logger();
     hwa::info!("Log ready. Starting...");
+
     hwa::Contract::init_heap();
     hwa::info!(
         "Initializing {} {}",
@@ -473,35 +475,41 @@ async fn init_controllers_and_spawn_tasks(
         if #[cfg(feature = "with-motion")] {
 
             // Max speed
-            motion_config.set_max_speed(hwa::Contract::DEFAULT_MAX_SPEED);
+            motion_config.set_max_speed(hwa::Contract::DEFAULT_MAX_SPEED_PS);
 
-            motion_config.set_max_accel(hwa::Contract::DEFAULT_MAX_ACCEL);
+            motion_config.set_max_accel(hwa::Contract::DEFAULT_MAX_ACCEL_PS);
 
-            motion_config.set_max_jerk(hwa::Contract::DEFAULT_MAX_JERK);
+            motion_config.set_max_jerk(hwa::Contract::DEFAULT_MAX_JERK_PS);
 
-            motion_config.set_default_travel_speed(hwa::Contract::DEFAULT_TRAVEL_SPEED);
+            motion_config.set_default_travel_speed(hwa::Contract::DEFAULT_TRAVEL_SPEED_PS);
 
-            motion_config.set_units_per_world_magnitude(
-                hwa::Contract::DEFAULT_UNITS_PER_MM.map_values(
-                    |_c, _v| Some(Real::from_f32(_v))
-                )
-            );
+            motion_config.set_space_units_per_world_unit(hwa::Contract::DEFAULT_UNITS_PER_WU);
 
             motion_config.set_micro_steps_per_axis(
                 hwa::Contract::DEFAULT_MICRO_STEPS_PER_AXIS
             );
 
-            motion_config.set_machine_bounds(
-                hwa::Contract::DEFAULT_MACHINE_BOUNDS.map_values(
-                    |_c, _v| Some(Real::from_f32(_v))
-                )
+            motion_config.set_workspace_center(
+                hwa::Contract::DEFAULT_WORLD_CENTER_WU
+            );
+
+            motion_config.set_world_size(
+                hwa::Contract::DEFAULT_WORLD_SIZE_WU
             );
 
             motion_config.set_flow_rate(100);
             motion_config.set_speed_rate(100);
 
-            // Homing unneeded
-            motion_status.update_last_planned_position(0, &TVector::zero());
+            // Make homing unneeded
+            hwa::warn!("Virtually homing");
+            {
+                // FIXME!!!! -> WORLD
+                let pos = hwa::controllers::Position::new_from_space_projection(
+                    &Contract::DEFAULT_WORLD_HOMING_POINT_WU
+                );
+                motion_status.update_last_planned_position(0, &pos);
+                motion_status.update_current_position(0, &pos);
+            }
         }
     }
 

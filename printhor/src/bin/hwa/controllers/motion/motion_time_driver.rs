@@ -198,6 +198,8 @@ impl SoftTimerDriver {
     /// driver.on_interrupt();
     /// ```
     pub fn on_interrupt(&mut self) {
+        core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
+
         if self.state == State::Idle {
             if !self.try_consume() {
                 self.notify();
@@ -370,7 +372,10 @@ impl SoftTimer {
     /// ```
     pub const fn new() -> Self {
         Self(CsMutex::new(RefCell::new(SoftTimerDriver {
-            current: StepPlanner::new(hwa::MotionDelta::new()),
+            current: StepPlanner::new(
+                #[cfg(feature = "with-motion-broadcast")]
+                hwa::MotionDelta::new(),
+            ),
             state: State::Idle,
             queue: [None; TIMER_QUEUE_SIZE],
             head: 0,
@@ -448,7 +453,7 @@ impl SoftTimer {
     /// A future that resolves to `()` once the segment has been successfully queued.
     pub fn push(
         &self,
-        delta: hwa::MotionDelta,
+        #[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
         stepper_enable_flags: hwa::CoordSel,
         stepper_dir_fwd_flags: hwa::CoordSel,
@@ -456,6 +461,7 @@ impl SoftTimer {
         poll_fn(move |cx| {
             self.poll_push(
                 cx,
+                #[cfg(feature = "with-motion-broadcast")]
                 delta,
                 multi_timer,
                 stepper_enable_flags,
@@ -480,7 +486,7 @@ impl SoftTimer {
     fn poll_push(
         &self,
         cx: &mut Context<'_>,
-        delta: hwa::MotionDelta,
+        #[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
         stepper_enable_flags: hwa::CoordSel,
         stepper_dir_fwd_flags: hwa::CoordSel,
@@ -495,6 +501,7 @@ impl SoftTimer {
                 let current_tail = r.tail;
                 hwa::trace!("u-segment queued at {}", current_tail);
                 r.queue[current_tail as usize] = Some(StepPlanner::from(
+                    #[cfg(feature = "with-motion-broadcast")]
                     delta,
                     multi_timer,
                     stepper_enable_flags,
@@ -593,7 +600,7 @@ impl SoftTimer {
     fn poll_flush(&self, cx: &mut Context<'_>) -> Poll<FlushResult> {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
-            if r.num_queued > 0 {
+            if r.num_queued > 0 || r.state != State::Idle {
                 r.waker.register(cx.waker());
                 Poll::Pending
             } else {
@@ -695,7 +702,7 @@ pub extern "Rust" fn do_tick() {
                 match &step_driver.pins {
                     None => {}
                     Some(pins) => {
-                        pins.set_forward_direction(CoordSel::X, CoordSel::X)
+                        pins.set_forward_direction(hwa::CoordSel::X, hwa::CoordSel::X)
                     }
                 }
             }

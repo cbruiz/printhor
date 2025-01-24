@@ -97,17 +97,20 @@ pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::type
                 }
             }
 
-            Ok(DeferEvent::AwaitRequested(action, channel, order_num)) => {
-                hwa::info!("AwaitRequested {:?} {}", action, order_num);
+            Ok(DeferEvent::AwaitRequested(action, channel, _order_num)) => {
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("AwaitRequested {:?} {}", action, _order_num);
                 let _ = subscriptions.update(action, channel, 1);
+                #[cfg(feature = "trace-commands")]
                 hwa::info!(
                     "[task_defer] Actual subscriptions count: {}",
                     subscriptions.total_counts
                 );
             }
 
-            Ok(DeferEvent::Completed(action, channel, order_num)) => {
-                hwa::info!("AwaitCompleted {:?} {}", action, order_num);
+            Ok(DeferEvent::Completed(action, channel, _order_num)) => {
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("AwaitCompleted {:?} {}", action, _order_num);
                 if subscriptions.update(action, channel, -1).unwrap_or(false) {
                     cfg_if::cfg_if! {
                         if #[cfg(feature="trace-commands")] {
@@ -121,6 +124,7 @@ pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::type
                         }
                     }
                 }
+                #[cfg(feature = "trace-commands")]
                 hwa::info!(
                     "[task_defer] Actual subscriptions count: {}",
                     subscriptions.total_counts

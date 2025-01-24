@@ -61,4 +61,6 @@ impl async_gcode::ByteStream for MockedUartSinkRxInputStream
     async fn next(&mut self) -> Option<Self::Item> {
         future::pending().await
     }
+
+    async fn recovery_check(&mut self) {}
 }

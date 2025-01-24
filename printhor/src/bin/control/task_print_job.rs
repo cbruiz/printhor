@@ -45,6 +45,7 @@ use hwa::{CommChannel, EventFlags, EventStatus};
 /// 5. **State Updates**: Publishes events to signal the state of the print job (e.g., `JOB_PAUSED`, `JOB_COMPLETED`).
 ///
 /// The robust handling of print job execution ensures that the 3D printer can efficiently and reliably process and execute the G-code commands.
+/// FIXME: JOB_PAUSE status flag remains!!
 #[allow(unused_mut)]
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_print_job(
@@ -78,7 +79,7 @@ pub async fn task_print_job(
         {
             Err(_) => {
                 #[cfg(feature = "trace-commands")]
-                hwa::info!("[trace-commands] [task_print_job]] Timeout");
+                hwa::info!("[trace-commands] [task_print_job] Timeout");
                 #[cfg(test)]
                 if control::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_print_job] Ending gracefully");
@@ -154,10 +155,16 @@ pub async fn task_print_job(
                                     #[cfg(feature = "trace-commands")]
                                     hwa::info!("[trace-commands] Executing {}", gcode);
 
-                                    match processor
-                                        .execute(CommChannel::Internal, &gcode, true)
-                                        .await
-                                    {
+                                    cfg_if::cfg_if! {
+                                        if #[cfg(feature = "trace-commands")] {
+                                            const CHANNEL: CommChannel = CommChannel::Internal;
+                                        }
+                                        else {
+                                            const CHANNEL: CommChannel = CommChannel::Sink;
+                                        }
+                                    }
+
+                                    match processor.execute(CHANNEL, &gcode, true).await {
                                         Ok(CodeExecutionSuccess::OK) => {
                                             hwa::debug!("Response: OK {} (I)", gcode);
                                         }

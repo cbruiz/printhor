@@ -12,7 +12,15 @@ pub async fn task_motion_broadcast(
     _motion_config: hwa::controllers::MotionConfig,
     _motion_sender: hwa::types::MotionSender,
 ) -> ! {
-    hwa::info!("[task_motion_broadcast] started");
+    // The motion interpolation period width
+    const MICRO_SEGMENT_PERIOD_US: u32 =
+        1_000_000 / Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY;
+    const MAX_CMD_DELAY: u32 = MICRO_SEGMENT_PERIOD_US / 2;
+
+    hwa::info!(
+        "[task_motion_broadcast] started. Max expected delay: {} us",
+        MAX_CMD_DELAY
+    );
 
     let mut current_order = None;
     let mut lag: embassy_time::Instant = embassy_time::Instant::now();
@@ -57,12 +65,21 @@ pub async fn task_motion_broadcast(
                 });
 
                 if changed {
-                    hwa::debug!("[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] delta: [{:?}]",
+                    hwa::info!("[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] pos: [{:?}]",
                         Real::from_f32((elapsed as f32) / 1000000.0).rdp(4), motion_event.micro_segment_time.rdp(4),
                         motion_event.order_num, motion_event.micro_segment_id,
                         motion_event.pos_wu
                     );
-                    mg.apply();
+
+                    if embassy_time::with_timeout(
+                        embassy_time::Duration::from_micros((MAX_CMD_DELAY) as u64),
+                        mg.apply(),
+                    )
+                    .await
+                    .is_err()
+                    {
+                        hwa::warn!("[task_motion_broadcast] I2C Timeout");
+                    }
                 }
             }
         }

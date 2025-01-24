@@ -228,8 +228,21 @@ impl CoordSel {
         axis_count
     }
 
+    /// All motion relevant axis. Meaning INCLUDING Extruder (E)
     pub const fn all_axis() -> CoordSel {
         CoordSel::all().difference(CoordSel::UNSET)
+    }
+
+    /// All motion relevant axis INCLUDING Extruder (E), if exists.
+    pub const fn motion_relevant_axis() -> CoordSel {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-e-axis")] {
+                CoordSel::all().difference(CoordSel::UNSET.union(CoordSel::E))
+            }
+            else {
+                CoordSel::all().difference(CoordSel::UNSET)
+            }
+        }
     }
 }
 
@@ -295,7 +308,7 @@ impl defmt::Format for CoordSel {
                 }
                 match _v {
                     #[cfg(feature = "with-e-axis")]
-                    CoordSel::E => defmt::write!("E"),
+                    CoordSel::E => defmt::write!(_fmt, "E"),
                     //
                     #[cfg(feature = "with-x-axis")]
                     CoordSel::X => defmt::write!(_fmt, "X"),
@@ -344,6 +357,7 @@ pub trait ArithmeticOps:
     fn one() -> Self;
     fn is_zero(&self) -> bool;
     fn is_defined_positive(&self) -> bool;
+    fn is_negligible(&self) -> bool;
     fn abs(&self) -> Self;
 }
 
@@ -357,7 +371,6 @@ pub trait RealOps {
     fn floor(&self) -> Self;
 }
 
-#[non_exhaustive]
 #[derive(Copy, Clone, PartialEq)]
 pub struct TVector<T>
 where
@@ -1126,150 +1139,236 @@ where
         self
     }
 
-    #[allow(unused)]
-    pub fn assign_if_set(&mut self, coord_idx: CoordSel, other: &Self) -> &Self {
+    pub fn assign_if_set(&mut self, _coord_idx: CoordSel, _other: &Self) -> &Self {
         #[cfg(feature = "with-e-axis")]
-        if coord_idx.contains(CoordSel::E) && other.e.is_some() {
-            self.e = other.e
+        if _coord_idx.contains(CoordSel::E) && _other.e.is_some() {
+            self.e = _other.e
         }
         //
         #[cfg(feature = "with-x-axis")]
-        if coord_idx.contains(CoordSel::X) && other.x.is_some() {
-            self.x = other.x
+        if _coord_idx.contains(CoordSel::X) && _other.x.is_some() {
+            self.x = _other.x
         }
         #[cfg(feature = "with-y-axis")]
-        if coord_idx.contains(CoordSel::Y) && other.y.is_some() {
-            self.y = other.y
+        if _coord_idx.contains(CoordSel::Y) && _other.y.is_some() {
+            self.y = _other.y
         }
         #[cfg(feature = "with-z-axis")]
-        if coord_idx.contains(CoordSel::Z) && other.z.is_some() {
-            self.z = other.z
+        if _coord_idx.contains(CoordSel::Z) && _other.z.is_some() {
+            self.z = _other.z
         }
         //
         #[cfg(feature = "with-a-axis")]
-        if coord_idx.contains(CoordSel::A) && other.a.is_some() {
-            self.a = other.a
+        if _coord_idx.contains(CoordSel::A) && _other.a.is_some() {
+            self.a = _other.a
         }
         #[cfg(feature = "with-b-axis")]
-        if coord_idx.contains(CoordSel::B) && other.b.is_some() {
-            self.b = other.b
+        if _coord_idx.contains(CoordSel::B) && _other.b.is_some() {
+            self.b = _other.b
         }
         #[cfg(feature = "with-c-axis")]
-        if coord_idx.contains(CoordSel::C) && other.c.is_some() {
-            self.c = other.c
+        if _coord_idx.contains(CoordSel::C) && _other.c.is_some() {
+            self.c = _other.c
         }
         //
         #[cfg(feature = "with-i-axis")]
-        if coord_idx.contains(CoordSel::I) && other.i.is_some() {
-            self.i = other.i
+        if _coord_idx.contains(CoordSel::I) && _other.i.is_some() {
+            self.i = _other.i
         }
         #[cfg(feature = "with-j-axis")]
-        if coord_idx.contains(CoordSel::J) && other.j.is_some() {
-            self.j = other.j
+        if _coord_idx.contains(CoordSel::J) && _other.j.is_some() {
+            self.j = _other.j
         }
         #[cfg(feature = "with-k-axis")]
-        if coord_idx.contains(CoordSel::K) && other.k.is_some() {
-            self.k = other.k
+        if _coord_idx.contains(CoordSel::K) && _other.k.is_some() {
+            self.k = _other.k
         }
         //
         #[cfg(feature = "with-u-axis")]
-        if coord_idx.contains(CoordSel::U) && other.u.is_some() {
-            self.u = other.u
+        if _coord_idx.contains(CoordSel::U) && _other.u.is_some() {
+            self.u = _other.u
         }
         #[cfg(feature = "with-v-axis")]
-        if coord_idx.contains(CoordSel::V) && other.v.is_some() {
-            self.v = other.v
+        if _coord_idx.contains(CoordSel::V) && _other.v.is_some() {
+            self.v = _other.v
         }
         #[cfg(feature = "with-w-axis")]
-        if coord_idx.contains(CoordSel::W) && other.w.is_some() {
-            self.w = other.w
+        if _coord_idx.contains(CoordSel::W) && _other.w.is_some() {
+            self.w = _other.w
         }
         self
     }
 
-    #[allow(unused)]
-    pub fn with_coord_if_set(&self, coord_idx: CoordSel, val: Option<T>) -> Self {
+    pub fn with_coord_if_set(&self, _coord_idx: CoordSel, _val: Option<T>) -> Self {
         Self {
             _phantom: PhantomData,
             #[cfg(feature = "with-e-axis")]
-            e: if coord_idx.contains(CoordSel::E) && self.e.is_some() {
-                val
+            e: if _coord_idx.contains(CoordSel::E) && self.e.is_some() {
+                _val
             } else {
                 self.e
             },
             //
             #[cfg(feature = "with-x-axis")]
-            x: if coord_idx.contains(CoordSel::X) && self.x.is_some() {
-                val
+            x: if _coord_idx.contains(CoordSel::X) && self.x.is_some() {
+                _val
             } else {
                 self.x
             },
             #[cfg(feature = "with-y-axis")]
-            y: if coord_idx.contains(CoordSel::Y) && self.y.is_some() {
-                val
+            y: if _coord_idx.contains(CoordSel::Y) && self.y.is_some() {
+                _val
             } else {
                 self.y
             },
             #[cfg(feature = "with-z-axis")]
-            z: if coord_idx.contains(CoordSel::Z) && self.z.is_some() {
-                val
+            z: if _coord_idx.contains(CoordSel::Z) && self.z.is_some() {
+                _val
             } else {
                 self.z
             },
             //
             #[cfg(feature = "with-a-axis")]
-            a: if coord_idx.contains(CoordSel::A) && self.a.is_some() {
-                val
+            a: if _coord_idx.contains(CoordSel::A) && self.a.is_some() {
+                _val
             } else {
                 self.a
             },
             #[cfg(feature = "with-b-axis")]
-            b: if coord_idx.contains(CoordSel::B) && self.b.is_some() {
-                val
+            b: if _coord_idx.contains(CoordSel::B) && self.b.is_some() {
+                _val
             } else {
                 self.b
             },
             #[cfg(feature = "with-c-axis")]
-            c: if coord_idx.contains(CoordSel::C) && self.c.is_some() {
-                val
+            c: if _coord_idx.contains(CoordSel::C) && self.c.is_some() {
+                _val
             } else {
                 self.c
             },
             //
             #[cfg(feature = "with-i-axis")]
-            i: if coord_idx.contains(CoordSel::I) && self.i.is_some() {
-                val
+            i: if _coord_idx.contains(CoordSel::I) && self.i.is_some() {
+                _val
             } else {
                 self.i
             },
             #[cfg(feature = "with-j-axis")]
-            j: if coord_idx.contains(CoordSel::J) && self.j.is_some() {
-                val
+            j: if _coord_idx.contains(CoordSel::J) && self.j.is_some() {
+                _val
             } else {
                 self.j
             },
             #[cfg(feature = "with-k-axis")]
-            k: if coord_idx.contains(CoordSel::K) && self.k.is_some() {
-                val
+            k: if _coord_idx.contains(CoordSel::K) && self.k.is_some() {
+                _val
             } else {
                 self.k
             },
             //
             #[cfg(feature = "with-u-axis")]
-            u: if coord_idx.contains(CoordSel::U) && self.u.is_some() {
-                val
+            u: if _coord_idx.contains(CoordSel::U) && self.u.is_some() {
+                _val
             } else {
                 self.u
             },
             #[cfg(feature = "with-v-axis")]
-            v: if coord_idx.contains(CoordSel::V) && self.v.is_some() {
-                val
+            v: if _coord_idx.contains(CoordSel::V) && self.v.is_some() {
+                _val
             } else {
                 self.v
             },
             #[cfg(feature = "with-w-axis")]
-            w: if coord_idx.contains(CoordSel::W) && self.w.is_some() {
-                val
+            w: if _coord_idx.contains(CoordSel::W) && self.w.is_some() {
+                _val
+            } else {
+                self.w
+            },
+        }
+    }
+
+    pub fn with_coords_if_set(&self, _coord_idx: CoordSel, _other: &Self) -> Self {
+        Self {
+            _phantom: PhantomData,
+            #[cfg(feature = "with-e-axis")]
+            e: if _coord_idx.contains(CoordSel::E) && _other.e.is_some() {
+                _other.e
+            } else {
+                self.e
+            },
+            //
+            #[cfg(feature = "with-x-axis")]
+            x: if _coord_idx.contains(CoordSel::X) && _other.x.is_some() {
+                _other.x
+            } else {
+                self.x
+            },
+            #[cfg(feature = "with-y-axis")]
+            y: if _coord_idx.contains(CoordSel::Y) && _other.y.is_some() {
+                _other.y
+            } else {
+                self.y
+            },
+            #[cfg(feature = "with-z-axis")]
+            z: if _coord_idx.contains(CoordSel::Z) && _other.z.is_some() {
+                _other.z
+            } else {
+                self.z
+            },
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: if _coord_idx.contains(CoordSel::A) && _other.a.is_some() {
+                _other.a
+            } else {
+                self.a
+            },
+            #[cfg(feature = "with-b-axis")]
+            b: if _coord_idx.contains(CoordSel::B) && _other.b.is_some() {
+                _other.b
+            } else {
+                self.b
+            },
+            #[cfg(feature = "with-c-axis")]
+            c: if _coord_idx.contains(CoordSel::C) && _other.c.is_some() {
+                _other.c
+            } else {
+                self.c
+            },
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: if _coord_idx.contains(CoordSel::I) && _other.i.is_some() {
+                _other.i
+            } else {
+                self.i
+            },
+            #[cfg(feature = "with-j-axis")]
+            j: if _coord_idx.contains(CoordSel::J) && _other.j.is_some() {
+                _other.j
+            } else {
+                self.j
+            },
+            #[cfg(feature = "with-k-axis")]
+            k: if _coord_idx.contains(CoordSel::K) && _other.k.is_some() {
+                _other.k
+            } else {
+                self.k
+            },
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: if _coord_idx.contains(CoordSel::U) && _other.u.is_some() {
+                _other.u
+            } else {
+                self.u
+            },
+            #[cfg(feature = "with-v-axis")]
+            v: if _coord_idx.contains(CoordSel::V) && _other.v.is_some() {
+                _other.v
+            } else {
+                self.v
+            },
+            #[cfg(feature = "with-w-axis")]
+            w: if _coord_idx.contains(CoordSel::W) && _other.w.is_some() {
+                _other.w
             } else {
                 self.w
             },
@@ -2065,6 +2164,7 @@ where
         }
     }
 
+    /// Map all NaN values of any coordinate to specific value
     pub fn map_nan(&self, _value: &T) -> Self {
         Self {
             _phantom: PhantomData,
@@ -2101,6 +2201,60 @@ where
         }
     }
 
+    /// Map coords restricted to `_coords`
+    pub fn map_coords(&self, _coords: CoordSel, _value: &Option<T>) -> Self {
+        self.map(|_c, _v| if _coords.contains(_c) { *_value } else { *_v })
+    }
+
+    /// Select only coords in set (assign nan)
+    pub fn selecting(&self, _coords: CoordSel) -> Self {
+        self.map(|_c, _v| if _coords.contains(_c) { *_v } else { None })
+    }
+
+    /// Select only coords in set (assign nan)
+    pub fn selecting_negligible(&self, _coords: CoordSel) -> Self {
+        self.map(|_c, _v| match _v {
+            Some(_value) => {
+                if _value.is_negligible() {
+                    *_v
+                } else {
+                    None
+                }
+            }
+            None => *_v,
+        })
+    }
+
+    /// Filter coords in set (assign nan)
+    pub fn excluding(&self, _coords: CoordSel) -> Self {
+        self.map(|_c, _v| if _coords.contains(_c) { None } else { *_v })
+    }
+
+    /// Filter negligible
+    pub fn excluding_negligible(&self) -> Self {
+        self.map(|_c, _v| match _v {
+            Some(_value) => {
+                if _value.is_negligible() {
+                    None
+                } else {
+                    *_v
+                }
+            }
+            None => *_v,
+        })
+    }
+
+    /// Map NaN values of coordinates restricted to `_coords`
+    pub fn map_nan_coords(&self, _coords: CoordSel, _value: &T) -> Self {
+        self.map(|_c, _v| {
+            if _v.is_none() && _coords.contains(_c) {
+                Some(*_value)
+            } else {
+                *_v
+            }
+        })
+    }
+
     pub fn map_val(&self, _value: &T) -> Self {
         Self {
             _phantom: PhantomData,
@@ -2135,6 +2289,54 @@ where
             #[cfg(feature = "with-w-axis")]
             w: self.w.and(Some(*_value)),
         }
+    }
+
+    /// Gets the bitset of coords that have a negligible value (Nan, 0 or lower than epsilon)
+    pub fn negligible_coords(&self) -> CoordSel
+    where
+        T: ArithmeticOps,
+    {
+        #[allow(unused_mut)]
+        let mut negligible_set = CoordSel::empty();
+        self.foreach(|_c, _v| {
+            if let Some(v) = _v {
+                negligible_set.set(_c, v.is_negligible());
+            } else {
+                negligible_set.set(_c, true);
+            }
+        });
+        negligible_set
+    }
+
+    /// Gets the bitset of coords that have a NOT negligible value (Nan, 0 or lower than epsilon)
+    pub fn not_negligible_coords(&self) -> CoordSel
+    where
+        T: ArithmeticOps,
+    {
+        self.negligible_coords()
+            .complement()
+            .intersection(CoordSel::all_axis())
+    }
+
+    pub fn nan_coords(&self) -> CoordSel
+    where
+        T: ArithmeticOps,
+    {
+        #[allow(unused_mut)]
+        let mut nan_set = CoordSel::empty();
+        self.foreach(|_c, _v| {
+            nan_set.set(_c, _v.is_some());
+        });
+        nan_set
+    }
+
+    pub fn not_nan_coords(&self) -> CoordSel
+    where
+        T: ArithmeticOps,
+    {
+        self.nan_coords()
+            .complement()
+            .intersection(CoordSel::all_axis())
     }
 
     pub fn sum(&self) -> T
@@ -2864,6 +3066,17 @@ where
     }
 }
 
+impl<T> core::ops::Neg for TVector<T>
+where
+    T: ArithmeticOps + core::ops::Neg<Output = T>,
+{
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        self.map_values(|_c, _v| Some(_v.neg()))
+    }
+}
+
 impl<T> core::ops::Sub for TVector<T>
 where
     T: ArithmeticOps + core::ops::Sub<Output = T>,
@@ -3305,11 +3518,9 @@ where
 //////////////
 
 impl ArithmeticOps for i32 {
-    #[inline]
     fn zero() -> Self {
         0
     }
-    #[inline]
     fn one() -> Self {
         1
     }
@@ -3328,17 +3539,22 @@ impl ArithmeticOps for i32 {
         self.gt(&0)
     }
 
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialEq,
+    {
+        self.eq(&0)
+    }
+
     fn abs(&self) -> Self {
         i32::abs(*self)
     }
 }
 
 impl ArithmeticOps for u32 {
-    #[inline]
     fn zero() -> Self {
         0
     }
-    #[inline]
     fn one() -> Self {
         1
     }
@@ -3352,9 +3568,16 @@ impl ArithmeticOps for u32 {
 
     fn is_defined_positive(&self) -> bool
     where
-        Self: core::cmp::PartialEq,
+        Self: core::cmp::PartialOrd,
     {
         self.gt(&0)
+    }
+
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialEq,
+    {
+        self.eq(&0)
     }
 
     fn abs(&self) -> Self {
@@ -3363,11 +3586,9 @@ impl ArithmeticOps for u32 {
 }
 
 impl ArithmeticOps for u64 {
-    #[inline]
     fn zero() -> Self {
         0
     }
-    #[inline]
     fn one() -> Self {
         1
     }
@@ -3381,9 +3602,16 @@ impl ArithmeticOps for u64 {
 
     fn is_defined_positive(&self) -> bool
     where
-        Self: core::cmp::PartialEq,
+        Self: core::cmp::PartialOrd,
     {
         self.gt(&0)
+    }
+
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialOrd,
+    {
+        self.eq(&0)
     }
 
     fn abs(&self) -> Self {
@@ -3392,11 +3620,9 @@ impl ArithmeticOps for u64 {
 }
 
 impl ArithmeticOps for u16 {
-    #[inline]
     fn zero() -> Self {
         0
     }
-    #[inline]
     fn one() -> Self {
         1
     }
@@ -3413,6 +3639,13 @@ impl ArithmeticOps for u16 {
         Self: core::cmp::PartialEq,
     {
         self.gt(&0)
+    }
+
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialOrd,
+    {
+        self.eq(&0)
     }
 
     fn abs(&self) -> Self {
@@ -3421,11 +3654,9 @@ impl ArithmeticOps for u16 {
 }
 
 impl ArithmeticOps for u8 {
-    #[inline]
     fn zero() -> Self {
         0
     }
-    #[inline]
     fn one() -> Self {
         1
     }
@@ -3444,17 +3675,22 @@ impl ArithmeticOps for u8 {
         self.gt(&0)
     }
 
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialOrd,
+    {
+        self.eq(&0)
+    }
+
     fn abs(&self) -> Self {
         *self
     }
 }
 
 impl ArithmeticOps for f32 {
-    #[inline]
     fn zero() -> Self {
         0.0f32
     }
-    #[inline]
     fn one() -> Self {
         1.0f32
     }
@@ -3471,6 +3707,13 @@ impl ArithmeticOps for f32 {
         Self: core::cmp::PartialEq,
     {
         self.gt(&0.0f32)
+    }
+
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialEq,
+    {
+        FloatCore::abs(*self) < <f32 as FloatCore>::epsilon()
     }
 
     fn abs(&self) -> Self {
@@ -3509,12 +3752,10 @@ impl RealOps for f32 {
 }
 
 impl ArithmeticOps for Real {
-    #[inline]
     fn zero() -> Self {
         Real::zero()
     }
 
-    #[inline]
     fn one() -> Self {
         Real::one()
     }
@@ -3528,6 +3769,13 @@ impl ArithmeticOps for Real {
         Self: core::cmp::PartialEq,
     {
         self.gt(&Real::zero())
+    }
+
+    fn is_negligible(&self) -> bool
+    where
+        Self: core::cmp::PartialEq,
+    {
+        Real::is_negligible(self)
     }
 
     fn abs(&self) -> Self {
@@ -3558,15 +3806,4 @@ impl RealOps for Real {
     fn floor(&self) -> Self {
         Real::floor(self)
     }
-}
-
-#[allow(unused)]
-pub fn test() {
-    let pos: TVector<i32> = TVector::new();
-    let p1: TVector<i32> = TVector::one();
-
-    let p0 = pos.map_nan(&0);
-
-    let r = p0 + p1;
-    hwa::info!("{:?}", r);
 }

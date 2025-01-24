@@ -1,26 +1,29 @@
+//! IO device wrappers for nucleo64-F410RB (STM32F410RB)
 
+use printhor_hwa_common as hwa;
+#[allow(unused)]
+use hwa::math;
 #[cfg(feature = "with-serial-usb")]
 compile_error!("Not supported");
 
 #[cfg(feature = "with-serial-port-1")]
 pub(crate) mod uart_port1 {
+    #[allow(unused)]
+    use embedded_io_async::{BufRead, Read};
     use printhor_hwa_common as hwa;
+    #[allow(unused)]
     use hwa::HwiContract;
 
     pub struct UartPort1RxInputStream {
-        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
+        receiver: embassy_stm32::usart::BufferedUartRx<'static>,
     }
 
     impl UartPort1RxInputStream {
-        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
-            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
+        pub fn new(receiver: embassy_stm32::usart::BufferedUartRx<'static>) -> Self {
+            //type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
 
             Self {
-                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
-                    "UartPort1RXRingBuff",
-                    BufferType,
-                    [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
-                )),
+                receiver
             }
         }
     }
@@ -36,13 +39,107 @@ pub(crate) mod uart_port1 {
 
             let mut buff: [u8; 1] = [0; 1];
 
-            match self.receiver.read(&mut buff).await {
-                Ok(_r) => Some(Ok(buff[0])),
+            match self.receiver.read_exact(&mut buff[..]).await {
+                Ok(_r) => {
+                    Some(Ok(buff[0]))
+                },
                 Err(_e) => None,
             }
+        }
+
+        async fn recovery_check(&mut self) {
+            hwa::warn!("Internal reset");
+            // TODO
         }
     }
 }
 
 #[cfg(feature = "with-serial-port-2")]
 compile_error!("Not implemented");
+
+#[cfg(feature = "with-i2c")]
+pub struct MotionI2c {
+    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>>,
+    state: [pwm_pca9685::ChannelOnOffControl; 16],
+}
+
+#[cfg(feature = "with-i2c")]
+impl MotionI2c {
+    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>) -> Self {
+
+        let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
+        let pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();
+
+        let mut instance = Self {
+            pwm,
+            state: [pwm_pca9685::ChannelOnOffControl{
+                on: 0,
+                off: 0,
+                full_on: false,
+                full_off: false,
+            }; 16],
+        };
+        for _servo in hwa::math::CoordSel::all_axis().iter() {
+            instance.set_angle(_servo, &math::ZERO);
+        }
+        let cmd_timeout = embassy_time::Duration::from_millis(10);
+
+        let got_timeout =
+            if embassy_time::with_timeout(cmd_timeout, instance.pwm.disable()).await.is_err() {
+                true
+            }
+            else {
+                if embassy_time::with_timeout(cmd_timeout, instance.pwm.set_prescale(123)).await.is_err() {
+                    true
+                }
+                else {
+                    if embassy_time::with_timeout(cmd_timeout, instance.pwm.enable()).await.is_err() {
+                        true
+                    }
+                    else {
+                        if embassy_time::with_timeout(cmd_timeout, instance.apply()).await.is_err() {
+                            true
+                        }
+                        else {
+                            false
+                        }
+                    }
+                }
+            };
+        if got_timeout {
+            hwa::warn!("Timeout initializing I2C");
+        }
+        instance
+    }
+
+    pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
+        //Theoretically, should be:
+        // let pwm = (
+        //             (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
+        //         ).max(205).min(409) as u16;
+        // that is: (100 ... 300 ... 500) for -90, 0 and 90º respectively
+        // but your mileage may vary, because (100, ..., 300, .. 500) is the best accuracy result
+        // with some analog servos (tested with TowerPro SG90 and brand-less MG90S)
+        let pwm = (
+            (math::Real::from_f32(300.0) + (math::Real::from_f32(10.0/3.0) * (*angle))).round().to_i32().unwrap()
+        ).max(100).min(500) as u16;
+        let index = axis.index();
+        if index < 16 {
+            if self.state[index].off != pwm {
+                //hwa::info!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
+                self.state[index].off = pwm;
+                true
+            }
+            else {
+                false
+            }
+        }
+        else {
+            false
+        }
+    }
+
+    pub async fn apply(&mut self) {
+        let _ = self.pwm.set_all_channels(&self.state).await;
+    }
+}

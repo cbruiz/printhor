@@ -1,151 +1,107 @@
-//noinspection RsDetachedFile
 cfg_if::cfg_if! {
     if #[cfg(feature="fixed-point-128-impl")] {
+        #[allow(unused)]
+        use crate as hwa;
         use core::cmp::Ordering;
         use core::ops::*;
-        use core::fmt::{Debug, Display, Formatter};
         use rust_decimal::prelude::*;
         use rust_decimal_macros::dec;
-        use crate::hwa;
 
-        #[derive(Copy, Clone, Default, Debug)]
+        #[derive(Copy, Clone, Default)]
         pub struct Real(pub Decimal);
         pub type RealImpl = Decimal;
 
-        #[allow(dead_code)]
         impl Real {
-            #[inline]
-            pub(crate) fn new(num: i64, scale: u32) -> Self {
+            pub fn new(num: i64, scale: u32) -> Self {
                 Real(Decimal::new(num, scale))
             }
-            #[inline]
             pub const fn from_fixed(dec: Decimal) -> Self {
                 Real(dec)
             }
 
-            #[inline]
             pub fn from_f32(num: f32) -> Self {
                 Real(Decimal::from_f32_retain(num).unwrap())
             }
-            #[inline]
             pub fn from_lit(num: i64, scale: u32) -> Self {
                 Real(Decimal::new(num, scale))
             }
-            #[inline]
             pub fn inner(&self) -> Decimal {
                 self.0
             }
-            #[inline]
-            pub(crate) fn abs(self) -> Self {
+            pub fn abs(self) -> Self {
                 Real(self.0.abs())
             }
-            #[inline]
-            pub(crate) fn powi(self, x: i32) -> Self {
+            pub fn powi(self, x: i32) -> Self {
                 Real(self.0.powi(x as i64))
             }
-
-            #[inline]
             pub fn recip(self) -> Self {
                 use num_traits::Inv;
                 Real(self.0.inv())
             }
-
-            #[inline]
             pub const fn zero() -> Self {
                 Real(Decimal::ZERO)
             }
-            #[inline]
-            pub(crate) const fn is_zero(&self) -> bool {
+            pub const fn is_zero(&self) -> bool {
                 self.0.is_zero()
             }
-
-            #[inline]
             pub const fn epsilon() -> Self {
                 crate::math::EPSILON
             }
-
-            #[inline]
-            pub(crate) const fn is_positive(&self) -> bool {
+            pub const fn is_positive(&self) -> bool {
                 !self.0.is_sign_negative()
             }
-
-            #[inline]
             pub fn is_negligible(&self) -> bool {
                 self.0.is_zero()
             }
-
-            pub(crate) fn is_defined_positive(&self) -> bool {
+            pub fn is_defined_positive(&self) -> bool {
                 self.0 > dec!(0.0)
             }
-
-            #[inline]
-            pub(crate) const fn one() -> Self {
+            pub const fn one() -> Self {
                 Real(dec!(1.0))
             }
-            #[inline]
-            pub(crate) fn round(&self) -> Self {
+            pub fn round(&self) -> Self {
                 Real(self.0.round())
             }
-            #[inline]
-            pub(crate) fn round_dp(&self, decimals: u32) -> Self {
+            pub fn round_dp(&self, decimals: u32) -> Self {
                 Real(self.0.round_dp(decimals))
             }
             /// Round to decimal digits
-            #[inline]
             pub fn rdp(&self, digits: u32) -> Self {
                 Real(self.0.round_dp(digits))
             }
-            #[inline]
-            pub(crate) fn ceil(&self) -> Self {
+            pub fn ceil(&self) -> Self {
                 Real(self.0.ceil())
             }
-            #[inline]
-            pub(crate) fn floor(&self) -> Self {
+            pub fn floor(&self) -> Self {
                 Real(self.0.floor())
             }
-            #[inline]
             pub fn to_f64(&self) -> f64 {
                 self.0.to_f64().unwrap()
             }
-
-            #[inline]
             pub fn to_i32(&self) -> Option<i32> {
                 self.0.round().to_i32()
             }
-
-            #[inline]
             pub fn to_i64(&self) -> Option<i64> {
                 self.0.round().to_i64()
             }
-
-            #[inline]
             pub fn int(&self) -> i64 {
                 self.0.trunc().to_i64().unwrap()
             }
-
-            #[inline]
-            pub(crate) fn sqrt(self) -> Option<Self> {
+            pub fn sqrt(self) -> Option<Self> {
                 match self.0.sqrt() {
                     None => {None}
                     Some(v) => {Some(Real(v))}
                 }
             }
-
-            #[inline]
-            pub(crate) fn cos(self) -> Self {
+            pub fn cos(self) -> Self {
                 Real(self.0.cos())
             }
-
-            #[inline]
-            pub(crate) fn ln(self) -> Self {
+            pub fn ln(self) -> Self {
                 Real(self.0.ln())
             }
+            pub fn exp(self) -> Self {Real(self.0.exp()) }
 
-            #[inline]
-            pub(crate) fn exp(self) -> Self {Real(self.0.exp()) }
-
-            #[inline]
-            pub(crate) fn sign(self) -> Self {
+            pub fn sign(self) -> Self {
                 let s = self.0.signum();
                 if s.is_zero() {Real::one()} else {Real(s)}
             }
@@ -293,102 +249,17 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl Display for Real {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Display::fmt(&self.0, f)
+        impl core::fmt::Debug for Real {
+            fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                core::write!(_f, "{:?}", self.rdp(4).0)?;
+                Ok(())
             }
         }
 
         #[cfg(feature = "with-defmt")]
         impl defmt::Format for Real {
-            fn format(&self, fmt: defmt::Formatter) {
-                defmt::write!(fmt, "{:?}", self.0.to_f64());
-            }
-        }
-
-        #[derive(Clone)]
-        pub struct RealInclusiveRange {
-            current: Real,
-            current_back: Real,
-            step_size: Real,
-            start: Real,
-            end: Real,
-            num_steps: Real,
-        }
-
-        impl RealInclusiveRange {
-            pub fn new(start: Real, end: Real, step_size: Real) -> Self {
-                let num_steps = ((end - start) / step_size).ceil();
-                hwa::debug!("RealInclusiveRange: start={} end={} step_size={}, num_steps={}", start.rdp(4), end.rdp(4), step_size.rdp(4), num_steps.rdp(4));
-                RealInclusiveRange {
-                    current: start,
-                    current_back: start,
-                    step_size,
-                    start,
-                    end,
-                    num_steps,
-                }
-            }
-
-            #[allow(unused)]
-            #[inline]
-            pub fn width(&self) -> Real {
-                self.end - self.start
-            }
-
-            #[inline]
-            #[allow(unused)]
-            pub fn step_size(&self) -> Real {
-                self.step_size
-            }
-
-            #[allow(unused)]
-            pub fn reset(&mut self) {
-                self.current = self.start;
-                self.current_back = self.start;
-            }
-
-            /// panics (in debug) when len doesn't fit in usize
-            fn usize_len(&self) -> usize {
-                self.num_steps.0.to_usize().unwrap()
-            }
-
-            /// Does scale
-            #[allow(unused)]
-            pub fn scale(&self, scale: Real) -> Self {
-                RealInclusiveRange::new(self.start * scale, self.end * scale, self.num_steps)
-            }
-        }
-
-        impl Iterator for RealInclusiveRange {
-            type Item = Real;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                if !self.step_size.is_zero() && self.current <= self.end {
-                    self.current_back = self.current.clone();
-                    self.current += self.step_size.clone();
-                    Some(self.current_back.clone())
-                }
-                else {
-                    None
-                }
-            }
-
-            fn count(self) -> usize {
-                self.usize_len()
-            }
-        }
-
-        impl DoubleEndedIterator for RealInclusiveRange {
-            fn next_back(&mut self) -> Option<Self::Item> {
-                if self.current_back >= self.end {
-                    self.current = self.current_back;
-                    self.current_back -= self.step_size;
-                    Some(self.current)
-                }
-                else {
-                    None
-                }
+            fn format(&self, _f: defmt::Formatter) {
+                defmt::write!(_f, "{:?}", self.round_dp(4).to_f64());
             }
         }
     }

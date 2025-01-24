@@ -57,8 +57,6 @@ use hwa::SyncMutexStrategy;
 
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
-#[cfg(feature = "with-motion")]
-use hwa::math::TVector;
 #[allow(unused)]
 use hwa::{CommChannel, DeferAction, DeferEvent, EventFlags, EventStatus};
 use strum::VariantNames;
@@ -185,6 +183,7 @@ impl GCodeProcessor {
                 let _ = mg.wrapped_write(_msg.as_bytes()).await;
                 mg.wrapped_flush().await;
             }
+            CommChannel::Sink => {}
             CommChannel::Internal => {
                 cfg_if::cfg_if! {
                     if #[cfg(feature="native")] {
@@ -224,6 +223,7 @@ impl GCodeProcessor {
                 mg.wrapped_flush().await;
             }
             CommChannel::Internal => {}
+            CommChannel::Sink => {}
         }
     }
 
@@ -385,16 +385,14 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
-                let pos = _pos.as_vector();
-                self.motion_planner
-                    .motion_status()
-                    .update_last_planned_position(gc.order_num, &pos);
+                let position =
+                    hwa::controllers::Position::new_with_world_projection(&_pos.as_vector());
                 // FIXME: Push "position" move into move queue
                 loop {
                     if self.event_bus.has_flags(EventFlags::MOV_QUEUE_EMPTY).await {
                         self.motion_planner
                             .motion_status()
-                            .update_current_real_position(gc.order_num, &pos);
+                            .update_current_position(gc.order_num, &position);
                         break;
                     } else {
                         hwa::debug!("Spinning until move queue empty");
@@ -630,18 +628,14 @@ impl GCodeProcessor {
             GCodeValue::M110(_n) => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
             GCodeValue::M114 => {
-                let _pos = self
+                let _pos: hwa::controllers::Position = self
                     .motion_planner
                     .motion_status()
-                    .get_last_planned_position()
-                    .unwrap_or(TVector::zero());
-                let _spos = self
-                    .motion_planner
-                    .motion_status()
-                    .get_current_real_position()
-                    .unwrap_or(TVector::zero());
+                    .get_last_planned_position();
+                let _spos: hwa::controllers::Position =
+                    self.motion_planner.motion_status().get_current_position();
                 // TODO: Use display
-                let z = alloc::format!("{} Count {}\n", _pos, _spos);
+                let z = alloc::format!("{} Count {}\n", _pos.world_pos, _spos.world_pos);
                 let _ = self.write(channel, z.as_str()).await;
 
                 Ok(CodeExecutionSuccess::OK)

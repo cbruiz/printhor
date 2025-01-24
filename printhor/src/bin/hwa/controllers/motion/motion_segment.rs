@@ -1,41 +1,41 @@
+//! Motion segment module
 //! TODO: This feature is still in incubation
-
 use crate::control::motion::{Constraints, MotionProfile};
 use crate::hwa;
 use hwa::math::Real;
 use hwa::math::TVector;
-use printhor_hwa_common::CoordSel;
 
 /// Represents the data for a motion segment.
 ///
 /// # Fields
-/// - `speed_enter_mms`: Initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-/// - `speed_exit_mms`: Speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-/// - `speed_target_mms`: Target speed for the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-/// - `displacement_mm`: Total displacement to complete the movement in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
-/// - `speed_enter_constrained_mms`: Constrained initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-/// - `speed_exit_constrained_mms`: Constrained speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
+/// - `speed_enter_sus`: Initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_exit_sus`: Speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_target_sus`: Target speed for the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `displacement_su`: Total displacement to complete the movement in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
+/// - `speed_enter_constrained_sus`: Constrained initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_exit_constrained_sus`: Constrained speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
 /// - `proj_prev`: Projection of the previous segment.
 /// - `proj_next`: Projection of the next segment.
-/// - `unit_vector_dir`: Unit vector for the direction of movement.
-/// - `dest_pos`: Destination position vector.
+/// - `unit_vector_dir`: Unit vector for the direction of movement in space coordinates.
+/// - `dest_pos`: Destination position vector in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
+/// - `dest_world_pos`: Destination position vector in world units ([hwa::Contract::WORLD_UNIT_MAGNITUDE]).
 /// - `tool_power`: Tool power utilized in the segment.
 /// - `constraints`: Motion constraints applicable to the segment.
 #[derive(Clone, Copy)]
 pub struct Segment {
-    /// Initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-    pub speed_enter_wu_s: Real,
-    /// Speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-    pub speed_exit_wu_s: Real,
-    /// Target speed for the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-    pub speed_target_wu: Real,
-    /// Total displacement to complete the movement in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
-    pub displacement_wu: Real,
+    /// Initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub speed_enter_su_s: Real,
+    /// Speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub speed_exit_su_s: Real,
+    /// Target speed for the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub speed_target_su_s: Real,
+    /// Total displacement to complete the movement in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
+    pub displacement_su: Real,
 
-    /// Constrained initial speed at the entry of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-    pub speed_enter_constrained_wu_s: Real,
-    /// Constrained speed at the exit of the segment in [hwa::Contract::WORLD_UNIT_MAGNITUDE] per second.
-    pub speed_exit_constrained_wu_s: Real,
+    /// Constrained initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub speed_enter_constrained_su_s: Real,
+    /// Constrained speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub speed_exit_constrained_su_s: Real,
     /// Projection of the previous segment.
     pub proj_prev: Real,
     /// Projection of the next segment.
@@ -44,11 +44,14 @@ pub struct Segment {
     /// Unit vector for the direction of movement.
     pub unit_vector_dir: TVector<Real>,
 
-    /// Source position vector in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
+    /// Source position vector in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
     pub src_pos: TVector<Real>,
 
-    /// Destination position vector in [hwa::Contract::WORLD_UNIT_MAGNITUDE].
+    /// Destination position vector in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
     pub dest_pos: TVector<Real>,
+
+    /// Destination position vector in world units ([hwa::Contract::WORLD_UNIT_MAGNITUDE]).
+    pub dest_world_pos: TVector<Real>,
 
     #[allow(unused)]
     /// Tool power utilized in the segment.
@@ -58,14 +61,14 @@ pub struct Segment {
 }
 
 impl Segment {
-    pub fn fix_deviation(&mut self, deviation: &TVector<Real>, flow_rate: Real) {
+    pub fn fix_deviation(&mut self, deviation: &TVector<Real>, _flow_rate: Real) {
         self.src_pos -= *deviation;
-        (self.unit_vector_dir, self.displacement_wu) = (self.dest_pos - self.src_pos)
+        (self.unit_vector_dir, self.displacement_su) = (self.dest_pos - self.src_pos)
             .map_values(|coord, coord_value| match coord {
                 #[cfg(feature = "with-e-axis")]
-                CoordSel::E => match coord_value.is_zero() {
+                hwa::CoordSel::E => match coord_value.is_zero() {
                     true => None,
-                    false => Some(coord_value * flow_rate),
+                    false => Some(coord_value * _flow_rate),
                 },
                 _ => match coord_value.is_zero() {
                     true => None,
@@ -196,17 +199,18 @@ mod tests {
 
     fn dummy_segment() -> Segment {
         Segment {
-            speed_enter_wu_s: Real::from_f32(10.0),
-            speed_exit_wu_s: Real::from_f32(15.0),
-            speed_target_wu: Real::from_f32(20.0),
-            displacement_wu: Real::from_f32(100.0),
-            speed_enter_constrained_wu_s: Real::from_f32(10.0),
-            speed_exit_constrained_wu_s: Real::from_f32(15.0),
+            speed_enter_su_s: Real::from_f32(10.0),
+            speed_exit_su_s: Real::from_f32(15.0),
+            speed_target_su_s: Real::from_f32(20.0),
+            displacement_su: Real::from_f32(100.0),
+            speed_enter_constrained_su_s: Real::from_f32(10.0),
+            speed_exit_constrained_su_s: Real::from_f32(15.0),
             proj_prev: Real::from_f32(0.0),
             proj_next: Real::from_f32(100.0),
             unit_vector_dir: TVector::one(),
             src_pos: TVector::zero(),
             dest_pos: TVector::one() * math::ONE_HUNDRED,
+            dest_world_pos: TVector::one() * math::ONE_HUNDRED,
             tool_power: Real::from_f32(5.0),
             constraints: Constraints {
                 v_max: math::ONE_HUNDRED,
@@ -219,9 +223,9 @@ mod tests {
     #[test]
     fn test_segment_creation() {
         let segment = dummy_segment();
-        assert_eq!(segment.speed_enter_wu_s, Real::from_f32(10.0));
-        assert_eq!(segment.speed_exit_wu_s, Real::from_f32(15.0));
-        assert_eq!(segment.speed_target_wu, Real::from_f32(20.0));
+        assert_eq!(segment.speed_enter_su_s, Real::from_f32(10.0));
+        assert_eq!(segment.speed_exit_su_s, Real::from_f32(15.0));
+        assert_eq!(segment.speed_target_su_s, Real::from_f32(20.0));
     }
 
     #[test]

@@ -59,8 +59,6 @@ cooperative = []
 executor-interrupt = ["embassy-executor/executor-interrupt", "embassy-time/generic-queue", "embassy-time/generic-queue-128"]
 verbose-timings = []
 sd-card-uses-spi = []
-ili9341_parallel = []
-ili9341_spi = ["with-spi"]
 without-vref-int = []
 without-ringbuffer = []
 

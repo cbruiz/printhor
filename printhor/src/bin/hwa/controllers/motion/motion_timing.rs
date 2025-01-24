@@ -150,6 +150,7 @@ impl MultiTimer {
 pub struct StepPlanner {
     /// The interval width for the step planner in microseconds
     pub interval_width: u32,
+    #[cfg(feature = "with-motion-broadcast")]
     pub delta: hwa::MotionDelta,
     // The current time in step-planner
     pub(crate) ref_time_us: u32,
@@ -169,8 +170,9 @@ impl StepPlanner {
     /// # Returns
     ///
     /// A new StepPlanner instance.
-    pub const fn new(delta: hwa::MotionDelta) -> Self {
+    pub const fn new(#[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta) -> Self {
         Self {
+            #[cfg(feature = "with-motion-broadcast")]
             delta,
             ref_time_us: 0,
             interval_width: 0,
@@ -193,12 +195,13 @@ impl StepPlanner {
     ///
     /// A new StepPlanner instance.
     pub fn from(
-        delta: hwa::MotionDelta,
+        #[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
         stepper_enable_flags: CoordSel,
         stepper_dir_fwd_flags: CoordSel,
     ) -> Self {
         let mut instance = Self {
+            #[cfg(feature = "with-motion-broadcast")]
             delta,
             ref_time_us: 0,
             interval_width: multi_timer.width_us,

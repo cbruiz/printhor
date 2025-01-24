@@ -1,7 +1,6 @@
 //
 #[allow(unused)]
 use printhor_hwa_common as hwa;
-use crate::board_stm32l4::io;
 
 pub type Watchdog = embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
@@ -20,7 +19,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-i2c")] {
-        pub type I2c = io::MotionI2c;
+        pub type I2c = super::io::MotionI2c;
     }
 }
 
@@ -165,7 +164,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
-        pub type MotionSender = io::MotionI2c;
+        pub type MotionSender = super::io::MotionI2c;
     }
 }
 
@@ -221,4 +220,3 @@ cfg_if::cfg_if!{
         pub type HotBedPwmChannel = embassy_stm32::timer::Channel;
     }
 }
-

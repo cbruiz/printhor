@@ -3,6 +3,8 @@
 extern crate alloc;
 extern crate core;
 
+#[cfg(feature = "with-motion")]
+pub mod kinematics;
 pub mod math;
 
 pub use printhor_hwa_common_macros::*;
@@ -68,9 +70,11 @@ pub enum CommChannel {
     /// Communication through Serial Port 2
     #[cfg(feature = "with-serial-port-2")]
     SerialPort2,
-    /// This variant is mandatory. Used by SD prints, integration tests or macro/automation.
+    /// This variant is mandatory. Used by integration tests or macro/automation.
     /// It means the source communication channel comes from programmatic and/or internal routines.
     Internal,
+    /// This variant is mandatory. Used by SD prints. Output is discarded.
+    Sink,
 }
 
 impl Default for CommChannel {
@@ -145,6 +149,7 @@ impl CommChannel {
     ///     #[cfg(feature = "with-serial-port-2")]
     ///     CommChannel::SerialPort2 => println!("Index corresponds to SerialPort2"),
     ///     CommChannel::Internal => println!("Index does not match any external channel, defaulting to Internal"),
+    ///     CommChannel::Sink => println!("Index does not match any external channel, defaulting to Internal"),
     /// }
     /// ```
     ///
@@ -170,7 +175,11 @@ impl CommChannel {
                 }
             }
         }
-        CommChannel::Internal
+        if _idx == Self::COUNT - 2 {
+            CommChannel::Internal
+        } else {
+            CommChannel::Sink
+        }
     }
 
     /// Retrieves the communication channel based on an index value.
@@ -212,7 +221,8 @@ impl CommChannel {
             CommChannel::SerialPort1 => SERIAL_PORT1_OFFSET - 1,
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => SERIAL_PORT1_OFFSET,
-            CommChannel::Internal => Self::COUNT - 1,
+            CommChannel::Internal => Self::COUNT - 2,
+            CommChannel::Sink => Self::COUNT - 1,
         }
     }
 

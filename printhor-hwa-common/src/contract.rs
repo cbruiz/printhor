@@ -2,16 +2,20 @@ use crate as hwa;
 #[allow(unused)]
 use hwa::traits;
 
+use crate::CoordSel;
 use core::future;
 
 ///! This module contains the interface contract of HWI boards
 
 /// All boards must export a struct Called `Contract` at crate level implementing this trait
 pub trait HwiContract: Sized {
+    //#region "Global common constants"
+
     const FIRMWARE_NAME: &'static str = "PrinThor";
     const FIRMWARE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
     const FIRMWARE_URL: &'static str = "https://github.com/cbruiz/printhor";
     const MACHINE_UUID: &'static str = "00000000-0000-0000-0000-000000000000";
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-e-axis")] {
             const EXTRUDER_COUNT: &'static str = "1";
@@ -21,20 +25,24 @@ pub trait HwiContract: Sized {
         }
     }
 
+    //#endregion
+
+    //#region "Board specific constants"
+
+    /// The machine descriptive type
     const MACHINE_TYPE: &'static str;
+    /// The machine bord name/model
     const MACHINE_BOARD: &'static str;
+    /// The machine processor model
     const MACHINE_PROCESSOR: &'static str;
+    /// The frequency at which MCU runs. Needed for computing motion ISR
+    ///
+    /// In native (std), embassy-executor is hard-coded to 1GHz
+    const PROCESSOR_SYS_CK_MHZ: u32;
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature="with-motion")] {
-            /// The frequency at which MCU runs. Needed for computing motion ISR
-            ///
-            /// In native (std), embassy-executor is hard-coded to 1GHz
-            const PROCESSOR_SYS_CK_MHZ: u32;
-        }
-    }
+    //#endregion
 
-    //#region "Hard-coded settings"
+    //#region "WatchDog settings"
 
     /// Defines a timeout value for the watchdog timer in micro-seconds.
     /// This value is crucial for ensuring the system can recover from
@@ -53,16 +61,16 @@ pub trait HwiContract: Sized {
     /// Modify this value as per the requirements of your specific application.
     const WATCHDOG_TIMEOUT_US: u32;
 
+    //#endregion
+
+    //#region "Memory management/tracking settings"
+
     /// The size of the heap in bytes.
     /// By convention, 0 means no heap
     const MAX_HEAP_SIZE_BYTES: usize;
 
     /// The maximum expected allocation by hwa and hwi statics
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize;
-
-    //#endregion
-
-    //#region "Optional memory management/tracking"
 
     fn heap_current_size() -> usize {
         0
@@ -74,7 +82,7 @@ pub trait HwiContract: Sized {
 
     //#endregion
 
-    //#region "motion feature"
+    //#region "Feature [with-motion] settings"
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
@@ -82,6 +90,68 @@ pub trait HwiContract: Sized {
             /// The world unit magnitude. by default: mm
             #[const_env::from_env("WORLD_UNIT_MAGNITUDE")]
             const WORLD_UNIT_MAGNITUDE: &'static str = "mm";
+
+            /// The (work)space unit magnitude. by default: mm
+            #[const_env::from_env("SPACE_UNIT_MAGNITUDE")]
+            const SPACE_UNIT_MAGNITUDE: &'static str = "mm";
+
+            /// The physical unit magnitude. by default: mm
+            #[const_env::from_env("PHYSICAL_UNIT_MAGNITUDE")]
+            const PHYSICAL_UNIT_MAGNITUDE: &'static str = "mm";
+
+            /// World size to apply bounds restriction in World Units ([WORLD_UNIT_MAGNITUDE])
+            ///
+            /// See [DEFAULT_WORLD_CENTER_WU] for constraints clarification
+            const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real>;
+
+            /// World center in World Units ([WORLD_UNIT_MAGNITUDE])
+            ///
+            /// Makes world coordinates bounded to: [- [DEFAULT_WORLD_SIZE] /2, [DEFAULT_WORLD_SIZE] /2]
+            const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real>;
+
+            /// Homing offset in World Units ([WORLD_UNIT_MAGNITUDE])
+            ///
+            /// Represent the world point reached when Homing performs
+            const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
+                hwa::math::TVector::new_with_coord(CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
+            };
+
+            /// Transforms a World position to (Work)space position. By default, identity transform applied
+            ///
+            /// Parameters:
+            ///
+            /// - `world_pos`: The world position.
+            fn project_to_space(&self, world_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
+                use crate::kinematics::WorldToSpaceTransformer;
+                const TRANSFORMER: hwa::kinematics::Identity = hwa::kinematics::Identity;
+                TRANSFORMER.project_to_space(world_pos)
+            }
+
+            /// Transforms a (Work)space position to World position. By default, identity transform applied
+            ///
+            /// Parameters:
+            ///
+            /// - `space_pos`: The world position.
+            fn project_to_world(&self, space_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
+                use crate::kinematics::WorldToSpaceTransformer;
+                const TRANSFORMER: hwa::kinematics::Identity = hwa::kinematics::Identity;
+                TRANSFORMER.project_to_world(space_pos)
+            }
+
+            /// Default max speed in Physical Units / second
+            const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real>;
+            /// Default max speed in physical units by second
+            const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real>;
+            /// Default max speed in physical units by second
+            const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real>;
+            /// Default max speed in physical units by second
+            const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real;
+
+            /// Default units per workspace unit
+            const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real>;
+
+            /// Default micro-steps per axis
+            const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16>;
 
             /// The frequency at which a segment is sampled for the motion planner.
             /// For instance:
@@ -101,18 +171,6 @@ pub trait HwiContract: Sized {
             /// The queue size of Motion Planner RingBuffer
             /// Should be not very high, so capped to u8
             const SEGMENT_QUEUE_SIZE: u8;
-
-            /// Default max speed in world units by second
-            const DEFAULT_MAX_SPEED: hwa::math::TVector<u32>;
-            const DEFAULT_MAX_ACCEL: hwa::math::TVector<u32>;
-            const DEFAULT_MAX_JERK: hwa::math::TVector<u32>;
-            const DEFAULT_TRAVEL_SPEED: u16;
-
-            const DEFAULT_UNITS_PER_MM: hwa::math::TVector<f32>;
-
-            const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16>;
-
-            const DEFAULT_MACHINE_BOUNDS: hwa::math::TVector<f32>;
         }
     }
 

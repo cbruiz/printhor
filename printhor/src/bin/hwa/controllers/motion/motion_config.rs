@@ -47,34 +47,37 @@ impl MotionConfig {
         Self { cfg }
     }
 
-    pub fn set_max_speed(&self, speed: TVector<u32>) {
+    // Set max acceleration in space_units/s
+    pub fn set_max_speed(&self, speed: TVector<Real>) {
         self.cfg.apply_mut(|m| {
-            m.max_speed.assign(CoordSel::all_axis(), &speed);
+            m.max_speed_su = speed;
         });
         hwa::info!(
             "[MotionConfig] Max speed set to {:?} {}/s",
             speed,
-            Contract::WORLD_UNIT_MAGNITUDE
+            Contract::SPACE_UNIT_MAGNITUDE
         );
     }
-    pub fn set_max_accel(&self, accel: TVector<u32>) {
+    /// Set max acceleration in space_units/s^2
+    pub fn set_max_accel(&self, accel: TVector<Real>) {
         self.cfg.apply_mut(|m| {
-            m.max_accel.assign(CoordSel::all_axis(), &accel);
+            m.max_accel_su.assign(CoordSel::all_axis(), &accel);
         });
         hwa::info!(
             "[MotionConfig] Max accel set to {:?} {}/s^2",
             accel,
-            Contract::WORLD_UNIT_MAGNITUDE
+            Contract::SPACE_UNIT_MAGNITUDE
         );
     }
-    pub fn set_max_jerk(&self, jerk: TVector<u32>) {
+    //Set max jerk in space_units/s^3
+    pub fn set_max_jerk(&self, jerk: TVector<Real>) {
         self.cfg.apply_mut(|m| {
-            m.max_jerk.assign(CoordSel::all_axis(), &jerk);
+            m.max_jerk_su.assign(CoordSel::all_axis(), &jerk);
         });
         hwa::info!(
             "[MotionConfig] Max jerk set to {:?} {}/s^3",
             jerk,
-            Contract::WORLD_UNIT_MAGNITUDE
+            Contract::SPACE_UNIT_MAGNITUDE
         );
     }
     pub fn set_flow_rate(&self, rate: u8) {
@@ -83,7 +86,7 @@ impl MotionConfig {
         });
     }
 
-    pub fn set_units_per_world_magnitude(&self, upm: TVector<Real>) {
+    pub fn set_space_units_per_world_unit(&self, upm: TVector<Real>) {
         self.cfg.apply_mut(|m| {
             m.units_per_world_magnitude = upm;
         });
@@ -100,7 +103,7 @@ impl MotionConfig {
         });
     }
 
-    pub fn set_default_travel_speed(&self, speed: u16) {
+    pub fn set_default_travel_speed(&self, speed: Real) {
         self.cfg.apply_mut(|m| {
             m.default_travel_speed = speed;
         });
@@ -121,15 +124,29 @@ impl MotionConfig {
         );
     }
 
-    pub fn set_machine_bounds(&self, bounds: TVector<Real>) {
+    pub fn set_workspace_center(&self, center: TVector<Real>) {
         self.cfg.apply_mut(|m| {
-            m.machine_bounds = bounds;
+            m.world_center_wu = center;
         });
         hwa::info!(
-            "[MotionConfig] Machine bounds set to [{:?}], [{:?}] {}",
-            TVector::zero() - bounds,
-            bounds,
-            Contract::WORLD_UNIT_MAGNITUDE
+            "[MotionConfig] WorkSpace center set to [{:?}] {}",
+            center,
+            Contract::SPACE_UNIT_MAGNITUDE,
+        );
+    }
+
+    pub fn set_world_size(&self, size: TVector<Real>) {
+        self.cfg.apply_mut(|m| m.world_size_wu = size);
+        hwa::info!(
+            "[MotionConfig] WorkSpace size set to [{:?}] {}",
+            size,
+            Contract::SPACE_UNIT_MAGNITUDE,
+        );
+        hwa::info!(
+            "[MotionConfig] WorkSpace bounds updated to: [ [{:?}], [{:?}] ] {}",
+            -(size / hwa::math::TWO),
+            (size / hwa::math::TWO),
+            Contract::SPACE_UNIT_MAGNITUDE,
         );
     }
 
@@ -166,44 +183,24 @@ impl MotionConfig {
         Real::new(self.get_speed_rate() as i64, 0) / hwa::math::ONE_HUNDRED
     }
 
-    pub fn get_default_travel_speed(&self) -> u16 {
+    pub fn get_default_travel_speed(&self) -> Real {
         self.cfg.apply(|m| m.default_travel_speed)
     }
 
-    pub fn get_default_travel_speed_as_real(&self) -> Real {
-        Real::new(self.get_default_travel_speed() as i64, 0)
+    pub fn get_max_speed(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.max_speed_su)
     }
 
-    pub fn get_max_speed(&self) -> TVector<u32> {
-        self.cfg.apply(|m| m.max_speed)
+    pub fn get_max_accel(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.max_accel_su)
     }
 
-    pub fn get_max_speed_as_vector_real(&self) -> TVector<Real> {
-        Self::into_real(self.get_max_speed())
-    }
-
-    pub fn get_max_accel(&self) -> TVector<u32> {
-        self.cfg.apply(|m| m.max_accel)
-    }
-
-    pub fn get_max_accel_as_vector_real(&self) -> TVector<Real> {
-        Self::into_real(self.get_max_accel())
-    }
-
-    pub fn get_max_jerk(&self) -> TVector<u32> {
-        self.cfg.apply(|m| m.max_jerk)
-    }
-
-    pub fn get_max_jerk_as_vector_real(&self) -> TVector<Real> {
-        Self::into_real(self.get_max_jerk())
+    pub fn get_max_jerk(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.max_jerk_su)
     }
 
     pub fn get_machine_bounds(&self) -> TVector<Real> {
-        self.cfg.apply(|m| m.machine_bounds)
-    }
-
-    fn into_real(src: TVector<u32>) -> TVector<Real> {
-        src.map_values(|_, c| Some(Real::from_lit(c as i64, 0)))
+        self.cfg.apply(|m| m.world_size_wu)
     }
 }
 
@@ -214,21 +211,23 @@ impl Clone for MotionConfig {
 }
 
 pub struct MotionConfigContent {
-    /// Maximum acceleration for the motion.
-    pub max_accel: TVector<u32>,
-    /// Maximum speed for the motion.
-    pub max_speed: TVector<u32>,
-    /// Maximum jerk for the motion.
-    pub max_jerk: TVector<u32>,
+    /// Maximum speed for the motion in space units/s.
+    pub max_speed_su: TVector<Real>,
+    /// Maximum accel for the motion in space units/s^2
+    pub max_accel_su: TVector<Real>,
+    /// Maximum jerk for the motion in space units/s^3
+    pub max_jerk_su: TVector<Real>,
 
     /// Default travel speed in world magnitude units per second.
-    pub default_travel_speed: u16,
+    pub default_travel_speed: Real,
 
     /// Units per millimeters NOT considering micro-stepping.
     pub units_per_world_magnitude: TVector<Real>,
 
     /// Machine's motion bounds.
-    pub machine_bounds: TVector<Real>,
+    pub world_center_wu: TVector<Real>,
+    /// Machine's motion bounds.
+    pub world_size_wu: TVector<Real>,
     /// Micro-stepping values for each axis.
     pub micro_steps_per_axis: TVector<u16>,
     /// Flow rate for the motion, represented as a percentage.
@@ -242,13 +241,14 @@ impl MotionConfigContent {
     /// See [MotionConfigContent]
     pub const fn new() -> Self {
         Self {
-            max_accel: TVector::new(),
-            max_speed: TVector::new(),
-            max_jerk: TVector::new(),
+            max_accel_su: TVector::new(),
+            max_speed_su: TVector::new(),
+            max_jerk_su: TVector::new(),
             units_per_world_magnitude: TVector::new(),
-            machine_bounds: TVector::new(),
+            world_center_wu: TVector::new(),
+            world_size_wu: TVector::new(),
             micro_steps_per_axis: TVector::new(),
-            default_travel_speed: 1,
+            default_travel_speed: Real::one(),
             flow_rate: 100,
             speed_rate: 100,
         }

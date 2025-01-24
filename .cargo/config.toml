@@ -32,7 +32,7 @@ EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 ###########################
 
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset --log-format {L}{s}"
+runner = "probe-run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s}"
 rustflags = [ "-C", "linker=flip-link" ]
 
 [target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']

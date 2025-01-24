@@ -4,7 +4,7 @@ use quote::quote;
 use syn::parse::{Parse, ParseStream};
 use syn::{parse_macro_input, Expr, LitStr, Token, TypePath};
 
-//#region The make_static_ref macro [...]
+//#region "The make_static_ref macro"
 
 struct StaticInstanceParserInput {
     instance_name: LitStr,
@@ -100,7 +100,7 @@ pub fn make_static_ref(input: TokenStream) -> TokenStream {
 
 //#endregion
 
-//#region The make_static_sync_controller macro [...]
+//#region "The make_static_sync_controller macro"
 
 struct StaticSyncControllerParserInput {
     instance_name: LitStr,
@@ -128,7 +128,7 @@ impl Parse for StaticSyncControllerParserInput {
     }
 }
 
-/// Declares a instance of [StaticSyncController], which holds
+/// Declares an instance of [StaticSyncController], which holds
 /// a static reference of given resource wrapped into a `MutexStrategy` implementation.
 /// The resource is allocated in .bss section.
 ///
@@ -211,7 +211,7 @@ pub fn make_static_sync_controller(input: TokenStream) -> TokenStream {
 
 //#endregion
 
-//#region "make_static_async_controller macro"
+//#region "The make_static_async_controller macro"
 
 struct StaticAsyncControllerParserInput {
     instance_name: LitStr,
@@ -239,7 +239,7 @@ impl Parse for StaticAsyncControllerParserInput {
     }
 }
 
-/// Declares a instance of [StaticAsyncController], which holds
+/// Declares an instance of [StaticAsyncController], which holds
 /// a static reference of given resource wrapped into a [AsyncMutexStrategy] implementation.
 /// The resource is allocated in .bss section.
 ///
@@ -322,12 +322,277 @@ pub fn make_static_async_controller(input: TokenStream) -> TokenStream {
 
 //#endregion
 
-//#region "log sink macro"
+//#region "The log sink macro"
 
 /// A sink utility to discard logs if no log feature is enabled.
 #[proc_macro]
 pub fn no_log(_input: TokenStream) -> TokenStream {
     TokenStream::from(quote! {{}})
+}
+
+//#endregion
+
+//#region "The TVector macro(s)"
+
+struct KeyValue {
+    key: syn::Ident,
+    _eq_token: Token![=],
+    value: Expr,
+}
+
+/// Implementa el parseo de clave-valor
+impl Parse for KeyValue {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(KeyValue {
+            key: input.parse()?,
+            _eq_token: input.parse()?,
+            value: input.parse()?,
+        })
+    }
+}
+
+struct KeyValueList(Vec<KeyValue>);
+
+impl Parse for KeyValueList {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut key_values = Vec::new();
+        while !input.is_empty() {
+            key_values.push(input.parse()?);
+            if input.peek(Token![,]) {
+                let _ = input.parse::<Token![,]>();
+            }
+        }
+        Ok(KeyValueList(key_values))
+    }
+}
+
+/// Syntactic sugar for creating const vectors
+#[proc_macro]
+pub fn make_vector(input: TokenStream) -> TokenStream {
+    let KeyValueList(pairs) = match syn::parse::<KeyValueList>(input) {
+        Ok(parsed) => parsed,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    // HashMap para almacenar las expresiones
+    let mut expr_map = std::collections::HashMap::new();
+
+    // Lista de ejes válidos
+    let valid_axes = [
+        "e", "x", "y", "z", "a", "b", "c", "i", "j", "k", "u", "v", "w",
+    ];
+
+    for &axis in &valid_axes {
+        expr_map.insert(axis.to_string(), quote! { None });
+    }
+
+    for pair in pairs {
+        let axis = &pair.key;
+        let axis_name = axis.to_string();
+        let value = &pair.value;
+
+        if !valid_axes.contains(&axis_name.as_str()) {
+            return syn::Error::new(
+                axis.span(),
+                format!(
+                    "Unexpected key `{}`, expected one of: {}",
+                    axis_name,
+                    valid_axes.join(", ")
+                ),
+            )
+            .to_compile_error()
+            .into();
+        }
+        expr_map.insert(axis_name.clone(), quote! { Some(#value) });
+    }
+
+    let e_expr = expr_map.remove("e").unwrap();
+    //
+    let x_expr = expr_map.remove("x").unwrap();
+    let y_expr = expr_map.remove("y").unwrap();
+    let z_expr = expr_map.remove("z").unwrap();
+    //
+    let a_expr = expr_map.remove("a").unwrap();
+    let b_expr = expr_map.remove("b").unwrap();
+    let c_expr = expr_map.remove("c").unwrap();
+    //
+    let i_expr = expr_map.remove("i").unwrap();
+    let j_expr = expr_map.remove("j").unwrap();
+    let k_expr = expr_map.remove("k").unwrap();
+    //
+    let u_expr = expr_map.remove("u").unwrap();
+    let v_expr = expr_map.remove("v").unwrap();
+    let w_expr = expr_map.remove("w").unwrap();
+
+    // Generar el código de salida
+    let output = quote! {
+        printhor_hwa_common::math::TVector::from_coords(
+            #[cfg(feature="with-e-axis")] #e_expr,
+            //
+            #[cfg(feature="with-x-axis")] #x_expr,
+            #[cfg(feature="with-y-axis")] #y_expr,
+            #[cfg(feature="with-z-axis")] #z_expr,
+            //
+            #[cfg(feature="with-a-axis")] #a_expr,
+            #[cfg(feature="with-b-axis")] #b_expr,
+            #[cfg(feature="with-c-axis")] #c_expr,
+            //
+            #[cfg(feature="with-i-axis")] #i_expr,
+            #[cfg(feature="with-j-axis")] #j_expr,
+            #[cfg(feature="with-k-axis")] #k_expr,
+            //
+            #[cfg(feature="with-u-axis")] #u_expr,
+            #[cfg(feature="with-v-axis")] #v_expr,
+            #[cfg(feature="with-w-axis")] #w_expr,
+        )
+
+    };
+
+    output.into()
+}
+
+/// Syntactic sugar for creating const vectors
+#[proc_macro]
+pub fn make_vector_real(input: TokenStream) -> TokenStream {
+    let KeyValueList(pairs) = match syn::parse::<KeyValueList>(input) {
+        Ok(parsed) => parsed,
+        Err(err) => return err.to_compile_error().into(),
+    };
+
+    // HashMap para almacenar las expresiones
+    let mut expr_map = std::collections::HashMap::new();
+
+    // Lista de ejes válidos
+    let valid_axes = [
+        "e", "x", "y", "z", "a", "b", "c", "i", "j", "k", "u", "v", "w",
+    ];
+
+    for &axis in &valid_axes {
+        expr_map.insert(axis.to_string(), quote! { None });
+    }
+
+    for pair in pairs {
+        let axis = &pair.key;
+        let axis_name = axis.to_string();
+        let value = &pair.value;
+
+        if !valid_axes.contains(&axis_name.as_str()) {
+            return syn::Error::new(
+                axis.span(),
+                format!(
+                    "Unexpected key `{}`, expected one of: {}",
+                    axis_name,
+                    valid_axes.join(", ")
+                ),
+            )
+            .to_compile_error()
+            .into();
+        }
+        expr_map.insert(axis_name.clone(), quote! { Some(hwa::make_real!( #value)) });
+    }
+
+    let e_expr = expr_map.remove("e").unwrap();
+    //
+    let x_expr = expr_map.remove("x").unwrap();
+    let y_expr = expr_map.remove("y").unwrap();
+    let z_expr = expr_map.remove("z").unwrap();
+    //
+    let a_expr = expr_map.remove("a").unwrap();
+    let b_expr = expr_map.remove("b").unwrap();
+    let c_expr = expr_map.remove("c").unwrap();
+    //
+    let i_expr = expr_map.remove("i").unwrap();
+    let j_expr = expr_map.remove("j").unwrap();
+    let k_expr = expr_map.remove("k").unwrap();
+    //
+    let u_expr = expr_map.remove("u").unwrap();
+    let v_expr = expr_map.remove("v").unwrap();
+    let w_expr = expr_map.remove("w").unwrap();
+
+    // Generar el código de salida
+    let output = quote! {
+        hwa::math::TVector::from_coords(
+            #[cfg(feature="with-e-axis")] #e_expr,
+            //
+            #[cfg(feature="with-x-axis")] #x_expr,
+            #[cfg(feature="with-y-axis")] #y_expr,
+            #[cfg(feature="with-z-axis")] #z_expr,
+            //
+            #[cfg(feature="with-a-axis")] #a_expr,
+            #[cfg(feature="with-b-axis")] #b_expr,
+            #[cfg(feature="with-c-axis")] #c_expr,
+            //
+            #[cfg(feature="with-i-axis")] #i_expr,
+            #[cfg(feature="with-j-axis")] #j_expr,
+            #[cfg(feature="with-k-axis")] #k_expr,
+            //
+            #[cfg(feature="with-u-axis")] #u_expr,
+            #[cfg(feature="with-v-axis")] #v_expr,
+            #[cfg(feature="with-w-axis")] #w_expr,
+        )
+
+    };
+
+    output.into()
+}
+
+fn do_make_real(input: TokenStream) -> TokenStream {
+    let number: syn::LitFloat = syn::parse(input).unwrap();
+    cfg_if::cfg_if! {
+        if #[cfg(feature="float-point-f32-impl")] {
+            cfg_if::cfg_if! {
+                if #[cfg(any(feature="float-point-f64-impl", feature="fixed-point-128-impl"))] {
+                    compile_error!("Inconsistency detected")
+                }
+            }
+            let expanded = quote! {
+                hwa::math::Real::from_f32(#number)
+            };
+        }
+        else if #[cfg(feature="float-point-f64-impl")] {
+            cfg_if::cfg_if! {
+                if #[cfg(any(feature="float-point-f32-impl", feature="fixed-point-128-impl"))] {
+                    compile_error!("Inconsistency detected")
+                }
+            }
+            let expanded = quote! {
+                hwa::math::Real::from_f64(#number)
+            };
+        }
+        else if #[cfg(feature="fixed-point-128-impl")] {
+            cfg_if::cfg_if! {
+                if #[cfg(any(feature="float-point-f32-impl", feature="float-point-f64-impl"))] {
+                    compile_error!("Inconsistency detected")
+                }
+            }
+            let expanded = quote! {
+                hwa::math::Real::from_fixed(rust_decimal_macros::dec!(#number))
+            };
+        }
+        else {
+            panic!("No real precision specified");
+        }
+    }
+    expanded.into()
+}
+
+#[proc_macro]
+/// Syntactic sugar for creating const optional real literals
+pub fn make_optional_real(input: TokenStream) -> TokenStream {
+    let expanded = if input.is_empty() {
+        quote! {None}
+    } else {
+        let number: syn::LitFloat = syn::parse(input).unwrap();
+        quote! {Some( hwa::make_real!(#number))}
+    };
+
+    expanded.into()
+}
+
+#[proc_macro]
+/// Syntactic sugar for creating const real literals
+pub fn make_real(input: TokenStream) -> TokenStream {
+    do_make_real(input).into()
 }
 
 //#endregion

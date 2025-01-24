@@ -7,11 +7,10 @@ use hwa::HwiContract;
 use embassy_sync::mutex::MutexGuard;
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
 use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
-use hwa::AsyncMutexStrategy;
 use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
 
-use math::{CoordSel, TVector};
+use math::TVector;
 
 /// The execution plan action dequeued from the buffer
 pub enum ExecPlan {
@@ -406,11 +405,11 @@ impl MotionPlanner {
                             // x < v_0 - jmax q_1^2
                             // x > jmax * q_1^2 + v_0
 
-                            let mut curr_vmax = curr_segment.speed_target_wu;
+                            let mut curr_vmax = curr_segment.speed_target_su_s;
                             #[cfg(feature = "cornering")]
                             {
-                                let q_1 = curr_segment.displacement_wu;
-                                let v_0 = curr_segment.speed_enter_wu_s;
+                                let q_1 = curr_segment.displacement_su;
+                                let v_0 = curr_segment.speed_enter_su_s;
                                 let t_jmax =
                                     curr_segment.constraints.a_max / curr_segment.constraints.j_max;
 
@@ -441,24 +440,24 @@ impl MotionPlanner {
                             }
 
                             let curr_boundary = curr_vmax.min(curr_segment.constraints.v_max);
-                            let v_marginal_gain = curr_boundary - curr_segment.speed_exit_wu_s;
+                            let v_marginal_gain = curr_boundary - curr_segment.speed_exit_su_s;
                             hwa::debug!(
                                 "\t- constraint = {:?} bound = {:?}",
                                 curr_vmax,
                                 curr_boundary
                             );
                             hwa::debug!("\t= v_margin: {:?}", v_marginal_gain);
-                            curr_segment.speed_enter_constrained_wu_s = v_marginal_gain;
-                            curr_segment.speed_exit_constrained_wu_s = v_marginal_gain;
+                            curr_segment.speed_enter_constrained_su_s = v_marginal_gain;
+                            curr_segment.speed_exit_constrained_su_s = v_marginal_gain;
 
                             hwa::debug!(
                                 "s: vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}] / d = {:?}",
-                                curr_segment.speed_enter_wu_s,
-                                curr_segment.speed_enter_constrained_wu_s,
-                                curr_segment.speed_target_wu,
-                                curr_segment.speed_exit_constrained_wu_s,
-                                curr_segment.speed_exit_wu_s,
-                                curr_segment.displacement_wu
+                                curr_segment.speed_enter_su_s,
+                                curr_segment.speed_enter_constrained_su_s,
+                                curr_segment.speed_target_su_s,
+                                curr_segment.speed_exit_constrained_su_s,
+                                curr_segment.speed_exit_su_s,
+                                curr_segment.displacement_su
                             );
 
                             hwa::debug!("\t= max_gain: {:?}", v_marginal_gain);
@@ -474,9 +473,9 @@ impl MotionPlanner {
                                                 prev_segment.unit_vector_dir, curr_segment.unit_vector_dir, proj
                                             );
                                             hwa::debug!("\ts : vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}]:",
-                                                prev_segment.speed_enter_wu_s, prev_segment.speed_enter_constrained_wu_s,
-                                                prev_segment.speed_target_wu,
-                                                prev_segment.speed_exit_wu_s, prev_segment.speed_exit_constrained_wu_s,
+                                                prev_segment.speed_enter_su_s, prev_segment.speed_enter_constrained_su_s,
+                                                prev_segment.speed_target_su_s,
+                                                prev_segment.speed_exit_su_s, prev_segment.speed_exit_constrained_su_s,
                                             );
                                             hwa::debug!("\t\tproj = {:?}", proj);
                                             cfg_if::cfg_if! {
@@ -491,14 +490,22 @@ impl MotionPlanner {
                                     _ => {}
                                 }
                             }
+                            #[cfg(feature = "debug-motion")]
                             hwa::info!(
                                 "[MotionPlanner] order_num:{:?} L:{:?} MotionPlan queued. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
                                 order_num, line_tag.unwrap_or(0),
-                                curr_segment.src_pos, curr_segment.dest_pos, curr_segment.speed_target_wu,
-                                curr_segment.unit_vector_dir.abs() * curr_segment.speed_target_wu
+                                curr_segment.src_pos, curr_segment.dest_pos,
+                                curr_segment.speed_target_su_s,
+                                curr_segment.unit_vector_dir.abs() * curr_segment.speed_target_su_s
                             );
-                            self.motion_status
-                                .update_last_planned_position(order_num, &curr_segment.dest_pos);
+                            {
+                                let pos = hwa::controllers::Position::new_from(
+                                    curr_segment.dest_world_pos,
+                                    curr_segment.dest_pos,
+                                );
+                                self.motion_status
+                                    .update_last_planned_position(order_num, &pos);
+                            }
                             (
                                 PlanEntry::PlannedMove(
                                     curr_segment,
@@ -603,17 +610,6 @@ impl MotionPlanner {
         &self.motion_driver
     }
 
-    pub fn mc_set_max_speed(
-        &self,
-        mutex_guard: &mut MutexGuard<
-            <hwa::types::MotionDriverMutexStrategy as AsyncMutexStrategy>::AsyncMutexType,
-            motion::MotionConfigContent,
-        >,
-        speed: TVector<u32>,
-    ) {
-        mutex_guard.max_speed.assign(CoordSel::all_axis(), &speed);
-    }
-
     /// Plans and schedules a series of motion commands based on the given GCode.
     ///
     /// Depending on the provided GCode, this method performs different motion planning
@@ -714,40 +710,74 @@ impl MotionPlanner {
         mnemonic: &'static str,
         channel: hwa::CommChannel,
         action: hwa::DeferAction,
-        p1_t: TVector<Real>,
+        p1_wu: TVector<Real>,
         requested_motion_speed: Option<Real>,
         blocking: bool,
         event_bus: &hwa::types::EventBus,
         num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
-        let p0 = self
-            .motion_status
-            .get_last_planned_position()
-            .ok_or(control::CodeExecutionFailure::HomingRequired)?;
-        let p1 = if self.motion_status.is_absolute_positioning() {
-            p1_t
-        } else {
-            p0 + p1_t
+        let p0_pos = self.motion_status.get_current_position();
+        let relevant_world_coords = p1_wu.not_nan_coords();
+
+        if !p0_pos.is_set {
+            return Err(control::CodeExecutionFailure::HomingRequired);
+        }
+
+        #[cfg(feature = "debug-motion")]
+        hwa::info!(
+            "[MotionPlanner] order_num:{:?} L:{:?} Received motion. world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
+            num, line.unwrap_or(0),
+            p0_pos.world_pos.selecting(relevant_world_coords), Contract::WORLD_UNIT_MAGNITUDE,
+            p1_wu, Contract::WORLD_UNIT_MAGNITUDE,
+            self.motion_status.is_absolute_positioning(), requested_motion_speed,
+            Contract::WORLD_UNIT_MAGNITUDE
+        );
+
+        let p1_pos = {
+            if self.motion_status.is_absolute_positioning() {
+                p0_pos.complete_and_project(&p1_wu)
+            } else {
+                p0_pos.complete_and_project(&(p0_pos.world_pos + p1_wu))
+            }
         };
 
         //----
-        let dts = self.motion_config.get_default_travel_speed_as_real();
+        let dts = self.motion_config.get_default_travel_speed();
         let flow_rate = self.motion_config.get_flow_rate_as_real();
         let speed_rate = self.motion_config.get_speed_rate_as_real();
-        let max_speed = self.motion_config.get_max_speed_as_vector_real();
-        let max_accel = self.motion_config.get_max_accel_as_vector_real();
-        let max_jerk = self.motion_config.get_max_jerk_as_vector_real();
+        let max_speed = self.motion_config.get_max_speed();
+        let max_accel = self.motion_config.get_max_accel();
+        let max_jerk = self.motion_config.get_max_jerk();
         //----
 
         // Compute distance and decompose as unit vector and module.
         // When dist is zero, value is map to None (NaN).
         // In case o E dimension, flow rate factor is applied
-        let ds = p1 - p0;
+        let ds = p1_pos.space_pos - p0_pos.space_pos;
+        let relevant_space_coords = ds.not_negligible_coords();
+
+        hwa::debug!(
+            "[MotionPlanner] order_num:{:?} L:{:?} Relevant space coords: [{:?}]",
+            num,
+            line.unwrap_or(0),
+            relevant_space_coords
+        );
+
+        #[cfg(feature = "debug-motion")]
+        hwa::info!(
+            "[MotionPlanner] order_num:{:?} L:{:?} Transformed to space [ src: [{:?}] dest: [{:?}] ] {}, speed: {:?} {}/s",
+            num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords),
+            p1_pos.space_pos.selecting(relevant_space_coords),
+            Contract::SPACE_UNIT_MAGNITUDE,
+            requested_motion_speed,
+            Contract::SPACE_UNIT_MAGNITUDE,
+        );
+
         let (unit_vector_dir, module_target_distance) = ds
             .map_values(|coord, coord_value| match coord {
                 #[cfg(feature = "with-e-axis")]
-                CoordSel::E => match coord_value.is_zero() {
+                hwa::CoordSel::E => match coord_value.is_zero() {
                     true => None,
                     false => Some(coord_value * flow_rate),
                 },
@@ -777,9 +807,11 @@ impl MotionPlanner {
             .unwrap_or(math::ZERO);
 
         let move_result = if module_target_distance.is_negligible() {
+            #[cfg(feature = "debug-motion")]
             hwa::info!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Discarding plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
-                num, line.unwrap_or(0), p0, p1, module_target_speed, speed_vector
+                num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords),
+                p1_pos.space_pos.selecting(relevant_space_coords), module_target_speed, speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
         } else if !module_target_speed.is_zero()
@@ -787,16 +819,17 @@ impl MotionPlanner {
             && !module_target_jerk.is_zero()
         {
             let segment_data = motion::Segment {
-                speed_enter_wu_s: Real::zero(),
-                speed_exit_wu_s: Real::zero(),
-                speed_target_wu: module_target_speed,
-                displacement_wu: module_target_distance,
-                speed_enter_constrained_wu_s: Real::zero(),
-                speed_exit_constrained_wu_s: Real::zero(),
+                speed_enter_su_s: Real::zero(),
+                speed_exit_su_s: Real::zero(),
+                speed_target_su_s: module_target_speed,
+                displacement_su: module_target_distance,
+                speed_enter_constrained_su_s: Real::zero(),
+                speed_exit_constrained_su_s: Real::zero(),
                 proj_prev: Real::zero(),
                 unit_vector_dir,
-                src_pos: p0,
-                dest_pos: p1,
+                src_pos: p0_pos.space_pos.selecting(relevant_space_coords),
+                dest_pos: p1_pos.space_pos.selecting(relevant_space_coords),
+                dest_world_pos: p1_pos.world_pos.selecting(relevant_world_coords),
                 tool_power: Real::zero(),
                 constraints: control::motion::Constraints {
                     v_max: module_target_speed,
@@ -832,7 +865,7 @@ impl MotionPlanner {
         } else {
             hwa::warn!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Bad plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
-                num, line.unwrap_or(0), p0, p1, module_target_speed, speed_vector
+                num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords), p1_pos.space_pos.selecting(relevant_space_coords), module_target_speed, speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
         };
@@ -863,12 +896,16 @@ impl MotionPlanner {
             .await
         {
             Ok(_pos) => {
-                self.motion_status()
-                    .update_last_planned_position(order_num, &_pos);
+                self.motion_status().update_last_planned_position(
+                    order_num,
+                    &hwa::controllers::Position::new_with_world_projection(&_pos),
+                );
             }
             Err(_pos) => {
-                self.motion_status()
-                    .update_last_planned_position(order_num, &_pos);
+                self.motion_status().update_last_planned_position(
+                    order_num,
+                    &hwa::controllers::Position::new_with_world_projection(&_pos),
+                );
                 // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
                 // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
                 // return Err(())
@@ -955,7 +992,7 @@ fn perform_cornering(
             Ok(prev_segment_candidate) => {
                 if prev_segment_candidate.proj_next.is_defined_positive() {
                     left_offset = index;
-                    left_watermark = prev_segment_candidate.speed_enter_wu_s;
+                    left_watermark = prev_segment_candidate.speed_enter_su_s;
                 } else {
                     break;
                 }
@@ -979,8 +1016,8 @@ fn perform_cornering(
         } else if left_offset == right_offset {
             let mid_segment = rb.mut_planned_segment_from_tail(left_offset)?;
 
-            mid_segment.speed_enter_wu_s = left_watermark;
-            mid_segment.speed_exit_wu_s = right_watermark;
+            mid_segment.speed_enter_su_s = left_watermark;
+            mid_segment.speed_exit_su_s = right_watermark;
             break;
         } else {
             let (left_segment, right_segment) =
@@ -994,31 +1031,32 @@ fn perform_cornering(
 
             hwa::trace!("\tleft [{}] right[{}]", left_offset, right_offset);
 
-            let left_max_inc = (left_segment.proj_next * left_segment.speed_target_wu)
-                .min(left_segment.speed_exit_constrained_wu_s);
+            let left_max_inc = (left_segment.proj_next * left_segment.speed_target_su_s)
+                .min(left_segment.speed_exit_constrained_su_s);
 
-            let right_max_inc = (right_segment.proj_prev * right_segment.speed_target_wu)
-                .min(right_segment.speed_enter_constrained_wu_s);
+            let right_max_inc = (right_segment.proj_prev * right_segment.speed_target_su_s)
+                .min(right_segment.speed_enter_constrained_su_s);
 
-            let water_left = (left_watermark + left_max_inc).min(left_segment.speed_target_wu);
-            let water_right = (right_watermark + right_max_inc).min(right_segment.speed_target_wu);
+            let water_left = (left_watermark + left_max_inc).min(left_segment.speed_target_su_s);
+            let water_right =
+                (right_watermark + right_max_inc).min(right_segment.speed_target_su_s);
 
             if water_left <= water_right {
                 // Flood at right
                 hwa::trace!("flood to right  [{:?} {:?}]", water_left, water_right);
-                left_segment.speed_enter_wu_s = left_watermark;
-                left_segment.speed_exit_wu_s = water_left;
-                right_segment.speed_enter_wu_s = water_left;
-                right_segment.speed_exit_wu_s = right_watermark;
+                left_segment.speed_enter_su_s = left_watermark;
+                left_segment.speed_exit_su_s = water_left;
+                right_segment.speed_enter_su_s = water_left;
+                right_segment.speed_exit_su_s = right_watermark;
                 left_watermark = water_left;
                 left_offset -= 1;
             } else {
                 // Flood at left
                 hwa::trace!("flood to left [{:?} {:?}]", water_left, water_right);
-                left_segment.speed_enter_wu_s = left_watermark;
-                left_segment.speed_exit_wu_s = water_right;
-                right_segment.speed_enter_wu_s = water_right;
-                right_segment.speed_exit_wu_s = right_watermark;
+                left_segment.speed_enter_su_s = left_watermark;
+                left_segment.speed_exit_su_s = water_right;
+                right_segment.speed_enter_su_s = water_right;
+                right_segment.speed_exit_su_s = right_watermark;
                 right_watermark = water_right;
                 right_offset += 1;
             }
@@ -1035,7 +1073,7 @@ fn perform_cornering(
 #[allow(unused)]
 pub fn display_content(
     rb: &MutexGuard<
-        <hwa::types::MotionRingBufferMutexStrategy as AsyncMutexStrategy>::AsyncMutexType,
+        <hwa::types::MotionRingBufferMutexStrategy as hwa::AsyncMutexStrategy>::AsyncMutexType,
         RingBuffer,
     >,
     left_offset: u8,
@@ -1046,7 +1084,7 @@ pub fn display_content(
         let s = rb.planned_segment_from_tail(left_offset - i).unwrap();
         stb.push(format!(
             "[{:?},{:?}]",
-            s.speed_enter_wu_s, s.speed_exit_wu_s
+            s.speed_enter_su_s, s.speed_exit_su_s
         ))
     }
 

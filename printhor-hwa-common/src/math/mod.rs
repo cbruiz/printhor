@@ -17,6 +17,8 @@ cfg_if::cfg_if! {
         mod constants_fixedpoint;
         pub use real_fixedpoint::*;
         pub use constants_fixedpoint::*;
+        pub use rust_decimal;
+        pub use rust_decimal_macros;
     }
     else {
         compile_error!("Real arithmetic backend not selected");

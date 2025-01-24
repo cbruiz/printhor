@@ -70,7 +70,9 @@ where
 
     /// Remove the queued value in this `Config`, if any.
     pub fn reset(&self) {
-        self.state.lock(|cell| cell.set(State::None));
+        self.state.lock(|cell| {
+            cell.set(State::None);
+        });
     }
 
     fn poll_wait(&self, cx: &mut Context<'_>) -> Poll<T> {
@@ -89,7 +91,7 @@ where
                     Poll::Pending
                 }
                 State::Waiting(w) => {
-                    //info!("Poll State::Waiting.2");
+                    hwa::error!("Poll State::Waiting.2");
                     cell.set(State::Waiting(cx.waker().clone()));
                     w.wake();
                     Poll::Pending

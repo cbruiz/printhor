@@ -38,7 +38,7 @@ cfg_if::cfg_if! {
         pub type MotionPinsMutexType = hwa::SyncCsMutexType;
         pub type MotionSignalMutexType = hwa::AsyncNoopMutexType;
         pub type MotionRingBufferMutexType = hwa::AsyncNoopMutexType;
-        pub type MotionConfigMutexType = hwa::AsyncNoopMutexType;
+        pub type MotionConfigMutexType = hwa::AsyncCsMutexType;
         pub type MotionStatusMutexType = hwa::AsyncNoopMutexType;
         pub type MotionDriverMutexType = hwa::AsyncNoopMutexType;
 
@@ -47,9 +47,26 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
+        pub type MotionBroadcastChannelMutexType = hwa::AsyncCsMutexType;
+
+        pub type MotionSenderMutexType = I2cMutexType;
+
+        pub type MotionSenderMutexStrategy = hwa::AsyncStandardStrategy<MotionSenderMutexType, super::device::MotionSender>;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-spi")] {
         pub type Spi1MutexType = hwa::AsyncNoopMutexType;
         pub type Spi1MutexStrategyType = hwa::AsyncHoldableStrategy<Spi1MutexType, super::device::Spi>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-i2c")] {
+        pub type I2cMutexType = hwa::AsyncCsMutexType;
+        pub type I2cMutexStrategyType = hwa::AsyncStandardStrategy<I2cMutexType, super::device::I2c>;
     }
 }
 

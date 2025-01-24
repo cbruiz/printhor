@@ -112,6 +112,7 @@ impl GCodeMultiplexedInputStream {
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.get_state(),
             hwa::CommChannel::Internal => async_gcode::AsyncParserState::ErrorRecovery,
+            hwa::CommChannel::Sink => async_gcode::AsyncParserState::ErrorRecovery,
         }
     }
 
@@ -125,6 +126,7 @@ impl GCodeMultiplexedInputStream {
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.get_line(),
             hwa::CommChannel::Internal => 0,
+            hwa::CommChannel::Sink => 0,
         }
     }
 
@@ -137,18 +139,20 @@ impl GCodeMultiplexedInputStream {
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.gcode_line(),
             hwa::CommChannel::Internal => None,
+            hwa::CommChannel::Sink => None,
         }
     }
 
-    pub fn reset(&mut self, comm_channel: hwa::CommChannel) {
+    pub async fn reset(&mut self, comm_channel: hwa::CommChannel) {
         match comm_channel {
             #[cfg(feature = "with-serial-usb")]
-            hwa::CommChannel::SerialUsb => self.serial_usb_line_parser.reset(),
+            hwa::CommChannel::SerialUsb => self.serial_usb_line_parser.reset().await,
             #[cfg(feature = "with-serial-port-1")]
-            hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.reset(),
+            hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.reset().await,
             #[cfg(feature = "with-serial-port-2")]
-            hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.reset(),
+            hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.reset().await,
             hwa::CommChannel::Internal => {}
+            hwa::CommChannel::Sink => {}
         }
     }
 }

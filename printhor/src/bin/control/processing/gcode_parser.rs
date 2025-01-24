@@ -219,6 +219,7 @@ where
                                         None => {
                                             match raw_gcode_spec.take() {
                                                 None => {
+                                                    #[cfg(feature = "trace-commands")]
                                                     hwa::warn!("Ignoring empty line");
                                                     continue;
                                                 } // Empty line. Just ignore
@@ -274,9 +275,9 @@ where
     }
 
     #[allow(unused)]
-    pub fn reset(&mut self) {
-        hwa::warn!("AsyncGcodeParser reset");
-        self.raw_parser.reset();
+    pub async fn reset(&mut self) {
+        hwa::debug!("AsyncGcodeParser reset");
+        self.raw_parser.reset().await;
     }
 
     #[allow(unused)]

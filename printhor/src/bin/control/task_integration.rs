@@ -191,14 +191,32 @@ pub async fn task_integration(
             5,
             Some(5),
             control::GCodeValue::G92(control::EXYZ {
+                #[cfg(feature = "with-e-axis")]
+                e: Some(math::ZERO),
                 #[cfg(feature = "with-x-axis")]
                 x: Some(math::ZERO),
                 #[cfg(feature = "with-y-axis")]
                 y: Some(math::ZERO),
                 #[cfg(feature = "with-z-axis")]
                 z: Some(math::ZERO),
-                #[cfg(feature = "with-e-axis")]
-                e: Some(math::ZERO),
+                #[cfg(feature = "with-a-axis")]
+                a: None,
+                #[cfg(feature = "with-b-axis")]
+                b: None,
+                #[cfg(feature = "with-c-axis")]
+                c: None,
+                #[cfg(feature = "with-i-axis")]
+                i: None,
+                #[cfg(feature = "with-j-axis")]
+                j: None,
+                #[cfg(feature = "with-k-axis")]
+                k: None,
+                #[cfg(feature = "with-u-axis")]
+                u: None,
+                #[cfg(feature = "with-v-axis")]
+                v: None,
+                #[cfg(feature = "with-w-axis")]
+                w: None,
             }),
         );
 

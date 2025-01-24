@@ -8,6 +8,8 @@ use embassy_time::Duration;
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 use hwa::math;
+#[allow(unused)]
+use hwa::HwiContract;
 use math::Real;
 use math::{ArithmeticOps, CoordSel, TVector};
 
@@ -167,7 +169,7 @@ impl MotionDriver {
         #[cfg(feature = "trace-commands")]
         hwa::info!(
             "[trace-commands] [Homing] Steps per {}: {:?}",
-            Contract::WORLD_UNIT_MAGNITUDE,
+            hwa::Contract::WORLD_UNIT_MAGNITUDE,
             _steps_per_world_unit
         );
         let _machine_bounds = motion_config.get_machine_bounds();
