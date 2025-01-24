@@ -1,9 +1,8 @@
-
 use crate::hwa;
-use hwa::SyncMutexStrategy;
 use hwa::math::{CoordSel, Real, TVector};
+use hwa::SyncMutexStrategy;
 #[allow(unused)]
-use hwa::{Contract,HwiContract};
+use hwa::{Contract, HwiContract};
 
 /// Wraps the actual motion status
 pub struct MotionStatus {
@@ -18,8 +17,12 @@ impl MotionStatus {
     pub fn set_real_current_position(&self, _order_num: u32, pos: &TVector<Real>) {
         self.cfg.apply_mut(|m| {
             m.current_real_position_wu.replace(*pos);
-            hwa::info!("[MotionStatus] order_num:{:?} Real position set to [{:?}] {}",
-                _order_num, m.current_real_position_wu, Contract::WORLD_UNIT_MAGNITUDE);
+            hwa::info!(
+                "[MotionStatus] order_num:{:?} Real position set to [{:?}] {}",
+                _order_num,
+                m.current_real_position_wu,
+                Contract::WORLD_UNIT_MAGNITUDE
+            );
         });
     }
 
@@ -32,7 +35,11 @@ impl MotionStatus {
     /***
     Update last planned position. E is always ignored (So far, only relative E moves are implemented)
      */
-    pub fn update_last_planned_position(&self, _order_num: u32, updated_position_coords: &TVector<Real>) {
+    pub fn update_last_planned_position(
+        &self,
+        _order_num: u32,
+        updated_position_coords: &TVector<Real>,
+    ) {
         self.cfg.apply_mut(|m| {
             if let Some(last_position) = &mut m.last_planned_position_wu {
                 cfg_if::cfg_if! {
@@ -62,7 +69,11 @@ impl MotionStatus {
         });
     }
 
-    pub fn update_current_real_position(&self, _order_num: u32, updated_position_coords: &TVector<Real>) {
+    pub fn update_current_real_position(
+        &self,
+        _order_num: u32,
+        updated_position_coords: &TVector<Real>,
+    ) {
         self.cfg.apply_mut(|m| {
             if let Some(last_position) = &mut m.current_real_position_wu {
                 cfg_if::cfg_if! {

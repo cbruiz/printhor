@@ -226,7 +226,6 @@ mod tests {
 
     #[test]
     fn test_segment_iterator() {
-
         let constraints = Constraints {
             v_max: Real::from_f32(10.0),
             a_max: Real::from_f32(2.0),

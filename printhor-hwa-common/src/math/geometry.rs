@@ -550,16 +550,13 @@ where
     where
         T: ArithmeticOps + core::ops::Sub<Output = T>,
     {
-        self.map_values(
-            |_c, _v| {
-                if !_v.is_defined_positive() {
-                    Some(T::zero() - T::one())
-                }
-                else {
-                    Some(T::one())
-                }
+        self.map_values(|_c, _v| {
+            if !_v.is_defined_positive() {
+                Some(T::zero() - T::one())
+            } else {
+                Some(T::one())
             }
-        )
+        })
     }
 
     pub fn map<U, F>(&self, _f: F) -> TVector<U>

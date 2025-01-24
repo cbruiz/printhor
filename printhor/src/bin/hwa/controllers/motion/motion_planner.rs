@@ -497,10 +497,8 @@ impl MotionPlanner {
                                 curr_segment.src_pos, curr_segment.dest_pos, curr_segment.speed_target_wu,
                                 curr_segment.unit_vector_dir.abs() * curr_segment.speed_target_wu
                             );
-                            self.motion_status.update_last_planned_position(
-                                order_num,
-                                &curr_segment.dest_pos
-                            );
+                            self.motion_status
+                                .update_last_planned_position(order_num, &curr_segment.dest_pos);
                             (
                                 PlanEntry::PlannedMove(
                                     curr_segment,
@@ -852,7 +850,11 @@ impl MotionPlanner {
         }
     }
 
-    pub async fn do_homing(&self, order_num: u32, event_bus: &hwa::types::EventBus) -> Result<(), ()> {
+    pub async fn do_homing(
+        &self,
+        order_num: u32,
+        event_bus: &hwa::types::EventBus,
+    ) -> Result<(), ()> {
         match self
             .motion_driver
             .lock()
@@ -861,10 +863,12 @@ impl MotionPlanner {
             .await
         {
             Ok(_pos) => {
-                self.motion_status().update_last_planned_position(order_num, &_pos);
+                self.motion_status()
+                    .update_last_planned_position(order_num, &_pos);
             }
             Err(_pos) => {
-                self.motion_status().update_last_planned_position(order_num, &_pos);
+                self.motion_status()
+                    .update_last_planned_position(order_num, &_pos);
                 // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
                 // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
                 // return Err(())

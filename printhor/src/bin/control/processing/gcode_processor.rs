@@ -298,12 +298,10 @@ impl GCodeProcessor {
                     .await?)
             }
             #[cfg(feature = "with-motion")]
-            GCodeValue::G4(_) => {
-                Ok(self
-                    .motion_planner
-                    .plan(channel, &gc, _blocking, &self.event_bus)
-                    .await?)
-            }
+            GCodeValue::G4(_) => Ok(self
+                .motion_planner
+                .plan(channel, &gc, _blocking, &self.event_bus)
+                .await?),
 
             #[cfg(feature = "with-motion")]
             GCodeValue::G10 => Ok(CodeExecutionSuccess::OK),
@@ -398,8 +396,7 @@ impl GCodeProcessor {
                             .motion_status()
                             .update_current_real_position(gc.order_num, &pos);
                         break;
-                    }
-                    else {
+                    } else {
                         hwa::debug!("Spinning until move queue empty");
                         embassy_time::Timer::after_millis(500).await;
                     }
@@ -430,8 +427,7 @@ impl GCodeProcessor {
                     .await;
                 if dry_run_set {
                     let _ = self.write(channel, "echo: DRY_RUN mode enabled\n").await;
-                }
-                else {
+                } else {
                     let _ = self.write(channel, "echo: DRY_RUN mode disabled\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
@@ -454,7 +450,7 @@ impl GCodeProcessor {
                 }
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-trinamic")] {
-                        let _ = self.motion_planner.motion_driver.lock().await.trinamic_controller.init().await.is_ok();
+                        let _ = self.motion_planner.motion_driver().lock().await.trinamic_controller.init().await.is_ok();
                     }
                 }
                 #[cfg(feature = "with-ps-on")]
@@ -770,7 +766,7 @@ impl GCodeProcessor {
                  */
                 let success = {
                     self.motion_planner
-                        .motion_driver
+                        .motion_driver()
                         .lock()
                         .await
                         .trinamic_controller
