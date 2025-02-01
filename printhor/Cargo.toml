@@ -16,7 +16,8 @@ status = "experimental"
 
 [features]
 # Highly convenient for development. Meaning any other build needs to be like: cargo [...] --no-default-features
-default = ["native",
+default = [
+    "native",
     "with-serial-usb",
     "with-serial-port-1",
     "with-serial-port-2",

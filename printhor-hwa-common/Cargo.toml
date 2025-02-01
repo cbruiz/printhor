@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std"]
-default = ["std", "with-log"]
+default = ["std", "with-log", "float-point-f32-impl", "with-x-axis", "with-y-axis", "with-z-axis"]
 nightly = []
 executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
@@ -42,9 +42,9 @@ with-sd-card = ["async-gcode", "embedded-sdmmc", "heapless"]
 with-print-job = []
 with-trinamic = []
 
-fixed-point-128-impl = ["printhor-hwa-common-macros/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common-macros/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 with-x-axis = []
 with-y-axis = []

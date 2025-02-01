@@ -323,7 +323,7 @@ mod test {
         hwa::info!("{:?}", ch2);
         assert_ne!(ch2, ch3);
 
-        assert_eq!(hwa::CommChannel::count(), 4);
+        assert_eq!(hwa::CommChannel::count(), 5);
 
         let c0 = hwa::CommChannel::SerialUsb;
         let c1 = hwa::CommChannel::SerialPort1;

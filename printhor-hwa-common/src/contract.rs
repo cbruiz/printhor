@@ -2,7 +2,6 @@ use crate as hwa;
 #[allow(unused)]
 use hwa::traits;
 
-use crate::CoordSel;
 use core::future;
 
 ///! This module contains the interface contract of HWI boards
@@ -113,7 +112,7 @@ pub trait HwiContract: Sized {
             ///
             /// Represent the world point reached when Homing performs
             const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
-                hwa::math::TVector::new_with_coord(CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
+                hwa::math::TVector::new_with_coord(hwa::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
             };
 
             /// Transforms a World position to (Work)space position. By default, identity transform applied
