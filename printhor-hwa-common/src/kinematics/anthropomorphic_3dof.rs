@@ -4,9 +4,10 @@ use crate as hwa;
 use hwa::kinematics::WorldToSpaceTransformer;
 use hwa::math;
 use math::{CoordSel, Real, TVector};
-
+use printhor_hwa_common_macros::make_real;
 //#region "SingleActuator"
 
+/// Single 3DOF actuator/effector Denavit–Hartenberg parameters
 pub struct SingleActuator {
     /// Body height
     pub h: Real,
@@ -209,15 +210,11 @@ fn inverse_kinematics(
         .get_coord(_actuator.rel_z_coord)
         .unwrap_or(math::ZERO);
 
-    hwa::debug!("[i_kine] | xyz => [{:?}, {:?}, {:?}]", x, y, z);
-
     let theta1_r = y.atan2(x);
 
     let px = x - _actuator.l1 * theta1_r.cos();
     let py = y - _actuator.l1 * theta1_r.sin();
     let pz = z - _actuator.h;
-
-    hwa::debug!("[i_kine] | px,py,pz => [{:?}, {:?}, {:?}]", px, py, pz);
 
     let cos_theta3 =
         (px.powi(2) + py.powi(2) + pz.powi(2) - _actuator.l2.powi(2) - _actuator.l3.powi(2))
@@ -228,29 +225,53 @@ fn inverse_kinematics(
     let theta2_r = pz.atan2(((px * px) + (py * py)).sqrt().unwrap())
         - (_actuator.l3 * theta3_r.sin()).atan2(_actuator.l2 + _actuator.l3 * theta3_r.cos());
 
-    let theta1 = theta1_r.r2d() - hwa::make_real!(90.0) + _actuator.initial_theta1;
-    let theta2 = -theta2_r.r2d();
-    let theta3 = theta3_r.r2d();
-
-    hwa::debug!(
-        "[i_kine] theta = [{:?}, {:?}, {:?}]",
-        theta1,
-        theta2,
-        theta3
-    );
+    let theta1 = theta1_r.r2d() - _actuator.initial_theta1;
+    let theta2 = theta2_r.r2d() - _actuator.initial_theta2;
+    let theta3 = theta3_r.r2d() - _actuator.initial_theta3;
 
     p.set_coord(_actuator.rel_x_coord, Some(theta1));
     p.set_coord(_actuator.rel_y_coord, Some(theta2));
-    p.set_coord(_actuator.rel_z_coord, Some(theta3));
+    if theta3 > make_real!(90.0) {
+        p.set_coord(_actuator.rel_z_coord, Some(theta3 - make_real!(180.0)));
+    }
+    else if theta3 < make_real!(-90.0) {
+        p.set_coord(_actuator.rel_z_coord, Some(theta3 + make_real!(180.0)));
+    }
 
     Ok(p)
 }
 
 /// Computes the direct kinematics for a 3-DOF anthropomorphic manipulator (R-R-R in 3D)
+///
+/// https://www.geogebra.org/3d/hujnva2f
+///
+/// ```text
+/// tep1 = Rz(theta_1) * Trans(L_1, 0, H) =
+///  | cos(theta_1)   -sin(theta_1)  0             L_1 * cos(theta_1)   |
+///  | sin(theta_1)   cos(theta_1)   0             L_1 * sin(theta_1)   |
+///  | 0              0              0             H                    |
+///  | 0              0              0             1                    |
+///
+/// tep2 = Ry(theta_2) * Trans(L_2, 0, 0) =
+///  | cos(theta_2)   0              sin(theta_2)   L_2 * cos(theta_2)  |
+///  | 0              1              0              0                   |
+///  | -sin(theta_2)  0              cos(theta_2)   -L_2 * sin(theta_2) |
+///  | 0              0              0              1                   |
+///
+/// tep3 = Ry(theta_3) * Trans(L_3, 0, 0) =
+///  | cos(theta_3)   0            sin(theta_3)     L_3 * cos(theta_3)  |
+///  | 0              1            0                0                   |
+///  | -sin(theta_3)  0            cos(theta_3)     -L_3 * sin(theta_3) |
+///  | 0              0            0                1                   |
+///
+/// direct_kine_efector = tep1 (*) tep2 (*) tep3 (*) (0;0;0;1)
+/// ```
+///
 fn direct_kinematics(
     space_pos: &TVector<Real>,
     _actuator: &SingleActuator,
 ) -> Result<TVector<Real>, ()> {
+
     hwa::debug!(
         "[kine] | h = {:?}, l1 = {:?}, l2 = {:?}, l3 = {:?}",
         _actuator.h,
@@ -261,49 +282,94 @@ fn direct_kinematics(
 
     let mut p = *space_pos;
 
-    let theta1_d = space_pos
-        .get_coord(_actuator.theta1_coord)
-        .unwrap_or(math::ZERO)
+    let theta1_d = space_pos.get_coord(_actuator.theta1_coord).unwrap_or(math::ZERO)
         + _actuator.initial_theta1;
-    let theta2_d = space_pos
-        .get_coord(_actuator.theta2_coord)
-        .unwrap_or(math::ZERO)
+    let theta2_d = space_pos.get_coord(_actuator.theta2_coord).unwrap_or(math::ZERO)
         + _actuator.initial_theta2;
-    let theta3_d = space_pos
-        .get_coord(_actuator.theta3_coord)
-        .unwrap_or(math::ZERO)
+    let theta3_d = space_pos.get_coord(_actuator.theta3_coord).unwrap_or(math::ZERO)
         + _actuator.initial_theta3;
 
-    hwa::debug!(
-        "[kine] | theta => [{:?}, {:?}, {:?}]",
-        theta1_d,
-        theta2_d,
-        theta3_d
-    );
+    let theta_1 = theta1_d.d2r();
+    let theta_2 = theta2_d.d2r();
+    let theta_3 = theta3_d.d2r();
 
-    let theta1 = theta1_d.d2r();
-    let theta2 = theta2_d.d2r();
-    let theta3 = theta3_d.d2r();
+    // Not yet optimized for readability
 
-    let proj_xy = _actuator.l1 + (_actuator.l2 * theta2.cos()) + (_actuator.l3 * theta3.cos());
-    let rel_x = proj_xy * theta1.sin();
-    let rel_y = proj_xy * theta1.cos();
-    let rel_z = _actuator.h + (_actuator.l2 * theta2.sin()) + (_actuator.l3 * theta3.sin());
+    let rel_x = {
+        (_actuator.l1 * theta_1.cos())
+            + (_actuator.l2 * theta_1.cos() * theta_2.cos())
+            - (_actuator.l3 * theta_1.cos() * theta_2.sin() * theta_3.sin())
+            + (_actuator.l3 * theta_1.cos() * theta_2.cos() * theta_3.cos())
+    };
 
-    hwa::debug!(
-        "[kine] | l2 sin(theta2): {:?} ",
-        _actuator.l2 * theta2.sin()
-    );
-    hwa::debug!(
-        "[kine] | l3 sin(theta3): {:?} ",
-        _actuator.l3 * theta3.sin()
-    );
+    let rel_y = {
+        (_actuator.l1 * theta_1.sin())
+            + (_actuator.l2 * theta_1.sin() * theta_2.cos())
+            - (_actuator.l3 * theta_1.sin() * theta_2.sin() * theta_3.sin())
+            + (_actuator.l3 * theta_1.sin() * theta_2.cos() * theta_3.cos())
+    };
 
-    hwa::debug!("[kine] xyz = [{:?}, {:?}, {:?}]", rel_x, rel_y, rel_z);
+    let rel_z = {
+        (_actuator.h)
+            - (_actuator.l2 * theta_2.sin())
+            - (_actuator.l3 * theta_2.sin() * theta_3.cos())
+            - (_actuator.l3 * theta_3.sin() * theta_2.cos())
+    };
 
     p.set_coord(_actuator.rel_x_coord, Some(rel_x));
     p.set_coord(_actuator.rel_y_coord, Some(rel_y));
     p.set_coord(_actuator.rel_z_coord, Some(rel_z));
 
     Ok(p)
+}
+
+#[cfg(test)]
+mod tests {
+    use printhor_hwa_common_macros::make_vector_real;
+    use crate as hwa;
+    use crate::kinematics::anthropomorphic_3dof::{direct_kinematics, inverse_kinematics, SingleActuator};
+    use crate::math;
+    use crate::math::TVector;
+
+    #[test]
+    fn test_kinematics() {
+        use crate::kinematics::anthropomorphic_3dof::SingleActuator;
+
+        let actuator = SingleActuator::new(
+            // Height
+            hwa::make_real!(70.0),
+            // L1 length
+            hwa::make_real!(24.0),
+            // L2 length
+            hwa::make_real!(55.0),
+            // L3 length
+            hwa::make_real!(70.0),
+            // theta1 initial angle
+            hwa::make_real!(45.0),
+            // theta2 initial angle
+            hwa::make_real!(0.0),
+            // theta3 initial angle
+            hwa::make_real!(90.0),
+            // Which world coordinates labels to get from input
+            hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z,
+            // Which space coordinates by label to use for output 
+            hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z,
+        );
+
+        let space_pos = hwa::make_vector_real!(x=0.0, y=0.0, z=0.0);
+        // Project (0,0,0) in space units to world to get the final effector position
+        let world_absolute_pos = direct_kinematics(&space_pos, &actuator).unwrap();
+        // Coordinate translation: Assuming the initial position of final effector is 0,0,0
+        let world_center = make_vector_real!(x=55.8614311, y=55.8614311, z=0.0);
+        // Compute relative world position.
+        let world_pos = world_absolute_pos - world_center;
+
+        // Deviation from expected world_pos
+        let distance_1 = world_pos.norm2().unwrap();
+        assert!(distance_1.is_negligible(), "World Projection is negligible compared to expected");
+
+        let space_absolute_pos = inverse_kinematics(&world_absolute_pos, &actuator).unwrap();
+        let distance_2 = space_absolute_pos.norm2().unwrap();
+        assert!(distance_1.is_negligible(), "Space Projection is negligible compared to expected");
+    }
 }

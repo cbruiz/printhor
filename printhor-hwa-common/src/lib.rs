@@ -305,6 +305,7 @@ mod test {
     use crate as hwa;
     use crate::CoordSel;
 
+
     #[cfg(all(
         feature = "with-serial-usb",
         feature = "with-serial-port-1",

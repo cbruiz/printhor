@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std"]
-default = ["std", "with-log", "float-point-f32-impl", "with-x-axis", "with-y-axis", "with-z-axis"]
+default = ["std", "with-motion", "with-motion-anthropomorphic-kinematics", "with-log", "float-point-f32-impl", "with-x-axis", "with-y-axis", "with-z-axis"]
 nightly = []
 executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
