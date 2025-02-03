@@ -72,8 +72,9 @@ impl Position {
     }
 
     pub fn update_from_space_coordinates(&mut self, updated_space_coordinates: &TVector<Real>) {
-        self.space_pos
-            .assign_if_set(CoordSel::motion_relevant_axis(), updated_space_coordinates);
+        #[cfg(feature = "debug-motion")]
+        hwa::info!("Updating space coords {:#?}", CoordSel::motion_relevant_axis());
+        self.space_pos.assign_if_set(CoordSel::motion_relevant_axis(), updated_space_coordinates);
         match Contract.project_to_world(&self.space_pos) {
             Ok(world_pos) => {
                 self.is_set = true;
@@ -123,7 +124,7 @@ impl MotionStatus {
             );
             #[cfg(feature = "debug-motion")]
             hwa::info!(
-                "[MotionStatus] order_num:{:?} Last planned position updated to space: [{:?}] {}",
+                "[MotionStatus] order_num:{:?} Last planned position updated to space: [{:#?}] {}",
                 _order_num,
                 m.last_planned_position.space_pos,
                 Contract::SPACE_UNIT_MAGNITUDE,
@@ -144,7 +145,7 @@ impl MotionStatus {
             );
             #[cfg(feature = "debug-motion")]
             hwa::info!(
-                "[MotionStatus] order_num:{:?} Current position updated to space: [{:?}] {}",
+                "[MotionStatus] order_num:{:?} Current position updated to space: [{:#?}] {}",
                 _order_num,
                 m.current_position.space_pos,
                 Contract::SPACE_UNIT_MAGNITUDE,

@@ -4,6 +4,8 @@
 ## Configuration - BEGIN ##
 ###########################
 
+EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "16384"
+
 ## Heater and bed configuration (thermistor based) ##
 
 # [Depends on the board] the pull-up resistance of hot-end sensor circuit in ohms
@@ -22,8 +24,8 @@ HOT_BED_THERM_BETA = "3950.0"
 
 ## Pure technical stuff ##
 
-DEFMT_LOG = "info"
-RUST_LOG = "INFO"
+#DEFMT_LOG = "INFO"
+#RUST_LOG = "INFO"
 ASYNC_STD_THREAD_COUNT = "1"
 EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 
@@ -31,12 +33,18 @@ EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 ## Configuration -  END  ##
 ###########################
 
+[target.'cfg(board="native")']
+
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
 runner = "probe-run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s}"
 rustflags = [ "-C", "linker=flip-link" ]
+linker = "flip-link"
 
 [target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32L476RGTx --connect-under-reset --disable-progressbars --log-format {L}{s}"
+runner = "probe-rs run --chip STM32L476RGTx --log-format {L}{s}"
+rustflags = [ "-C", "linker=flip-link" ]
+linker = "flip-link"
+
 
 [target.'cfg(all(any(board="skr_mini_e3_v2"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s} --base-address 08007000 --connect-under-reset"

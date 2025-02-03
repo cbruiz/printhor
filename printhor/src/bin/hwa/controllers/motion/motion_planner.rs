@@ -492,7 +492,7 @@ impl MotionPlanner {
                             }
                             #[cfg(feature = "debug-motion")]
                             hwa::info!(
-                                "[MotionPlanner] order_num:{:?} L:{:?} MotionPlan queued. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
+                                "[MotionPlanner] order_num:{:?} L:{:?} MotionPlan queued. space src: [{:#?}], dest: [{:#?}], vmax: [ {:?}, [{:?}] ]",
                                 order_num, line_tag.unwrap_or(0),
                                 curr_segment.src_pos, curr_segment.dest_pos,
                                 curr_segment.speed_target_su_s,
@@ -726,8 +726,9 @@ impl MotionPlanner {
 
         #[cfg(feature = "debug-motion")]
         hwa::info!(
-            "[MotionPlanner] order_num:{:?} L:{:?} Received motion. world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
+            "[MotionPlanner] order_num:{:?} L:{:?} Received motion. relevant world coords: [{:?}] world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
             num, line.unwrap_or(0),
+            relevant_world_coords,
             p0_pos.world_pos.selecting(relevant_world_coords), Contract::WORLD_UNIT_MAGNITUDE,
             p1_wu, Contract::WORLD_UNIT_MAGNITUDE,
             self.motion_status.is_absolute_positioning(), requested_motion_speed,
@@ -757,8 +758,9 @@ impl MotionPlanner {
         let ds = p1_pos.space_pos - p0_pos.space_pos;
         let relevant_space_coords = ds.not_negligible_coords();
 
-        hwa::debug!(
-            "[MotionPlanner] order_num:{:?} L:{:?} Relevant space coords: [{:?}]",
+        #[cfg(feature = "debug-motion")]
+        hwa::info!(
+            "[MotionPlanner] order_num:{:?} L:{:?} Relevant space coords: [{:#?}]",
             num,
             line.unwrap_or(0),
             relevant_space_coords
@@ -766,7 +768,7 @@ impl MotionPlanner {
 
         #[cfg(feature = "debug-motion")]
         hwa::info!(
-            "[MotionPlanner] order_num:{:?} L:{:?} Transformed to space [ src: [{:?}] dest: [{:?}] ] {}, speed: {:?} {}/s",
+            "[MotionPlanner] order_num:{:?} L:{:?} Motion transformed to space [ src: [{:#?}] dest: [{:#?}] ] {}, speed: {:?} {}/s",
             num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords),
             p1_pos.space_pos.selecting(relevant_space_coords),
             Contract::SPACE_UNIT_MAGNITUDE,
@@ -811,7 +813,7 @@ impl MotionPlanner {
             hwa::info!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Discarding plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
                 num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords),
-                p1_pos.space_pos.selecting(relevant_space_coords), module_target_speed, speed_vector
+                p1_pos.space_pos.selecting(relevant_space_coords), module_target_speed.rdp(3), speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
         } else if !module_target_speed.is_zero()

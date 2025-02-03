@@ -53,7 +53,7 @@ impl MotionConfig {
             m.max_speed_su = speed;
         });
         hwa::info!(
-            "[MotionConfig] Max speed set to {:?} {}/s",
+            "[MotionConfig] Max speed set to {:#?} {}/s",
             speed,
             Contract::SPACE_UNIT_MAGNITUDE
         );
@@ -64,7 +64,7 @@ impl MotionConfig {
             m.max_accel_su.assign(CoordSel::all_axis(), &accel);
         });
         hwa::info!(
-            "[MotionConfig] Max accel set to {:?} {}/s^2",
+            "[MotionConfig] Max accel set to {:#?} {}/s^2",
             accel,
             Contract::SPACE_UNIT_MAGNITUDE
         );
@@ -75,7 +75,7 @@ impl MotionConfig {
             m.max_jerk_su.assign(CoordSel::all_axis(), &jerk);
         });
         hwa::info!(
-            "[MotionConfig] Max jerk set to {:?} {}/s^3",
+            "[MotionConfig] Max jerk set to {:#?} {}/s^3",
             jerk,
             Contract::SPACE_UNIT_MAGNITUDE
         );
@@ -88,11 +88,11 @@ impl MotionConfig {
 
     pub fn set_space_units_per_world_unit(&self, upm: TVector<Real>) {
         self.cfg.apply_mut(|m| {
-            m.units_per_world_magnitude = upm;
+            m.units_per_space_magnitude = upm;
         });
         hwa::info!(
-            "[MotionConfig] Units per {} set to {:?}",
-            Contract::WORLD_UNIT_MAGNITUDE,
+            "[MotionConfig] Space units per {} set to {:#?}",
+            Contract::SPACE_UNIT_MAGNITUDE,
             upm
         );
     }
@@ -108,9 +108,9 @@ impl MotionConfig {
             m.default_travel_speed = speed;
         });
         hwa::info!(
-            "[MotionConfig] Default travel speed set to {:?} {}/s",
+            "[MotionConfig] Default travel speed set to {:#?} {}/s",
             speed,
-            Contract::WORLD_UNIT_MAGNITUDE
+            Contract::SPACE_UNIT_MAGNITUDE
         );
     }
 
@@ -119,39 +119,39 @@ impl MotionConfig {
             m.micro_steps_per_axis = micro_steps;
         });
         hwa::info!(
-            "[MotionConfig] Micro-steps per axis set to {:?}",
+            "[MotionConfig] Micro-steps per space axis set to {:#?}",
             micro_steps
         );
     }
 
-    pub fn set_workspace_center(&self, center: TVector<Real>) {
+    pub fn set_world_center(&self, center: TVector<Real>) {
         self.cfg.apply_mut(|m| {
             m.world_center_wu = center;
         });
         hwa::info!(
-            "[MotionConfig] WorkSpace center set to [{:?}] {}",
+            "[MotionConfig] World center (reference zero) set to [{:?}] {}",
             center,
-            Contract::SPACE_UNIT_MAGNITUDE,
+            Contract::WORLD_UNIT_MAGNITUDE,
         );
     }
 
     pub fn set_world_size(&self, size: TVector<Real>) {
         self.cfg.apply_mut(|m| m.world_size_wu = size);
         hwa::info!(
-            "[MotionConfig] WorkSpace size set to [{:?}] {}",
+            "[MotionConfig] World size set to [{:?}] {}",
             size,
-            Contract::SPACE_UNIT_MAGNITUDE,
+            Contract::WORLD_UNIT_MAGNITUDE,
         );
         hwa::info!(
-            "[MotionConfig] WorkSpace bounds updated to: [ [{:?}], [{:?}] ] {}",
+            "[MotionConfig] World bounds updated to: [ [{:?}], [{:?}] ] {}",
             -(size / hwa::math::TWO),
             (size / hwa::math::TWO),
-            Contract::SPACE_UNIT_MAGNITUDE,
+            Contract::WORLD_UNIT_MAGNITUDE,
         );
     }
 
-    pub fn get_units_per_world_magnitude(&self) -> TVector<Real> {
-        self.cfg.apply(|m| m.units_per_world_magnitude)
+    pub fn get_units_per_space_magnitude(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.units_per_space_magnitude)
     }
 
     pub fn get_micro_steps(&self) -> TVector<u16> {
@@ -163,8 +163,8 @@ impl MotionConfig {
             .map_values(|_c, v| Some(Real::from_lit(v.into(), 0)))
     }
 
-    pub fn get_steps_per_world_unit_as_vector(&self) -> TVector<Real> {
-        self.get_units_per_world_magnitude() * self.get_micro_steps_as_vector()
+    pub fn get_steps_per_space_unit_as_vector(&self) -> TVector<Real> {
+        self.get_units_per_space_magnitude() * self.get_micro_steps_as_vector()
     }
 
     fn get_flow_rate(&self) -> u8 {
@@ -221,8 +221,8 @@ pub struct MotionConfigContent {
     /// Default travel speed in world magnitude units per second.
     pub default_travel_speed: Real,
 
-    /// Units per millimeters NOT considering micro-stepping.
-    pub units_per_world_magnitude: TVector<Real>,
+    /// Units per space magnitude NOT considering micro-stepping.
+    pub units_per_space_magnitude: TVector<Real>,
 
     /// Machine's motion bounds.
     pub world_center_wu: TVector<Real>,
@@ -244,7 +244,7 @@ impl MotionConfigContent {
             max_accel_su: TVector::new(),
             max_speed_su: TVector::new(),
             max_jerk_su: TVector::new(),
-            units_per_world_magnitude: TVector::new(),
+            units_per_space_magnitude: TVector::new(),
             world_center_wu: TVector::new(),
             world_size_wu: TVector::new(),
             micro_steps_per_axis: TVector::new(),

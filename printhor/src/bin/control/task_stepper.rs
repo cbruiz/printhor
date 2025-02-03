@@ -230,13 +230,13 @@ pub async fn task_stepper(
 
                 #[cfg(feature = "debug-motion")]
                 hwa::info!(
-                    "[task_stepper] order_num:{:?} Current real position: [{:?}] {}",
+                    "[task_stepper] order_num:{:?} Current real position: [{:#?}] {}",
                     _order_num,
                     current_real_pos.space_pos,
                     Contract::SPACE_UNIT_MAGNITUDE,
                 );
                 #[cfg(feature = "debug-motion")]
-                hwa::info!("[task_stepper] order_num:{:?} MotionPlan dequeued. vector displacement space: [{:?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
+                hwa::info!("[task_stepper] order_num:{:?} MotionPlan dequeued. vector displacement space: [{:#?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
                     _order_num,
                     segment.unit_vector_dir * segment.displacement_su,
                     Contract::SPACE_UNIT_MAGNITUDE,
@@ -258,10 +258,10 @@ pub async fn task_stepper(
                 );
 
                 #[cfg(feature = "debug-motion")]
-                hwa::info!("[task_stepper] order_num:{:?} MotionPlan refined. vector displacement space: [{:?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
+                hwa::info!("[task_stepper] order_num:{:?} MotionPlan refined. vector displacement space: [{:#?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
                     _order_num,
                     segment.unit_vector_dir * segment.displacement_su,
-                    Contract::WORLD_UNIT_MAGNITUDE,
+                    Contract::SPACE_UNIT_MAGNITUDE,
                     segment.speed_enter_su_s,
                     segment.speed_exit_su_s,
                 );
@@ -316,9 +316,9 @@ pub async fn task_stepper(
                         }
 
                         // Steps per world unit ratio
-                        let steps_per_wu: TVector<Real> = motion_planner
+                        let steps_per_su: TVector<Real> = motion_planner
                             .motion_config()
-                            .get_units_per_world_magnitude()
+                            .get_units_per_space_magnitude()
                             * motion_planner.motion_config().get_micro_steps_as_vector();
 
                         #[cfg(feature = "with-motion-broadcast")]
@@ -334,7 +334,7 @@ pub async fn task_stepper(
                                     .with_coord(relevant_coords.complement(), None)
                                     .abs(),
                                 segment.displacement_su,
-                                steps_per_wu.with_coord(relevant_coords.complement(), None),
+                                steps_per_su.with_coord(relevant_coords.complement(), None),
                             );
 
                         #[cfg(feature = "verbose-timings")]
@@ -473,8 +473,8 @@ pub async fn task_stepper(
                         let adv_pos = micro_segment_interpolator.advanced_world_units();
 
                         #[cfg(feature = "debug-motion")]
-                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:?}] {} [{:?}] steps",
-                            _order_num, adv_pos, Contract::WORLD_UNIT_MAGNITUDE, adv_steps.excluding_negligible()
+                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {} [{:#?}] steps",
+                            _order_num, adv_pos, Contract::SPACE_UNIT_MAGNITUDE, adv_steps.excluding_negligible()
                         );
 
                         cfg_if::cfg_if! {
@@ -516,7 +516,7 @@ pub async fn task_stepper(
                                 use crate::control::motion::profile::MotionProfile;
 
                                 //global_timer = embassy_time::Instant::now();
-                                hwa::info!("[task_stepper] v_0: {:?}, v_lim: {:?}, v_1: {:?}; t: {:?}; dist: {{ [{:?}] {}, |dist|: {:?} {}, steps: [{:?}] }}; [{:?} moves left]",
+                                hwa::info!("[task_stepper] v_0: {:?}, v_lim: {:?}, v_1: {:?}; t: {:?}; dist: {{ [{:#?}] {}, |dist|: {:?} {}, steps: [{:#?}] }}; [{:?} moves left]",
                                     segment.speed_enter_su_s.rdp(3).inner(),
                                     trajectory.v_lim.rdp(3).inner(),
                                     segment.speed_exit_su_s.rdp(3).inner(),
@@ -539,7 +539,12 @@ pub async fn task_stepper(
                         // segment end
                     }
                     Err(_) => {
-                        unreachable!("Unable to compute motion plan")
+                        hwa::error!("Unable to compute motion plan. Discarding...");
+                        let moves_left = motion_planner.consume_current_plan(&event_bus).await;
+                        event_bus
+                            .publish_event(EventStatus::not_containing(EventFlags::MOVING))
+                            .await;
+                        moves_left
                     }
                 }
             }

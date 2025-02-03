@@ -2,6 +2,7 @@
 use printhor_hwa_common as hwa;
 #[allow(unused)]
 use hwa::math;
+use hwa::HwiContract;
 
 #[cfg(feature = "with-serial-usb")]
 compile_error!("Not supported");
@@ -169,6 +170,9 @@ impl MotionI2c {
         let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
         let pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();
 
+        const PRESCALE:u8 = 126;
+        hwa::info!("I2C Prescale: {}", PRESCALE);
+
         let mut instance = Self {
             pwm,
             state: [pwm_pca9685::ChannelOnOffControl{
@@ -178,17 +182,22 @@ impl MotionI2c {
                 full_off: false,
             }; 16],
         };
-        for _servo in hwa::math::CoordSel::all_axis().iter() {
-            instance.set_angle(_servo, &math::ZERO);
-        }
-        let cmd_timeout = embassy_time::Duration::from_millis(10);
+
+        let world_center = crate::Contract::DEFAULT_WORLD_HOMING_POINT_WU;
+        hwa::info!("I2C: Proyecting {:?}", world_center);
+        let space_center = crate::Contract.project_to_space(&world_center).unwrap();
+        hwa::info!("I2C: Got {:?}", space_center);
+        space_center.foreach_values(|_c, _v| {
+            instance.set_angle(_c, _v);
+        });
+        let cmd_timeout = embassy_time::Duration::from_millis(500);
 
         let got_timeout =
             if embassy_time::with_timeout(cmd_timeout, instance.pwm.disable()).await.is_err() {
                 true
             }
             else {
-                if embassy_time::with_timeout(cmd_timeout, instance.pwm.set_prescale(123)).await.is_err() {
+                if embassy_time::with_timeout(cmd_timeout, instance.pwm.set_prescale(PRESCALE)).await.is_err() {
                     true
                 }
                 else {
@@ -212,20 +221,28 @@ impl MotionI2c {
     }
 
     pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
+
+        let calibrated_angle = (
+            (*angle)
+            + crate::board_stm32l4::ANTHROPOMORFIC_SPACE_CALIBRATION.get_coord(axis).unwrap_or(math::ZERO)
+        ) * crate::board_stm32l4::ANTHROPOMORFIC_SPACE_DIR.get_coord(axis).unwrap_or(math::ZERO);
+
+
         //Theoretically, should be:
-        // let pwm = (
-        //             (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
-        //         ).max(205).min(409) as u16;
-        // that is: (100 ... 300 ... 500) for -90, 0 and 90º respectively
+        // cnt_min (1ms := -90º) = (4096 / 20) + 0.5 - 1 = 204.3
+        // cnt_max (2ms := +90º) = 2 * (4095) / 20 + 0.5 -1 = 409.0
         // but your mileage may vary, because (100, ..., 300, .. 500) is the best accuracy result
         // with some analog servos (tested with TowerPro SG90 and brand-less MG90S)
-        let pwm = (
-            (math::Real::from_f32(300.0) + (math::Real::from_f32(10.0/3.0) * (*angle))).round().to_i32().unwrap()
-        ).max(100).min(500) as u16;
+        const PULSE_CENTER: hwa::math::Real = hwa::make_real!(309.0);
+        const CNT_BY_ANGLE: hwa::math::Real = hwa::make_real!(2.1944444444);
+        let pwm = ((calibrated_angle * CNT_BY_ANGLE) + PULSE_CENTER).round().to_i32().unwrap()
+            .max(110).min(500) as u16;
         let index = axis.index();
+
         if index < 16 {
+            //#[cfg(feature = "debug-motion-broadcast")]
+            hwa::info!("[task_motion_broadcast] set PWM [{:?}, {:?}] angle: ({:?})->{:?} : {:?} -> {:?}", axis, index, angle, calibrated_angle, self.state[index].off, pwm );
             if self.state[index].off != pwm {
-                //hwa::info!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
                 self.state[index].off = pwm;
                 true
             }
@@ -243,6 +260,9 @@ impl MotionI2c {
         let t0 = embassy_time::Instant::now();
         let _ = self.pwm.set_all_channels(&self.state).await;
         #[cfg(feature = "verbose-timings")]
-        hwa::debug!("I2C update took {:?} us", t0.elapsed().as_micros());
+        hwa::info!("I2C update took {:?} us", t0.elapsed().as_micros());
+    }
+
+    pub async fn reset(&mut self) {
     }
 }

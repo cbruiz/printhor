@@ -34,9 +34,12 @@ EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset --log-format {L}{s}"
 rustflags = [ "-C", "linker=flip-link" ]
+linker = "flip-link"
 
 [target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32L476RGTx --disable-progressbars"
+rustflags = [ "-C", "linker=flip-link" ]
+linker = "flip-link"
 
 [target.'cfg(all(any(board="skr_mini_e3_v2"), target_arch="arm", target_os="none"))']
 runner = "probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s} --base-address 08007000 --connect-under-reset"

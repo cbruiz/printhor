@@ -56,6 +56,8 @@ with-u-axis = []
 with-v-axis = []
 with-w-axis = []
 
+debug-motion-broadcast = []
+
 nightly = ["embassy-executor/nightly"]
 executor-interrupt = []
 verbose-timings = []
@@ -67,7 +69,7 @@ float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 
 [dependencies]
-embassy-executor = { version = "0.7", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-196608"] }
+embassy-executor = { version = "0.7", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-32768"] }
 embassy-sync = { version = "0.6", features = ["std"] }
 embassy-time = { version = "0.4", features = ["std", "generic-queue-64"] }
 embassy-futures = { version = "0.1", features = [] }

@@ -359,13 +359,19 @@ async fn report(
             }
         }
         Ok(control::CodeExecutionSuccess::DEFERRED(_)) => {
-            hwa::debug!("Control not sending (deferred)");
-            let s = alloc::format!("echo; promised {}\n", gc);
-            processor.write(channel, s.as_str()).await;
+            #[cfg(feature = "trace-commands")]
+            {
+                hwa::debug!("Control not sending (deferred)");
+                let s = alloc::format!("echo; promised {}\n", gc);
+                processor.write(channel, s.as_str()).await;
+            }
         }
         Ok(control::CodeExecutionSuccess::CONSUMED) => {
-            let s = alloc::format!("echo; already confirmed {}\n", gc);
-            processor.write(channel, s.as_str()).await;
+            #[cfg(feature = "trace-commands")]
+            {
+                let s = alloc::format!("echo; already confirmed {}\n", gc);
+                processor.write(channel, s.as_str()).await;
+            }
         }
         Err(_e) => {
             hwa::info!("Control sending ERR");

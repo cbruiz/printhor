@@ -632,13 +632,19 @@ impl GCodeProcessor {
                     .motion_planner
                     .motion_status()
                     .get_last_planned_position();
-                let _spos: hwa::controllers::Position =
+                let _rpos: hwa::controllers::Position =
                     self.motion_planner.motion_status().get_current_position();
-                // TODO: Use display
-                let z = alloc::format!("{} Count {}\n", _pos.world_pos, _spos.world_pos);
+                let z = alloc::format!("{:?} Count {:?}\n", _pos.world_pos, _rpos.world_pos.map(
+                    |_c, _v| {
+                        Some(0u32)
+                    }
+                    
+                ));
                 let _ = self.write(channel, z.as_str()).await;
-
-                Ok(CodeExecutionSuccess::OK)
+                let _ = self.write(channel, "ok").await;
+                let z2 = alloc::format!("echo: Space {:#?}\n", _rpos.space_pos);
+                let _ = self.write(channel, z2.as_str()).await;
+                Ok(CodeExecutionSuccess::CONSUMED)
             }
             GCodeValue::M115 => {
                 let _ = self.write(channel, "echo: FIRMWARE_NAME: ").await;

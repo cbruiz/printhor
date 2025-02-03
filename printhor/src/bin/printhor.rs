@@ -489,7 +489,7 @@ async fn init_controllers_and_spawn_tasks(
                 hwa::Contract::DEFAULT_MICRO_STEPS_PER_AXIS
             );
 
-            motion_config.set_workspace_center(
+            motion_config.set_world_center(
                 hwa::Contract::DEFAULT_WORLD_CENTER_WU
             );
 
@@ -503,8 +503,7 @@ async fn init_controllers_and_spawn_tasks(
             // Make homing unneeded
             hwa::warn!("Virtually homing");
             {
-                // FIXME!!!! -> WORLD
-                let pos = hwa::controllers::Position::new_from_space_projection(
+                let pos = hwa::controllers::Position::new_with_world_projection(
                     &Contract::DEFAULT_WORLD_HOMING_POINT_WU
                 );
                 motion_status.update_last_planned_position(0, &pos);

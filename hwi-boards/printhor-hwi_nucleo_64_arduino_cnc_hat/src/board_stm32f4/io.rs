@@ -70,6 +70,14 @@ impl MotionI2c {
         let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
         let pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();
 
+        // For PCA9685 with internal RC resonator (innacurate), according to specs,
+        // PRESCALE can be computed as:
+        //  PRESCALE = (25_000_000f32 - (25.0f32 * 4096.0f32)) / (50.0f32 * 4096.0f32);
+        // Ideally PRESCALE IS 121.57031250, so 121 rounding
+        // However, measuring with oscilloscope, prescale=126 shows a constant 20.07ms period
+        const PRESCALE:u8 = 126;
+        hwa::info!("I2C Prescale: {}", PRESCALE);
+
         let mut instance = Self {
             pwm,
             state: [pwm_pca9685::ChannelOnOffControl{
@@ -89,7 +97,7 @@ impl MotionI2c {
                 true
             }
             else {
-                if embassy_time::with_timeout(cmd_timeout, instance.pwm.set_prescale(123)).await.is_err() {
+                if embassy_time::with_timeout(cmd_timeout, instance.pwm.set_prescale(PRESCALE)).await.is_err() {
                     true
                 }
                 else {
@@ -114,19 +122,19 @@ impl MotionI2c {
 
     pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
         //Theoretically, should be:
-        // let pwm = (
-        //             (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
-        //         ).max(205).min(409) as u16;
-        // that is: (100 ... 300 ... 500) for -90, 0 and 90º respectively
+        // cnt_min (1ms := -90º) = (4096 / 20) + 0.5 - 1 = 204.3
+        // cnt_max (2ms := +90º) = 2 * (4095) / 20 + 0.5 -1 = 409.0
         // but your mileage may vary, because (100, ..., 300, .. 500) is the best accuracy result
         // with some analog servos (tested with TowerPro SG90 and brand-less MG90S)
-        let pwm = (
-            (math::Real::from_f32(300.0) + (math::Real::from_f32(10.0/3.0) * (*angle))).round().to_i32().unwrap()
-        ).max(100).min(500) as u16;
+        const PULSE_CENTER: hwa::math::Real = hwa::make_real!(309.0);
+        const CNT_BY_ANGLE: hwa::math::Real = hwa::make_real!(2.1944444444);
+        let pwm = (((*angle) * CNT_BY_ANGLE) + PULSE_CENTER).round().to_i32().unwrap()
+            .max(110).min(500) as u16;
         let index = axis.index();
         if index < 16 {
+            #[cfg(feature = "debug-motion-broadcast")]
+            hwa::info!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
             if self.state[index].off != pwm {
-                //hwa::info!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
                 self.state[index].off = pwm;
                 true
             }

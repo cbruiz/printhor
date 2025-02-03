@@ -1,4 +1,7 @@
 //#region "Async wrapper"
+#[allow(unused)]
+use crate as hwa;
+
 pub trait AsyncWrapperWriter<E> {
     fn wrapped_write(
         &mut self,
@@ -45,20 +48,20 @@ where
                     crate::warn!("Error sending")
                 }
             }
-            //embassy_time::Timer::after(embassy_time::Duration::from_millis(1)).await;
+            embassy_time::Timer::after(embassy_time::Duration::from_millis(1)).await;
             Ok(data.len())
         }
     }
     fn wrapped_flush(&mut self) -> impl core::future::Future<Output = ()> {
         async {
+            let d = embassy_time::Duration::from_ticks(
+                self._ticks_by_word * ((self.last_write_len + 1) as u64),
+            );
+            hwa::info!("flushing {} bytes ({}) us", self.last_write_len, d.as_micros());
             if self.last_write_len > 0 {
-                let _ = self.peri.flush().await;
-
-                let d = embassy_time::Duration::from_ticks(
-                    self._ticks_by_word * ((self.last_write_len + 1) as u64),
-                );
+                //let _ = self.peri.flush().await;
+                
                 embassy_time::Timer::after(d).await;
-
                 self.last_write_len = 0;
             }
         }

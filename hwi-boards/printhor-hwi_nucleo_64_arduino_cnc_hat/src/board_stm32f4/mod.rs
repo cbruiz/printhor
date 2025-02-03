@@ -37,7 +37,7 @@ impl HwiContract for Contract {
     //#region "Memory management/tracking settings"
 
     #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
-    const MAX_HEAP_SIZE_BYTES: usize = 256;
+    const MAX_HEAP_SIZE_BYTES: usize = 512;
 
     #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 8096;
@@ -709,7 +709,9 @@ impl HwiContract for Contract {
     where
         F: FnOnce() -> R,
     {
-        cortex_m::interrupt::free(|_| f())
+        // TODO: Suspecting it is causing issues... 
+        // cortex_m::interrupt::free(|_| f())
+        f()
     }
 
     cfg_if::cfg_if! {

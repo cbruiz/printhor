@@ -76,29 +76,28 @@ impl hwa::HwiContract for Contract {
                     const PHYSICAL_UNIT_MAGNITUDE: &'static str = "º";
 
                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(
-                            hwa::math::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(180.0)
-                        )
+                        ANTHROPOMORFIC_WORLD_SIZE_WU
                     };
 
                     const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(
-                            hwa::math::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(90.0)
-                        )
+                        ANTHROPOMORFIC_WORLD_CENTER_WU
                     };
 
                     const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        ANTHROPOMORFIC_WORLD_POS
+                       hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), hwa::make_optional_real!(0.0))
                     };
 
                     fn project_to_space(&self, world_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
                         use hwa::kinematics::WorldToSpaceTransformer;
-                        ANTHROPOMORFIC_TRANSFORMER.project_to_space(world_pos)
+                        let traslated_world_pos = world_pos.clone() + ANTHROPOMORFIC_WORLD_CENTER_WU;
+                        ANTHROPOMORFIC_TRANSFORMER.project_to_space(&traslated_world_pos)
                     }
 
                     fn project_to_world(&self, space_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
                         use hwa::kinematics::WorldToSpaceTransformer;
-                        ANTHROPOMORFIC_TRANSFORMER.project_to_world(space_pos)
+                        ANTHROPOMORFIC_TRANSFORMER.project_to_world(space_pos).and_then(|pos|
+                            Ok(pos - ANTHROPOMORFIC_WORLD_CENTER_WU)
+                        )
                     }
 
                     /// Default max speed in Physical Units / second
@@ -134,7 +133,7 @@ impl hwa::HwiContract for Contract {
                     ///
                     /// With PCA9685, which has 12 bits counter, it's 0.005000 period secs per count. Much higher than dead-band width.
                     const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(1))
+                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(100))
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
@@ -146,60 +145,46 @@ impl hwa::HwiContract for Contract {
                     #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 20;
 
+                    #[const_env::from_env("U_SEGMENT_QUEUE_SIZE")]
+                    const U_SEGMENT_QUEUE_SIZE: u8 = 10;
+
                 }
                 else if #[cfg(feature = "with-motion-delta-kinematics")] {
                     compile_error!("Work in progress");
                 }
                 else { // Implicitly Assume with-motion-cartessian-kinematic
-                    #[const_env::from_env("PHYSICAL_UNIT_MAGNITUDE")]
-                    const PHYSICAL_UNIT_MAGNITUDE: &'static str = "º";
 
                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(
-                            hwa::math::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(180.0)
-                        )
+                        hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
                     };
 
                     const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(
-                            hwa::math::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(90.0)
-                        )
+                        hwa::make_vector_real!(x=110.0, y=110.0, z=110.0)
                     };
 
-                    /// Default max speed in Physical Units / second
-                    /// Reference: MG90S Analog Servo: 0.1s/60º @4.8Volt => 600.240096 º/seg
                     const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), hwa::make_optional_real!(600.0))
+                        hwa::make_vector_real!(x=600.0, y=600.0, z=300.0, e=300.0)
                     };
-                    /// Default max speed in physical units by second
+
                     const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), hwa::make_optional_real!(1200.0))
+                        hwa::make_vector_real!(x=3600.0, y=3600.0, z=3600.0, e=3600.0)
                     };
-                    /// Default max speed in physical units by second
+
                     const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), hwa::make_optional_real!(2400.0))
+                        hwa::make_vector_real!(x=7200.0, y=7200.0, z=7200.0, e=7200.0)
                     };
                     /// Default max speed in physical units by second
                     const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
                         hwa::make_real!(600.0)
                     };
 
-                    /// Default units per workspace unit
-                    ///
-                    /// Reference: MG90S Analog Servo and PCA9685 (12 bit counter).
-                    ///
-                    /// pwm count by angle is 1.1375, which is higher than unit, so we are just the finest we can
                     const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), hwa::make_optional_real!(1.0))
+                       hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=50.0)
                     };
 
                     /// Default micro-steps per axis
-                    ///
-                    /// Reference: MG90S Analog Servo: Dead-band width: 5 µs:
-                    ///
-                    /// With PCA9685, which has 12 bits counter, it's 0.005000 period secs per count. Much higher than dead-band width.
                     const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(1))
+                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(2))
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
@@ -862,22 +847,67 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
 
         cfg_if::cfg_if! {
-            if #[cfg(any(
-                not(feature = "with-x-axis"), not(feature = "with-y-axis"), not(feature = "with-z-axis"),
-                not(feature = "with-a-axis"),not(feature = "with-b-axis"),not(feature = "with-c-axis"),
-                not(feature = "with-i-axis"),not(feature = "with-j-axis"),not(feature = "with-k-axis"),
-                not(feature = "with-u-axis"),not(feature = "with-v-axis"),not(feature = "with-w-axis")
-            ))] {
-                compile_error!("with-motion-anthropomorphic-kinematics requires all axis (x,y,z,a,b,c,i,j,k,u,v,w)");
+            if #[cfg(any(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))] {
+                // If ANY OF x, y, z is set...
+                cfg_if::cfg_if! {
+                    if #[cfg(not(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis")))] {
+                        // ALL x, y, z must be set...
+                        compile_error!("with-motion-anthropomorphic-kinematics requires all (x, y, z) axes if any of them is set");
+                    }
+                }
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))] {
+                // If ANY OF a, b, c is set...
+                cfg_if::cfg_if! {
+                    if #[cfg(not(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis")))] {
+                        // ALL a, c, c must be set...
+                        compile_error!("with-motion-anthropomorphic-kinematics requires all (a, b, c) axes if any of them is set");
+                    }
+                }
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))] {
+                // If ANY OF i, j, k is set...
+                cfg_if::cfg_if! {
+                    if #[cfg(not(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis")))] {
+                        // ALL i, j, k must be set...
+                        compile_error!("with-motion-anthropomorphic-kinematics requires all (i, j, k) axes if any of them is set");
+                    }
+                }
+            }
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))] {
+                // If ANY OF u, v, w is set...
+                cfg_if::cfg_if! {
+                    if #[cfg(not(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis")))] {
+                        // ALL u, v, w must be set...
+                        compile_error!("with-motion-anthropomorphic-kinematics requires all (u, v, w) axes if any of them is set");
+                    }
+                }
             }
         }
 
-        const ANTHROPOMORFIC_WORLD_POS: hwa::math::TVector<hwa::math::Real> = hwa::make_vector_real!(
-            x=0.0, y=0.0, z=0.0, a=0.0, b=0.0, c=0.0, i=0.0, j=0.0, k=0.0, u=0.0, v=0.0, w=0.0
+        const ANTHROPOMORFIC_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = hwa::make_vector_real!(
+            x=55.8614311, y=55.8614311, z=0.0,
+            a=55.8614311, b=55.8614311, c=0.0,
+            i=55.8614311, j=55.8614311, k=0.0,
+            u=55.8614311, v=55.8614311, w=0.0
+        );
+
+        const ANTHROPOMORFIC_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = hwa::make_vector_real!(
+            x=250.0, y=250.0, z=140.0,
+            a=250.0, b=250.0, c=140.0,
+            i=250.0, j=250.0, k=140.0,
+            u=250.0, v=250.0, w=140.0,
         );
 
         const ANTHROPOMORFIC_TRANSFORMER: hwa::kinematics::anthropomorphic_3dof::Quadruped =
             hwa::kinematics::anthropomorphic_3dof::Quadruped::new(
+                #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
                 hwa::kinematics::anthropomorphic_3dof::SingleActuator::new(
                     hwa::make_real!(70.0),
                     hwa::make_real!(24.0),
@@ -885,10 +915,11 @@ cfg_if::cfg_if! {
                     hwa::make_real!(70.0),
                     hwa::make_real!(45.0),
                     hwa::make_real!(0.0),
-                    hwa::make_real!(-90.0),
+                    hwa::make_real!(90.0),
                     hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z,
                     hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z,
                 ),
+            #[cfg(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))]
                 hwa::kinematics::anthropomorphic_3dof::SingleActuator::new(
                     hwa::make_real!(70.0),
                     hwa::make_real!(24.0),
@@ -896,10 +927,11 @@ cfg_if::cfg_if! {
                     hwa::make_real!(70.0),
                     hwa::make_real!(45.0),
                     hwa::make_real!(0.0),
-                    hwa::make_real!(-90.0),
+                    hwa::make_real!(90.0),
                     hwa::CoordSel::A, hwa::CoordSel::B, hwa::CoordSel::C,
                     hwa::CoordSel::A, hwa::CoordSel::B, hwa::CoordSel::C,
                 ),
+                #[cfg(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))]
                 hwa::kinematics::anthropomorphic_3dof::SingleActuator::new(
                     hwa::make_real!(70.0),
                     hwa::make_real!(24.0),
@@ -907,10 +939,11 @@ cfg_if::cfg_if! {
                     hwa::make_real!(70.0),
                     hwa::make_real!(45.0),
                     hwa::make_real!(0.0),
-                    hwa::make_real!(-90.0),
+                    hwa::make_real!(90.0),
                     hwa::CoordSel::I, hwa::CoordSel::J, hwa::CoordSel::K,
                     hwa::CoordSel::I, hwa::CoordSel::J, hwa::CoordSel::K,
                 ),
+                #[cfg(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))]
                 hwa::kinematics::anthropomorphic_3dof::SingleActuator::new(
                     hwa::make_real!(70.0),
                     hwa::make_real!(24.0),
@@ -918,7 +951,7 @@ cfg_if::cfg_if! {
                     hwa::make_real!(70.0),
                     hwa::make_real!(45.0),
                     hwa::make_real!(0.0),
-                    hwa::make_real!(-90.0),
+                    hwa::make_real!(90.0),
                     hwa::CoordSel::U, hwa::CoordSel::V, hwa::CoordSel::W,
                     hwa::CoordSel::U, hwa::CoordSel::V, hwa::CoordSel::W,
                 ),

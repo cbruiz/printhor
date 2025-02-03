@@ -358,6 +358,11 @@ impl SCurveMotionProfile {
         constraints: &Constraints,
         error_correction: bool,
     ) -> Result<SCurveMotionProfile, CodeExecutionFailure> {
+        
+        if constraints.v_max.is_negligible() || constraints.a_max.is_negligible() || constraints.j_max.is_negligible() {
+            hwa::warn!("Unable to perform movement: constraints are unset");
+            return Err(CodeExecutionFailure::NumericalError)
+        }
         // Clamp v_ma to be equal or higher than v_0 and v_1
         let v_min = v_0.max(v_1);
         let mut v_max = v_min.max(constraints.v_max);

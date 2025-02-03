@@ -303,8 +303,6 @@ impl<D> Copy for HwiResource<D> where D: Copy {}
 mod test {
     #[allow(unused)]
     use crate as hwa;
-    use crate::CoordSel;
-
 
     #[cfg(all(
         feature = "with-serial-usb",
@@ -314,13 +312,13 @@ mod test {
     #[test]
     fn test_some_objects() {
         let _nd = hwa::NoDevice::new();
-        let ch1 = hwa::CoordSel::E;
+        let ch1 = hwa::CoordSel::X;
         hwa::info!("{:?}", ch1);
         let mut ch2 = ch1.clone();
         assert_eq!(ch1, ch2);
         let ch3 = ch2;
         assert_eq!(ch2, ch3);
-        ch2.set(CoordSel::Y, true);
+        ch2.set(hwa::CoordSel::Y, true);
         hwa::info!("{:?}", ch2);
         assert_ne!(ch2, ch3);
 

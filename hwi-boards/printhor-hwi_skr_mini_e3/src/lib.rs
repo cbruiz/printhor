@@ -232,5 +232,7 @@ pub fn interrupt_free<F, R>(f: F) -> R
 where
     F: FnOnce() -> R,
 {
-    cortex_m::interrupt::free(|_| f())
+    // TODO: Suspecting it is causing issues... 
+    // cortex_m::interrupt::free(|_| f())
+    f()
 }

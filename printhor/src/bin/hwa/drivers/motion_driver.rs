@@ -158,11 +158,11 @@ impl MotionDriver {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-e-axis")] {
                 let _steps_per_world_unit = motion_config
-                    .get_steps_per_world_unit_as_vector()
+                    .get_steps_per_space_unit_as_vector()
                     .with_coord(CoordSel::E, None);
             }
             else {
-                let _steps_per_world_unit = motion_config.get_steps_per_world_unit_as_vector();
+                let _steps_per_world_unit = motion_config.get_steps_per_space_unit_as_vector();
             }
         }
 

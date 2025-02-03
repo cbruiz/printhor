@@ -41,6 +41,7 @@ verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_min
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
 debug-motion = []
+debug-motion-broadcast = []
 
 with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast"]
@@ -188,9 +189,10 @@ plot-motion-plan = ["gnuplot"]
 native = [
     "with-log",
     "debug-motion",
+    #"debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
-    "trace-commands",
+    #"trace-commands",
 
     "cornering",
 
@@ -221,9 +223,9 @@ native = [
     "with-motion-broadcast",
     "with-e-axis",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    "with-a-axis", "with-b-axis", "with-c-axis",
-    "with-i-axis", "with-j-axis", "with-k-axis",
-    "with-u-axis", "with-v-axis", "with-w-axis",
+    #"with-a-axis", "with-b-axis", "with-c-axis",
+    #"with-i-axis", "with-j-axis", "with-k-axis",
+    #"with-u-axis", "with-v-axis", "with-w-axis",
 
     #"plot-motion-plan",
     #"itertools",
@@ -272,6 +274,7 @@ mks_robin_nano = [
 nucleo64-l476rg = [
     "with-defmt",
     #"debug-motion",
+    #"debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
@@ -304,7 +307,7 @@ nucleo64-l476rg = [
     #"with-hot-bed", # CNC Hat does not have it
     #"with-fan-layer",
     #"with-laser",
-    #"with-ps-on",
+    "with-ps-on",
 
     #"enable_vrefint-with-delay",
 
@@ -316,7 +319,7 @@ nucleo64-l476rg = [
 ]
 nucleo64-f410rb = [
     "with-defmt",
-    #"debug-motion",
+    "debug-motion",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
@@ -325,12 +328,15 @@ nucleo64-f410rb = [
     "cooperative",
 
     "with-motion",
+    #"with-motion-anthropomorphic-kinematics",
     "with-motion-cartessian-kinematics",
+    #"with-motion-delta-kinematics",
+    "with-motion-broadcast",
     "with-x-axis", "with-y-axis", "with-z-axis",
 
     "with-serial-port-1",
     #"with-spi",
-    #"with-i2c",
+    "with-i2c",
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
     #"with-probe",
@@ -462,7 +468,7 @@ tst-rp2040 = [
 
 rp_2040 = [
     "printhor-hwi_rp_2040/without-uart-until_idle", "printhor-hwi_rp_2040/with-uart-buffered",
-    "embassy-executor",
+    "embassy-executor/executor-thread",
     "printhor-hwi_rp_2040",
     "cortex-m",
     "cortex-m-rt",
@@ -486,7 +492,7 @@ alloc-cortex-m = { version = "0.4", optional = true}
 critical-section = {version = "1.2", default-features = false}
 
 embassy-stm32 = { version = "0.2", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread"], optional = true }
+embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread"] }
 embassy-sync = { version = "0.6", features = [] }
 embassy-time = { version = "0.4", features = [] }
 embassy-futures = { version = "0.1", features = [] }
@@ -545,8 +551,6 @@ bitflags = { version = "2.6", default-features = false, features = [] }
 
 cfg-if = { version = "1.0", features = [] }
 const_env = { version = "0.1" }
-
-aquamarine = "0.6.0"
 
 [build-dependencies]
 #proc-macro2 = "1.0."

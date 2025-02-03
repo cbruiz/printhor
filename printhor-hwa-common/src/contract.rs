@@ -170,6 +170,10 @@ pub trait HwiContract: Sized {
             /// The queue size of Motion Planner RingBuffer
             /// Should be not very high, so capped to u8
             const SEGMENT_QUEUE_SIZE: u8;
+            
+            /// The queue size of Step Planner RingBuffer
+            /// Should be not very high, so capped to u8
+            const U_SEGMENT_QUEUE_SIZE: u8 = 2;
         }
     }
 

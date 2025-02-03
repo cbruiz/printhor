@@ -9,7 +9,7 @@ use hwa::math::Real;
 use num_traits::float::FloatCore;
 
 cfg_if::cfg_if! {
-    if #[cfg(any(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis",
+    if #[cfg(any(feature = "with-c-axis", feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis",
         feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"
     ))] {
         pub type AxisNativeType = u16;
@@ -24,50 +24,51 @@ bitflags! {
     pub struct CoordSel: AxisNativeType {
 
         const UNSET = 0b1 << 0;
+        const ALTERNATE_NAME = 0b1 << 1;
 
         #[cfg(feature = "with-e-axis")]
         /// E (Extruder) coordinate
-        const E = 0b1 << 1;
+        const E = 0b1 << 2;
 
         #[cfg(feature = "with-x-axis")]
         /// X axis coordinate
-        const X = 0b1 << 2;
+        const X = 0b1 << 3;
         #[cfg(feature = "with-y-axis")]
         /// Y axis coordinate
-        const Y = 0b1 << 3;
+        const Y = 0b1 << 4;
         #[cfg(feature = "with-z-axis")]
         /// Z axis coordinate
-        const Z = 0b1 << 4;
+        const Z = 0b1 << 5;
 
         #[cfg(feature = "with-a-axis")]
-        const A = 0b1 << 5;
+        const A = 0b1 << 6;
         /// A axis coordinate
         #[cfg(feature = "with-b-axis")]
-        const B = 0b1 << 6;
+        const B = 0b1 << 7;
         /// B axis coordinate
         #[cfg(feature = "with-c-axis")]
         /// C axis coordinate
-        const C = 0b1 << 7;
+        const C = 0b1 << 8;
 
         #[cfg(feature = "with-i-axis")]
         /// I axis coordinate
-        const I = 0b1 << 8;
+        const I = 0b1 << 9;
         #[cfg(feature = "with-j-axis")]
         /// J axis coordinate
-        const J = 0b1 << 9;
+        const J = 0b1 << 10;
         #[cfg(feature = "with-k-axis")]
         /// K axis coordinate
-        const K = 0b1 << 10;
+        const K = 0b1 << 11;
 
         #[cfg(feature = "with-u-axis")]
         /// U axis coordinate
-        const U = 0b1 << 11;
+        const U = 0b1 << 12;
         #[cfg(feature = "with-v-axis")]
         /// V axis coordinate
-        const V = 0b1 << 12;
+        const V = 0b1 << 13;
         #[cfg(feature = "with-w-axis")]
         /// W axis coordinate
-        const W = 0b1 << 13;
+        const W = 0b1 << 14;
     }
 }
 impl CoordSel {
@@ -228,9 +229,91 @@ impl CoordSel {
         axis_count
     }
 
+    pub const fn is_alternate(&self) -> bool {
+        self.contains(Self::ALTERNATE_NAME)
+    }
+
+    pub const fn alternative_name(&self) -> &'static str {
+        cfg_if::cfg_if! {
+            if #[cfg(any(feature = "with-motion-anthropomorphic-kinematics", feature = "with-motion-delta-kinematics"))] {
+                match *self {
+                    #[cfg(feature = "with-e-axis")]
+                    CoordSel::E => "E",
+                    //
+                    #[cfg(feature = "with-x-axis")]
+                    CoordSel::X => "θ(1)",
+                    #[cfg(feature = "with-y-axis")]
+                    CoordSel::Y => "ϕ(1)",
+                    #[cfg(feature = "with-z-axis")]
+                    CoordSel::Z => "ψ(1)",
+                    //
+                    #[cfg(feature = "with-a-axis")]
+                    CoordSel::A => "θ(2)",
+                    #[cfg(feature = "with-b-axis")]
+                    CoordSel::B => "ϕ(2)",
+                    #[cfg(feature = "with-c-axis")]
+                    CoordSel::C => "ψ(2)",
+                    //
+                    #[cfg(feature = "with-i-axis")]
+                    CoordSel::I => "θ(3)",
+                    #[cfg(feature = "with-j-axis")]
+                    CoordSel::J => "ϕ(3)",
+                    #[cfg(feature = "with-j-axis")]
+                    CoordSel::K => "ψ(3)",
+                    //
+                    #[cfg(feature = "with-u-axis")]
+                    CoordSel::U => "θ(4)",
+                    #[cfg(feature = "with-v-axis")]
+                    CoordSel::V => "ϕ(4)",
+                    #[cfg(feature = "with-w-axis")]
+                    CoordSel::W => "ψ(4)",
+                    _ => "?",
+                }
+            }
+            else {
+                self.name()
+            }
+        }
+    }
+    pub const fn name(&self) -> &'static str {
+        match *self {
+            #[cfg(feature = "with-e-axis")]
+            CoordSel::E => "E",
+            //
+            #[cfg(feature = "with-x-axis")]
+            CoordSel::X => "X",
+            #[cfg(feature = "with-y-axis")]
+            CoordSel::Y => "Y",
+            #[cfg(feature = "with-z-axis")]
+            CoordSel::Z => "Z",
+            //
+            #[cfg(feature = "with-a-axis")]
+            CoordSel::A => "A",
+            #[cfg(feature = "with-b-axis")]
+            CoordSel::B => "B",
+            #[cfg(feature = "with-c-axis")]
+            CoordSel::C => "C",
+            //
+            #[cfg(feature = "with-i-axis")]
+            CoordSel::I => "I",
+            #[cfg(feature = "with-j-axis")]
+            CoordSel::J => "J",
+            #[cfg(feature = "with-j-axis")]
+            CoordSel::K => "K",
+            //
+            #[cfg(feature = "with-u-axis")]
+            CoordSel::U => "U",
+            #[cfg(feature = "with-v-axis")]
+            CoordSel::V => "V",
+            #[cfg(feature = "with-w-axis")]
+            CoordSel::W => "W",
+            _w => "?",
+        }
+    }
+
     /// All motion relevant axis. Meaning INCLUDING Extruder (E)
     pub const fn all_axis() -> CoordSel {
-        CoordSel::all().difference(CoordSel::UNSET)
+        CoordSel::all().difference(CoordSel::from_bits_truncate(CoordSel::UNSET.bits() | CoordSel::ALTERNATE_NAME.bits()))
     }
 
     /// All motion relevant axis INCLUDING Extruder (E), if exists.
@@ -249,45 +332,18 @@ impl CoordSel {
 impl core::fmt::Debug for CoordSel {
     fn fmt(&self, _fmt: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut _spacing = false;
-        for _v in self.0.iter() {
+        for _v in CoordSel::all_axis().iter() {
             if self.contains(_v) {
                 if _spacing {
                     core::write!(_fmt, " | ")?
                 } else {
                     _spacing = true;
                 }
-                match _v {
-                    #[cfg(feature = "with-e-axis")]
-                    CoordSel::E => core::write!(_fmt, "E")?,
-                    //
-                    #[cfg(feature = "with-x-axis")]
-                    CoordSel::X => core::write!(_fmt, "X")?,
-                    #[cfg(feature = "with-y-axis")]
-                    CoordSel::Y => core::write!(_fmt, "Y")?,
-                    #[cfg(feature = "with-z-axis")]
-                    CoordSel::Z => core::write!(_fmt, "Z")?,
-                    //
-                    #[cfg(feature = "with-a-axis")]
-                    CoordSel::A => core::write!(_fmt, "A")?,
-                    #[cfg(feature = "with-b-axis")]
-                    CoordSel::B => core::write!(_fmt, "B")?,
-                    #[cfg(feature = "with-c-axis")]
-                    CoordSel::C => core::write!(_fmt, "C")?,
-                    //
-                    #[cfg(feature = "with-i-axis")]
-                    CoordSel::I => core::write!(_fmt, "I")?,
-                    #[cfg(feature = "with-j-axis")]
-                    CoordSel::J => core::write!(_fmt, "J")?,
-                    #[cfg(feature = "with-j-axis")]
-                    CoordSel::K => core::write!(_fmt, "K")?,
-                    //
-                    #[cfg(feature = "with-u-axis")]
-                    CoordSel::U => core::write!(_fmt, "U")?,
-                    #[cfg(feature = "with-v-axis")]
-                    CoordSel::V => core::write!(_fmt, "V")?,
-                    #[cfg(feature = "with-w-axis")]
-                    CoordSel::W => core::write!(_fmt, "W")?,
-                    _w => core::write!(_fmt, "{:?}?", _w.bits())?,
+                if _fmt.alternate() {
+                    core::write!(_fmt, "{}", _v.alternative_name())?
+                }
+                else {
+                    core::write!(_fmt, "{}", _v.name())?
                 }
             }
         }
@@ -299,45 +355,18 @@ impl core::fmt::Debug for CoordSel {
 impl defmt::Format for CoordSel {
     fn format(&self, _fmt: defmt::Formatter) {
         let mut _spacing = false;
-        for _v in self.0.iter() {
+        for _v in CoordSel::all_axis().iter() {
             if self.contains(_v) {
                 if _spacing {
                     defmt::write!(_fmt, " | ")
                 } else {
                     _spacing = true;
                 }
-                match _v {
-                    #[cfg(feature = "with-e-axis")]
-                    CoordSel::E => defmt::write!(_fmt, "E"),
-                    //
-                    #[cfg(feature = "with-x-axis")]
-                    CoordSel::X => defmt::write!(_fmt, "X"),
-                    #[cfg(feature = "with-y-axis")]
-                    CoordSel::Y => defmt::write!(_fmt, "Y"),
-                    #[cfg(feature = "with-z-axis")]
-                    CoordSel::Z => defmt::write!(_fmt, "Z"),
-                    //
-                    #[cfg(feature = "with-a-axis")]
-                    CoordSel::A => defmt::write!(_fmt, "A"),
-                    #[cfg(feature = "with-b-axis")]
-                    CoordSel::B => defmt::write!(_fmt, "B"),
-                    #[cfg(feature = "with-c-axis")]
-                    CoordSel::C => defmt::write!(_fmt, "C"),
-                    //
-                    #[cfg(feature = "with-i-axis")]
-                    CoordSel::I => defmt::write!(_fmt, "I"),
-                    #[cfg(feature = "with-j-axis")]
-                    CoordSel::J => defmt::write!(_fmt, "J"),
-                    #[cfg(feature = "with-j-axis")]
-                    CoordSel::K => defmt::write!(_fmt, "K"),
-                    //
-                    #[cfg(feature = "with-u-axis")]
-                    CoordSel::U => defmt::write!(_fmt, "U"),
-                    #[cfg(feature = "with-v-axis")]
-                    CoordSel::V => defmt::write!(_fmt, "V"),
-                    #[cfg(feature = "with-w-axis")]
-                    CoordSel::W => defmt::write!(_fmt, "W"),
-                    _w => defmt::write!(_fmt, "{:?}?", _w.bits()),
+                if self.is_alternate() {
+                    defmt::write!(_fmt, "{:a}", _v.alternative_name())
+                }
+                else {
+                    defmt::write!(_fmt, "{:a}", _v.name())
                 }
             }
         }
@@ -761,69 +790,67 @@ where
         });
     }
 
-    #[allow(unused)]
-    pub fn set_coord(&mut self, coord_idx: CoordSel, val: Option<T>) -> &Self {
+    pub fn set_coord(&mut self, _coord_idx: CoordSel, _val: Option<T>) -> &Self {
         #[cfg(feature = "with-e-axis")]
-        if coord_idx.contains(CoordSel::E) {
-            self.e = val
+        if _coord_idx.contains(CoordSel::E) {
+            self.e = _val
         }
         //
         #[cfg(feature = "with-x-axis")]
-        if coord_idx.contains(CoordSel::X) {
-            self.x = val
+        if _coord_idx.contains(CoordSel::X) {
+            self.x = _val
         }
         #[cfg(feature = "with-y-axis")]
-        if coord_idx.contains(CoordSel::Y) {
-            self.y = val
+        if _coord_idx.contains(CoordSel::Y) {
+            self.y = _val
         }
         #[cfg(feature = "with-z-axis")]
-        if coord_idx.contains(CoordSel::Z) {
-            self.z = val
+        if _coord_idx.contains(CoordSel::Z) {
+            self.z = _val
         }
         //
         #[cfg(feature = "with-a-axis")]
-        if coord_idx.contains(CoordSel::A) {
-            self.a = val
+        if _coord_idx.contains(CoordSel::A) {
+            self.a = _val
         }
         #[cfg(feature = "with-b-axis")]
-        if coord_idx.contains(CoordSel::B) {
-            self.b = val
+        if _coord_idx.contains(CoordSel::B) {
+            self.b = _val
         }
         #[cfg(feature = "with-c-axis")]
-        if coord_idx.contains(CoordSel::C) {
-            self.c = val
+        if _coord_idx.contains(CoordSel::C) {
+            self.c = _val
         }
         //
         #[cfg(feature = "with-i-axis")]
-        if coord_idx.contains(CoordSel::I) {
-            self.i = val
+        if _coord_idx.contains(CoordSel::I) {
+            self.i = _val
         }
         #[cfg(feature = "with-j-axis")]
-        if coord_idx.contains(CoordSel::J) {
-            self.j = val
+        if _coord_idx.contains(CoordSel::J) {
+            self.j = _val
         }
         #[cfg(feature = "with-k-axis")]
-        if coord_idx.contains(CoordSel::K) {
-            self.k = val
+        if _coord_idx.contains(CoordSel::K) {
+            self.k = _val
         }
         //
         #[cfg(feature = "with-u-axis")]
-        if coord_idx.contains(CoordSel::U) {
-            self.u = val
+        if _coord_idx.contains(CoordSel::U) {
+            self.u = _val
         }
         #[cfg(feature = "with-v-axis")]
-        if coord_idx.contains(CoordSel::V) {
-            self.v = val
+        if _coord_idx.contains(CoordSel::V) {
+            self.v = _val
         }
         #[cfg(feature = "with-w-axis")]
-        if coord_idx.contains(CoordSel::W) {
-            self.w = val
+        if _coord_idx.contains(CoordSel::W) {
+            self.w = _val
         }
 
         self
     }
 
-    #[allow(unused)]
     pub const fn get_coord(&self, coord_idx: CoordSel) -> Option<T> {
         match coord_idx {
             #[cfg(feature = "with-e-axis")]
@@ -860,76 +887,75 @@ where
         }
     }
 
-    #[allow(unused)]
-    pub fn increment(&mut self, coord_idx: CoordSel, val: T) -> &Self {
+    pub fn increment(&mut self, _coord_idx: CoordSel, _val: T) -> &Self {
         #[cfg(feature = "with-e-axis")]
-        if coord_idx.contains(CoordSel::E) {
-            self.e = self.e.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::E) {
+            self.e = self.e.and_then(|v| Some(v + _val))
         }
         //
         #[cfg(feature = "with-x-axis")]
-        if coord_idx.contains(CoordSel::X) {
-            self.x = self.x.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::X) {
+            self.x = self.x.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-y-axis")]
-        if coord_idx.contains(CoordSel::Y) {
-            self.y = self.y.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::Y) {
+            self.y = self.y.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-z-axis")]
-        if coord_idx.contains(CoordSel::Z) {
-            self.z = self.z.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::Z) {
+            self.z = self.z.and_then(|v| Some(v + _val))
         }
         //
         #[cfg(feature = "with-a-axis")]
-        if coord_idx.contains(CoordSel::A) {
-            self.a = self.a.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::A) {
+            self.a = self.a.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-b-axis")]
-        if coord_idx.contains(CoordSel::B) {
-            self.b = self.b.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::B) {
+            self.b = self.b.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-c-axis")]
-        if coord_idx.contains(CoordSel::C) {
-            self.c = self.c.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::C) {
+            self.c = self.c.and_then(|v| Some(v + _val))
         }
         //
         #[cfg(feature = "with-i-axis")]
-        if coord_idx.contains(CoordSel::I) {
-            self.i = self.i.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::I) {
+            self.i = self.i.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-j-axis")]
-        if coord_idx.contains(CoordSel::J) {
-            self.j = self.j.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::J) {
+            self.j = self.j.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-k-axis")]
-        if coord_idx.contains(CoordSel::K) {
-            self.k = self.k.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::K) {
+            self.k = self.k.and_then(|v| Some(v + _val))
         }
         //
         #[cfg(feature = "with-u-axis")]
-        if coord_idx.contains(CoordSel::U) {
-            self.u = self.u.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::U) {
+            self.u = self.u.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-v-axis")]
-        if coord_idx.contains(CoordSel::V) {
-            self.v = self.v.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::V) {
+            self.v = self.v.and_then(|v| Some(v + _val))
         }
         #[cfg(feature = "with-w-axis")]
-        if coord_idx.contains(CoordSel::W) {
-            self.w = self.w.and_then(|v| Some(v + val))
+        if _coord_idx.contains(CoordSel::W) {
+            self.w = self.w.and_then(|v| Some(v + _val))
         }
         self
     }
 
-    #[allow(unused)]
-    pub fn decrement_if_positive(&mut self, coord_idx: CoordSel) -> bool
+    pub fn decrement_if_positive(&mut self, _coord_idx: CoordSel) -> bool
     where
         T: ArithmeticOps + core::ops::Sub<Output = T>,
     {
+        #[allow(unused_mut)]
         let mut changed = false;
 
         #[cfg(feature = "with-e-axis")]
-        if coord_idx.contains(CoordSel::E) {
+        if _coord_idx.contains(CoordSel::E) {
             self.e = self.e.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -941,7 +967,7 @@ where
         }
 
         #[cfg(feature = "with-x-axis")]
-        if coord_idx.contains(CoordSel::X) {
+        if _coord_idx.contains(CoordSel::X) {
             self.x = self.x.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -952,7 +978,7 @@ where
             })
         }
         #[cfg(feature = "with-y-axis")]
-        if coord_idx.contains(CoordSel::Y) {
+        if _coord_idx.contains(CoordSel::Y) {
             self.y = self.y.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -963,7 +989,7 @@ where
             })
         }
         #[cfg(feature = "with-z-axis")]
-        if coord_idx.contains(CoordSel::Z) {
+        if _coord_idx.contains(CoordSel::Z) {
             self.z = self.z.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -975,7 +1001,7 @@ where
         }
 
         #[cfg(feature = "with-a-axis")]
-        if coord_idx.contains(CoordSel::A) {
+        if _coord_idx.contains(CoordSel::A) {
             self.a = self.a.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -986,7 +1012,7 @@ where
             })
         }
         #[cfg(feature = "with-b-axis")]
-        if coord_idx.contains(CoordSel::B) {
+        if _coord_idx.contains(CoordSel::B) {
             self.b = self.b.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -997,7 +1023,7 @@ where
             })
         }
         #[cfg(feature = "with-c-axis")]
-        if coord_idx.contains(CoordSel::C) {
+        if _coord_idx.contains(CoordSel::C) {
             self.c = self.c.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1009,7 +1035,7 @@ where
         }
 
         #[cfg(feature = "with-i-axis")]
-        if coord_idx.contains(CoordSel::I) {
+        if _coord_idx.contains(CoordSel::I) {
             self.i = self.i.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1020,7 +1046,7 @@ where
             })
         }
         #[cfg(feature = "with-j-axis")]
-        if coord_idx.contains(CoordSel::J) {
+        if _coord_idx.contains(CoordSel::J) {
             self.j = self.j.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1031,7 +1057,7 @@ where
             })
         }
         #[cfg(feature = "with-k-axis")]
-        if coord_idx.contains(CoordSel::K) {
+        if _coord_idx.contains(CoordSel::K) {
             self.k = self.k.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1043,7 +1069,7 @@ where
         }
 
         #[cfg(feature = "with-u-axis")]
-        if coord_idx.contains(CoordSel::U) {
+        if _coord_idx.contains(CoordSel::U) {
             self.u = self.u.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1054,7 +1080,7 @@ where
             })
         }
         #[cfg(feature = "with-v-axis")]
-        if coord_idx.contains(CoordSel::V) {
+        if _coord_idx.contains(CoordSel::V) {
             self.v = self.v.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1065,7 +1091,7 @@ where
             })
         }
         #[cfg(feature = "with-w-axis")]
-        if coord_idx.contains(CoordSel::W) {
+        if _coord_idx.contains(CoordSel::W) {
             self.w = self.w.and_then(|v| {
                 if v.is_defined_positive() {
                     changed = true;
@@ -1078,63 +1104,62 @@ where
         changed
     }
 
-    #[allow(unused)]
-    pub fn assign(&mut self, coord_idx: CoordSel, other: &Self) -> &Self {
+    pub fn assign(&mut self, _coord_idx: CoordSel, _other: &Self) -> &Self {
         #[cfg(feature = "with-e-axis")]
-        if coord_idx.contains(CoordSel::E) {
-            self.e = other.e
+        if _coord_idx.contains(CoordSel::E) {
+            self.e = _other.e
         }
         //
         #[cfg(feature = "with-x-axis")]
-        if coord_idx.contains(CoordSel::X) {
-            self.x = other.x
+        if _coord_idx.contains(CoordSel::X) {
+            self.x = _other.x
         }
         #[cfg(feature = "with-y-axis")]
-        if coord_idx.contains(CoordSel::Y) {
-            self.y = other.y
+        if _coord_idx.contains(CoordSel::Y) {
+            self.y = _other.y
         }
         #[cfg(feature = "with-z-axis")]
-        if coord_idx.contains(CoordSel::Z) {
-            self.z = other.z
+        if _coord_idx.contains(CoordSel::Z) {
+            self.z = _other.z
         }
         //
         #[cfg(feature = "with-a-axis")]
-        if coord_idx.contains(CoordSel::A) {
-            self.a = other.a
+        if _coord_idx.contains(CoordSel::A) {
+            self.a = _other.a
         }
         #[cfg(feature = "with-b-axis")]
-        if coord_idx.contains(CoordSel::B) {
-            self.b = other.b
+        if _coord_idx.contains(CoordSel::B) {
+            self.b = _other.b
         }
         #[cfg(feature = "with-c-axis")]
-        if coord_idx.contains(CoordSel::C) {
-            self.c = other.c
+        if _coord_idx.contains(CoordSel::C) {
+            self.c = _other.c
         }
         //
         #[cfg(feature = "with-i-axis")]
-        if coord_idx.contains(CoordSel::I) {
-            self.i = other.i
+        if _coord_idx.contains(CoordSel::I) {
+            self.i = _other.i
         }
         #[cfg(feature = "with-j-axis")]
-        if coord_idx.contains(CoordSel::J) {
-            self.j = other.j
+        if _coord_idx.contains(CoordSel::J) {
+            self.j = _other.j
         }
         #[cfg(feature = "with-k-axis")]
-        if coord_idx.contains(CoordSel::K) {
-            self.k = other.k
+        if _coord_idx.contains(CoordSel::K) {
+            self.k = _other.k
         }
         //
         #[cfg(feature = "with-u-axis")]
-        if coord_idx.contains(CoordSel::U) {
-            self.u = other.u
+        if _coord_idx.contains(CoordSel::U) {
+            self.u = _other.u
         }
         #[cfg(feature = "with-v-axis")]
-        if coord_idx.contains(CoordSel::V) {
-            self.v = other.v
+        if _coord_idx.contains(CoordSel::V) {
+            self.v = _other.v
         }
         #[cfg(feature = "with-w-axis")]
-        if coord_idx.contains(CoordSel::W) {
-            self.w = other.w
+        if _coord_idx.contains(CoordSel::W) {
+            self.w = _other.w
         }
         self
     }
@@ -2325,7 +2350,7 @@ where
         #[allow(unused_mut)]
         let mut nan_set = CoordSel::empty();
         self.foreach(|_c, _v| {
-            nan_set.set(_c, _v.is_some());
+            nan_set.set(_c, _v.is_none());
         });
         nan_set
     }
@@ -2719,246 +2744,31 @@ impl<T> core::fmt::Debug for TVector<T>
 where
     T: ArithmeticOps + core::fmt::Debug,
 {
-    #[allow(unused_assignments)]
-    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        #[allow(unused_mut)]
-        let mut _spacing = false;
-        #[cfg(feature = "with-e-axis")]
-        if let Some(v) = &self.e {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "E {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-x-axis")]
-        if let Some(v) = &self.x {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "X {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-y-axis")]
-        if let Some(v) = &self.y {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "Y {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-z-axis")]
-        if let Some(v) = &self.z {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "Z {:?}", v)?;
-            _spacing = true;
-        }
-        //
-        #[cfg(feature = "with-a-axis")]
-        if let Some(v) = &self.a {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "A {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-b-axis")]
-        if let Some(v) = &self.b {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "B {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-c-axis")]
-        if let Some(v) = &self.c {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "C {:?}", v)?;
-            _spacing = true;
-        }
-        //
-        #[cfg(feature = "with-i-axis")]
-        if let Some(v) = &self.i {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "I {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-j-axis")]
-        if let Some(v) = &self.j {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "J {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-k-axis")]
-        if let Some(v) = &self.k {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "K {:?}", v)?;
-            _spacing = true;
-        }
-        //
-        #[cfg(feature = "with-u-axis")]
-        if let Some(v) = &self.u {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "U {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-v-axis")]
-        if let Some(v) = &self.v {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "V {:?}", v)?;
-            _spacing = true;
-        }
-        #[cfg(feature = "with-w-axis")]
-        if let Some(v) = &self.w {
-            if _spacing {
-                core::write!(_f, " ")?;
-            }
-            core::write!(_f, "W {:?}", v)?;
-        }
-        Ok(())
-    }
-}
-
-impl<T> core::fmt::Display for TVector<T>
-where
-    T: ArithmeticOps + core::fmt::Debug,
-{
-    #[allow(unused_assignments)]
-    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        #[allow(unused)]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut spacing = false;
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-e-axis")] {
+        let mut err = None;
+        self.foreach_values(|coord, value| {
+            if err.is_none() {
                 if spacing {
-                    core::write!(_f, " ")?;
+                    err = core::write!(f, " ").err();
                 }
-                core::write!(_f, "E:{:?}", self.e.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-x-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
+                else {
+                    spacing = true;
                 }
-                core::write!(_f, "X:{:?}", self.x.unwrap_or(T::zero()))?;
-                spacing = true;
             }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-y-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
+            if err.is_none() {
+                if f.alternate() {
+                    err = core::write!(f, "{} {:?}", coord.alternative_name(), value).err();
                 }
-                core::write!(_f, "Y:{:?}", self.y.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-z-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
+                else {
+                    err = core::write!(f, "{} {:?}", coord.name(), value).err();
                 }
-                core::write!(_f, "Z:{:?}", self.z.unwrap_or(T::zero()))?;
-                spacing = true;
             }
+        });
+        match err{
+            Some(err) => Err(err),
+            None => Ok(()),
         }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-a-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "A:{:?}", self.a.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-b-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "B:{:?}", self.b.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-c-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "C:{:?}", self.c.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-i-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "I:{:?}", self.i.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-j-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "J:{:?}", self.j.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-k-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "K:{:?}", self.k.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-u-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "U:{:?}", self.u.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-v-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "V:{:?}", self.v.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-w-axis")] {
-                if spacing {
-                    core::write!(_f, " ")?;
-                }
-                core::write!(_f, "W:{:?}", self.w.unwrap_or(T::zero()))?;
-                spacing = true;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -2969,7 +2779,6 @@ where
 {
     // TODO: reimplement to be more efficient
 
-    #[allow(unused_assignments)]
     fn format(&self, fmt: defmt::Formatter) {
         #[allow(unused_mut)]
         let mut spacing = false;
@@ -2980,7 +2789,7 @@ where
             } else {
                 spacing = true;
             }
-            defmt::write!(fmt, "{:?} {:?}", _c, _v);
+            defmt::write!(fmt, "{} {:?}", _c, _v);
         });
     }
 }

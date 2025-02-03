@@ -55,6 +55,7 @@ impl MockedI2c {
         let index = axis.index();
         if index < 16 {
             if self.state[index].off != pwm {
+                #[cfg(feature = "debug-motion-broadcast")]
                 hwa::debug!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
                 self.state[index].off = pwm;
                 true

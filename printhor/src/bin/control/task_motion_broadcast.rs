@@ -36,7 +36,7 @@ pub async fn task_motion_broadcast(
                 lag = embassy_time::Instant::now();
             }
             hwa::MotionBroadcastEvent::Delta(motion_event) => {
-                let elapsed = match current_order {
+                let _elapsed = match current_order {
                     Some(order_num) => {
                         if order_num != motion_event.order_num {
                             flush(
@@ -64,22 +64,27 @@ pub async fn task_motion_broadcast(
                     changed |= mg.set_angle(coord, val);
                 });
 
+                #[cfg(feature="debug-motion-broadcast")]
+                hwa::info!("[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] pos: [{:?}] applied: {:?}",
+                    Real::from_f32((_elapsed as f32) / 1000000.0).rdp(4), motion_event.micro_segment_time.rdp(4),
+                    motion_event.order_num, motion_event.micro_segment_id,
+                    motion_event.pos_wu, changed
+                );
                 if changed {
-                    hwa::info!("[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] pos: [{:?}]",
-                        Real::from_f32((elapsed as f32) / 1000000.0).rdp(4), motion_event.micro_segment_time.rdp(4),
-                        motion_event.order_num, motion_event.micro_segment_id,
-                        motion_event.pos_wu
-                    );
+                    mg.apply().await;
+                    /*
 
                     if embassy_time::with_timeout(
                         embassy_time::Duration::from_micros((MAX_CMD_DELAY) as u64),
-                        mg.apply(),
+                        
                     )
                     .await
                     .is_err()
                     {
+                        mg.reset().await;
                         hwa::warn!("[task_motion_broadcast] I2C Timeout");
                     }
+                     */
                 }
             }
         }
@@ -88,14 +93,15 @@ pub async fn task_motion_broadcast(
 
 fn flush(
     current_id: &mut Option<u32>,
-    absolute_stp_pos: &TVector<i32>,
-    absolute_wu_pos: &TVector<Real>,
+    _absolute_stp_pos: &TVector<i32>,
+    _absolute_wu_pos: &TVector<Real>,
 ) {
+    #[cfg(feature="debug-motion-broadcast")]
     hwa::info!(
         "[task_motion_broadcast] DONE order_num:{:?} pos: [ step: [{:?}], world [{:?}] {} ]",
         current_id,
-        absolute_stp_pos,
-        absolute_wu_pos,
+        _absolute_stp_pos,
+        _absolute_wu_pos,
         Contract::WORLD_UNIT_MAGNITUDE,
     );
     *current_id = None;
