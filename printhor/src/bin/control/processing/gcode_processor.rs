@@ -385,20 +385,9 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
-                let position =
-                    hwa::controllers::Position::new_with_world_projection(&_pos.as_vector());
-                // FIXME: Push "position" move into move queue
-                loop {
-                    if self.event_bus.has_flags(EventFlags::MOV_QUEUE_EMPTY).await {
-                        self.motion_planner
-                            .motion_status()
-                            .update_current_position(gc.order_num, &position);
-                        break;
-                    } else {
-                        hwa::debug!("Spinning until move queue empty");
-                        embassy_time::Timer::after_millis(500).await;
-                    }
-                }
+                let updated_coords = _pos.as_vector();
+                hwa::warn!("TODO: G92 {:?}", updated_coords);
+                // TODO: Push "position" move into move queue
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]

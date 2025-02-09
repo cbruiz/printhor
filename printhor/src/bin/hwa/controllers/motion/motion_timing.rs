@@ -243,7 +243,7 @@ impl StepPlanner {
                     if _ch.width < step_width {
                         cfg_if::cfg_if! {
                             if #[cfg(not(feature = "with-motion-broadcast"))] {
-                                unreachable!(
+                                hwa::error!(
                                     "Feedrate exceeded: width: {} min: {}",
                                     _ch.width, step_width
                                 );

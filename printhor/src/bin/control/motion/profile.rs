@@ -658,7 +658,7 @@ impl SCurveMotionProfile {
                                         cache: Cache::default(),
                                         constraints: *constraints,
                                     };
-                                    profile.compute_cache();
+                                    profile.compute_cache()?;
                                     if error_correction {
                                         let final_pos = profile.s_i7(&profile.i7_end());
                                         let delta_e = profile.q1 - final_pos;
@@ -1076,9 +1076,9 @@ impl SCurveMotionProfile {
     /// Compute intermediate piecewise function points to speedup equations
     /// A max between previous segment max pos and next one is applied to guarantee consistency
     /// when the move is (pseudo)triangular, given that position can never decrease
-    fn compute_cache(&mut self) {
+    fn compute_cache(&mut self) -> Result<(), CodeExecutionFailure>{
         if self.v_lim.is_negligible() {
-            panic!("vlim is zero");
+            return Err(CodeExecutionFailure::NumericalError)
         }
         self.cache.s1_pt = self.s_i1(&self.i1_end());
         self.cache.s2_pt = self.cache.s1_pt.max(self.s_i2(&self.i2_end()));
@@ -1087,6 +1087,7 @@ impl SCurveMotionProfile {
         self.cache.s5_pt = self.cache.s4_pt.max(self.s_i5(&self.i5_end()));
         self.cache.s6_pt = self.cache.s5_pt.max(self.s_i6(&self.i6_end()));
         self.cache.s7_pt = self.cache.s6_pt.max(self.s_i7(&self.i7_end()));
+        Ok(())
     }
 
     pub fn extend(&mut self, delta_e: Real) -> Result<(), ()> {

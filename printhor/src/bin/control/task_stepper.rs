@@ -246,7 +246,7 @@ pub async fn task_stepper(
 
                 let position_offset = segment.src_pos - current_real_pos.space_pos;
                 #[cfg(feature = "debug-motion")]
-                hwa::debug!(
+                hwa::info!(
                     "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
                     _order_num,
                     position_offset,
@@ -471,10 +471,16 @@ pub async fn task_stepper(
                         #[cfg(feature = "debug-motion")]
                         let adv_steps = micro_segment_interpolator.advanced_steps();
                         let adv_pos = micro_segment_interpolator.advanced_world_units();
+                        
+                        #[cfg(feature = "debug-motion")]
+                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {}, vlim: {:?} {}/s",
+                            _order_num, adv_pos, Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.v_lim, Contract::SPACE_UNIT_MAGNITUDE
+                        );
 
                         #[cfg(feature = "debug-motion")]
-                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {} [{:#?}] steps",
-                            _order_num, adv_pos, Contract::SPACE_UNIT_MAGNITUDE, adv_steps.excluding_negligible()
+                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] steps",
+                            _order_num, adv_steps.excluding_negligible()
                         );
 
                         cfg_if::cfg_if! {
