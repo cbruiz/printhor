@@ -76,7 +76,7 @@ embassy-usb = { version = "0", features = [], optional = true }
 portable-atomic = { version = "1", features = ["critical-section"] }
 printhor-hwa-common = { version = "0", features = [] }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
+#futures = { version = "0.3", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
 
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }

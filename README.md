@@ -550,13 +550,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M117</td>
         <td>*</td>
         <td>Display message</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M118</td>
         <td>*</td>
         <td>Echo message on host</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M119</td>

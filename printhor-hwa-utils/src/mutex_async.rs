@@ -47,7 +47,7 @@ where
         Self::CAN_RETAIN
     }
 
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> {
+    fn retain(&self) -> impl core::future::Future<Output = Result<(), ()>> {
         async { Err(()) }
     }
 
@@ -212,7 +212,7 @@ where
     type AsyncMutexType = M;
     type Resource = D;
 
-    fn retain(&self) -> impl futures::Future<Output = Result<(), ()>> {
+    fn retain(&self) -> impl core::future::Future<Output = Result<(), ()>> {
         async {
             self.holder.set(self.mutex.lock().await);
             Ok(())

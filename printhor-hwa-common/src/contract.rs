@@ -3,6 +3,7 @@ use crate as hwa;
 use hwa::traits;
 
 use core::future;
+use crate::CommChannel;
 
 ///! This module contains the interface contract of HWI boards
 
@@ -14,6 +15,11 @@ pub trait HwiContract: Sized {
     const FIRMWARE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
     const FIRMWARE_URL: &'static str = "https://github.com/cbruiz/printhor";
     const MACHINE_UUID: &'static str = "00000000-0000-0000-0000-000000000000";
+    
+    /// The display channel for M118
+    fn display_channel() -> CommChannel {
+        CommChannel::Internal
+    }
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-e-axis")] {

@@ -82,7 +82,7 @@ embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven"] }
 
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3.17", default-features = false, features = [] }
+#futures = { version = "0.3.17", default-features = false, features = [] }
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1" }

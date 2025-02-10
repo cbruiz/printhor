@@ -719,10 +719,10 @@ pub enum GCodeValue {
     M116,
 
     /// Display message
-    M117,
+    M117(Option<alloc::string::String>),
 
     /// Echo message on host
-    M118,
+    M118(Option<alloc::string::String>),
 
     /// Get Endstop Status
     M119,

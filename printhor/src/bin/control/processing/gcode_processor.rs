@@ -630,9 +630,9 @@ impl GCodeProcessor {
                     
                 ));
                 let _ = self.write(channel, z.as_str()).await;
-                let _ = self.write(channel, "ok").await;
                 let z2 = alloc::format!("echo: Space {:#?}\n", _rpos.space_pos);
                 let _ = self.write(channel, z2.as_str()).await;
+                let _ = self.write(channel, "ok\n").await;
                 Ok(CodeExecutionSuccess::CONSUMED)
             }
             GCodeValue::M115 => {
@@ -654,8 +654,21 @@ impl GCodeProcessor {
                 let _ = self.write(channel, hwa::Contract::EXTRUDER_COUNT).await;
                 Ok(CodeExecutionSuccess::OK)
             }
-            GCodeValue::M117 => {
-                let _ = self.write(channel, "echo: (display msg)\n").await;
+            GCodeValue::M117(_msg) => {
+                if let Some(msg) = _msg {
+                    let target_channel = Contract::display_channel();
+                    let _ = self.write(target_channel, "echo: ").await;
+                    let _ = self.write(target_channel, msg.as_str()).await;
+                    let _ = self.write(target_channel, "\n").await;
+                }
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCodeValue::M118(_msg) => {
+                if let Some(msg) = _msg {
+                    let _ = self.write(channel, "echo: ").await;
+                    let _ = self.write(channel, msg.as_str()).await;
+                    let _ = self.write(channel, "\n").await;
+                }
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
@@ -785,5 +798,6 @@ impl GCodeProcessor {
 }
 
 impl Drop for GCodeProcessor {
-    fn drop(&mut self) {}
+    fn drop(&mut self) {
+    }
 }

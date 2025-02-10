@@ -4,6 +4,8 @@ use async_gcode::AsyncParserState;
 use embassy_time::{Duration, TimeoutError};
 #[allow(unused)]
 use printhor_hwa_common::{EventFlags, EventStatus};
+#[cfg(feature = "with-sd-card")]
+use crate::hwa::controllers::sd_card_controller::SDEntryType;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-print-job")] {
@@ -223,34 +225,46 @@ pub async fn execute(
         control::GCodeValue::M20(_path) => {
             {
                 let path = _path.clone().unwrap_or(alloc::string::String::from("/"));
+                let mut sent_first = false;
                 match _card_controller.dir_iterator(path.as_str()).await {
                     Ok(mut it) => {
                         loop {
                             match it.next().await {
                                 Ok(Some(entry)) => {
-                                    let s = alloc::format!(
-                                        "echo: F\"{}\" {} {} ; M20 \n",
-                                        entry.name,
-                                        match entry.entry_type {
-                                            hwa::controllers::sd_card_controller::SDEntryType::FILE => "A",
-                                            hwa::controllers::sd_card_controller::SDEntryType::DIRECTORY => "D",
-                                        },
-                                        entry.size
-                                    );
-                                    processor.write(channel, s.as_str()).await;
+                                    match entry.entry_type {
+                                        SDEntryType::FILE => {
+                                            if !sent_first {
+                                                processor.write(channel, "Begin file list\n").await;
+                                                sent_first = true;
+                                            }
+                                            processor.write(channel, entry.name.as_str()).await;
+                                            let s = alloc::format!(
+                                                " {}\n",
+                                                entry.size
+                                            );
+                                            processor.write(channel, s.as_str()).await;
+                                        }
+                                        SDEntryType::DIRECTORY => {}
+                                    }
                                 }
                                 Ok(None) => {
                                     // EOF
+                                    processor.write(channel, "End file list\n").await;
                                     break;
                                 }
                                 Err(_e) => {
+                                    if sent_first {
+                                        processor.write(channel, "End file list\n").await;
+                                    }
+                                    processor.write(channel, "err\n").await;
                                     hwa::error!("Error listing files");
                                     break;
                                 }
                             }
                         }
                         it.close().await;
-                        Ok(control::CodeExecutionSuccess::OK)
+                        processor.write(channel, "ok\n").await;
+                        Ok(control::CodeExecutionSuccess::CONSUMED)
                     }
                     Err(_e) => {
                         let s = alloc::format!("echo: M20: Unable to list: {:?}\n", _e);
@@ -260,28 +274,34 @@ pub async fn execute(
                 }
             }
         }
+        #[cfg(feature = "with-sd-card")]
+        control::GCodeValue::M21 => {
+            Ok(control::CodeExecutionSuccess::OK)
+        },
         #[cfg(feature = "with-print-job")]
-        control::GCodeValue::M23(f) => {
+        control::GCodeValue::M23(file) => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::SetFile(
                     channel,
-                    match f {
+                    match file {
                         None => alloc::string::String::new(),
                         Some(str) => str.clone(),
                     },
                 ))
                 .await
             {
-                Ok(_f) => {
-                    processor.write(channel, "echo: Print job file set\n").await;
+                Ok(()) => {
+                    if let Some(_f) = file {
+                        processor.write(channel, "echo Now fresh file: ").await;
+                        processor.write(channel, _f.as_str()).await;
+                        processor.write(channel, "\n").await;
+                    }
                     processor
                         .event_bus
                         .publish_event(EventStatus::not_containing(EventFlags::JOB_COMPLETED))
                         .await;
                     // TODO
-                    Ok(control::CodeExecutionSuccess::DEFERRED(
-                        hwa::EventStatus::new(),
-                    ))
+                    Ok(control::CodeExecutionSuccess::CONSUMED)
                 }
                 Err(_e) => {
                     let s = alloc::format!("echo: M23: Unable to set: {:?}\n", _e);
@@ -297,6 +317,7 @@ pub async fn execute(
                 .await
             {
                 Ok(_f) => {
+                    processor.write(channel, "ok\n").await;
                     processor.write(channel, "echo: Print job resumed\n").await;
                     Ok(control::CodeExecutionSuccess::CONSUMED)
                 }
@@ -314,6 +335,7 @@ pub async fn execute(
                 .await
             {
                 Ok(_f) => {
+                    processor.write(channel, "ok\n").await;
                     processor.write(channel, "echo: Print job paused\n").await;
                     Ok(control::CodeExecutionSuccess::CONSUMED)
                 }

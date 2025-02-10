@@ -6,8 +6,6 @@ use crate::control;
 use crate::hwa;
 use control::{GCodeCmd, GCodeLineParserError};
 use embassy_futures::select::Either3;
-#[allow(unused)]
-use futures_util::future;
 
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
@@ -45,7 +43,7 @@ impl GCodeMultiplexedInputStream {
                 let f1 = self.serial_usb_line_parser.next_gcode();
             }
             else {
-                let f1 = future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
+                let f1 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
             }
         }
         cfg_if::cfg_if! {
@@ -53,7 +51,7 @@ impl GCodeMultiplexedInputStream {
                 let f2 = self.serial_port1_line_parser.next_gcode();
             }
             else {
-                let f2 = future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
+                let f2 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
             }
         }
         cfg_if::cfg_if! {
@@ -61,7 +59,7 @@ impl GCodeMultiplexedInputStream {
                 let f3 = self.serial_port2_line_parser.next_gcode();
             }
             else {
-                let f3 = future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
+                let f3 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
             }
         }
 

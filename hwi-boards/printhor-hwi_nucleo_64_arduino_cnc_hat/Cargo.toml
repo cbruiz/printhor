@@ -60,10 +60,11 @@ with-v-axis = ["printhor-hwa-common/with-v-axis"]
 with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
 debug-signals = []
+verbose-timings = []
+debug-motion-broadcast = []
 
 nightly = []
 cooperative = ["embassy-time/generic-queue-64"]
-verbose-timings = []
 sd-card-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]
@@ -73,10 +74,11 @@ float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 
 [dependencies]
-defmt = { version = "0.3", default-features = false, optional = true }
-cortex-m = { version = "0.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = { version = "0.7.3", default-features = false }
-alloc-cortex-m = { version = "0.4", default-features = false, features = [] }
+defmt = { version = "0.3.10", default-features = false, optional = true }
+cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = { version = "0.7.5", default-features = false }
+alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
+critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
 
 embassy-stm32 = { version = "0.2", default-features = false, features = ["rt", "memory-x", "exti", "unstable-pac"] }
 embassy-executor = { version = "0.7", default-features = false, features = ["arch-cortex-m", "executor-interrupt"] }
@@ -88,17 +90,15 @@ embassy-usb = { version = "0", features = [], optional = true }
 printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0", default-features = false, features = [], path = "../../printhor-hwa-utils" }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-futures = { version = "0.3", default-features = false, features = [] }
+#futures = { version = "0.3", default-features = false, features = [] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true, features = [] }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
 embedded-io-async = { version = "0.6", default-features = false, optional = true, features = [] }
 
 pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
 
-
-cfg-if = { version = "1.0" }
-const_env = { version = "0.1" }
-pin-project = "1.1"
+cfg-if = { version = "1.0.0" }
+const_env = { version = "0.1.2" }
 
 rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { optional = true, version = "1" }

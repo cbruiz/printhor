@@ -87,7 +87,7 @@ printhor-hwa-utils = { version = "0.0", default-features = false, features = ["s
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven" ], optional = true }
-futures = { version = "0.3", default-features = false, features = [] }
+#futures = { version = "0.3", default-features = false, features = [] }
 embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
 
 pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}

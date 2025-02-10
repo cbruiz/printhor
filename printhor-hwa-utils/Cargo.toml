@@ -26,10 +26,10 @@ portable-atomic = { version = "1",  default-features = false, features = ["criti
 static_cell = { version = "2.1",  default-features = false, features = [] }
 const_env = { version = "0.1"}
 embassy-sync = { version = "0.6", features = [] }
-futures = { version = "0.3", default-features = false }
+#futures = { version = "0.3", default-features = false }
 cfg-if = { version = "1.0" }
 defmt = {version = "0.3", default-features = false, optional = true}
 log = { version = "0.4", default-features = false, optional = true }
-critical-section = { version = "1", default-features = false, features = []}
+critical-section = { version = "1.2.0", default-features = false, features = []}
 [dev-dependencies]
 futures-test = { version = "0.3", default-features = false }

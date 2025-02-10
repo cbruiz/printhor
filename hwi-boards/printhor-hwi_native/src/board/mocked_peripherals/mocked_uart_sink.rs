@@ -1,4 +1,4 @@
-use futures::future;
+use core::future;
 
 // A mocked Uart which does nothing
 pub struct MockedUartSink {

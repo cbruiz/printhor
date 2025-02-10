@@ -96,7 +96,9 @@ pub async fn task_print_job(
                 print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
                     Ok(stream) => {
                         let parser = GCodeLineParser::new(stream);
-                        processor.write(channel, "ok\n").await;
+                        processor.write(channel, "File opened: ").await;
+                        processor.write(channel, file_path.as_str()).await;
+                        processor.write(channel, "\nFile selected\n").await;
                         Some(parser)
                     }
                     Err(_e) => {
