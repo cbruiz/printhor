@@ -35,7 +35,7 @@
 //!
 //! The above example shows how to create a new `GenericSDCardController` instance and
 //! customize it for specific SD card configurations.
-//! 
+//!
 //! Warning: Reference releasing is still uncompleted
 //!
 #[allow(unused)]

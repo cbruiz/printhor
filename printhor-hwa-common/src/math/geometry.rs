@@ -313,7 +313,9 @@ impl CoordSel {
 
     /// All motion relevant axis. Meaning INCLUDING Extruder (E)
     pub const fn all_axis() -> CoordSel {
-        CoordSel::all().difference(CoordSel::from_bits_truncate(CoordSel::UNSET.bits() | CoordSel::ALTERNATE_NAME.bits()))
+        CoordSel::all().difference(CoordSel::from_bits_truncate(
+            CoordSel::UNSET.bits() | CoordSel::ALTERNATE_NAME.bits(),
+        ))
     }
 
     /// All motion relevant axis INCLUDING Extruder (E), if exists.
@@ -341,8 +343,7 @@ impl core::fmt::Debug for CoordSel {
                 }
                 if _fmt.alternate() {
                     core::write!(_fmt, "{}", _v.alternative_name())?
-                }
-                else {
+                } else {
                     core::write!(_fmt, "{}", _v.name())?
                 }
             }
@@ -364,8 +365,7 @@ impl defmt::Format for CoordSel {
                 }
                 if self.is_alternate() {
                     defmt::write!(_fmt, "{:a}", _v.alternative_name())
-                }
-                else {
+                } else {
                     defmt::write!(_fmt, "{:a}", _v.name())
                 }
             }
@@ -1711,7 +1711,6 @@ where
 
     /// Evaluates when a vector has all coordinates bounded by other
     /// Meaning that every x, y, z ... of Self is lower than other's
-    #[allow(unused)]
     pub fn bounded_by(&self, rhs: &TVector<T>) -> bool {
         let mut matching_point = true;
         #[cfg(feature = "with-e-axis")]
@@ -2751,21 +2750,19 @@ where
             if err.is_none() {
                 if spacing {
                     err = core::write!(f, " ").err();
-                }
-                else {
+                } else {
                     spacing = true;
                 }
             }
             if err.is_none() {
                 if f.alternate() {
                     err = core::write!(f, "{} {:?}", coord.alternative_name(), value).err();
-                }
-                else {
+                } else {
                     err = core::write!(f, "{} {:?}", coord.name(), value).err();
                 }
             }
         });
-        match err{
+        match err {
             Some(err) => Err(err),
             None => Ok(()),
         }

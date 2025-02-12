@@ -2,6 +2,7 @@
 use printhor_hwa_common as hwa;
 #[allow(unused)]
 use hwa::math;
+#[allow(unused)]
 use hwa::HwiContract;
 
 #[cfg(feature = "with-serial-usb")]

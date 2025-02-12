@@ -161,12 +161,10 @@ where
                                     return Err(GCodeLineParserError::EOF);
                                 } // Empty line. Just ignore
                                 Some(rgs) => {
-                                    return Err(
-                                        GCodeLineParserError::GCodeNotImplemented(
-                                            self.raw_parser.get_current_line(),
-                                            alloc::format!("{:?}", rgs),
-                                        ),
-                                    );
+                                    return Err(GCodeLineParserError::GCodeNotImplemented(
+                                        self.raw_parser.get_current_line(),
+                                        alloc::format!("{:?}", rgs),
+                                    ));
                                 }
                             }
                         }
@@ -212,14 +210,12 @@ where
                                         update_current(current_gcode, ch, frx, fv)
                                     } else {
                                         raw_gcode_spec.replace(RawGCodeSpec::from(ch, frx));
-                                        
+
                                         let has_text_argument = match (ch, frx) {
-                                            ('m', Some((23, 0))) | ('m', Some((117, 0))) | ('m', Some((118, 0))) => {
-                                                true
-                                            },
-                                            _ => {
-                                                false
-                                            },
+                                            ('m', Some((23, 0)))
+                                            | ('m', Some((117, 0)))
+                                            | ('m', Some((118, 0))) => true,
+                                            _ => false,
                                         };
                                         // We need to start building the current GCodeCmd that is being parsed
                                         match init_current(ch, frx) {
@@ -763,7 +759,7 @@ fn update_current(
             if let async_gcode::RealValue::Literal(async_gcode::Literal::String(text)) = fv {
                 msg.replace(text);
             }
-        },
+        }
         #[cfg(feature = "with-hot-bed")]
         GCodeValue::M140(coord) => match (ch, frx) {
             ('s', Some(val)) => {
@@ -787,12 +783,10 @@ fn update_current(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
     use super::*;
-
+    use std::collections::VecDeque;
 
     struct BufferStream {
         buff: VecDeque<u8>,
@@ -809,27 +803,22 @@ mod tests {
 
         async fn next(&mut self) -> Option<Self::Item> {
             match self.buff.pop_front() {
-                None => {None}
-                Some(_b) => {
-                    Some(Ok(_b))
-                }
+                None => None,
+                Some(_b) => Some(Ok(_b)),
             }
         }
 
-        async fn recovery_check(&mut self) {
-        }
+        async fn recovery_check(&mut self) {}
     }
-    
+
     async fn check_m32_benchy_result(parser: &mut GCodeLineParser<BufferStream>) {
         match parser.next_gcode().await {
-            Ok(_cmd) => {
-                match _cmd.value {
-                    GCodeValue::M23(Some(_path)) => {
-                        assert!(_path.eq("BENCHY.G"), "Got the proper string param")
-                    }
-                    _ => assert!(false, "Unexpected code value")
+            Ok(_cmd) => match _cmd.value {
+                GCodeValue::M23(Some(_path)) => {
+                    assert!(_path.eq("BENCHY.G"), "Got the proper string param")
                 }
-            }
+                _ => assert!(false, "Unexpected code value"),
+            },
             Err(_e) => {
                 assert!(false, "Got an error");
             }
@@ -838,14 +827,12 @@ mod tests {
 
     async fn check_display_m117_result(parser: &mut GCodeLineParser<BufferStream>) {
         match parser.next_gcode().await {
-            Ok(_cmd) => {
-                match _cmd.value {
-                    GCodeValue::M117(Some(_msg)) => {
-                        assert!(_msg.eq("Hello World!"), "Got the proper string param")
-                    }
-                    _ => assert!(false, "Unexpected code value")
+            Ok(_cmd) => match _cmd.value {
+                GCodeValue::M117(Some(_msg)) => {
+                    assert!(_msg.eq("Hello World!"), "Got the proper string param")
                 }
-            }
+                _ => assert!(false, "Unexpected code value"),
+            },
             Err(_e) => {
                 assert!(false, "Got an error");
             }
@@ -853,14 +840,12 @@ mod tests {
     }
     async fn check_display_m118_result(parser: &mut GCodeLineParser<BufferStream>) {
         match parser.next_gcode().await {
-            Ok(_cmd) => {
-                match _cmd.value {
-                    GCodeValue::M118(Some(_msg)) => {
-                        assert!(_msg.eq("Hello World!"), "Got the proper string param")
-                    }
-                    _ => assert!(false, "Unexpected code value")
+            Ok(_cmd) => match _cmd.value {
+                GCodeValue::M118(Some(_msg)) => {
+                    assert!(_msg.eq("Hello World!"), "Got the proper string param")
                 }
-            }
+                _ => assert!(false, "Unexpected code value"),
+            },
             Err(_e) => {
                 assert!(false, "Got an error");
             }
@@ -868,7 +853,6 @@ mod tests {
     }
     #[futures_test::test]
     async fn test_m23_with_newline() {
-        
         let stream = BufferStream::new("M23 BENCHY.G\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         check_m32_benchy_result(&mut parser).await;
@@ -876,7 +860,6 @@ mod tests {
 
     #[futures_test::test]
     async fn test_m23_with_eof_condition() {
-
         let stream = BufferStream::new("M23 BENCHY.G".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         check_m32_benchy_result(&mut parser).await;
@@ -884,7 +867,6 @@ mod tests {
 
     #[futures_test::test]
     async fn test_m23_with_trailin_comments() {
-
         let stream = BufferStream::new("M23 BENCHY.G".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         check_m32_benchy_result(&mut parser).await;
@@ -892,7 +874,6 @@ mod tests {
 
     #[futures_test::test]
     async fn test_m117() {
-
         let stream = BufferStream::new("M117 Hello World!".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         check_display_m117_result(&mut parser).await;
@@ -900,7 +881,6 @@ mod tests {
 
     #[futures_test::test]
     async fn test_m118() {
-
         let stream = BufferStream::new("M118 Hello World!".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         check_display_m118_result(&mut parser).await;

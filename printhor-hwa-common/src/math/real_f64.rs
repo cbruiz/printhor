@@ -1,5 +1,7 @@
 cfg_if::cfg_if! {
     if #[cfg(feature="float-point-f64-impl")] {
+        #[allow(unused)]
+        use crate as hwa;
         use core::cmp::Ordering;
         use core::ops::*;
         use core::fmt::{Debug, Display, Formatter};
@@ -14,58 +16,53 @@ cfg_if::cfg_if! {
         pub struct Real(pub F);
         pub type RealImpl = f64;
 
-        #[allow(dead_code)]
         impl Real {
-            #[inline]
+
             pub fn new(num: i64, scale: u32) -> Self {
                 Self::from_lit(num, scale)
             }
-            #[inline]
+
             pub fn from_lit(num: i64, scale: u32) -> Self {
                 let s = F::powi(10.0, scale as i32);
                 Self((num as F) / s)
             }
-            #[inline]
+
             pub const fn from_f32(num: f32) -> Self {
                 Self(num as f64)
             }
-            #[inline]
+
             pub const fn from_f64(num: f64) -> Self {
                 Self(num)
             }
-            #[inline]
+
             pub fn inner(&self) -> f64 {
                 self.0
             }
-            #[inline]
+
             pub fn abs(self) -> Self {
                 Self(self.0.abs())
             }
-            #[inline]
+
             pub fn powi(self, x: i32) -> Self {
                 Self(self.0.powi(x))
             }
 
-            #[inline]
             pub fn recip(self) -> Self {
                 Self(FloatCore::recip(self.0))
             }
 
-            #[inline]
             pub const fn zero() -> Self {
                 Self(0.0)
             }
-            #[inline]
+
             pub fn is_zero(&self) -> bool {
                 F::is_zero(&self.0)
             }
 
-            #[inline]
             pub const fn epsilon() -> Self {
                 crate::math::EPSILON
             }
 
-            #[inline]
             pub fn is_negligible(&self) -> bool {
                 FloatCore::abs(self.0) < <f64 as FloatCore>::epsilon()
             }
@@ -74,11 +71,10 @@ cfg_if::cfg_if! {
                 self.0 > 0.0
             }
 
-            #[inline]
             pub fn is_positive(&self) -> bool {
                 !(self.0 < 0.0)
             }
-            #[inline]
+
             pub const fn one() -> Self {
                 Self(1.0)
             }
@@ -107,17 +103,26 @@ cfg_if::cfg_if! {
                 self.0.to_i32()
             }
 
-            #[inline]
             pub fn to_i64(&self) -> Option<i64> {
                 self.0.to_i64()
             }
 
-            #[inline]
             pub fn int(&self) -> i64 {
                 self.0.to_i64().unwrap()
             }
 
-            #[inline]
+             /// Radians to degrees
+            pub fn r2d(&self) -> Real {
+                (*self) * hwa::make_real!(180.0) / hwa::math::PI
+            }
+
+            /// Degrees to radians
+            /// 360 -> 2pi
+            /// x ->
+            pub fn d2r(&self) -> Real {
+                (*self) * hwa::math::PI / hwa::make_real!(180.0)
+            }
+
             pub fn sqrt(self) -> Option<Self> {
                 //#[cfg(feature = "native")]
                 //let v = self.0.sqrt();
@@ -141,9 +146,27 @@ cfg_if::cfg_if! {
                 y * (1.5 - (number * 0.5 * y * y))
             }
 
-            #[inline]
+            pub fn sin(self) -> Self {
+                Real(micromath::F32(self.0 as f32).sin().0 as f64)
+            }
+
             pub fn cos(self) -> Self {
                 Real(micromath::F32(self.0 as f32).cos().0 as f64)
+            }
+
+            pub fn tan(self) -> Self {
+                Real(micromath::F32(self.0 as f32).tan().0 as f64)
+            }
+
+            /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
+            pub fn atan2(self, other:Real) -> Self {
+                Real(micromath::F32(self.0 as f32).atan2(micromath::F32(other.0 as f32)).0 as f64)
+            }
+
+            /// Computes the arccosine of a number. Return value is in radians in the range [0, pi] or NaN if the number is outside the range [-1, 1].
+            pub fn acos(self) -> Self {
+                //Real(micromath::F32(self.0 as f32).acos().0 as f64)
+                todo!("....")
             }
 
             #[inline]

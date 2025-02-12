@@ -219,15 +219,12 @@ cfg_if::cfg_if! {
                 Real(self.0.acos())
             }
 
-            #[inline]
             pub fn ln(self) -> Self {
                 Real(self.0.ln())
             }
 
-            #[inline]
             pub fn exp(self) -> Self {Real(self.0.exp()) }
 
-            #[inline]
             pub fn sign(self) -> Self {
                 let s = F32Ext::signum(self.0);
                 if s.is_zero() {Real::one()} else {Real(s)}

@@ -2,8 +2,8 @@ use crate as hwa;
 #[allow(unused)]
 use hwa::traits;
 
-use core::future;
 use crate::CommChannel;
+use core::future;
 
 ///! This module contains the interface contract of HWI boards
 
@@ -15,7 +15,7 @@ pub trait HwiContract: Sized {
     const FIRMWARE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
     const FIRMWARE_URL: &'static str = "https://github.com/cbruiz/printhor";
     const MACHINE_UUID: &'static str = "00000000-0000-0000-0000-000000000000";
-    
+
     /// The display channel for M118
     fn display_channel() -> CommChannel {
         CommChannel::Internal
@@ -176,7 +176,7 @@ pub trait HwiContract: Sized {
             /// The queue size of Motion Planner RingBuffer
             /// Should be not very high, so capped to u8
             const SEGMENT_QUEUE_SIZE: u8;
-            
+
             /// The queue size of Step Planner RingBuffer
             /// Should be not very high, so capped to u8
             const U_SEGMENT_QUEUE_SIZE: u8 = 2;

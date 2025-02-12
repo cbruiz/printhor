@@ -26,7 +26,7 @@ pub trait MotionProfile {
     /// An `Option` containing a tuple with:
     /// - The evaluated position as `Real`.
     /// - A status as `u8` (implementation-specific).
-    fn eval_position(&self, t: Real) -> Option<(Real, u8)>;
+    fn eval_position(&self, t: Real) -> Option<Real>;
 }
 
 /// Struct representing the motion profile configuration.
@@ -358,10 +358,12 @@ impl SCurveMotionProfile {
         constraints: &Constraints,
         error_correction: bool,
     ) -> Result<SCurveMotionProfile, CodeExecutionFailure> {
-        
-        if constraints.v_max.is_negligible() || constraints.a_max.is_negligible() || constraints.j_max.is_negligible() {
+        if constraints.v_max.is_negligible()
+            || constraints.a_max.is_negligible()
+            || constraints.j_max.is_negligible()
+        {
             hwa::warn!("Unable to perform movement: constraints are unset");
-            return Err(CodeExecutionFailure::NumericalError)
+            return Err(CodeExecutionFailure::NumericalError);
         }
         // Clamp v_ma to be equal or higher than v_0 and v_1
         let v_min = v_0.max(v_1);
@@ -1076,9 +1078,9 @@ impl SCurveMotionProfile {
     /// Compute intermediate piecewise function points to speedup equations
     /// A max between previous segment max pos and next one is applied to guarantee consistency
     /// when the move is (pseudo)triangular, given that position can never decrease
-    fn compute_cache(&mut self) -> Result<(), CodeExecutionFailure>{
+    fn compute_cache(&mut self) -> Result<(), CodeExecutionFailure> {
         if self.v_lim.is_negligible() {
-            return Err(CodeExecutionFailure::NumericalError)
+            return Err(CodeExecutionFailure::NumericalError);
         }
         self.cache.s1_pt = self.s_i1(&self.i1_end());
         self.cache.s2_pt = self.cache.s1_pt.max(self.s_i2(&self.i2_end()));
@@ -1237,25 +1239,25 @@ impl MotionProfile for SCurveMotionProfile {
         self.q1
     }
 
-    fn eval_position(&self, t: Real) -> Option<(Real, u8)> {
+    fn eval_position(&self, t: Real) -> Option<Real> {
         if t < math::ZERO {
             None
         } else if t >= self.i1_start() && t < self.i1_end() {
-            Some((self.s_i1(&t), 1))
+            Some(self.s_i1(&t))
         } else if t >= self.i2_start() && t < self.i2_end() {
-            Some((self.s_i2(&t), 2))
+            Some(self.s_i2(&t))
         } else if t >= self.i3_start() && t < self.i3_end() {
-            Some((self.s_i3(&t), 3))
+            Some(self.s_i3(&t))
         } else if t >= self.i4_start() && t < self.i4_end() {
-            Some((self.s_i4(&t), 4))
+            Some(self.s_i4(&t))
         } else if t >= self.i5_start() && t < self.i5_end() {
-            Some((self.s_i5(&t), 5))
+            Some(self.s_i5(&t))
         } else if t >= self.i6_start() && t < self.i6_end() {
-            Some((self.s_i6(&t), 6))
+            Some(self.s_i6(&t))
         } else if t >= self.i7_start() && t <= self.i7_end() {
-            Some((self.s_i7(&t), 7))
+            Some(self.s_i7(&t))
         } else {
-            Some((self.q1, 8))
+            Some(self.q1)
         }
     }
 }

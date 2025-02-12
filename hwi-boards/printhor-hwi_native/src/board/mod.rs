@@ -734,7 +734,7 @@ impl hwa::HwiContract for Contract {
 
     #[cfg(feature = "with-motion")]
     fn pause_ticker() {
-        hwa::info!("Ticker Paused");
+        hwa::debug!("Ticker Paused");
         TICKER_SIGNAL.reset();
     }
 

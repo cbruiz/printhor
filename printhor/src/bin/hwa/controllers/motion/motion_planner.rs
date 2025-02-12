@@ -716,14 +716,14 @@ impl MotionPlanner {
         num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
-        let p0_pos = self.motion_status.get_current_position();
+        let p0_pos = self.motion_status.get_last_planned_position();
         let relevant_world_coords = p1_wu.not_nan_coords();
 
         if !p0_pos.is_set {
             return Err(control::CodeExecutionFailure::HomingRequired);
         }
 
-        #[cfg(feature = "debug-motion")]
+        //#[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Received motion. relevant world coords: [{:?}] world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
             num, line.unwrap_or(0),
@@ -852,7 +852,7 @@ impl MotionPlanner {
                     line,
                 )
                 .await?;
-
+            
             hwa::debug!(
                 "speed: {:?} -> {:?} ",
                 requested_motion_speed.unwrap_or(Real::zero()).rdp(4),
@@ -980,7 +980,10 @@ impl Clone for MotionPlanner {
 /// corners, hence enhancing overall motion performance.
 #[cfg(feature = "cornering")]
 fn perform_cornering(
-    mut rb: embassy_sync::mutex::MutexGuard<<Contract as HwiContract>::MotionRingBufferMutexType, RingBuffer>,
+    mut rb: embassy_sync::mutex::MutexGuard<
+        <Contract as HwiContract>::MotionRingBufferMutexType,
+        RingBuffer,
+    >,
 ) -> Result<(), ()> {
     let mut left_offset = 2;
     let mut left_watermark = math::ZERO;

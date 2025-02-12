@@ -87,15 +87,48 @@ cfg_if::cfg_if! {
             pub fn int(&self) -> i64 {
                 self.0.trunc().to_i64().unwrap()
             }
+
+            /// Radians to degrees
+            pub fn r2d(&self) -> Real {
+                (*self) * hwa::make_real!(180.0) / hwa::math::PI
+            }
+
+            /// Degrees to radians
+            /// 360 -> 2pi
+            /// x ->
+            pub fn d2r(&self) -> Real {
+                (*self) * hwa::math::PI / hwa::make_real!(180.0)
+            }
+
             pub fn sqrt(self) -> Option<Self> {
                 match self.0.sqrt() {
                     None => {None}
                     Some(v) => {Some(Real(v))}
                 }
             }
+
+            pub fn sin(self) -> Self {
+                Real(self.0.sin())
+            }
+
             pub fn cos(self) -> Self {
                 Real(self.0.cos())
             }
+
+            pub fn tan(self) -> Self {
+                Real(self.0.tan())
+            }
+
+            /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
+            pub fn atan2(self, _other: Real) -> Self {
+                todo!("...")
+            }
+
+            /// Computes the arccosine of a number. Return value is in radians in the range [0, pi] or NaN if the number is outside the range [-1, 1].
+            pub fn acos(self) -> Self {
+                todo!("....")
+            }
+
             pub fn ln(self) -> Self {
                 Real(self.0.ln())
             }

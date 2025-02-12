@@ -122,7 +122,11 @@ pub struct Quadruped {
     ///  -X-/^\---
     ///  ---\_/---
     /// ```
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     leg_fl: SingleActuator,
     /// Leg Front-Right
     /// ```text
@@ -130,7 +134,11 @@ pub struct Quadruped {
     ///  ---/^\-X-
     ///  ---\_/---
     /// ```
-    #[cfg(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))]
+    #[cfg(all(
+        feature = "with-a-axis",
+        feature = "with-b-axis",
+        feature = "with-c-axis"
+    ))]
     leg_fr: SingleActuator,
     /// Leg Bottom-Left
     /// ```text
@@ -138,7 +146,11 @@ pub struct Quadruped {
     ///  ---/^\---
     ///  -X-\_/---
     /// ```
-    #[cfg(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))]
+    #[cfg(all(
+        feature = "with-i-axis",
+        feature = "with-j-axis",
+        feature = "with-k-axis"
+    ))]
     leg_bl: SingleActuator,
     /// Leg Bottom-Right
     /// ```text
@@ -146,28 +158,64 @@ pub struct Quadruped {
     ///  ---/^\---
     ///  ---\_/-X-
     /// ```
-    #[cfg(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))]
+    #[cfg(all(
+        feature = "with-u-axis",
+        feature = "with-v-axis",
+        feature = "with-w-axis"
+    ))]
     leg_br: SingleActuator,
 }
 impl Quadruped {
     pub const fn new(
-        #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+        #[cfg(all(
+            feature = "with-x-axis",
+            feature = "with-y-axis",
+            feature = "with-z-axis"
+        ))]
         leg_fl: SingleActuator,
-        #[cfg(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))]
+        #[cfg(all(
+            feature = "with-a-axis",
+            feature = "with-b-axis",
+            feature = "with-c-axis"
+        ))]
         leg_fr: SingleActuator,
-        #[cfg(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))]
+        #[cfg(all(
+            feature = "with-i-axis",
+            feature = "with-j-axis",
+            feature = "with-k-axis"
+        ))]
         leg_bl: SingleActuator,
-        #[cfg(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))]
+        #[cfg(all(
+            feature = "with-u-axis",
+            feature = "with-v-axis",
+            feature = "with-w-axis"
+        ))]
         leg_br: SingleActuator,
     ) -> Self {
         Self {
-            #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+            #[cfg(all(
+                feature = "with-x-axis",
+                feature = "with-y-axis",
+                feature = "with-z-axis"
+            ))]
             leg_fl,
-            #[cfg(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))]
+            #[cfg(all(
+                feature = "with-a-axis",
+                feature = "with-b-axis",
+                feature = "with-c-axis"
+            ))]
             leg_fr,
-            #[cfg(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))]
+            #[cfg(all(
+                feature = "with-i-axis",
+                feature = "with-j-axis",
+                feature = "with-k-axis"
+            ))]
             leg_bl,
-            #[cfg(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))]
+            #[cfg(all(
+                feature = "with-u-axis",
+                feature = "with-v-axis",
+                feature = "with-w-axis"
+            ))]
             leg_br,
         }
     }
@@ -178,14 +226,30 @@ impl WorldToSpaceTransformer for Quadruped {
         let mut space_pos = TVector::new();
 
         for actuator in [
-            #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+            #[cfg(all(
+                feature = "with-x-axis",
+                feature = "with-y-axis",
+                feature = "with-z-axis"
+            ))]
             &self.leg_fl,
-            #[cfg(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))]
+            #[cfg(all(
+                feature = "with-a-axis",
+                feature = "with-b-axis",
+                feature = "with-c-axis"
+            ))]
             &self.leg_fr,
-            #[cfg(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))]
+            #[cfg(all(
+                feature = "with-i-axis",
+                feature = "with-j-axis",
+                feature = "with-k-axis"
+            ))]
             &self.leg_bl,
-            #[cfg(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))]
-            &self.leg_br
+            #[cfg(all(
+                feature = "with-u-axis",
+                feature = "with-v-axis",
+                feature = "with-w-axis"
+            ))]
+            &self.leg_br,
         ] {
             let transformed_pos = actuator.project_to_space(world_pos)?;
             space_pos.assign_if_set(actuator.coords(), &transformed_pos);
@@ -197,14 +261,30 @@ impl WorldToSpaceTransformer for Quadruped {
         let mut world_pos = TVector::new();
 
         for actuator in [
-            #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+            #[cfg(all(
+                feature = "with-x-axis",
+                feature = "with-y-axis",
+                feature = "with-z-axis"
+            ))]
             &self.leg_fl,
-            #[cfg(all(feature = "with-a-axis", feature = "with-b-axis", feature = "with-c-axis"))]
+            #[cfg(all(
+                feature = "with-a-axis",
+                feature = "with-b-axis",
+                feature = "with-c-axis"
+            ))]
             &self.leg_fr,
-            #[cfg(all(feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis"))]
+            #[cfg(all(
+                feature = "with-i-axis",
+                feature = "with-j-axis",
+                feature = "with-k-axis"
+            ))]
             &self.leg_bl,
-            #[cfg(all(feature = "with-u-axis", feature = "with-v-axis", feature = "with-w-axis"))]
-            &self.leg_br
+            #[cfg(all(
+                feature = "with-u-axis",
+                feature = "with-v-axis",
+                feature = "with-w-axis"
+            ))]
+            &self.leg_br,
         ] {
             let transformed_pos = actuator.project_to_world(space_pos)?;
             world_pos.assign_if_set(actuator.coords(), &transformed_pos);
@@ -216,7 +296,7 @@ impl WorldToSpaceTransformer for Quadruped {
 //#endregion
 
 /// Analytically computes the inverse kinematics for a 3-DOF anthropomorphic manipulator (R-R-R in 3D)
-/// 
+///
 /// https://www.geogebra.org/3d/agurreym
 fn inverse_kinematics(
     world_pos: &TVector<Real>,
@@ -253,7 +333,10 @@ fn inverse_kinematics(
             / (math::TWO * _actuator.l2 * _actuator.l3);
 
     // \text{theta}_{3_r} = tan^{-1}\Big(\frac{\sqrt{1-cos^2_{\text{theta}_3}}}{cos_{\text{theta}_3}}\Big)
-    let theta3_r = (math::ONE - cos_theta3.powi(2)).sqrt().unwrap().atan2(cos_theta3);
+    let theta3_r = (math::ONE - cos_theta3.powi(2))
+        .sqrt()
+        .unwrap()
+        .atan2(cos_theta3);
 
     let theta2_r = pz.atan2((px.powi(2) + py.powi(2)).sqrt().unwrap())
         - (_actuator.l3 * theta3_r.sin()).atan2(_actuator.l2 + _actuator.l3 * theta3_r.cos());
@@ -299,7 +382,6 @@ fn direct_kinematics(
     space_pos: &TVector<Real>,
     _actuator: &SingleActuator,
 ) -> Result<TVector<Real>, ()> {
-
     hwa::debug!(
         "[kine] | h = {:?}, l1 = {:?}, l2 = {:?}, l3 = {:?}",
         _actuator.h,
@@ -310,11 +392,17 @@ fn direct_kinematics(
 
     let mut p = *space_pos;
 
-    let theta1_d = space_pos.get_coord(_actuator.theta1_coord).unwrap_or(math::ZERO)
+    let theta1_d = space_pos
+        .get_coord(_actuator.theta1_coord)
+        .unwrap_or(math::ZERO)
         + _actuator.initial_theta1;
-    let theta2_d = space_pos.get_coord(_actuator.theta2_coord).unwrap_or(math::ZERO)
+    let theta2_d = space_pos
+        .get_coord(_actuator.theta2_coord)
+        .unwrap_or(math::ZERO)
         + _actuator.initial_theta2;
-    let theta3_d = space_pos.get_coord(_actuator.theta3_coord).unwrap_or(math::ZERO)
+    let theta3_d = space_pos
+        .get_coord(_actuator.theta3_coord)
+        .unwrap_or(math::ZERO)
         + _actuator.initial_theta3;
 
     let theta_1 = theta1_d.d2r();
@@ -324,15 +412,13 @@ fn direct_kinematics(
     // Not yet optimized for readability
 
     let rel_x = {
-        (_actuator.l1 * theta_1.cos())
-            + (_actuator.l2 * theta_1.cos() * theta_2.cos())
+        (_actuator.l1 * theta_1.cos()) + (_actuator.l2 * theta_1.cos() * theta_2.cos())
             - (_actuator.l3 * theta_1.cos() * theta_2.sin() * theta_3.sin())
             + (_actuator.l3 * theta_1.cos() * theta_2.cos() * theta_3.cos())
     };
 
     let rel_y = {
-        (_actuator.l1 * theta_1.sin())
-            + (_actuator.l2 * theta_1.sin() * theta_2.cos())
+        (_actuator.l1 * theta_1.sin()) + (_actuator.l2 * theta_1.sin() * theta_2.cos())
             - (_actuator.l3 * theta_1.sin() * theta_2.sin() * theta_3.sin())
             + (_actuator.l3 * theta_1.sin() * theta_2.cos() * theta_3.cos())
     };
@@ -354,7 +440,9 @@ fn direct_kinematics(
 #[cfg(test)]
 mod tests {
     use crate as hwa;
-    use crate::kinematics::anthropomorphic_3dof::{direct_kinematics, inverse_kinematics, SingleActuator};
+    use crate::kinematics::anthropomorphic_3dof::{
+        direct_kinematics, inverse_kinematics, SingleActuator,
+    };
 
     const fn top_right_actuator() -> SingleActuator {
         SingleActuator::new(
@@ -373,54 +461,74 @@ mod tests {
             // theta3 initial angle
             hwa::make_real!(90.0),
             // Which world coordinates labels to get from input
-            hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z,
-            // Which space coordinates by label to use for output 
-            hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z,
+            hwa::CoordSel::X,
+            hwa::CoordSel::Y,
+            hwa::CoordSel::Z,
+            // Which space coordinates by label to use for output
+            hwa::CoordSel::X,
+            hwa::CoordSel::Y,
+            hwa::CoordSel::Z,
         )
     }
 
     #[test]
     fn test_kinematics() {
-
         let actuator = top_right_actuator();
 
         // 1.1 Test space center projects to world center
-        let space_center_pos = hwa::make_vector_real!(x=0.0, y=0.0, z=0.0);
+        let space_center_pos = hwa::make_vector_real!(x = 0.0, y = 0.0, z = 0.0);
         // Coordinate translation: Assuming the initial position of final effector is 0,0,0
-        let world_center = hwa::make_vector_real!(x=55.8614311, y=55.8614311, z=0.0);
+        let world_center = hwa::make_vector_real!(x = 55.8614311, y = 55.8614311, z = 0.0);
         // The normalized world center
-        let normalized_world_center = hwa::make_vector_real!(x=0.0, y=0.0, z=0.0);
-        
+        let normalized_world_center = hwa::make_vector_real!(x = 0.0, y = 0.0, z = 0.0);
+
         // Project (0,0,0) in space units to world to get the final effector position
         let world_pos = direct_kinematics(&space_center_pos, &actuator).unwrap();
         // Normalize world position. (traslate final effector relative position to 0,0,0)
         let world_normalized_pos = world_pos - world_center;
 
         // Deviation from expected world_pos (position relative to base)
-        let distance_1 = (world_normalized_pos - normalized_world_center).norm2().unwrap();
-        assert!(distance_1.is_negligible(), "World Projection is negligible compared to expected");
+        let distance_1 = (world_normalized_pos - normalized_world_center)
+            .norm2()
+            .unwrap();
+        assert!(
+            distance_1.is_negligible(),
+            "World Projection is negligible compared to expected"
+        );
 
         // 1.2 Test world center projects to space center
 
-        let space_absolute_pos = inverse_kinematics(&(world_normalized_pos + world_center), &actuator).unwrap();
+        let space_absolute_pos =
+            inverse_kinematics(&(world_normalized_pos + world_center), &actuator).unwrap();
         let distance_2 = space_absolute_pos.norm2().unwrap();
-        assert!(distance_2.is_negligible(), "Space Projection is negligible compared to expected");
-        
+        assert!(
+            distance_2.is_negligible(),
+            "Space Projection is negligible compared to expected"
+        );
+
         // 1.3 Test other projections
         // 1.3.1 10mm up
-        let p1 = world_center + hwa::make_vector_real!(x=0.0, y=0.0, z=10.0);
+        let p1 = world_center + hwa::make_vector_real!(x = 0.0, y = 0.0, z = 10.0);
         let space_absolute_pos = inverse_kinematics(&p1, &actuator).unwrap();
-        let distance_3 = (space_absolute_pos - hwa::make_vector_real!(
-            x=0.0, y=-10.4693403, z=9.71987152
-        )).norm2().unwrap();
-        assert!(distance_3.is_negligible(), "Space Projection is negligible compared to expected");
+        let distance_3 = (space_absolute_pos
+            - hwa::make_vector_real!(x = 0.0, y = -10.4693403, z = 9.71987152))
+        .norm2()
+        .unwrap();
+        assert!(
+            distance_3.is_negligible(),
+            "Space Projection is negligible compared to expected"
+        );
 
         // 1.3.1 10mm down
-        let p1 = world_center + hwa::make_vector_real!(x=0.0, y=0.0, z=-10.0);
+        let p1 = world_center + hwa::make_vector_real!(x = 0.0, y = 0.0, z = -10.0);
         let space_absolute_pos = inverse_kinematics(&p1, &actuator).unwrap();
-        let distance_3 = (space_absolute_pos - hwa::make_vector_real!(
-            x=0.0, y=10.4820585, z=-11.233345
-        )).norm2().unwrap();
-        assert!(distance_3.is_negligible(), "Space Projection is negligible compared to expected");
+        let distance_3 = (space_absolute_pos
+            - hwa::make_vector_real!(x = 0.0, y = 10.4820585, z = -11.233345))
+        .norm2()
+        .unwrap();
+        assert!(
+            distance_3.is_negligible(),
+            "Space Projection is negligible compared to expected"
+        );
     }
 }

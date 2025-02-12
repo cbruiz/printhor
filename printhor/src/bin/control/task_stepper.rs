@@ -224,15 +224,32 @@ pub async fn task_stepper(
                 #[cfg(feature = "verbose-timings")]
                 let mut tq = 0;
 
-                hwa::debug!("[task_stepper] MOTION_PLAN START");
+                #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                hwa::info!("[task_stepper] order_num:{:?} Commiting segment", _order_num);
 
                 let current_real_pos = motion_planner.motion_status().get_current_position();
 
                 #[cfg(feature = "debug-motion")]
                 hwa::info!(
-                    "[task_stepper] order_num:{:?} Current real position: [{:#?}] {}",
+                    "[task_stepper] order_num:{:?} Current real position is: world [{:#?}] {}",
+                    _order_num,
+                    current_real_pos.world_pos,
+                    Contract::WORLD_UNIT_MAGNITUDE,
+                );
+                #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                hwa::info!(
+                    "[task_stepper] order_num:{:?} Current real position is: space [{:#?}] {}",
                     _order_num,
                     current_real_pos.space_pos,
+                    Contract::SPACE_UNIT_MAGNITUDE,
+                );
+
+                #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                hwa::info!(
+                    "[task_stepper] order_num:{:?} Planned src: [{:#?}] dest: [{:#?}] {}",
+                    _order_num,
+                    segment.src_pos,
+                    segment.dest_pos,
                     Contract::SPACE_UNIT_MAGNITUDE,
                 );
                 #[cfg(feature = "debug-motion")]
@@ -245,13 +262,16 @@ pub async fn task_stepper(
                 );
 
                 let position_offset = segment.src_pos - current_real_pos.space_pos;
-                #[cfg(feature = "debug-motion")]
+                #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
                 hwa::info!(
                     "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
                     _order_num,
                     position_offset,
                     Contract::SPACE_UNIT_MAGNITUDE,
                 );
+                if !position_offset.abs().bounded_by(&TVector::one()) {
+                    hwa::warn!("[task_stepper] order_num:{:?} Too much offset to correct", _order_num)
+                }
                 segment.fix_deviation(
                     &position_offset,
                     motion_planner.motion_config().get_flow_rate_as_real(),
@@ -298,14 +318,16 @@ pub async fn task_stepper(
                         hwa::debug!("Relevant coords: [{:?}]", relevant_coords);
                         hwa::debug!("Relevant coords_dir_fwd: [{:?}]", relevant_coords_dir_fwd);
 
-                        hwa::debug!(
-                            "[task_stepper] MOVE [{:?}] -> [{:?}]",
+                        hwa::info!(
+                            "[task_stepper] order_num:{:?} Trajectory: [ src: [{:?}] dest: [{:?}] {} ]",
+                            _order_num,
                             segment
                                 .src_pos
                                 .with_coord(relevant_coords.complement(), None),
                             segment
                                 .dest_pos
                                 .with_coord(relevant_coords.complement(), None),
+                            Contract::SPACE_UNIT_MAGNITUDE,
                         );
 
                         cfg_if::cfg_if! {
@@ -339,9 +361,12 @@ pub async fn task_stepper(
 
                         #[cfg(feature = "verbose-timings")]
                         hwa::info!(
-                            "[task_stepper] order_num:{:?} Trajectory computation took: {} us",
+                            "[task_stepper] order_num:{:?} Trajectory computation took: {} us. displacement: {:?} {} in {:?} s",
                             _order_num,
-                            t_calc.elapsed().as_micros()
+                            t_calc.elapsed().as_micros(),
+                            trajectory.end_pos(),
+                            Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.end_time(),
                         );
                         #[cfg(feature = "verbose-timings")]
                         let t_bus = embassy_time::Instant::now();
@@ -381,7 +406,7 @@ pub async fn task_stepper(
 
                             hwa::trace!("Micro-segment START");
 
-                            if let Some((estimated_position, _)) = segment_iterator.next() {
+                            if let Some(estimated_position) = segment_iterator.next() {
                                 cfg_if::cfg_if! {
                                     if #[cfg(any(feature = "verbose-timings", feature = "with-motion-broadcast"))] {
                                         micro_segment_id += 1;
@@ -405,6 +430,7 @@ pub async fn task_stepper(
 
                                 let w = (segment_iterator.dt() * math::ONE_MILLION).round();
                                 if w.is_negligible() {
+                                    hwa::info!("giving up for any reason");
                                     break;
                                 }
                                 let _has_more =
@@ -415,10 +441,10 @@ pub async fn task_stepper(
                                     "[task_stepper] order_num:{:?}|{:?} Trajectory micro-segment advanced: {:?} {} {:?} steps",
                                     _order_num,
                                     micro_segment_id,
-                                    micro_segment_interpolator.advanced_world_units().map_nan_coords(
+                                    micro_segment_interpolator.advanced_units().map_nan_coords(
                                         relevant_coords, &math::ZERO
                                     ),
-                                    Contract::WORLD_UNIT_MAGNITUDE,
+                                    Contract::SPACE_UNIT_MAGNITUDE,
                                     micro_segment_interpolator.advanced_steps().map_nan_coords(
                                         relevant_coords, &0
                                     ),
@@ -470,8 +496,8 @@ pub async fn task_stepper(
 
                         #[cfg(feature = "debug-motion")]
                         let adv_steps = micro_segment_interpolator.advanced_steps();
-                        let adv_pos = micro_segment_interpolator.advanced_world_units();
-                        
+                        let adv_pos = micro_segment_interpolator.advanced_units();
+
                         #[cfg(feature = "debug-motion")]
                         hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {}, vlim: {:?} {}/s",
                             _order_num, adv_pos, Contract::SPACE_UNIT_MAGNITUDE,
@@ -503,10 +529,36 @@ pub async fn task_stepper(
                         }
 
                         {
-                            let next_real_pos = current_real_pos.space_pos
-                                + (segment.unit_vector_dir.sign() * adv_pos).map_nan(&math::ZERO);
+                            let adv_delta = segment.unit_vector_dir.sign() * adv_pos;
+                            #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                            hwa::info!(
+                                "[task_stepper] order_num:{:?} Advanced space: [{:#?}] {} {:?} steps",
+                                _order_num,
+                                adv_delta,
+                                Contract::SPACE_UNIT_MAGNITUDE,
+                                micro_segment_interpolator.advanced_steps()
+                            );
+                            let next_real_pos = (current_real_pos.space_pos
+                                + adv_delta.map_nan(&math::ZERO))
+                            .rdp(6);
                             let mut pos = current_real_pos.clone();
                             pos.update_from_space_coordinates(&next_real_pos);
+
+                            #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                            hwa::info!(
+                                "[task_stepper] order_num:{:?} Next real position: world [{:#?}] {}",
+                                _order_num,
+                                pos.world_pos,
+                                Contract::WORLD_UNIT_MAGNITUDE,
+                            );
+
+                            #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                            hwa::info!(
+                                "[task_stepper] order_num:{:?} Next real position: space [{:#?}] {}",
+                                _order_num,
+                                pos.space_pos,
+                                Contract::SPACE_UNIT_MAGNITUDE,
+                            );
                             motion_planner
                                 .motion_status()
                                 .update_current_position(_order_num, &pos);
@@ -527,10 +579,10 @@ pub async fn task_stepper(
                                     trajectory.v_lim.rdp(3).inner(),
                                     segment.speed_exit_su_s.rdp(3).inner(),
                                     trajectory.end_time(),
-                                    micro_segment_interpolator.advanced_world_units(),
-                                    Contract::WORLD_UNIT_MAGNITUDE,
-                                    micro_segment_interpolator.advanced_world_units().norm2().unwrap_or(math::ZERO).rdp(4),
-                                    Contract::WORLD_UNIT_MAGNITUDE,
+                                    micro_segment_interpolator.advanced_units(),
+                                    Contract::SPACE_UNIT_MAGNITUDE,
+                                    micro_segment_interpolator.advanced_units().norm2().unwrap_or(math::ZERO).rdp(4),
+                                    Contract::SPACE_UNIT_MAGNITUDE,
                                     micro_segment_interpolator.advanced_steps(),
                                     moves_left,
                                 );
@@ -592,12 +644,18 @@ pub async fn task_stepper(
                 } else {
                     hwa::debug!("dry_run: Skipping homing");
                 }
+                let position = hwa::controllers::Position::new_with_world_projection(
+                    &Contract::DEFAULT_WORLD_HOMING_POINT_WU,
+                );
+                motion_planner.motion_status().update_last_planned_position(
+                    _order_num,
+                    &position,
+                );
                 motion_planner.motion_status().update_current_position(
                     _order_num,
-                    &hwa::controllers::Position::new_with_world_projection(
-                        &Contract::DEFAULT_WORLD_HOMING_POINT_WU,
-                    ),
+                    &position,
                 );
+                
                 let moves_left = motion_planner.consume_current_plan(&event_bus).await;
                 hwa::debug!("Homing done");
                 moves_left
@@ -608,7 +666,8 @@ pub async fn task_stepper(
 }
 
 async fn park(motion_planner: &hwa::controllers::MotionPlanner) {
-    hwa::warn!("Stepping parked");
+    #[cfg(feature = "trace-commands")]
+    hwa::info!("[trace-commands] [task_stepper] Stepping parked");
     STEP_DRIVER.flush().await;
     motion_planner
         .motion_driver()

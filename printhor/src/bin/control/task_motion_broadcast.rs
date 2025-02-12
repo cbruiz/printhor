@@ -28,7 +28,9 @@ pub async fn task_motion_broadcast(
     let receiver = _motion_broadcast_channel.receiver();
 
     loop {
-        match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), receiver.receive()).await {
+        match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), receiver.receive())
+            .await
+        {
             Ok(hwa::MotionBroadcastEvent::Reset) => {
                 if current_order.is_some() {
                     flush(&mut current_order, &TVector::zero(), &TVector::zero());
@@ -64,7 +66,7 @@ pub async fn task_motion_broadcast(
                     changed |= mg.set_angle(coord, val);
                 });
 
-                #[cfg(feature="debug-motion-broadcast")]
+                #[cfg(feature = "debug-motion-broadcast")]
                 hwa::info!("[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] pos: [{:?}] applied: {:?}",
                     Real::from_f32((_elapsed as f32) / 1000000.0).rdp(4), motion_event.micro_segment_time.rdp(4),
                     motion_event.order_num, motion_event.micro_segment_id,
@@ -76,7 +78,7 @@ pub async fn task_motion_broadcast(
 
                     if embassy_time::with_timeout(
                         embassy_time::Duration::from_micros((MAX_CMD_DELAY) as u64),
-                        
+
                     )
                     .await
                     .is_err()
@@ -87,7 +89,7 @@ pub async fn task_motion_broadcast(
                      */
                 }
             }
-            Err(_e ) => {
+            Err(_e) => {
                 hwa::trace!("[task_motion_broadcast] Timeout");
             }
         }
@@ -99,7 +101,7 @@ fn flush(
     _absolute_stp_pos: &TVector<i32>,
     _absolute_wu_pos: &TVector<Real>,
 ) {
-    #[cfg(feature="debug-motion-broadcast")]
+    #[cfg(feature = "debug-motion-broadcast")]
     hwa::info!(
         "[task_motion_broadcast] DONE order_num:{:?} pos: [ step: [{:?}], world [{:?}] {} ]",
         current_id,

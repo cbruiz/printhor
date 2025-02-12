@@ -623,12 +623,11 @@ impl GCodeProcessor {
                     .get_last_planned_position();
                 let _rpos: hwa::controllers::Position =
                     self.motion_planner.motion_status().get_current_position();
-                let z = alloc::format!("{:?} Count {:?}\n", _pos.world_pos, _rpos.world_pos.map(
-                    |_c, _v| {
-                        Some(0u32)
-                    }
-                    
-                ));
+                let z = alloc::format!(
+                    "{:?} Count {:?}\n",
+                    _pos.world_pos,
+                    _rpos.world_pos.map(|_c, _v| { Some(0u32) })
+                );
                 let _ = self.write(channel, z.as_str()).await;
                 let z2 = alloc::format!("echo: Space {:#?}\n", _rpos.space_pos);
                 let _ = self.write(channel, z2.as_str()).await;
@@ -798,6 +797,5 @@ impl GCodeProcessor {
 }
 
 impl Drop for GCodeProcessor {
-    fn drop(&mut self) {
-    }
+    fn drop(&mut self) {}
 }

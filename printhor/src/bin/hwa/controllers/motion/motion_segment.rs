@@ -154,9 +154,9 @@ where
     ///
     /// # Returns
     /// An `Option` containing:
-    /// - A tuple of `(Real: Position, u8: segment piecewise id)`
+    /// - The position as real
     /// - `None` if exhausted.
-    pub fn next(&mut self) -> Option<(Real, u8)> {
+    pub fn next(&mut self) -> Option<Real> {
         if self.exhausted {
             None
         } else {
@@ -174,15 +174,15 @@ where
                 Some(p) => {
                     let end_pos = self.profile.end_pos();
 
-                    if p.0 >= end_pos {
+                    if p >= end_pos {
                         self.exhausted = true;
                         self.ds = end_pos - self.last_evaluated_position_wu;
                         self.last_evaluated_position_wu = end_pos;
                     } else {
-                        self.ds = p.0 - self.last_evaluated_position_wu;
-                        self.last_evaluated_position_wu = p.0;
+                        self.ds = p - self.last_evaluated_position_wu;
+                        self.last_evaluated_position_wu = p;
                     }
-                    Some((self.last_evaluated_position_wu, p.1))
+                    Some(self.last_evaluated_position_wu)
                 }
             }
         }

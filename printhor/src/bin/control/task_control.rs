@@ -1,11 +1,11 @@
 use crate::control;
 use crate::hwa;
+#[cfg(feature = "with-sd-card")]
+use crate::hwa::controllers::sd_card_controller::SDEntryType;
 use async_gcode::AsyncParserState;
 use embassy_time::{Duration, TimeoutError};
 #[allow(unused)]
 use printhor_hwa_common::{EventFlags, EventStatus};
-#[cfg(feature = "with-sd-card")]
-use crate::hwa::controllers::sd_card_controller::SDEntryType;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-print-job")] {
@@ -230,23 +230,18 @@ pub async fn execute(
                     Ok(mut it) => {
                         loop {
                             match it.next().await {
-                                Ok(Some(entry)) => {
-                                    match entry.entry_type {
-                                        SDEntryType::FILE => {
-                                            if !sent_first {
-                                                processor.write(channel, "Begin file list\n").await;
-                                                sent_first = true;
-                                            }
-                                            processor.write(channel, entry.name.as_str()).await;
-                                            let s = alloc::format!(
-                                                " {}\n",
-                                                entry.size
-                                            );
-                                            processor.write(channel, s.as_str()).await;
+                                Ok(Some(entry)) => match entry.entry_type {
+                                    SDEntryType::FILE => {
+                                        if !sent_first {
+                                            processor.write(channel, "Begin file list\n").await;
+                                            sent_first = true;
                                         }
-                                        SDEntryType::DIRECTORY => {}
+                                        processor.write(channel, entry.name.as_str()).await;
+                                        let s = alloc::format!(" {}\n", entry.size);
+                                        processor.write(channel, s.as_str()).await;
                                     }
-                                }
+                                    SDEntryType::DIRECTORY => {}
+                                },
                                 Ok(None) => {
                                     // EOF
                                     processor.write(channel, "End file list\n").await;
@@ -275,9 +270,7 @@ pub async fn execute(
             }
         }
         #[cfg(feature = "with-sd-card")]
-        control::GCodeValue::M21 => {
-            Ok(control::CodeExecutionSuccess::OK)
-        },
+        control::GCodeValue::M21 => Ok(control::CodeExecutionSuccess::OK),
         #[cfg(feature = "with-print-job")]
         control::GCodeValue::M23(file) => {
             match _printer_controller

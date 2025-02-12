@@ -3,11 +3,12 @@ use hwa::controllers::MultiTimer;
 use hwa::math;
 use hwa::math::TVector;
 use math::Real;
+use printhor_hwa_common::CoordSel;
 
 /// A struct for interpolating microsteps along linear trajectories.
 pub struct LinearMicrosegmentStepInterpolator {
     vdir_abs: TVector<Real>,
-    usteps_per_world_magnitude: TVector<Real>,
+    usteps_per_space_magnitude: TVector<Real>,
 
     /// Number of discrete steps along vector already advanced.
     usteps_advanced: TVector<u32>,
@@ -38,14 +39,14 @@ impl LinearMicrosegmentStepInterpolator {
     pub fn new(
         vdir_abs: TVector<Real>,
         distance: Real,
-        usteps_per_world_magnitude: TVector<Real>,
+        usteps_per_space_magnitude: TVector<Real>,
     ) -> Self {
         Self {
             vdir_abs,
-            usteps_per_world_magnitude,
+            usteps_per_space_magnitude,
             usteps_advanced: TVector::zero(),
             axis_steps_advanced_precise: TVector::zero(),
-            axis_steps_to_advance_precise: (vdir_abs * distance * usteps_per_world_magnitude)
+            axis_steps_to_advance_precise: (vdir_abs * distance * usteps_per_space_magnitude)
                 .floor(),
             multi_timer: MultiTimer::new(),
             #[cfg(any(test, feature = "assert-motion"))]
@@ -65,9 +66,10 @@ impl LinearMicrosegmentStepInterpolator {
     /// A boolean indicating whether advancement is successful.
     pub fn advance_to(&mut self, estimated_position: Real, width: Real) -> bool {
         let axial_pos: TVector<Real> = self.vdir_abs * estimated_position;
-        let step_pos: TVector<Real> = axial_pos * self.usteps_per_world_magnitude;
+        let step_pos: TVector<Real> = axial_pos * self.usteps_per_space_magnitude;
 
-        let steps_to_advance = (step_pos - self.axis_steps_advanced_precise)
+        let half = TVector::new().with_coord(CoordSel::all_axis(), Some(hwa::math::HALF));
+        let steps_to_advance = ((step_pos - self.axis_steps_advanced_precise) + half)
             .clamp_higher_than(TVector::zero())
             .clamp_lower_than(self.axis_steps_to_advance_precise);
         let steps_to_advance_precise_1: TVector<Real> = steps_to_advance;
@@ -83,7 +85,7 @@ impl LinearMicrosegmentStepInterpolator {
             });
         }
 
-        let _can_advance_more = self
+        let can_advance_more = self
             .axis_steps_advanced_precise
             .bounded_by(&self.axis_steps_to_advance_precise);
 
@@ -132,8 +134,7 @@ impl LinearMicrosegmentStepInterpolator {
         }
         tick_period_by_axis
             .foreach(|coord, v| self.multi_timer.set_channel_ticks(coord.into(), *v));
-        //can_advance_more
-        true
+        can_advance_more
     }
 
     /// Returns the internal state of the `MultiTimer`.
@@ -154,19 +155,19 @@ impl LinearMicrosegmentStepInterpolator {
         self.usteps_advanced
     }
 
-    /// Returns the number of advanced [hwa::Contract::WORLD_UNIT_MAGNITUDE] units.
+    /// Returns the number of advanced [hwa::Contract::SPACE_UNIT_MAGNITUDE] units.
     ///
     /// # Returns
     ///
-    /// A `TVector` containing the number of advanced [hwa::Contract::WORLD_UNIT_MAGNITUDE] units.
-    pub fn advanced_world_units(&self) -> TVector<Real> {
+    /// A `TVector` containing the number of advanced [hwa::Contract::SPACE_UNIT_MAGNITUDE] units.
+    pub fn advanced_units(&self) -> TVector<Real> {
         self.advanced_steps().map_values(|_, c| {
             if c > 0 {
                 Some(Real::from_lit(c.into(), 0))
             } else {
                 None
             }
-        }) / self.usteps_per_world_magnitude
+        }) / self.usteps_per_space_magnitude
     }
 
     /// Returns the width of the multi timer.
@@ -193,9 +194,9 @@ pub mod interpolation_test {
         use math::Real;
 
         let mut lin = LinearMicrosegmentStepInterpolator::new(
-            TVector::from_coords(Some(math::ONE), None, None, None),
+            hwa::make_vector_real!(x = 1.0),
             Real::from_f32(100.0),
-            TVector::from_coords(Some(Real::from_f32(160.0)), None, None, None),
+            hwa::make_vector_real!(x = 160.0),
         );
 
         lin.advance_to(Real::from_f32(100.0), Real::from_f32(100.0));

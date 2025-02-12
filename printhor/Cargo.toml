@@ -18,30 +18,16 @@ status = "experimental"
 # Highly convenient for development. Meaning any other build needs to be like: cargo [...] --no-default-features
 default = [
     "native",
-    "with-serial-usb",
-    "with-serial-port-1",
-    "with-serial-port-2",
-    "with-spi",
-    "with-i2c",
-    "with-motion",
-    #"with-ps-on",
-    "with-probe",
-    "with-hot-end",
-    "with-hot-bed",
-    "with-fan-layer",
-    "with-sd-card",
-    "with-print-job",
-    "with-fan-extra-1",
-    "with-laser",
-    #"with-trinamic",
-    #"trace-commands",
 ]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
 # A specific hack to verify motion distances match the expectations
-assert-motion = []
+
+debug-position = []
 debug-motion = []
 debug-motion-broadcast = []
+
+assert-motion = []
 
 with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast"]
@@ -188,33 +174,19 @@ plot-motion-plan = ["gnuplot"]
 
 native = [
     "with-log",
-    "debug-motion",
+    "debug-position",
+    #"debug-motion",
     #"debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
 
     "cornering",
+    #"trace-commands",
 
     "with-motion-cartessian-kinematics",
     #"with-motion-anthropomorphic-kinematics",
     #"with-motion-delta-kinematics",
-
-    #"with-trinamic", "trinamic-uart-multi-channel",
-    #"with-motion",
-    #"with-serial-usb",
-    #"with-serial-port-1",
-    #"with-serial-port-2",
-    #"with-ps-on",
-    #"with-spi",
-    #"with-sd-card",
-    #"with-print-job",
-    #"with-probe",
-    #"with-hot-end",
-    #"with-hot-bed",
-    #"with-fan-layer",
-    #"with-fan-extra-1",
-    #"with-laser",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -227,8 +199,24 @@ native = [
     #"with-i-axis", "with-j-axis", "with-k-axis",
     #"with-u-axis", "with-v-axis", "with-w-axis",
 
-    #"plot-motion-plan",
-    #"itertools",
+
+    "with-serial-usb",
+    "with-serial-port-1",
+    "with-serial-port-2",
+    "with-spi",
+    "with-i2c",
+    "with-motion",
+    "with-ps-on",
+    "with-probe",
+    "with-hot-end",
+    "with-hot-bed",
+    "with-fan-layer",
+    "with-sd-card",
+    "with-print-job",
+    "with-fan-extra-1",
+    "with-laser",
+    #"with-trinamic",
+
     "printhor-hwi_native",
     "embassy-executor/arch-std", "embassy-sync/std", "embassy-time/std",
 ]
@@ -275,8 +263,9 @@ nucleo64-l476rg = [
     #"nightly",
     "with-defmt",
 
+    "debug-position",
     #"debug-motion",
-    #"debug-motion-broadcast",
+    "debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
@@ -284,21 +273,21 @@ nucleo64-l476rg = [
     "cornering",
 
     "with-motion",
-    "with-motion-cartessian-kinematics",
-    #"with-motion-anthropomorphic-kinematics",
+    #"with-motion-cartessian-kinematics",
+    "with-motion-anthropomorphic-kinematics",
     #"with-motion-delta-kinematics",
-    #"with-motion-broadcast",
+    "with-motion-broadcast",
     #"with-e-axis",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    #"with-a-axis", "with-b-axis", "with-c-axis",
-    #"with-i-axis", "with-j-axis", "with-k-axis",
-    #"with-u-axis", "with-v-axis", "with-w-axis",
+    "with-a-axis", "with-b-axis", "with-c-axis",
+    "with-i-axis", "with-j-axis", "with-k-axis",
+    "with-u-axis", "with-v-axis", "with-w-axis",
 
     #"with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1",
     #"with-serial-port-2", # Not implemented
     #"with-spi",
-    #"with-i2c",
+    "with-i2c",
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
     #"with-probe",
@@ -318,7 +307,9 @@ nucleo64-l476rg = [
 ]
 nucleo64-f410rb = [
     "with-defmt",
-    "debug-motion",
+    #"debug-position",
+    #"debug-motion",
+    #"debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
@@ -333,20 +324,22 @@ nucleo64-f410rb = [
     #"with-motion-broadcast",
     "with-x-axis", "with-y-axis", "with-z-axis",
 
+    #"with-serial-usb", # NOT SUPPORTED
     "with-serial-port-1",
+    #"with-serial-port-2", # TODO
     #"with-spi",
     #"with-i2c",
-    #"with-sd-card", "sd-card-uses-spi",
-    #"with-print-job",
-    #"with-probe",
+    #"with-sd-card", "sd-card-uses-spi", # TODO
+    #"with-print-job", # TODO
+    #"with-probe", # TODO
     #"with-hot-end", # CNC Hat does not have it
     #"with-hot-bed", # CNC Hat does not have it
-    #"with-fan-layer",
-    #"with-laser",
-    #"with-ps-on",
+    #"with-fan-layer", # TODO
+    "with-laser",
+    "with-ps-on",
 
     "float-point-f32-impl",
-    #"float-point-f64-impl",
+    #"float-point-f64-impl", # TAKES TOO MUCH SPACE
     #"fixed-point-128-impl",
 
     "printhor-hwi_nucleo_64_arduino_cnc_hat/nucleo64-f410rb",

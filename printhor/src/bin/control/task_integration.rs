@@ -1,8 +1,8 @@
-use alloc::string::ToString;
 #[allow(unused)]
 use crate::control;
 use crate::hwa;
 use crate::hwa::GCodeProcessor;
+use alloc::string::ToString;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use hwa::math;
 use hwa::CoordSel;
@@ -747,8 +747,6 @@ pub async fn task_integration(
             }
         }
     }
-    
-    
 
     // Separator
     hwa::info!("##");
@@ -764,21 +762,19 @@ pub async fn task_integration(
         let resp = control::task_control::execute(
             &mut processor,
             CommChannel::Internal,
-            &(
-                control::GCodeCmd::new(
-                    11,
-                    Some(11),
-                    control::GCodeValue::M37(control::S {
-                        s: Some(Real::new(1, 0)),
-                    }),
-                )
-            ),
+            &(control::GCodeCmd::new(
+                11,
+                Some(11),
+                control::GCodeValue::M37(control::S {
+                    s: Some(Real::new(1, 0)),
+                }),
+            )),
             #[cfg(feature = "with-sd-card")]
             &mut card_controller,
             #[cfg(feature = "with-print-job")]
             &mut printer_controller,
         )
-            .await;
+        .await;
         if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
@@ -801,7 +797,7 @@ pub async fn task_integration(
             #[cfg(feature = "with-print-job")]
             &mut printer_controller,
         )
-            .await;
+        .await;
         if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
@@ -813,7 +809,7 @@ pub async fn task_integration(
             embassy_time::Duration::from_secs(5),
             subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_PAUSED)),
         )
-            .await
+        .await
         {
             Ok(_) => {
                 // command resume (eq: M24)
@@ -829,13 +825,13 @@ pub async fn task_integration(
                     #[cfg(feature = "with-print-job")]
                     &mut printer_controller,
                 )
-                    .await;
+                .await;
                 if resp.and_then(expect_immediate).is_ok() {
                     match embassy_time::with_timeout(
                         embassy_time::Duration::from_secs(1200),
                         subscriber.ft_wait_until(EventFlags::JOB_COMPLETED),
                     )
-                        .await
+                    .await
                     {
                         Ok(_r) => {
                             hwa::info!("## {} - END", test_name);
@@ -861,21 +857,19 @@ pub async fn task_integration(
         let resp = control::task_control::execute(
             &mut processor,
             CommChannel::Internal,
-            &(
-                control::GCodeCmd::new(
-                    11,
-                    Some(11),
-                    control::GCodeValue::M37(control::S {
-                        s: Some(Real::new(0, 0)),
-                    }),
-                )
-            ),
+            &(control::GCodeCmd::new(
+                11,
+                Some(11),
+                control::GCodeValue::M37(control::S {
+                    s: Some(Real::new(0, 0)),
+                }),
+            )),
             #[cfg(feature = "with-sd-card")]
             &mut card_controller,
             #[cfg(feature = "with-print-job")]
             &mut printer_controller,
         )
-            .await;
+        .await;
         if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
@@ -883,8 +877,6 @@ pub async fn task_integration(
             return;
         }
     }
-
-
 
     // Separator
     hwa::info!("##");

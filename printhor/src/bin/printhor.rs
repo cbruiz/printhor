@@ -509,6 +509,11 @@ async fn init_controllers_and_spawn_tasks(
                 motion_status.update_last_planned_position(0, &pos);
                 motion_status.update_current_position(0, &pos);
             }
+            #[cfg(all(feature = "native", feature = "with-ps-on"))]
+            {
+                hwa::warn!("Virtually powering on");
+                event_bus.publish_event(hwa::EventStatus::containing(hwa::EventFlags::ATX_ON)).await;
+            }
         }
     }
 

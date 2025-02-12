@@ -4,6 +4,7 @@ use crate::hwa;
 #[allow(unused)]
 use core::ops::Neg;
 use embassy_time::Duration;
+use hwa::Contract;
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
@@ -381,7 +382,7 @@ impl MotionDriver {
             homming_position
         );
 
-        Ok(homming_position)
+        Ok(Contract::DEFAULT_WORLD_HOMING_POINT_WU)
     }
     #[allow(unused)]
     async fn shabbily_move_to(
