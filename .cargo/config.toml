@@ -4,8 +4,6 @@
 ## Configuration - BEGIN ##
 ###########################
 
-EMBASSY_EXECUTOR_TASK_ARENA_SIZE = "16384"
-
 ## Heater and bed configuration (thermistor based) ##
 
 # [Depends on the board] the pull-up resistance of hot-end sensor circuit in ohms

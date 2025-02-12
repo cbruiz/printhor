@@ -272,7 +272,9 @@ mks_robin_nano = [
 ####################
 
 nucleo64-l476rg = [
+    #"nightly",
     "with-defmt",
+
     #"debug-motion",
     #"debug-motion-broadcast",
     #"verbose-timings",
@@ -280,26 +282,23 @@ nucleo64-l476rg = [
     #"trace-commands",
 
     "cornering",
-    #"nightly",
-    #"executor-interrupt",
-    "cooperative",
 
     "with-motion",
-    "with-motion-anthropomorphic-kinematics",
-    #"with-motion-cartessian-kinematics",
+    "with-motion-cartessian-kinematics",
+    #"with-motion-anthropomorphic-kinematics",
     #"with-motion-delta-kinematics",
-    "with-motion-broadcast",
+    #"with-motion-broadcast",
     #"with-e-axis",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    "with-a-axis", "with-b-axis", "with-c-axis",
-    "with-i-axis", "with-j-axis", "with-k-axis",
-    "with-u-axis", "with-v-axis", "with-w-axis",
+    #"with-a-axis", "with-b-axis", "with-c-axis",
+    #"with-i-axis", "with-j-axis", "with-k-axis",
+    #"with-u-axis", "with-v-axis", "with-w-axis",
 
     #"with-serial-usb", # Useless Nucleo64 attachs USART2 # Not working either
     "with-serial-port-1",
     #"with-serial-port-2", # Not implemented
     #"with-spi",
-    "with-i2c",
+    #"with-i2c",
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
     #"with-probe",
@@ -328,15 +327,15 @@ nucleo64-f410rb = [
     "cooperative",
 
     "with-motion",
-    #"with-motion-anthropomorphic-kinematics",
     "with-motion-cartessian-kinematics",
+    #"with-motion-anthropomorphic-kinematics",
     #"with-motion-delta-kinematics",
-    "with-motion-broadcast",
+    #"with-motion-broadcast",
     "with-x-axis", "with-y-axis", "with-z-axis",
 
     "with-serial-port-1",
     #"with-spi",
-    "with-i2c",
+    #"with-i2c",
     #"with-sd-card", "sd-card-uses-spi",
     #"with-print-job",
     #"with-probe",

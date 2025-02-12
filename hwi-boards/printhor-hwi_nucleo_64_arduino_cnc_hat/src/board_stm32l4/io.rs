@@ -224,11 +224,17 @@ impl MotionI2c {
 
     pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
 
-        let calibrated_angle = (
-            (*angle)
-            + crate::board_stm32l4::ANTHROPOMORFIC_SPACE_CALIBRATION.get_coord(axis).unwrap_or(math::ZERO)
-        ) * crate::board_stm32l4::ANTHROPOMORFIC_SPACE_DIR.get_coord(axis).unwrap_or(math::ZERO);
-
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
+                let calibrated_angle = (
+                    (*angle)
+                    + crate::board_stm32l4::ANTHROPOMORFIC_SPACE_CALIBRATION.get_coord(axis).unwrap_or(math::ZERO)
+                ) * crate::board_stm32l4::ANTHROPOMORFIC_SPACE_DIR.get_coord(axis).unwrap_or(math::ZERO);
+            }
+            else {
+                let calibrated_angle = *angle;
+            }
+        }
 
         //Theoretically, should be:
         // cnt_min (1ms := -90º) = (4096 / 20) + 0.5 - 1 = 204.3
