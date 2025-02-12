@@ -283,7 +283,7 @@ mod tests {
         // Set to a time past the end of the profile
         let micro_segment = segment_iter.next();
 
-        assert_eq!(micro_segment.unwrap().0, motion_profile.end_pos(), "At end");
+        assert_eq!(micro_segment.unwrap(), motion_profile.end_pos(), "At end");
         let micro_segment = segment_iter.next();
         assert!(micro_segment.is_none(), "Does not avance more");
         assert!(segment_iter.exhausted, "Is exhausted");
