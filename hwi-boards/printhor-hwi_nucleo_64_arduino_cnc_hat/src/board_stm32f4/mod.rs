@@ -2,6 +2,8 @@
 //!
 //! https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32F410RB.json
 //!
+
+use embassy_stm32::rcc::HseMode;
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
 
@@ -37,7 +39,7 @@ impl HwiContract for Contract {
     //#region "Memory management/tracking settings"
 
     #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
-    const MAX_HEAP_SIZE_BYTES: usize = 512;
+    const MAX_HEAP_SIZE_BYTES: usize = 256;
 
     #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 8096;
@@ -325,18 +327,23 @@ impl HwiContract for Contract {
 
         //#region "Init RCC"
 
-        // HSI = 16Mhz
-        // SYSCLK = ((HSI / M) * N) / P => ((16 / 8) * 100) / 2 = 100Mhz
+        // HSE = 8Mhz (The ST Link Master Clock Output)
+        // SYSCLK = ((HSE / M) * N) / P => ((8 / 4) * 100) / 2 = 100Mhz
         // HCLK = SYSCLK / ahb_pre => 100 / 1 =  100MHz
 
         let config = {
             let mut config = embassy_stm32::Config::default();
-            config.rcc.hsi = true;
-            config.rcc.hse = None;
+            config.rcc.hsi = false;
+            config.rcc.hse = Some(
+                embassy_stm32::rcc::Hse {
+                    mode: HseMode::Bypass,
+                    freq: embassy_stm32::time::Hertz(8_000_000),
+                }
+            );
             config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_P;
-            config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSI;
+            config.rcc.pll_src = embassy_stm32::rcc::PllSource::HSE;
             config.rcc.pll = Some(embassy_stm32::rcc::Pll {
-                prediv: embassy_stm32::rcc::PllPreDiv::DIV8,
+                prediv: embassy_stm32::rcc::PllPreDiv::DIV4,
                 mul: embassy_stm32::rcc::PllMul::MUL100,
                 divp: Some(embassy_stm32::rcc::PllPDiv::DIV2),
                 divq: None,
@@ -347,6 +354,7 @@ impl HwiContract for Contract {
             config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
             config
         };
+        // CPACR?
         hwa::info!("embassy init...");
         let p = embassy_stm32::init(config);
         hwa::info!("embassy init done");
@@ -359,14 +367,14 @@ impl HwiContract for Contract {
             if #[cfg(all(feature = "with-serial-port-1"))] {
 
                 embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
-                    USART2 => embassy_stm32::usart::BufferedInterruptHandler<embassy_stm32::peripherals::USART2>;
+                    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
                 });
                 {
                     use embassy_stm32::interrupt::InterruptExt;
                     embassy_stm32::interrupt::USART2.set_priority(embassy_stm32::interrupt::Priority::P3);
                     //uses DMA1_CH6 (TX), p.DMA1_CH7 (RX),
-                    embassy_stm32::interrupt::DMA1_STREAM7.set_priority(embassy_stm32::interrupt::Priority::P3);
                     embassy_stm32::interrupt::DMA1_STREAM6.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_STREAM5.set_priority(embassy_stm32::interrupt::Priority::P3);
                 }
 
                 let mut cfg = embassy_stm32::usart::Config::default();
@@ -375,26 +383,20 @@ impl HwiContract for Contract {
                 cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
                 cfg.parity = embassy_stm32::usart::Parity::ParityNone;
                 cfg.detect_previous_overrun = true;
-                type TxBuffType = [u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE];
-                type RxBuffType = [u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE];
 
-                let txb = hwa::make_static_ref!(
-                    "txbuff",
-                    TxBuffType,
-                    [0u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE]
-                );
+                type RxBuffType = [u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE];
                 let rxb = hwa::make_static_ref!(
                     "txbuff",
                     RxBuffType,
                     [0u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE]
                 );
 
-                let (uart_port1_tx_device, uart_port1_rx_device) = embassy_stm32::usart::BufferedUart::new(
+                let (uart_port1_tx_device, uart_port1_rx_device) = embassy_stm32::usart::Uart::new(
                     p.USART2,
-                    UartPort1Irqs,
                     p.PA3, p.PA2,
-                    txb,
-                    rxb,
+                    UartPort1Irqs,
+                    p.DMA1_CH6,
+                    p.DMA1_CH5,
                     cfg,
                 ).expect("Ready").split();
                 let serial_port1_tx = hwa::make_static_async_controller!(
@@ -402,7 +404,9 @@ impl HwiContract for Contract {
                     types::SerialPort1TxMutexStrategy,
                     hwa::SerialTxWrapper::new(uart_port1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
                 );
-                let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device);
+                let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device.into_ring_buffered(
+                    rxb
+                ));
                 hwa::info!("serial-port-1 DONE");
             }
         }
@@ -488,7 +492,7 @@ impl HwiContract for Contract {
                                 i2c_conf,
                             )).await
                         );
-                        hwa::info!("with-motion-broadcast DONE");
+                        hwa::debug!("with-motion-broadcast DONE");
                     }
                 }
 
@@ -723,7 +727,7 @@ impl HwiContract for Contract {
                     syst.disable_counter();
                     syst.disable_interrupt();
                 }
-                hwa::debug!("Ticker Paused");
+                hwa::info!("Ticker Paused");
             }
 
             fn resume_ticker() {
@@ -731,10 +735,10 @@ impl HwiContract for Contract {
                 unsafe {
                     let p = cortex_m::Peripherals::steal();
                     let mut syst = p.SYST;
-                    syst.enable_interrupt();
                     syst.enable_counter();
+                    syst.enable_interrupt();
                 }
-                hwa::debug!("Ticker Resumed");
+                hwa::info!("Ticker Resumed");
             }
         }
     }
@@ -749,15 +753,15 @@ impl HwiContract for Contract {
                 pub static EXECUTOR_HIGH: embassy_executor::InterruptExecutor = embassy_executor::InterruptExecutor::new();
 
                 #[interrupt]
-                unsafe fn RCC() {
+                unsafe fn RTC_ALARM() {
                     EXECUTOR_HIGH.on_interrupt()
                 }
 
                 use embassy_stm32::interrupt;
                 use embassy_stm32::interrupt::InterruptExt;
-                interrupt::RCC.set_priority(interrupt::Priority::P2);
+                interrupt::RTC_ALARM.set_priority(interrupt::Priority::P2);
 
-                let spawner = EXECUTOR_HIGH.start(interrupt::RCC);
+                let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
                 spawner.spawn(_token).map_err(|_| ())
             }
         }

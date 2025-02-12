@@ -13,10 +13,14 @@ There are two base boards supported in this category.
 The assumption/requirement is to use any of these generic purpose development board with the Arduino CNC Shield v3 (hat):
 ![alt text](../../datasheets/NUCLEO-L476RG/Arduino-CNC-Shield-Pinout-V3.XX.jpeg "Arduino CNC Shield v3")
 
+**Important**: Upgrade the Nucleo ST-LINK/V2 firmware to at least: Version: V2J43M28 Build:   Jun 16 2023 16:43:19
+
 In these development boards, flash and run can be directly performed with probe-rs just connecting USB as they have a built-in SWD/JTAG interface:
 
 ### nucleo-f410rb
-Please, note that this board is very limited in terms of flash and memory (48kB SRAM, 128kB flash).
+https://os.mbed.com/platforms/ST-Nucleo-F410RB/
+
+Please, note that this board is very limited in terms of flash and memory (32kB SRAM, 128kB flash).
 You might not assume that a firwmare not optimized for size (LTO, etc...) will fit in flash.
 
 Note: This target uses flip-link by default, requiring flip-link tool. To change this behavior please check .cargo/config.toml
@@ -29,6 +33,8 @@ DEFMT_LOG=info RUST_BACKTRACE=0 RUSTFLAGS='--cfg board_stm32l4="nucleo64-f410rb"
 ```
 
 ### nucleo-l476rg
+https://os.mbed.com/platforms/ST-Nucleo-L476RG/
+
 This one is a bit slower but much more RAM and flash. Enough even though with not very optimized firmware and many features
 
 ```shell

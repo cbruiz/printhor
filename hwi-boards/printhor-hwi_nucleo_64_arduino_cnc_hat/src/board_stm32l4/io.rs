@@ -11,6 +11,8 @@ cfg_if::cfg_if! {
     if #[cfg(all(feature = "with-serial-port-1", not(feature = "uart-uses-ring-buffer")))] {
         pub mod uart_port1 {
 
+            compile_error!("not proper");
+
             pub struct UartPort1RxInputStream {
                 receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>,
             }
@@ -240,7 +242,7 @@ impl MotionI2c {
         let index = axis.index();
 
         if index < 16 {
-            //#[cfg(feature = "debug-motion-broadcast")]
+            #[cfg(feature = "debug-motion-broadcast")]
             hwa::info!("[task_motion_broadcast] set PWM [{:?}, {:?}] angle: ({:?})->{:?} : {:?} -> {:?}", axis, index, angle, calibrated_angle, self.state[index].off, pwm );
             if self.state[index].off != pwm {
                 self.state[index].off = pwm;

@@ -1,3 +1,4 @@
+use alloc::string::ToString;
 #[allow(unused)]
 use crate::control;
 use crate::hwa;
@@ -613,7 +614,7 @@ pub async fn task_integration(
             &mut printer_controller,
         )
         .await;
-        if resp.and_then(expect_deferred).is_ok() {
+        if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
             finish_task(Err(test_name));
@@ -691,7 +692,7 @@ pub async fn task_integration(
             &mut printer_controller,
         )
         .await;
-        if resp.and_then(expect_deferred).is_ok() {
+        if resp.and_then(expect_immediate).is_ok() {
             hwa::info!("## {} - END", test_name);
         } else {
             finish_task(Err(test_name));
@@ -746,6 +747,144 @@ pub async fn task_integration(
             }
         }
     }
+    
+    
+
+    // Separator
+    hwa::info!("##");
+
+    // Separator
+    hwa::info!("##");
+
+    #[cfg(feature = "with-print-job")]
+    {
+        let test_name = "T16 [Benchy)]";
+
+        // Set DRY_RUN Mode
+        let resp = control::task_control::execute(
+            &mut processor,
+            CommChannel::Internal,
+            &(
+                control::GCodeCmd::new(
+                    11,
+                    Some(11),
+                    control::GCodeValue::M37(control::S {
+                        s: Some(Real::new(1, 0)),
+                    }),
+                )
+            ),
+            #[cfg(feature = "with-sd-card")]
+            &mut card_controller,
+            #[cfg(feature = "with-print-job")]
+            &mut printer_controller,
+        )
+            .await;
+        if resp.and_then(expect_immediate).is_ok() {
+            hwa::info!("## {} - END", test_name);
+        } else {
+            finish_task(Err(test_name));
+            return;
+        }
+
+        let gcode = control::GCodeCmd::new(
+            9,
+            Some(9),
+            control::GCodeValue::M23(Some("BENCHY.G".to_string())),
+        );
+        hwa::info!("## {} - BEGIN", test_name);
+        let resp = control::task_control::execute(
+            &mut processor,
+            CommChannel::Internal,
+            &gcode,
+            #[cfg(feature = "with-sd-card")]
+            &mut card_controller,
+            #[cfg(feature = "with-print-job")]
+            &mut printer_controller,
+        )
+            .await;
+        if resp.and_then(expect_immediate).is_ok() {
+            hwa::info!("## {} - END", test_name);
+        } else {
+            finish_task(Err(test_name));
+            return;
+        }
+
+        match embassy_time::with_timeout(
+            embassy_time::Duration::from_secs(5),
+            subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_PAUSED)),
+        )
+            .await
+        {
+            Ok(_) => {
+                // command resume (eq: M24)
+
+                let gcode = control::GCodeCmd::new(10, Some(10), control::GCodeValue::M24);
+
+                let resp = control::task_control::execute(
+                    &mut processor,
+                    CommChannel::Internal,
+                    &gcode,
+                    #[cfg(feature = "with-sd-card")]
+                    &mut card_controller,
+                    #[cfg(feature = "with-print-job")]
+                    &mut printer_controller,
+                )
+                    .await;
+                if resp.and_then(expect_immediate).is_ok() {
+                    match embassy_time::with_timeout(
+                        embassy_time::Duration::from_secs(1200),
+                        subscriber.ft_wait_until(EventFlags::JOB_COMPLETED),
+                    )
+                        .await
+                    {
+                        Ok(_r) => {
+                            hwa::info!("## {} - END", test_name);
+                        }
+                        Err(_) => {
+                            finish_task(Err(test_name));
+                            return;
+                        }
+                    }
+                } else {
+                    finish_task(Err(test_name));
+                    return;
+                }
+            }
+            Err(_) => {
+                //hwa::error!("Timeout expecting pause status");
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+
+        // Unset DRY_RUN Mode
+        let resp = control::task_control::execute(
+            &mut processor,
+            CommChannel::Internal,
+            &(
+                control::GCodeCmd::new(
+                    11,
+                    Some(11),
+                    control::GCodeValue::M37(control::S {
+                        s: Some(Real::new(0, 0)),
+                    }),
+                )
+            ),
+            #[cfg(feature = "with-sd-card")]
+            &mut card_controller,
+            #[cfg(feature = "with-print-job")]
+            &mut printer_controller,
+        )
+            .await;
+        if resp.and_then(expect_immediate).is_ok() {
+            hwa::info!("## {} - END", test_name);
+        } else {
+            finish_task(Err(test_name));
+            return;
+        }
+    }
+
+
 
     // Separator
     hwa::info!("##");

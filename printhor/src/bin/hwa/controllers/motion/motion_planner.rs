@@ -4,7 +4,6 @@ use hwa::math;
 use hwa::Contract;
 use hwa::HwiContract;
 
-use embassy_sync::mutex::MutexGuard;
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
 use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
 use hwa::{EventFlags, EventStatus, PersistentState};
@@ -981,7 +980,7 @@ impl Clone for MotionPlanner {
 /// corners, hence enhancing overall motion performance.
 #[cfg(feature = "cornering")]
 fn perform_cornering(
-    mut rb: MutexGuard<<Contract as HwiContract>::MotionRingBufferMutexType, RingBuffer>,
+    mut rb: embassy_sync::mutex::MutexGuard<<Contract as HwiContract>::MotionRingBufferMutexType, RingBuffer>,
 ) -> Result<(), ()> {
     let mut left_offset = 2;
     let mut left_watermark = math::ZERO;
@@ -1074,7 +1073,7 @@ fn perform_cornering(
 #[cfg(feature = "native")]
 #[allow(unused)]
 pub fn display_content(
-    rb: &MutexGuard<
+    rb: &embassy_sync::mutex::MutexGuard<
         <hwa::types::MotionRingBufferMutexStrategy as hwa::AsyncMutexStrategy>::AsyncMutexType,
         RingBuffer,
     >,

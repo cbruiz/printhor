@@ -1,6 +1,8 @@
 //! Hardware Interface implementation for nucleo64-L476RG (STM32L476RG)
 //!
 //! https://github.com/embassy-rs/stm32-data-generated/blob/main/data/chips/STM32L476RG.json
+//!
+//! https://os.mbed.com/platforms/ST-Nucleo-L476RG/
 
 use embassy_time::Duration;
 use printhor_hwa_common as hwa;
@@ -123,13 +125,13 @@ impl HwiContract for Contract {
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
-                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 25;
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 50;
 
                     #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
-                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 50;
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100;
 
                     #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
-                    const SEGMENT_QUEUE_SIZE: u8 = 5;
+                    const SEGMENT_QUEUE_SIZE: u8 = 10;
 
                 }
                 else if #[cfg(feature = "with-motion-delta-kinematics")] {
@@ -269,7 +271,7 @@ impl HwiContract for Contract {
             #[const_env::from_env("SERIAL_PORT1_BAUD_RATE")]
             const SERIAL_PORT1_BAUD_RATE: u32 = 115200;
             #[const_env::from_env("SERIAL_PORT1_RX_BUFFER_SIZE")]
-            const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 1024;
+            const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 512;
 
             type SerialPort1Tx = types::SerialPort1TxMutexStrategy;
             type SerialPort1Rx = device::SerialPort1Rx;
@@ -293,7 +295,7 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-i2c")] {
             #[const_env::from_env("I2C_FREQUENCY")]
-            const I2C_FREQUENCY: u32 = 400_000;
+            const I2C_FREQUENCY: u32 = 1_000_000;
             type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
         }
     }
@@ -406,36 +408,81 @@ impl HwiContract for Contract {
         let config = {
             let mut config = embassy_stm32::Config::default();
 
-            config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_R;
-
-            config.rcc.hsi = true;
-            config.rcc.msi = Some(embassy_stm32::rcc::MSIRange::RANGE16M);
-            config.rcc.pll = Some(embassy_stm32::rcc::Pll {
-                source: embassy_stm32::rcc::PllSource::MSI, // HSI: 16Mhz
-                prediv: embassy_stm32::rcc::PllPreDiv::DIV2,
-                mul: embassy_stm32::rcc::PllMul::MUL20,
-                divp: None,
-                divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // PLL1_R 80Mhz (16 / 2 * 20 / 2)
-                divq: Some(embassy_stm32::rcc::PllQDiv::DIV2), // PLLQ 80Mhz (16 / 2 * 20 / 2)
-            });
-            config.rcc.pllsai1 = Some(embassy_stm32::rcc::Pll {
-                source: embassy_stm32::rcc::PllSource::MSI, // HSI: 16Mhz
-                prediv: embassy_stm32::rcc::PllPreDiv::DIV2,
-                mul: embassy_stm32::rcc::PllMul::MUL12,
-                divp: None,
-                divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // PLLSAl1R 48Mhz (16 / 2 * 12 / 2)
-                divq: Some(embassy_stm32::rcc::PllQDiv::DIV2), // PLLSAl1Q 48Mhz (16 / 2 * 12 / 2)
-            });
-
-            config.rcc.mux.clk48sel = embassy_stm32::rcc::mux::Clk48sel::PLLSAI1_Q;
-            config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
-            config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
-            config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
             cfg_if::cfg_if! {
-                if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
-                    config.rcc.mux.adcsel = embassy_stm32::rcc::mux::Adcsel::SYS;
+                if #[cfg(feature="hse-stlink-mso")] {
+
+                    config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_R;
+
+                    config.rcc.hsi = false;
+                    config.rcc.hse = Some(
+                        embassy_stm32::rcc::Hse {
+                            mode: embassy_stm32::rcc::HseMode::Bypass,
+                            freq: embassy_stm32::time::Hertz(8_000_000),
+                        }
+                    );
+                    config.rcc.msi = None;
+                    config.rcc.pll = Some(embassy_stm32::rcc::Pll {
+                        source: embassy_stm32::rcc::PllSource::HSE, // HSE: 8Mhz
+                        prediv: embassy_stm32::rcc::PllPreDiv::DIV1,
+                        mul: embassy_stm32::rcc::PllMul::MUL20,
+                        divp: Some(embassy_stm32::rcc::PllPDiv::DIV7), // PLLP 22.85Mhz (8 / 1 * 20 / 7)
+                        divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // PLL1_R 80Mhz (8 / 1 * 20 / 2)
+                        divq: Some(embassy_stm32::rcc::PllQDiv::DIV2), // PLLQ 80Mhz (8 / 1 * 20 / 2)
+                    });
+                    config.rcc.pllsai1 = Some(embassy_stm32::rcc::Pll {
+                        source: embassy_stm32::rcc::PllSource::HSE, // HSE: 8Mhz
+                        prediv: embassy_stm32::rcc::PllPreDiv::DIV1,
+                        mul: embassy_stm32::rcc::PllMul::MUL12,
+                        divp: Some(embassy_stm32::rcc::PllPDiv::DIV7), // PLLSAl1P 13.71Mhz (8 / 1 * 12 / 7)
+                        divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // PLLSAl1R 48Mhz (8 / 1 * 12 / 2)
+                        divq: Some(embassy_stm32::rcc::PllQDiv::DIV2), // PLLSAl1Q 48Mhz (8 / 1 * 12 / 2)
+                    });
+
+                    config.rcc.mux.clk48sel = embassy_stm32::rcc::mux::Clk48sel::PLLSAI1_Q;
+                    config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
+                    config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+                    config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+                    cfg_if::cfg_if! {
+                        if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+                            config.rcc.mux.adcsel = embassy_stm32::rcc::mux::Adcsel::SYS;
+                        }
+                    }
+                }
+                else {
+                    config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_R;
+
+                    config.rcc.hsi = true;
+                    config.rcc.hse = None;
+                    config.rcc.msi = Some(embassy_stm32::rcc::MSIRange::RANGE16M);
+                    config.rcc.pll = Some(embassy_stm32::rcc::Pll {
+                        source: embassy_stm32::rcc::PllSource::HSI, // HSI: 16Mhz
+                        prediv: embassy_stm32::rcc::PllPreDiv::DIV2,
+                        mul: embassy_stm32::rcc::PllMul::MUL20,
+                        divp: Some(embassy_stm32::rcc::PllPDiv::DIV7), // PLLP 22.85Mhz (16 / 2 * 20 / 7)
+                        divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // PLL1_R 80Mhz (16 / 2 * 20 / 2)
+                        divq: Some(embassy_stm32::rcc::PllQDiv::DIV2), // PLLQ 80Mhz (16 / 2 * 20 / 2)
+                    });
+                    config.rcc.pllsai1 = Some(embassy_stm32::rcc::Pll {
+                        source: embassy_stm32::rcc::PllSource::HSI, // HSI: 16Mhz
+                        prediv: embassy_stm32::rcc::PllPreDiv::DIV2,
+                        mul: embassy_stm32::rcc::PllMul::MUL12,
+                        divp: Some(embassy_stm32::rcc::PllPDiv::DIV7), // PLLSAl1P 13.71Mhz (16 / 2 * 12 / 7)
+                        divr: Some(embassy_stm32::rcc::PllRDiv::DIV2), // PLLSAl1R 48Mhz (16 / 2 * 12 / 2)
+                        divq: Some(embassy_stm32::rcc::PllQDiv::DIV2), // PLLSAl1Q 48Mhz (16 / 2 * 12 / 2)
+                    });
+
+                    //config.rcc.mux.clk48sel = embassy_stm32::rcc::mux::Clk48sel::PLLSAI1_Q;
+                    config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
+                    config.rcc.apb1_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+                    config.rcc.apb2_pre = embassy_stm32::rcc::APBPrescaler::DIV1;
+                    cfg_if::cfg_if! {
+                        if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+                            config.rcc.mux.adcsel = embassy_stm32::rcc::mux::Adcsel::SYS;
+                        }
+                    }
                 }
             }
+
             config
         };
 
@@ -812,15 +859,15 @@ impl HwiContract for Contract {
                 pub static EXECUTOR_HIGH: embassy_executor::InterruptExecutor = embassy_executor::InterruptExecutor::new();
 
                 #[interrupt]
-                unsafe fn RCC() {
+                unsafe fn RTC_ALARM() {
                     EXECUTOR_HIGH.on_interrupt()
                 }
 
                 use embassy_stm32::interrupt;
                 use embassy_stm32::interrupt::InterruptExt;
-                interrupt::RCC.set_priority(interrupt::Priority::P2);
+                interrupt::RTC_ALARM.set_priority(interrupt::Priority::P2);
 
-                let spawner = EXECUTOR_HIGH.start(interrupt::RCC);
+                let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
                 spawner.spawn(_token).map_err(|_| ())
             }
         }

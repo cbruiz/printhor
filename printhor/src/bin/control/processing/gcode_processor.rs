@@ -385,8 +385,8 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
-                let updated_coords = _pos.as_vector();
-                hwa::warn!("TODO: G92 {:?}", updated_coords);
+                let _updated_coords = _pos.as_vector();
+                hwa::warn!("TODO: G92 {:?}", _updated_coords);
                 // TODO: Push "position" move into move queue
                 Ok(CodeExecutionSuccess::OK)
             }

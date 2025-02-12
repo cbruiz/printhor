@@ -57,6 +57,13 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-ps-on")] {
+        pub type PSOnLockType = hwa::SyncNoopMutexType;
+        pub type PSOnMutexStrategy = hwa::SyncStandardStrategy<PSOnLockType, super::device::PsOnPin>;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-spi")] {
         pub type Spi1MutexType = hwa::AsyncNoopMutexType;
         pub type Spi1MutexStrategyType = hwa::AsyncHoldableStrategy<Spi1MutexType, super::device::Spi>;

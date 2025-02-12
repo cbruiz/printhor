@@ -1,5 +1,6 @@
 use crate::hwa;
 use hwa::math::{CoordSel, Real, TVector};
+#[allow(unused)]
 use hwa::Contract;
 #[allow(unused)]
 use hwa::HwiContract;

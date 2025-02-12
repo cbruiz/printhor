@@ -15,12 +15,11 @@ pub(crate) mod uart_port1 {
     use hwa::HwiContract;
 
     pub struct UartPort1RxInputStream {
-        receiver: embassy_stm32::usart::BufferedUartRx<'static>,
+        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
     }
 
     impl UartPort1RxInputStream {
-        pub fn new(receiver: embassy_stm32::usart::BufferedUartRx<'static>) -> Self {
-            //type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
+        pub fn new(receiver: embassy_stm32::usart::RingBufferedUartRx<'static>) -> Self {
 
             Self {
                 receiver

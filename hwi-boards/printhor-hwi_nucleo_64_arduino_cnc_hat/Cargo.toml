@@ -18,8 +18,10 @@ homepage = "https://github.com/cbruiz/printhor"
 default = ["nucleo64-f410rb", "with-motion", "with-i2c", "printhor-hwa-common/with-i2c", "printhor-hwa-common/with-motion", "with-x-axis", "with-serial-port-1", "float-point-f32-impl"]
 # Board kind
 nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
-nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
+nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "hse-stlink-mso", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
 # Hardware device features
+# Use STLINK MCO as HSE (Not enabled by default in all nucleos)
+hse-stlink-mso = []
 with-serial-usb = ["embassy-usb"]
 with-print-job = []
 with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]

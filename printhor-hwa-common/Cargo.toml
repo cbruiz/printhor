@@ -18,7 +18,6 @@ homepage = "https://github.com/cbruiz/printhor"
 std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std"]
 default = ["std", "with-motion", "with-log", "float-point-f32-impl", "with-x-axis", "with-y-axis", "with-z-axis"]
 nightly = []
-executor-interrupt = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
 with-defmt = ["defmt", "printhor-hwa-utils/with-defmt", "embedded-sdmmc/defmt-log"]
 with-serial-usb = ["async-gcode", "embedded-io-async"]
@@ -77,11 +76,11 @@ async-gcode = { version = "0.3", default-features = false, features = [], option
 
 heapless = { version = "0.8", default-features = false, features = [], optional = true }
 
-bitflags = { version = "2.6", default-features = false, features = ["bytemuck"] }
+bitflags = { version = "2.8.0", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0" }
-defmt = {version = "0.3", default-features = false, optional = true}
-log = { version = "0.4", default-features = false, optional = true }
-strum = { version = "0.26", default-features = false, features = ["derive"] }
+defmt = {version = "0.3.10", default-features = false, optional = true}
+log = { version = "0.4.25", default-features = false, optional = true }
+strum = { version = "0.27.0", default-features = false, features = ["derive"] }
 
 num-traits = { version = "0.2", default-features = false, features = [] }
 micromath = { version = "2.1", default-features = false, features = [] }

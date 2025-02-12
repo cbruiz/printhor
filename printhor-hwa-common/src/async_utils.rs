@@ -57,7 +57,7 @@ where
             let d = embassy_time::Duration::from_ticks(
                 self._ticks_by_word * ((self.last_write_len + 1) as u64),
             );
-            hwa::info!("flushing {} bytes ({}) us", self.last_write_len, d.as_micros());
+            hwa::trace!("flushing {} bytes ({}) us", self.last_write_len, d.as_micros());
             if self.last_write_len > 0 {
                 //let _ = self.peri.flush().await;
                 

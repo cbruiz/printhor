@@ -13,13 +13,13 @@ pub async fn task_motion_broadcast(
     _motion_sender: hwa::types::MotionSender,
 ) -> ! {
     // The motion interpolation period width
-    const MICRO_SEGMENT_PERIOD_US: u32 =
+    const _MICRO_SEGMENT_PERIOD_US: u32 =
         1_000_000 / Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY;
-    const MAX_CMD_DELAY: u32 = MICRO_SEGMENT_PERIOD_US / 2;
+    const _MAX_CMD_DELAY: u32 = _MICRO_SEGMENT_PERIOD_US / 2;
 
     hwa::info!(
         "[task_motion_broadcast] started. Max expected delay: {} us",
-        MAX_CMD_DELAY
+        _MAX_CMD_DELAY
     );
 
     let mut current_order = None;
@@ -28,14 +28,14 @@ pub async fn task_motion_broadcast(
     let receiver = _motion_broadcast_channel.receiver();
 
     loop {
-        match receiver.receive().await {
-            hwa::MotionBroadcastEvent::Reset => {
+        match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), receiver.receive()).await {
+            Ok(hwa::MotionBroadcastEvent::Reset) => {
                 if current_order.is_some() {
                     flush(&mut current_order, &TVector::zero(), &TVector::zero());
                 }
                 lag = embassy_time::Instant::now();
             }
-            hwa::MotionBroadcastEvent::Delta(motion_event) => {
+            Ok(hwa::MotionBroadcastEvent::Delta(motion_event)) => {
                 let _elapsed = match current_order {
                     Some(order_num) => {
                         if order_num != motion_event.order_num {
@@ -86,6 +86,9 @@ pub async fn task_motion_broadcast(
                     }
                      */
                 }
+            }
+            Err(_e ) => {
+                hwa::trace!("[task_motion_broadcast] Timeout");
             }
         }
     }

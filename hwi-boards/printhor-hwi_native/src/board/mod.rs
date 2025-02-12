@@ -398,8 +398,8 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-sd-card")] {
-            const SD_CARD_MAX_FILES: usize = 4;
-            const SD_CARD_MAX_DIRS: usize = 4;
+            const SD_CARD_MAX_FILES: usize = 8;
+            const SD_CARD_MAX_DIRS: usize = 8;
             type SDCardBlockDevice = types::SDCardBlockDevice;
         }
     }
