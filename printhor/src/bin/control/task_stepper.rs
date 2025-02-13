@@ -2,7 +2,7 @@
 //!
 //! The IS algorithm works the following way:
 //! - Try to retrieve an execution-ready motion segment from the motion queue
-//!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`], disable all steppers
+//!   - If no motion segment is present within [`STEPPER_INACTIVITY_TIMEOUT`] seconds, disable all steppers
 //!   - If motion segment is execution-ready, dequeue it and then:
 //!     - Enable all steppers
 //!     - Evaluate the motion profile displacement at [`Contract::STEP_PLANNER_CLOCK_FREQUENCY`]
@@ -34,16 +34,16 @@ use hwa::{EventFlags, EventStatus};
 /// are automatically disabled to save power and prevent overheating.
 ///
 /// # Value
-/// The timeout is set to 5 seconds, represented using `embassy_time::Duration`.
+/// The timeout is set to [STEPPER_INACTIVITY_TIMEOUT] seconds, represented using `embassy_time::Duration`.
 ///
 /// # Usage
 /// This constant is used in the stepper motor control task to determine the period
 /// of inactivity before disabling the stepper motors. When no motion segment is
-/// retrieved within this duration, the steppers are turned off automatically.
+/// retrieved within this duration, they are turned off automatically.
 ///
 /// # Effect on Task Behavior
 /// In the `task_stepper` routine, this timeout plays a crucial role. If no motion
-/// segment is available within this 5-second window, the routine will automatically
+/// segment is available within this [STEPPER_INACTIVITY_TIMEOUT] seconds window, the routine will automatically
 /// disable the stepper motors. This means that:
 /// - **Energy Savings**: Steppers are not left running indefinitely when they are not needed, saving energy.
 /// - **Overheating Prevention**: Prevents the steppers from overheating due to continuous power being applied without motion.
@@ -225,7 +225,10 @@ pub async fn task_stepper(
                 let mut tq = 0;
 
                 #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
-                hwa::info!("[task_stepper] order_num:{:?} Commiting segment", _order_num);
+                hwa::debug!(
+                    "[task_stepper] order_num:{:?} Commiting segment",
+                    _order_num
+                );
 
                 let current_real_pos = motion_planner.motion_status().get_current_position();
 
@@ -270,7 +273,10 @@ pub async fn task_stepper(
                     Contract::SPACE_UNIT_MAGNITUDE,
                 );
                 if !position_offset.abs().bounded_by(&TVector::one()) {
-                    hwa::warn!("[task_stepper] order_num:{:?} Too much offset to correct", _order_num)
+                    hwa::warn!(
+                        "[task_stepper] order_num:{:?} Too much offset to correct",
+                        _order_num
+                    )
                 }
                 segment.fix_deviation(
                     &position_offset,
@@ -318,6 +324,7 @@ pub async fn task_stepper(
                         hwa::debug!("Relevant coords: [{:?}]", relevant_coords);
                         hwa::debug!("Relevant coords_dir_fwd: [{:?}]", relevant_coords_dir_fwd);
 
+                        #[cfg(feature = "debug-motion")]
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory: [ src: [{:?}] dest: [{:?}] {} ]",
                             _order_num,
@@ -530,7 +537,7 @@ pub async fn task_stepper(
 
                         {
                             let adv_delta = segment.unit_vector_dir.sign() * adv_pos;
-                            #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                            #[cfg(feature = "debug-motion")]
                             hwa::info!(
                                 "[task_stepper] order_num:{:?} Advanced space: [{:#?}] {} {:?} steps",
                                 _order_num,
@@ -544,7 +551,7 @@ pub async fn task_stepper(
                             let mut pos = current_real_pos.clone();
                             pos.update_from_space_coordinates(&next_real_pos);
 
-                            #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                            #[cfg(feature = "debug-motion")]
                             hwa::info!(
                                 "[task_stepper] order_num:{:?} Next real position: world [{:#?}] {}",
                                 _order_num,
@@ -647,15 +654,13 @@ pub async fn task_stepper(
                 let position = hwa::controllers::Position::new_with_world_projection(
                     &Contract::DEFAULT_WORLD_HOMING_POINT_WU,
                 );
-                motion_planner.motion_status().update_last_planned_position(
-                    _order_num,
-                    &position,
-                );
-                motion_planner.motion_status().update_current_position(
-                    _order_num,
-                    &position,
-                );
-                
+                motion_planner
+                    .motion_status()
+                    .update_last_planned_position(_order_num, &position);
+                motion_planner
+                    .motion_status()
+                    .update_current_position(_order_num, &position);
+
                 let moves_left = motion_planner.consume_current_plan(&event_bus).await;
                 hwa::debug!("Homing done");
                 moves_left

@@ -4,11 +4,11 @@ use crate::hwa;
 #[allow(unused)]
 use core::ops::Neg;
 use embassy_time::Duration;
-use hwa::Contract;
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 use hwa::math;
+use hwa::Contract;
 #[allow(unused)]
 use hwa::HwiContract;
 use math::Real;

@@ -174,7 +174,7 @@ plot-motion-plan = ["gnuplot"]
 
 native = [
     "with-log",
-    "debug-position",
+    #"debug-position",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"verbose-timings",

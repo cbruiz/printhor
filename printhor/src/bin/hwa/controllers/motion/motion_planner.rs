@@ -723,7 +723,7 @@ impl MotionPlanner {
             return Err(control::CodeExecutionFailure::HomingRequired);
         }
 
-        //#[cfg(feature = "debug-motion")]
+        #[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Received motion. relevant world coords: [{:?}] world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
             num, line.unwrap_or(0),
@@ -852,7 +852,7 @@ impl MotionPlanner {
                     line,
                 )
                 .await?;
-            
+
             hwa::debug!(
                 "speed: {:?} -> {:?} ",
                 requested_motion_speed.unwrap_or(Real::zero()).rdp(4),

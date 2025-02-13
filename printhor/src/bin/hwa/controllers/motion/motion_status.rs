@@ -20,24 +20,38 @@ impl Position {
     pub const fn new() -> Self {
         Self {
             is_set: false,
-            world_pos: TVector::new_with_coord(
-                CoordSel::motion_relevant_axis(),
-                Some(Real::zero()),
-            ),
+            world_pos: TVector::new_with_coord(CoordSel::all_axis(), Some(Real::zero())),
             space_pos: TVector::new(),
         }
     }
 
     pub const fn new_from(world_pos: TVector<Real>, space_pos: TVector<Real>) -> Self {
-        Self {
-            is_set: true,
-            world_pos,
-            space_pos,
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-e-axis")] {
+                Self {
+                    is_set: true,
+                    world_pos: world_pos.copy_with_coords(CoordSel::E, Some(hwa::math::ZERO)),
+                    space_pos: space_pos.copy_with_coords(CoordSel::E, Some(hwa::math::ZERO)),
+                }
+            }
+            else {
+                Self {
+                    is_set: true,
+                    world_pos,
+                    space_pos,
+                }
+            }
         }
     }
 
     pub fn new_from_space_projection(space_pos: &TVector<Real>) -> Self {
         let mut pos = Self::new();
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-e-axis")] {
+                pos.world_pos.e = Some(hwa::math::ZERO);
+                pos.space_pos.e = Some(hwa::math::ZERO);
+            }
+        }
         pos.update_from_space_coordinates(space_pos);
         pos
     }
@@ -53,6 +67,12 @@ impl Position {
             .assign_if_set(CoordSel::motion_relevant_axis(), &new.world_pos);
         self.space_pos
             .assign_if_set(CoordSel::motion_relevant_axis(), &new.space_pos);
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-e-axis")] {
+                self.world_pos.e = Some(hwa::math::ZERO);
+                self.space_pos.e = Some(hwa::math::ZERO);
+            }
+        }
     }
 
     pub fn update_from_world_coordinates(&mut self, updated_world_coordinates: &TVector<Real>) {

@@ -318,7 +318,7 @@ impl CoordSel {
         ))
     }
 
-    /// All motion relevant axis INCLUDING Extruder (E), if exists.
+    /// All motion relevant axis EXCLUDING Extruder (E), if exists.
     pub const fn motion_relevant_axis() -> CoordSel {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-e-axis")] {
@@ -497,6 +497,94 @@ where
             v,
             #[cfg(feature = "with-w-axis")]
             w,
+        }
+    }
+
+    pub const fn copy_with_coords(&self, _coord_idx: CoordSel, _val: Option<T>) -> Self {
+        Self {
+            _phantom: PhantomData,
+            #[cfg(feature = "with-e-axis")]
+            e: if _coord_idx.contains(CoordSel::E) {
+                _val
+            } else {
+                self.e
+            },
+            //
+            #[cfg(feature = "with-x-axis")]
+            x: if _coord_idx.contains(CoordSel::X) {
+                _val
+            } else {
+                self.x
+            },
+            #[cfg(feature = "with-y-axis")]
+            y: if _coord_idx.contains(CoordSel::Y) {
+                _val
+            } else {
+                self.y
+            },
+            #[cfg(feature = "with-z-axis")]
+            z: if _coord_idx.contains(CoordSel::Z) {
+                _val
+            } else {
+                self.z
+            },
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: if _coord_idx.contains(CoordSel::A) {
+                _val
+            } else {
+                self.a
+            },
+            #[cfg(feature = "with-b-axis")]
+            b: if _coord_idx.contains(CoordSel::B) {
+                _val
+            } else {
+                self.b
+            },
+            #[cfg(feature = "with-c-axis")]
+            c: if _coord_idx.contains(CoordSel::C) {
+                _val
+            } else {
+                self.c
+            },
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: if _coord_idx.contains(CoordSel::I) {
+                _val
+            } else {
+                self.i
+            },
+            #[cfg(feature = "with-j-axis")]
+            j: if _coord_idx.contains(CoordSel::J) {
+                _val
+            } else {
+                self.j
+            },
+            #[cfg(feature = "with-k-axis")]
+            k: if _coord_idx.contains(CoordSel::K) {
+                _val
+            } else {
+                self.k
+            },
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: if _coord_idx.contains(CoordSel::U) {
+                _val
+            } else {
+                self.u
+            },
+            #[cfg(feature = "with-v-axis")]
+            v: if _coord_idx.contains(CoordSel::V) {
+                _val
+            } else {
+                self.v
+            },
+            #[cfg(feature = "with-w-axis")]
+            w: if _coord_idx.contains(CoordSel::W) {
+                _val
+            } else {
+                self.w
+            },
         }
     }
 
