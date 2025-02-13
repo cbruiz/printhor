@@ -15,6 +15,7 @@ use math::TVector;
 pub enum ExecPlan {
     Segment(motion::Segment, hwa::CommChannel, u32),
     Dwell(Option<u32>, hwa::CommChannel, u32),
+    SetPosition(motion::Position, hwa::CommChannel, u32),
     Homing(hwa::CommChannel, u32),
 }
 
@@ -205,7 +206,12 @@ impl MotionPlanner {
                             PlanEntry::Executing(MovType::Dwell(channel), true, order_num);
                         return ExecPlan::Dwell(sleep, channel, order_num);
                     }
-                    PlanEntry::PlannedMove(planned_data, action, channel, deferred, order_num) => {
+                    PlanEntry::SetPosition(channel, position, _deferred, order_num) => {
+                        rb.data[head] =
+                            PlanEntry::Executing(MovType::SetPosition(channel), _deferred, order_num);
+                        return ExecPlan::SetPosition(position, channel, order_num);
+                    }
+                    PlanEntry::PlannedMove(planned_data, action, channel, _deferred, order_num) => {
                         hwa::debug!(
                             "PlannedMove starting: {} / {} h={}",
                             rb.used,
@@ -214,7 +220,7 @@ impl MotionPlanner {
                         );
                         rb.data[head] = PlanEntry::Executing(
                             MovType::Move(action, channel),
-                            deferred,
+                            _deferred,
                             order_num,
                         );
                         return ExecPlan::Segment(planned_data, channel, order_num);
@@ -272,29 +278,44 @@ impl MotionPlanner {
         let head = rb.head;
         hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
         match &rb.data[head as usize] {
-            PlanEntry::Executing(MovType::Homing(channel), _, order_num) => {
+            PlanEntry::Executing(MovType::Homing(channel), _is_defer, order_num) => {
                 event_bus
                     .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))
                     .await;
-                self.defer_channel
-                    .send(hwa::DeferEvent::Completed(
-                        hwa::DeferAction::Homing,
-                        *channel,
-                        *order_num,
-                    ))
-                    .await;
+                if *_is_defer {
+                    self.defer_channel
+                        .send(hwa::DeferEvent::Completed(
+                            hwa::DeferAction::Homing,
+                            *channel,
+                            *order_num,
+                        ))
+                        .await;
+                }
             }
-            PlanEntry::Executing(MovType::Dwell(channel), _, order_num) => {
-                self.defer_channel
-                    .send(hwa::DeferEvent::Completed(
-                        hwa::DeferAction::Dwell,
-                        *channel,
-                        *order_num,
-                    ))
-                    .await;
+            PlanEntry::Executing(MovType::Dwell(channel), _is_defer, order_num) => {
+                if *_is_defer {
+                    self.defer_channel
+                        .send(hwa::DeferEvent::Completed(
+                            hwa::DeferAction::Dwell,
+                            *channel,
+                            *order_num,
+                        ))
+                        .await;
+                }
             }
-            PlanEntry::Executing(MovType::Move(action, channel), deferred, order_num) => {
-                if *deferred {
+            PlanEntry::Executing(MovType::SetPosition(channel), _is_defer, order_num) => {
+                if *_is_defer {
+                    self.defer_channel
+                        .send(hwa::DeferEvent::Completed(
+                            hwa::DeferAction::SetPosition,
+                            *channel,
+                            *order_num,
+                        ))
+                        .await;
+                }
+            }
+            PlanEntry::Executing(MovType::Move(action, channel), _is_defer, order_num) => {
+                if *_is_defer {
                     self.defer_channel
                         .send(hwa::DeferEvent::Completed(*action, *channel, *order_num))
                         .await;
@@ -409,6 +430,7 @@ impl MotionPlanner {
                             {
                                 let q_1 = curr_segment.displacement_su;
                                 let v_0 = curr_segment.speed_enter_su_s;
+                                let v_1 = curr_segment.speed_exit_su_s;
                                 let t_jmax =
                                     curr_segment.constraints.a_max / curr_segment.constraints.j_max;
 
@@ -433,6 +455,10 @@ impl MotionPlanner {
                                     if q_1 >= q_lim {
                                         break;
                                     } else {
+                                        if curr_vmax < v_0 || curr_vmax < v_1 {
+                                            hwa::warn!("TODO: Check this case");
+                                            break;
+                                        }
                                         curr_vmax *= Real::from_f32(0.5);
                                     }
                                 }
@@ -528,6 +554,15 @@ impl MotionPlanner {
                             (
                                 PlanEntry::Dwell(channel, sleep, is_defer, order_num),
                                 hwa::EventStatus::containing(hwa::EventFlags::MOV_QUEUE_EMPTY),
+                            )
+                        }
+                        ScheduledMove::SetPosition(position, _order_num) => {
+                            is_defer = false;
+                            self.motion_status
+                                .update_last_planned_position(_order_num, &position);
+                            (
+                                PlanEntry::SetPosition(channel, position, is_defer, _order_num),
+                                hwa::EventStatus::containing(EventFlags::NOTHING),
                             )
                         }
                     };
@@ -697,6 +732,22 @@ impl MotionPlanner {
                     )
                     .await?)
             }
+            control::GCodeValue::G92(t) => {
+                let mut position = self.motion_status.get_last_planned_position();
+                position.update_from_world_coordinates(&t.as_vector());
+                Ok(self
+                    .schedule_raw_move(
+                        "G92",
+                        channel,
+                        hwa::DeferAction::SetPosition,
+                        ScheduledMove::SetPosition(position, gc.order_num),
+                        blocking,
+                        event_bus,
+                        gc.order_num,
+                        gc.line_tag,
+                    )
+                    .await?)
+            },
             control::GCodeValue::G29 => Ok(control::CodeExecutionSuccess::OK),
             control::GCodeValue::G29_1 => Ok(control::CodeExecutionSuccess::OK),
             control::GCodeValue::G29_2 => Ok(control::CodeExecutionSuccess::OK),
@@ -742,15 +793,18 @@ impl MotionPlanner {
             }
         };
 
-        //----
+        // Boundaries
         let dts = self.motion_config.get_default_travel_speed();
-        let flow_rate = self.motion_config.get_flow_rate_as_real();
-        let speed_rate = self.motion_config.get_speed_rate_as_real();
+        let min_speed = self.motion_config.get_min_speed();
         let max_speed = self.motion_config.get_max_speed();
+        let max_feed_rate = self.motion_config.get_max_feed_rate();
         let max_accel = self.motion_config.get_max_accel();
         let max_jerk = self.motion_config.get_max_jerk();
-        //----
-
+        
+        // Multipliers
+        let flow_rate = self.motion_config.get_flow_rate_as_real();
+        let speed_rate = self.motion_config.get_speed_rate_as_real();
+        
         // Compute distance and decompose as unit vector and module.
         // When dist is zero, value is map to None (NaN).
         // In case o E dimension, flow rate factor is applied
@@ -792,13 +846,14 @@ impl MotionPlanner {
         // Compute the speed module applying speed_rate factor
         let speed_module = requested_motion_speed.unwrap_or(dts);
         // Compute per-axis distance
-        let disp_vector: TVector<Real> = unit_vector_dir.abs() * speed_module;
+        let speed_vector: TVector<Real> = unit_vector_dir.abs() * speed_module;
+        let min_speed_module = min_speed.norm2().unwrap_or(math::ZERO);
         // Clamp per-axis target speed to the physical restrictions
-        let clamped_speed = disp_vector.clamp_lower_than(max_speed);
-
-        // Finally, per-axis relative speed
-        let speed_vector = clamped_speed * speed_rate;
-
+        let speed_vector = (speed_vector * speed_rate)
+            .clamp_higher_than(min_speed)
+            .clamp_lower_than(max_speed)
+            .clamp_lower_than(max_feed_rate);
+        
         let module_target_speed = speed_vector.norm2().unwrap_or(math::ZERO);
         let module_target_accel = (unit_vector_dir.abs() * max_accel)
             .norm2()
@@ -820,12 +875,12 @@ impl MotionPlanner {
             && !module_target_jerk.is_zero()
         {
             let segment_data = motion::Segment {
-                speed_enter_su_s: Real::zero(),
-                speed_exit_su_s: Real::zero(),
+                speed_enter_su_s: min_speed_module,
+                speed_exit_su_s: min_speed_module,
                 speed_target_su_s: module_target_speed,
                 displacement_su: module_target_distance,
-                speed_enter_constrained_su_s: Real::zero(),
-                speed_exit_constrained_su_s: Real::zero(),
+                speed_enter_constrained_su_s: min_speed_module,
+                speed_exit_constrained_su_s: min_speed_module,
                 proj_prev: Real::zero(),
                 unit_vector_dir,
                 src_pos: p0_pos.space_pos.selecting(relevant_space_coords),
@@ -859,7 +914,6 @@ impl MotionPlanner {
                 module_target_speed.rdp(4)
             );
             hwa::debug!("speed_vector: {:?}", speed_vector.rdp(4));
-            hwa::debug!("clamped_speed: {:?}", clamped_speed.rdp(4));
             hwa::debug!("speed_rates: {:?}", speed_rate.rdp(4));
             hwa::debug!("speed_module: {:?}", module_target_speed.rdp(4));
             return Ok(r);

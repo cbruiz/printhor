@@ -87,6 +87,9 @@ impl HwiContract for Contract {
                             Ok(pos - ANTHROPOMORFIC_WORLD_CENTER_WU)
                         )
                     }
+                    
+                    /// Apply calculated max feed rate boundaries
+                    const CLAMP_MAX_FEED_RATE: bool = false;
 
                     /// Default max speed in Physical Units / second
                     /// Reference: MG90S Analog Servo: 0.1s/60º @4.8Volt => 600.240096 º/seg
@@ -121,7 +124,7 @@ impl HwiContract for Contract {
                     ///
                     /// With PCA9685, which has 12 bits counter, it's 0.005000 period secs per count. Much higher than dead-band width.
                     const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
-                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(10))
+                        hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(2))
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
@@ -295,7 +298,7 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-i2c")] {
             #[const_env::from_env("I2C_FREQUENCY")]
-            const I2C_FREQUENCY: u32 = 1_000_000;
+            const I2C_FREQUENCY: u32 = 500_000;
             type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
         }
     }

@@ -106,6 +106,10 @@ pub enum DeferAction {
     #[cfg(feature = "with-motion")]
     Dwell,
 
+    /// SetPosition action for the motion feature.
+    #[cfg(feature = "with-motion")]
+    SetPosition,
+
     /// Action to set or monitor hot-end temperature.
     #[cfg(feature = "with-hot-end")]
     HotEndTemperature,

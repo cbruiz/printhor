@@ -16,6 +16,8 @@ struct SubscriptionCounting {
     num_rapid: u8,
     #[cfg(feature = "with-motion")]
     num_dwell: u8,
+    #[cfg(feature = "with-motion")]
+    num_set_position: u8,
     #[cfg(feature = "with-hot-end")]
     num_hotend: u8,
     #[cfg(feature = "with-hot-bed")]
@@ -57,6 +59,8 @@ impl Subscriptions {
                 DeferAction::LinearMove => &mut counts.num_linear,
                 #[cfg(feature = "with-motion")]
                 DeferAction::Dwell => &mut counts.num_dwell,
+                #[cfg(feature = "with-motion")]
+                DeferAction::SetPosition => &mut counts.num_set_position,
                 #[cfg(feature = "with-hot-end")]
                 DeferAction::HotEndTemperature => &mut counts.num_hotend,
                 #[cfg(feature = "with-hot-bed")]

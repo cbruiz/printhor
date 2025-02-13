@@ -2203,7 +2203,6 @@ where
         }
     }
 
-    #[allow(unused)]
     pub fn zero() -> Self {
         Self {
             _phantom: PhantomData,
@@ -2241,39 +2240,11 @@ where
     }
 
     pub fn one() -> Self {
-        Self {
-            _phantom: PhantomData,
-            #[cfg(feature = "with-e-axis")]
-            e: Some(T::one()),
-            //
-            #[cfg(feature = "with-x-axis")]
-            x: Some(T::one()),
-            #[cfg(feature = "with-y-axis")]
-            y: Some(T::one()),
-            #[cfg(feature = "with-z-axis")]
-            z: Some(T::one()),
-            //
-            #[cfg(feature = "with-a-axis")]
-            a: Some(T::one()),
-            #[cfg(feature = "with-b-axis")]
-            b: Some(T::one()),
-            #[cfg(feature = "with-c-axis")]
-            c: Some(T::one()),
-            //
-            #[cfg(feature = "with-i-axis")]
-            i: Some(T::one()),
-            #[cfg(feature = "with-j-axis")]
-            j: Some(T::one()),
-            #[cfg(feature = "with-k-axis")]
-            k: Some(T::one()),
-            //
-            #[cfg(feature = "with-u-axis")]
-            u: Some(T::one()),
-            #[cfg(feature = "with-v-axis")]
-            v: Some(T::one()),
-            #[cfg(feature = "with-w-axis")]
-            w: Some(T::one()),
-        }
+        TVector::new_with_coord(CoordSel::all_axis(), Some(T::one()))
+    }
+
+    pub const fn new_with_const_value(val: T) -> Self {
+        TVector::new_with_coord(CoordSel::all_axis(), Some(val))
     }
 
     /// Map all NaN values of any coordinate to specific value

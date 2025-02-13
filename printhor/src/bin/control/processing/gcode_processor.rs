@@ -385,9 +385,10 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
-                let _updated_coords = _pos.as_vector();
-                hwa::warn!("TODO: G92 {:?}", _updated_coords);
-                // TODO: Push "position" move into move queue
+                self
+                    .motion_planner
+                    .plan(channel, &gc, _blocking, &self.event_bus)
+                    .await?;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
@@ -623,10 +624,15 @@ impl GCodeProcessor {
                     .get_last_planned_position();
                 let _rpos: hwa::controllers::Position =
                     self.motion_planner.motion_status().get_current_position();
+                let _step_pos: hwa::math::TVector<i32> = (
+                    _rpos.world_pos * self.motion_planner.motion_config().get_steps_per_space_unit_as_vector()
+                ).map_values(|_c, _v| {
+                    Some(_v.to_i32().unwrap_or(0))
+                });
                 let z = alloc::format!(
                     "{:?} Count {:?}\n",
                     _pos.world_pos,
-                    _rpos.world_pos.map(|_c, _v| { Some(0u32) })
+                    _step_pos,
                 );
                 let _ = self.write(channel, z.as_str()).await;
                 let z2 = alloc::format!("echo: Space {:#?}\n", _rpos.space_pos);
@@ -651,6 +657,7 @@ impl GCodeProcessor {
                 let _ = self.write(channel, hwa::Contract::MACHINE_UUID).await;
                 let _ = self.write(channel, " EXTRUDER_COUNT: ").await;
                 let _ = self.write(channel, hwa::Contract::EXTRUDER_COUNT).await;
+                let _ = self.write(channel, "\n").await;
                 Ok(CodeExecutionSuccess::OK)
             }
             GCodeValue::M117(_msg) => {

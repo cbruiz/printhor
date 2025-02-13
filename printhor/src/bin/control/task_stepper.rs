@@ -81,7 +81,7 @@ const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(10);
 // let micro_segment_period_secs: Real = Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6);
 // // Used in task_stepper to control stepper motor behavior
 // ```
-const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
+pub const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
     1_000_000 / Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY;
 
 ///
@@ -118,7 +118,6 @@ const STEPPER_PLANNER_MICROSEGMENT_PERIOD_US: u32 =
 /// ```
 pub const STEPPER_PLANNER_CLOCK_PERIOD_US: u32 = 1_000_000 / Contract::STEP_PLANNER_CLOCK_FREQUENCY;
 
-#[cfg_attr(doc, aquamarine::aquamarine)]
 /// This asynchronous task manages the steps of the stepper motors
 /// based on motion segments from the motion queue.
 ///
@@ -324,9 +323,9 @@ pub async fn task_stepper(
                         hwa::debug!("Relevant coords: [{:?}]", relevant_coords);
                         hwa::debug!("Relevant coords_dir_fwd: [{:?}]", relevant_coords_dir_fwd);
 
-                        #[cfg(feature = "debug-motion")]
+                        #[cfg(any(feature = "debug-motion", feature = "debug-motion-displacement"))]
                         hwa::info!(
-                            "[task_stepper] order_num:{:?} Trajectory: [ src: [{:?}] dest: [{:?}] {} ]",
+                            "[task_stepper] order_num:{:?} Trajectory: [ src: [{:?}] dest: [{:?}] {} ] v0: {:?} v1: {:?} vlim: {:?}",
                             _order_num,
                             segment
                                 .src_pos
@@ -335,6 +334,9 @@ pub async fn task_stepper(
                                 .dest_pos
                                 .with_coord(relevant_coords.complement(), None),
                             Contract::SPACE_UNIT_MAGNITUDE,
+                            segment.speed_enter_su_s,
+                            segment.speed_exit_su_s,
+                            trajectory.v_lim,
                         );
 
                         cfg_if::cfg_if! {
@@ -625,6 +627,12 @@ pub async fn task_stepper(
                 event_bus
                     .publish_event(EventStatus::not_containing(EventFlags::MOVING))
                     .await;
+                moves_left
+            }
+            Ok(ExecPlan::SetPosition(position, _channel, _order_num)) => {
+                // SetPosition
+                motion_planner.motion_status().update_current_position(_order_num, &position);
+                let moves_left = motion_planner.consume_current_plan(&event_bus).await;
                 moves_left
             }
             Ok(ExecPlan::Homing(_channel, _order_num)) => {

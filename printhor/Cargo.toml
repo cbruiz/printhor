@@ -25,6 +25,7 @@ verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_min
 
 debug-position = []
 debug-motion = []
+debug-motion-displacement = []
 debug-motion-broadcast = []
 
 assert-motion = []
@@ -175,6 +176,7 @@ plot-motion-plan = ["gnuplot"]
 native = [
     "with-log",
     #"debug-position",
+    #"debug-motion-displacement",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"verbose-timings",
@@ -192,7 +194,7 @@ native = [
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    #"with-motion-broadcast",
+    "with-motion-broadcast",
     "with-e-axis",
     "with-x-axis", "with-y-axis", "with-z-axis",
     #"with-a-axis", "with-b-axis", "with-c-axis",
@@ -263,9 +265,9 @@ nucleo64-l476rg = [
     #"nightly",
     "with-defmt",
 
-    "debug-position",
+    #"debug-position",
     #"debug-motion",
-    "debug-motion-broadcast",
+    #"debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",

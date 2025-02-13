@@ -496,9 +496,21 @@ async fn init_controllers_and_spawn_tasks(
             motion_config.set_world_size(
                 hwa::Contract::DEFAULT_WORLD_SIZE_WU
             );
+            
+            motion_config.set_nozzle_offset(
+                hwa::make_vector_real!(x=0.0, y=0.0,z=0.0)
+            );
+            
+            motion_config.set_probe_offset(
+                hwa::make_vector_real!(x=0.0, y=0.0,z=0.0)
+            );
 
             motion_config.set_flow_rate(100);
             motion_config.set_speed_rate(100);
+
+            // Compute min speed. Really useful because of discretion effects
+            motion_config.compute_min_speed();
+
 
             // Make homing unneeded
             hwa::warn!("Virtually homing");

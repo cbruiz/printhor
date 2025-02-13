@@ -142,6 +142,11 @@ pub trait HwiContract: Sized {
                 const TRANSFORMER: hwa::kinematics::Identity = hwa::kinematics::Identity;
                 TRANSFORMER.project_to_world(space_pos)
             }
+            
+            /// Apply calculated min speed boundaries
+            const CLAMP_MIN_SPEED: bool = true;
+            /// Apply calculated max feed rate boundaries
+            const CLAMP_MAX_FEED_RATE: bool = true;
 
             /// Default max speed in Physical Units / second
             const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real>;

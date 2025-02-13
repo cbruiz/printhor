@@ -1,28 +1,28 @@
-/// The module for motion configuration-related functionalities.
+/// The module for motion configuration (parameters and constraints)
 mod motion_config;
 
-/// The module for motion segment-related functionalities.
+/// The module to model a motion segment instance.
 mod motion_segment;
 
-/// The module for motion status-related functionalities.
+/// The module to hold the real time motion status (positions mainly).
 mod motion_status;
 
-/// The module for motion ring buffer functionalities.
+/// The module to hold the planned segment ring-buffer.
 mod motion_ring_buffer;
 
-/// The module for motion planner functionalities.
+/// The module with the motion planner logic.
 mod motion_planner;
 
-/// The module for motion interpolation functionalities.
+/// The module for motion interpolation.
 mod motion_interpolation;
 
-/// The module for motion timing functionalities.
+/// The module for motion timing (formally: the StepPlan generator).
 mod motion_timing;
 
-/// The module for motion time driver functionalities.
+/// The module to provide a software time driver to schedule multi-axis steps with variable timings each at fixed rate
 mod motion_time_driver;
 
-/// The module for pins functionalities.
+/// The module to drive the step pins.
 mod motion_pins;
 
 use crate::hwa;
@@ -45,6 +45,8 @@ pub enum ScheduledMove {
     Homing(u32),
     /// A dwell action.
     Dwell(Option<u32>, u32),
+    /// A set-position action.
+    SetPosition(Position, u32),
 }
 
 /// Types of movements in the motion system.
@@ -56,6 +58,8 @@ pub enum MovType {
     Homing(hwa::CommChannel),
     /// A dwell action with a communication channel.
     Dwell(hwa::CommChannel),
+    /// A set-position action with a communication channel.
+    SetPosition(hwa::CommChannel),
 }
 
 /// Represents an entry in the motion plan.
@@ -79,12 +83,22 @@ pub enum PlanEntry {
     Homing(hwa::CommChannel, bool, u32),
     /// A Dwell action request.
     ///
-    /// *_1: CommChannel* - The input channel requesting the move.
+    /// *_1: CommChannel* - The input channel requesting the action.
     ///
     /// *_2: Option&lt;u32&gt;* - The number of milliseconds to delay.
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
     Dwell(hwa::CommChannel, Option<u32>, bool, u32),
+    
+    /// A SetPosition action request.
+    ///
+    /// *_1: CommChannel* - The input channel requesting the action.
+    /// 
+    /// *_2: Position* - The position to set.
+    ///
+    /// *_3: bool* - Indicates if motion is deferred or not.
+    SetPosition(hwa::CommChannel, Position, bool, u32),
+    
     /// An executing move.
     ///
     /// *_1: MovType* - The type of the move.

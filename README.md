@@ -4,13 +4,15 @@
 [![Coverage Status](https://coveralls.io/repos/github/cbruiz/printhor/badge.svg?branch=main)](https://coveralls.io/github/cbruiz/printhor?branch=main)[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
 
-<h3>Printhor: The highly reliable but not necessarily functional 3D printer firmware</h3>
+<h3>Printhor: The highly reliable but not necessarily functional 3D printer and robotics firmware</h3>
 
 <h5><p align="center"><i>If you are using this product or like the project, please <a href="https://github.com/cbruiz/printhor/stargazers">★</a> this repository to show your support! 🤩</i></p></h5>
 
 # Overview
 
-Printhor is a generic and hardware-agnostic firmware framework for FDM printers, CNC and Engravers implemented in Rust.
+Printhor is a generic and hardware-agnostic (firmware) framework for FDM printers, CNC, Engravers and robots implemented in Rust.
+
+Basically, it's a GCode interpreter capable to process a stream of GCodes (position and control orders), schedule them, compute a motion profile on the fly and finally perform the hardware level instructions (step pulses, PWM signals, ... or even dataframes broadcast for a dedicated breakboard) in real time.
 
 There are many productive firmwares in the community like gbrl, marlin, reprap, etc. Each single one have a concrete approach and guidelines.
 This one aims to provide a research environment for not strictly productive purpose, but a reliable platform with the following goals:
@@ -38,6 +40,7 @@ Which means the principal short-term goal is not to develop a productive firmwar
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
 * High behavior customization.
+* Low level action distribution leveraging dedicated break-boards. 
 * Wide GCode standard coverage.
 * Native simulation for development and benchmarking.
   * Many others coming.
@@ -1060,7 +1063,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">G92</td>
         <td>*</td>
         <td>Set Position</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">G92.1</td>
