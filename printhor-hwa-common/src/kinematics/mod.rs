@@ -14,18 +14,17 @@ pub trait WorldToSpaceTransformer {
     ///
     /// Parameters:
     ///
-    /// - `_world_pos`: The world position.
-    fn project_to_world(&self, _space_coordinate: &TVector<Real>) -> Result<TVector<Real>, ()> {
-        Ok(*_space_coordinate)
+    /// - `_space_pos`: The Space position.
+    fn project_to_world(&self, _space_pos: &TVector<Real>) -> Result<TVector<Real>, ()> {
+        Ok(*_space_pos)
     }
 }
-
-pub struct Identity;
-impl WorldToSpaceTransformer for Identity {}
 
 #[cfg(feature = "with-motion-anthropomorphic-kinematics")]
 pub mod anthropomorphic_3dof;
 #[cfg(feature = "with-motion-cartessian-kinematics")]
-mod cartessian;
+pub mod cartessian;
+#[cfg(feature = "with-motion-core-xy-kinematics")]
+pub mod core_xy;
 #[cfg(feature = "with-motion-delta-kinematics")]
 pub mod delta;

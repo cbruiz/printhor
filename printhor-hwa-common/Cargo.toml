@@ -34,12 +34,15 @@ with-motion = ["embedded-hal-0"]
 with-motion-broadcast = []
 with-motion-cartessian-kinematics = []
 with-motion-delta-kinematics = []
+with-motion-core-xy-kinematics = []
 with-motion-anthropomorphic-kinematics = []
 with-hot-end = ["embedded-hal-0"]
 with-hot-bed = ["embedded-hal-0"]
 with-sd-card = ["async-gcode", "embedded-sdmmc", "heapless"]
 with-print-job = []
-with-trinamic = []
+with-trinamic = ["embassy-embedded-hal"]
+
+sd-card-spi = []
 
 float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl"]
@@ -67,6 +70,7 @@ const_env = { version = "0.1"}
 embassy-sync = { version = "0.6", features = [] }
 embassy-executor = { version = "0.7", features = [] }
 embassy-time = { version = "0.4", features = [] }
+embassy-embedded-hal = { version = "0.3.0", optional = true, default-features = false, features = [] }
 
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven"], optional = true }
@@ -74,20 +78,20 @@ embedded-sdmmc = { version = "0.8.0", default-features = false, features = [], o
 embedded-io-async = { version = "0.6", default-features = false, features = [], optional = true }
 async-gcode = { version = "0.3", default-features = false, features = [], optional = true}
 
-heapless = { version = "0.8", default-features = false, features = [], optional = true }
+heapless = { version = "0.8.0", default-features = false, features = [], optional = true }
 
 bitflags = { version = "2.8.0", default-features = false, features = ["bytemuck"] }
-cfg-if = { version = "1.0" }
-defmt = {version = "0.3.10", default-features = false, optional = true}
+cfg-if = { version = "1.0.0" }
+defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
 log = { version = "0.4.25", default-features = false, optional = true }
-strum = { version = "0.27.0", default-features = false, features = ["derive"] }
+strum = { version = "0.27.1", default-features = false, features = ["derive"] }
 
 num-traits = { version = "0.2", default-features = false, features = [] }
 micromath = { version = "2.1", default-features = false, features = [] }
-rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { optional = true, version = "1" }
-ryu = {version = "1.0", default-features = false}
+rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1.36.0" }
+ryu = {version = "1.0.19", default-features = false}
 
 [dev-dependencies]
-futures-test = { version = "0.3", default-features = false}
-tmc2209 = { version = "0.2"}
+futures-test = { version = "0.3.31", default-features = false}
+tmc2209 = { version = "0.2.2"}

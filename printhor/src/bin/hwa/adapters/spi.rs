@@ -154,7 +154,7 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
                         return Err(e);
                     }
                     Ok(R1_IDLE_STATE) => {
-                        defmt::trace!("\tEnter SPI modd: IDLE");
+                        defmt::trace!("\tEnter SPI mode: IDLE");
                         break;
                     }
                     Ok(_r) => {

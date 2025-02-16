@@ -1,5 +1,5 @@
 //! IO device wrappers for nucleo64-F410RB (STM32F410RB)
-
+#[allow(unused)]
 use printhor_hwa_common as hwa;
 #[allow(unused)]
 use hwa::math;

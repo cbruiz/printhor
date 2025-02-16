@@ -30,40 +30,40 @@ debug-motion-broadcast = []
 
 assert-motion = []
 
-with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper"]
-with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast"]
-with-motion-cartessian-kinematics = ["printhor-hwi_native?/with-motion-cartessian-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-cartessian-kinematics"]
-with-motion-anthropomorphic-kinematics = ["printhor-hwi_native?/with-motion-anthropomorphic-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-anthropomorphic-kinematics"]
-with-motion-delta-kinematics = ["printhor-hwi_native?/with-motion-delta-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-delta-kinematics"]
+with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper", "printhor-hwi_skr_mini_e3?/with-motion-stepper", "printhor-hwi_mks_robin_nano?/with-motion-stepper", "printhor-hwi_rp_2040?/with-motion-stepper"]
+with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast", "printhor-hwi_skr_mini_e3?/with-motion-broadcast", "printhor-hwi_mks_robin_nano?/with-motion-broadcast", "printhor-hwi_rp_2040?/with-motion-broadcast"]
+with-motion-cartessian-kinematics = ["printhor-hwi_native?/with-motion-cartessian-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-cartessian-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-cartessian-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-cartessian-kinematics", "printhor-hwi_rp_2040?/with-motion-cartessian-kinematics"]
+with-motion-core-xy-kinematics = ["printhor-hwi_native?/with-motion-core-xy-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-core-xy-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-core-xy-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-core-xy-kinematics", "printhor-hwi_rp_2040?/with-motion-core-xy-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwi_native?/with-motion-delta-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-delta-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-delta-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-delta-kinematics", "printhor-hwi_rp_2040?/with-motion-delta-kinematics"]
+with-motion-anthropomorphic-kinematics = ["printhor-hwi_native?/with-motion-anthropomorphic-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-anthropomorphic-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-anthropomorphic-kinematics", "printhor-hwi_rp_2040?/with-motion-anthropomorphic-kinematics"]
 
 # Hardware device features
 
-with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt", "printhor-hwi_rp_2040?/with-defmt"]
-with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log"]
-with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-usb"]
+with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt", "printhor-hwi_skr_mini_e3?/with-defmt", "printhor-hwi_mks_robin_nano?/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "embedded-sdmmc?/defmt-log"]
+with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log", "embedded-sdmmc?/defmt-log"]
+with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-usb", "printhor-hwi_skr_mini_e3?/with-serial-usb", "printhor-hwi_mks_robin_nano?/with-serial-usb", "printhor-hwi_rp_2040?/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-1"]
 with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-2"]
-with-spi = ["embedded-hal-1", "printhor-hwa-common/with-spi", "printhor-hwi_native?/with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-spi"]
-with-i2c = ["embedded-hal-1", "printhor-hwa-common/with-i2c", "printhor-hwi_native?/with-i2c", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-i2c"]
-with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion"]
-with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-ps-on"]
+with-spi = ["embedded-hal-1", "printhor-hwa-common/with-spi", "printhor-hwi_native?/with-spi", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-spi", "printhor-hwi_skr_mini_e3?/with-spi", "printhor-hwi_mks_robin_nano?/with-spi", "printhor-hwi_rp_2040?/with-spi"]
+with-i2c = ["embedded-hal-1", "printhor-hwa-common/with-i2c", "printhor-hwi_native?/with-i2c", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-i2c", "printhor-hwi_skr_mini_e3?/with-i2c", "printhor-hwi_mks_robin_nano?/with-i2c", "printhor-hwi_rp_2040?/with-i2c"]
+with-motion = ["printhor-hwa-common/with-motion", "printhor-hwi_native?/with-motion", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion", "printhor-hwi_skr_mini_e3?/with-motion", "printhor-hwi_mks_robin_nano?/with-motion", "printhor-hwi_rp_2040?/with-motion"]
+with-ps-on = ["printhor-hwa-common/with-ps-on", "printhor-hwi_native?/with-ps-on", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-ps-on", "printhor-hwi_skr_mini_e3?/with-ps-on", "printhor-hwi_mks_robin_nano?/with-ps-on", "printhor-hwi_rp_2040?/with-ps-on"]
 
-with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-probe"]
-with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser", "printhor-hwi_native?/with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-laser"]
-with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer", "printhor-hwi_native?/with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-fan-layer"]
-with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1", "printhor-hwi_native?/with-fan-extra-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-fan-extra-1"]
+with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe", "printhor-hwi_native?/with-probe", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-probe", "printhor-hwi_skr_mini_e3?/with-probe", "printhor-hwi_mks_robin_nano?/with-probe", "printhor-hwi_rp_2040?/with-probe"]
+with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser", "printhor-hwi_native?/with-laser", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-laser", "printhor-hwi_skr_mini_e3?/with-laser", "printhor-hwi_mks_robin_nano?/with-laser", "printhor-hwi_rp_2040?/with-laser"]
+with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer", "printhor-hwi_native?/with-fan-layer", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-fan-layer", "printhor-hwi_skr_mini_e3?/with-fan-layer", "printhor-hwi_mks_robin_nano?/with-fan-layer", "printhor-hwi_rp_2040?/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1", "printhor-hwi_native?/with-fan-extra-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-fan-extra-1", "printhor-hwi_skr_mini_e3?/with-fan-extra-1", "printhor-hwi_mks_robin_nano?/with-fan-extra-1", "printhor-hwi_rp_2040?/with-fan-extra-1"]
 
-with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-hot-end"]
-with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-hot-bed"]
+with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end", "printhor-hwi_native?/with-hot-end", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-hot-end", "printhor-hwi_skr_mini_e3?/with-hot-end", "printhor-hwi_mks_robin_nano?/with-hot-end", "printhor-hwi_rp_2040?/with-hot-end"]
+with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed", "printhor-hwi_native?/with-hot-bed", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-hot-bed", "printhor-hwi_skr_mini_e3?/with-hot-bed", "printhor-hwi_mks_robin_nano?/with-hot-bed", "printhor-hwi_rp_2040?/with-hot-bed"]
 
-with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card", "printhor-hwi_native?/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-sd-card"]
-with-print-job = ["printhor-hwa-common/with-print-job", "printhor-hwi_native?/with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-print-job"]
+with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card", "printhor-hwi_native?/with-sd-card", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-sd-card", "printhor-hwi_skr_mini_e3?/with-sd-card", "printhor-hwi_mks_robin_nano?/with-sd-card", "printhor-hwi_rp_2040?/with-sd-card"]
+with-print-job = ["printhor-hwa-common/with-print-job", "printhor-hwi_native?/with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-print-job", "printhor-hwi_skr_mini_e3?/with-print-job", "printhor-hwi_mks_robin_nano?/with-print-job", "printhor-hwi_rp_2040?/with-print-job"]
 
 with-endstops = []
-with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic", "printhor-hwi_native?/with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-trinamic"]
+with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic", "printhor-hwi_native?/with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-trinamic", "printhor-hwi_skr_mini_e3?/with-trinamic", "printhor-hwi_mks_robin_nano?/with-trinamic"]
 # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
 with-display = ["printhor-hwi_native?/with-display"]
-
 
 without-bootloader = []
 
@@ -89,28 +89,17 @@ with-u-axis = ["printhor-hwa-common/with-u-axis", "printhor-hwi_native?/with-u-a
 with-v-axis = ["printhor-hwa-common/with-v-axis", "printhor-hwi_native?/with-v-axis", "printhor-hwi_skr_mini_e3?/with-v-axis", "printhor-hwi_mks_robin_nano?/with-v-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-v-axis", "printhor-hwi_rp_2040?/with-v-axis"]
 with-w-axis = ["printhor-hwa-common/with-w-axis", "printhor-hwi_native?/with-w-axis", "printhor-hwi_skr_mini_e3?/with-w-axis", "printhor-hwi_mks_robin_nano?/with-w-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-w-axis", "printhor-hwi_rp_2040?/with-w-axis"]
 
-fixed-point-128-impl = ["rust_decimal", "rust_decimal_macros", "printhor-hwa-common/fixed-point-128-impl", "printhor-hwi_native?/fixed-point-128-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/fixed-point-128-impl"]
-float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl", "printhor-hwi_native?/float-point-f32-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f32-impl"]
-float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl", "printhor-hwi_native?/float-point-f64-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f64-impl"]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl", "printhor-hwi_native?/float-point-f32-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f32-impl", "printhor-hwi_skr_mini_e3?/float-point-f32-impl", "printhor-hwi_mks_robin_nano?/float-point-f32-impl", "printhor-hwi_rp_2040?/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl", "printhor-hwi_native?/float-point-f64-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f64-impl", "printhor-hwi_skr_mini_e3?/float-point-f64-impl", "printhor-hwi_mks_robin_nano?/float-point-f64-impl", "printhor-hwi_rp_2040?/float-point-f64-impl"]
+fixed-point-128-impl = ["rust_decimal", "rust_decimal_macros", "printhor-hwa-common/fixed-point-128-impl", "printhor-hwi_native?/fixed-point-128-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/fixed-point-128-impl", "printhor-hwi_skr_mini_e3?/fixed-point-128-impl", "printhor-hwi_mks_robin_nano?/fixed-point-128-impl", "printhor-hwi_rp_2040?/fixed-point-128-impl"]
 
-# Wheter motion task is preemtive (takes exclusively the CPU when driving segments) or not
-# The optimal case is NOT preemtive, but MCU must be powerful enough to provide very short response times.
-# Otherwise, there will be lagging and hence yanks in motion kinematics
-motion-async-task-exclusive = []
 # Debug trick for testing timings with digital probe. Enable is threated as reference output clock.
 debug-skip-homing = []
 debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
 numerical-robusticity-check = []
 trace-commands = []
 
-cooperative = [
-    "printhor-hwi_mks_robin_nano?/cooperative",
-    "printhor-hwi_nucleo_64_arduino_cnc_hat?/cooperative",
-    "printhor-hwi_skr_mini_e3?/cooperative",
-    "printhor-hwi_rp_2040?/cooperative",
-]
-
-sd-card-uses-spi = []
+sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi", "printhor-hwi_skr_mini_e3?/sd-card-uses-spi", "printhor-hwi_mks_robin_nano?/sd-card-uses-spi"]
 adc-is-async = []
 trinamic-uart-multi-channel = []
 enable_vrefint-with-delay = []
@@ -186,7 +175,8 @@ native = [
     "cornering",
     #"trace-commands",
 
-    "with-motion-cartessian-kinematics",
+    #"with-motion-cartessian-kinematics",
+    "with-motion-core-xy-kinematics",
     #"with-motion-anthropomorphic-kinematics",
     #"with-motion-delta-kinematics",
 
@@ -230,19 +220,18 @@ native = [
 mks_robin_nano = [
     #"nightly",
     "cornering",
-    "cooperative",
     "without-bootloader", "printhor-hwi_mks_robin_nano/without-bootloader", # SHOULD NOT
     "with-defmt",
     #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
-    #"with-motion", "printhor-hwi_mks_robin_nano/with-motion",
-    #"with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
+    "with-motion", "with-motion-cartessian-kinematics", "with-motion-stepper",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
 
-    #"with-serial-usb", "printhor-hwi_mks_robin_nano/with-serial-usb",
+    "with-serial-usb",
     #"with-serial-port-1", "printhor-hwi_mks_robin_nano/with-serial-port-1",
     #"with-serial-port-2", "printhor-hwi_mks_robin_nano/with-serial-port-2", # Not implemented
-    #"with-spi", "printhor-hwi_mks_robin_nano/with-spi",
-    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_mks_robin_nano/with-sd-card", "printhor-hwi_mks_robin_nano/sd-card-uses-spi",
-    #"with-print-job", "printhor-hwi_mks_robin_nano/with-print-job",
+    "with-spi",
+    "with-sd-card", "sd-card-uses-spi",
+    "with-print-job",
     #"with-probe", "printhor-hwi_mks_robin_nano/with-probe",
     #"with-hot-end", "printhor-hwi_mks_robin_nano/with-hot-end",
     #"with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed",
@@ -317,7 +306,6 @@ nucleo64-f410rb = [
     #"trace-commands",
 
     "cornering",
-    "cooperative",
 
     "with-motion",
     "with-motion-cartessian-kinematics",
@@ -360,72 +348,74 @@ nucleo_64_arduino_cnc_hat = [
 
 skr_mini_e3_v2 = [
     #"nightly",
-    "cornering",
-    #"executor-interrupt",
-    "cooperative",
+
+    #"debug-position",
+    #"debug-motion",
+    #"debug-motion-broadcast",
+    #"verbose-timings",
+    #"assert-motion",
+    #"trace-commands",
+
+    #"cornering",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
-    #"printhor-hwi_skr_mini_e3/without-ringbuffer",
-    #"without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader", # SHOULD NOT
-    "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
-    "printhor-hwi_skr_mini_e3/without-ringbuffer",
-    "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
-    "with-sd-card", "sd-card-uses-spi", "printhor-hwi_skr_mini_e3/with-sd-card", "printhor-hwi_skr_mini_e3/sd-card-uses-spi",
-    "with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
-    #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb",
-    "with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
-    "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
-    "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
+    #"without-bootloader", # SHOULD NOT
+    #"with-motion",
+    #"with-spi",
+    #"with-sd-card", "sd-card-uses-spi", "printhor-hwi_skr_mini_e3/with-sd-card", "printhor-hwi_skr_mini_e3/sd-card-uses-spi",
+    #"with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
+    "with-serial-usb",
+    #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1",
+    #"with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
+    #"with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
     #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
-    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
-    "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
-    "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
-    "without-vref-int",
-    "adc-is-async",
+    #"with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
+    #"with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
+    #"with-probe", "printhor-hwi_skr_mini_e3/with-probe",
+    #"with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
+    #"with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
+    #"without-vref-int",
+    #"adc-is-async",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
-    "with-defmt",
 
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v2",
 ]
 skr_mini_e3_v3 = [
     #"nightly",
-    "cornering",
-    #"executor-interrupt",
-    "cooperative",
-    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
-    #"printhor-hwi_skr_mini_e3/without-ringbuffer",
-    #"without-bootloader", "printhor-hwi_skr_mini_e3/without-bootloader", # SHOULD NOT
-    "with-motion", "printhor-hwi_skr_mini_e3/with-motion",
-    "with-spi", "printhor-hwi_skr_mini_e3/with-spi",
-    "with-sd-card", "sd-card-uses-spi", "printhor-hwi_skr_mini_e3/with-sd-card", "printhor-hwi_skr_mini_e3/sd-card-uses-spi",
-    "with-print-job", "printhor-hwi_skr_mini_e3/with-print-job",
-    #"with-serial-usb", "printhor-hwi_skr_mini_e3/with-serial-usb", # Broken with bootloader?
-    #"with-serial-port-1", "printhor-hwi_skr_mini_e3/with-serial-port-1", # Broken
-    "with-serial-port-2", "printhor-hwi_skr_mini_e3/with-serial-port-2",
-    "with-trinamic", "printhor-hwi_skr_mini_e3/with-trinamic",
-    #"with-laser", "printhor-hwi_skr_mini_e3/with-laser",
-    "with-hot-end", "printhor-hwi_skr_mini_e3/with-hot-end",
-    "with-hot-bed", "printhor-hwi_skr_mini_e3/with-hot-bed",
-    "with-probe", "printhor-hwi_skr_mini_e3/with-probe",
-    "with-fan-layer", "printhor-hwi_skr_mini_e3/with-fan-layer",
-    "with-ps-on", "printhor-hwi_skr_mini_e3/with-ps-on",
+    "with-defmt",
+    "debug-position",
+    #"debug-motion",
+    #"debug-motion-broadcast",
+    #"verbose-timings",
 
-    "enable_vrefint-with-delay",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
+    "with-motion", "with-motion-cartessian-kinematics",
+    "with-spi",
+    "with-sd-card", "sd-card-uses-spi",
+    "with-print-job",
+    "with-serial-usb",
+    #"with-serial-port-1", # Broken
+    #"with-serial-port-2",
+    "with-trinamic",
+    #"with-laser",
+    #"with-hot-end",
+    #"with-hot-bed",
+    #"with-probe",
+    #"with-fan-layer",
+    "with-ps-on",
+
+    #"enable_vrefint-with-delay",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
     #"fixed-point-128-impl",
 
-    "with-defmt",
     "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v3",
 ]
 skr_mini_e3 = [
     "printhor-hwi_skr_mini_e3",
-    "embassy-executor/executor-thread",
     "cortex-m-rt",
     "ryu/no-panic",
 ]
@@ -476,37 +466,33 @@ rp_2040 = [
 
 [dependencies]
 # Optional baremetal
-defmt = {version = "0.3", optional = true, default-features = false, features = []}
-panic-probe = { version = "0.3", features = ["print-defmt"], optional = true}
-defmt-rtt = { version = "0.4", optional = true }
+defmt = {version = "0.3.10", optional = true, default-features = false, features = []}
+panic-probe = { version = "0.3.2",  optional = true, default-features = false, features = ["print-rtt"]}
+defmt-rtt = { version = "0.4.1", optional = true, default-features = false, features = [] }
 
-cortex-m = { version = "0.7.6", features = ["inline-asm"], optional = true }
+cortex-m = { version = "0.7.7", features = ["inline-asm"], optional = true }
 cortex-m-rt = { version = "0.7.5", optional = true}
 alloc-cortex-m = { version = "0.4.4", optional = true}
 critical-section = {version = "1.2.0", default-features = false}
 
-embassy-stm32 = { version = "0.2", default-features = false, features = [], optional = true }
-embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread"] }
-embassy-sync = { version = "0.6", features = [] }
-embassy-time = { version = "0.4", features = [] }
-embassy-futures = { version = "0.1", features = [] }
-#embassy-embedded-hal = { version = "0.3", features = [], optional = true }
-embassy-usb = { version = "0.4", features = [], optional = true }
-embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
+embassy-executor = { version = "0.7.0", default-features = false, features = ["executor-thread"] }
+embassy-sync = { version = "0.6.2", features = [] }
+embassy-time = { version = "0.4.0", features = [] }
+embassy-futures = { version = "0.1.1", features = [] }
+
+embedded-sdmmc = { version = "0.8.1", default-features = false, optional = true }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0", features = ["unproven", ], optional = true }
 
-#futures = { version = "0.3", default-features = false, features = [] }
-#futures-util = { version = "0.3", default-features = false, features = [] }
-heapless = { version = "0.8", default-features = false, features = [] }
+heapless = { version = "0.8.0", default-features = false, features = [] }
 
-async-gcode = {version = "0.3", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "parse-checksum"]}
+async-gcode = {version = "0.3.0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "parse-checksum"]}
 
-strum = { version = "0.26", default-features = false, features = ["derive"] }
+strum = { version = "0.27.1", default-features = false, features = ["derive"] }
 
-pid = { version = "4.0", default-features = false, features = [] }
-num-traits = { version = "0.2", default-features = false, features = [] }
-micromath = { version = "2.1", default-features = false, features = [] }
+pid = { version = "4.0.0", default-features = false, features = [] }
+num-traits = { version = "0.2.19", default-features = false, features = [] }
+micromath = { version = "2.1.0", default-features = false, features = [] }
 rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { optional = true, version = "1" }
 # For light and fast float parsing
@@ -514,13 +500,12 @@ rust_decimal_macros = { optional = true, version = "1" }
 # For light and fast float striong formatting
 #lexical-core = {version = "1.0", default-features = false, features = ["write-floats"]}
 # For very compact and fast float to string conversion
-ryu = {version = "1.0", default-features = false}
+ryu = {version = "1.0.19", default-features = false}
 
-
-embedded-io-async = { version = "0.6", default-features = false, features = [] }
+embedded-io-async = { version = "0.6.1", default-features = false, features = [] }
 
 # Steppers
-tmc2209 = { version = "0.2", optional = true }
+tmc2209 = { version = "0.2.2", optional = true }
 
 # Common base
 printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../printhor-hwa-common" }
@@ -533,23 +518,23 @@ printhor-hwi_mks_robin_nano = { version = "0.0", default-features = false, optio
 printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "0.0", default-features = false, optional = true }
 printhor-hwi_rp_2040 = { version = "0.0", default-features = false, optional = true }
 
-gnuplot = {version = "0.0.43", default-features = false, features=[], optional = true}
+gnuplot = {version = "0.0.45", default-features = false, features=[], optional = true}
 # Display
 #lvgl = { version = "0.5.2", default-features = false, features =[], optional = true }
 #embedded-graphics-core = {version = "0.4.0", optional = true }
 
 ### machinery
 
-cstr_core = { version = "0.2", default-features = false, features = ["alloc"], optional = true }
-bitflags = { version = "2.6", default-features = false, features = [] }
+cstr_core = { version = "0.2.6", default-features = false, features = ["alloc"], optional = true }
+bitflags = { version = "2.8.0", default-features = false, features = [] }
 
-cfg-if = { version = "1.0", features = [] }
-const_env = { version = "0.1" }
+cfg-if = { version = "1.0.0", features = [] }
+const_env = { version = "0.1.2" }
 
 [build-dependencies]
 #proc-macro2 = "1.0."
 cfg-if = "1.0"
 
 [dev-dependencies]
-futures-test = { version = "0.3"}
-tmc2209 = { version = "0.2"}
+futures-test = { version = "0.3.31"}
+tmc2209 = { version = "0.2.2"}

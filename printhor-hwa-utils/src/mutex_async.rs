@@ -1,7 +1,8 @@
 //! A module for managing async locks.
 
 //#region Useful reexports [...] Async mutexes
-
+#[allow(unused)]
+use crate as hwa;
 use core::cell::RefCell;
 use core::ops::Deref;
 
@@ -48,10 +49,12 @@ where
     }
 
     fn retain(&self) -> impl core::future::Future<Output = Result<(), ()>> {
+        hwa::error!("cannot retain");
         async { Err(()) }
     }
 
     fn release(&self) -> Result<(), ()> {
+        hwa::error!("cannot release");
         Err(())
     }
 

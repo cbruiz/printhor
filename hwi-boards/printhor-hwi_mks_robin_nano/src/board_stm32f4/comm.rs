@@ -1,5 +1,5 @@
 //! This specialization exists because there are several ways to communicate with stepper's Trinamic UART
-use crate::device;
+use super::device;
 use embassy_stm32::gpio::{Flex, Pin, Pull, Speed};
 use printhor_hwa_common::soft_uart;
 use printhor_hwa_common::soft_uart::{

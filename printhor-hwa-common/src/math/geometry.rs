@@ -1799,12 +1799,13 @@ where
 
     /// Evaluates when a vector has all coordinates bounded by other
     /// Meaning that every x, y, z ... of Self is lower than other's
-    pub fn bounded_by(&self, rhs: &TVector<T>) -> bool {
+    pub fn bounded_by(&self, _rhs: &TVector<T>) -> bool {
+        #[allow(unused_mut)]
         let mut matching_point = true;
         #[cfg(feature = "with-e-axis")]
         match self.e {
             None => {}
-            Some(lv) => match rhs.e {
+            Some(lv) => match _rhs.e {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1826,7 +1827,7 @@ where
         #[cfg(feature = "with-x-axis")]
         match self.x {
             None => {}
-            Some(lv) => match rhs.x {
+            Some(lv) => match _rhs.x {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1847,7 +1848,7 @@ where
         #[cfg(feature = "with-y-axis")]
         match self.y {
             None => {}
-            Some(lv) => match rhs.y {
+            Some(lv) => match _rhs.y {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1868,7 +1869,7 @@ where
         #[cfg(feature = "with-z-axis")]
         match self.z {
             None => {}
-            Some(lv) => match rhs.z {
+            Some(lv) => match _rhs.z {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1890,7 +1891,7 @@ where
         #[cfg(feature = "with-a-axis")]
         match self.a {
             None => {}
-            Some(lv) => match rhs.a {
+            Some(lv) => match _rhs.a {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1911,7 +1912,7 @@ where
         #[cfg(feature = "with-b-axis")]
         match self.b {
             None => {}
-            Some(lv) => match rhs.b {
+            Some(lv) => match _rhs.b {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1932,7 +1933,7 @@ where
         #[cfg(feature = "with-c-axis")]
         match self.c {
             None => {}
-            Some(lv) => match rhs.c {
+            Some(lv) => match _rhs.c {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1954,7 +1955,7 @@ where
         #[cfg(feature = "with-i-axis")]
         match self.i {
             None => {}
-            Some(lv) => match rhs.i {
+            Some(lv) => match _rhs.i {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1975,7 +1976,7 @@ where
         #[cfg(feature = "with-j-axis")]
         match self.j {
             None => {}
-            Some(lv) => match rhs.j {
+            Some(lv) => match _rhs.j {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -1996,7 +1997,7 @@ where
         #[cfg(feature = "with-k-axis")]
         match self.k {
             None => {}
-            Some(lv) => match rhs.k {
+            Some(lv) => match _rhs.k {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -2018,7 +2019,7 @@ where
         #[cfg(feature = "with-u-axis")]
         match self.u {
             None => {}
-            Some(lv) => match rhs.u {
+            Some(lv) => match _rhs.u {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -2039,7 +2040,7 @@ where
         #[cfg(feature = "with-v-axis")]
         match self.v {
             None => {}
-            Some(lv) => match rhs.v {
+            Some(lv) => match _rhs.v {
                 None => {
                     if !lv.is_zero() {
                         return false;
@@ -2060,7 +2061,7 @@ where
         #[cfg(feature = "with-w-axis")]
         match self.w {
             None => {}
-            Some(lv) => match rhs.w {
+            Some(lv) => match _rhs.w {
                 None => {
                     if !lv.is_zero() {
                         return false;

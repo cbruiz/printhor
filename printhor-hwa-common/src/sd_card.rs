@@ -1,10 +1,8 @@
 use crate as hwa;
-use embedded_sdmmc::{
-    Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager,
-};
+use embedded_sdmmc::{Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager};
 
 /// Represents various errors that can occur while interacting with an SD card.
-#[cfg_attr(feature = "with-log", derive(Debug))]
+#[derive(Debug)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum SDCardError {
     /// Error indicating that no volume could be found.
@@ -102,11 +100,12 @@ where
         D: hwa::traits::AsyncSDBlockDevice,
     {
         let mut card = VolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
-        //#[cfg(feature = "sd-card-uses-spi")]
-        let _ = card.device().retain().await;
+        hwa::debug!("Locking device...");
+        let _ = card.device().do_retain().await;
+        hwa::debug!("Opening volume...");
         let vol = card.open_raw_volume(VolumeIdx(partition));
-        //#[cfg(feature = "sd-card-uses-spi")]
-        let _ = card.device().release();
+        hwa::debug!("Unlocking device...");
+        let _ = card.device().do_release();
         let mut opened_dirs = heapless::Vec::new();
         let mut opened_dirs_ref_counts = heapless::Vec::new();
         for _ in 0..MAX_DIRS {
@@ -122,11 +121,11 @@ where
     }
 
     pub async fn retain_device(&mut self) -> Result<(), ()> {
-        self.mgr.device().retain().await
+        self.mgr.device().do_retain().await
     }
 
     pub fn release_device(&mut self) -> Result<(), ()> {
-        self.mgr.device().release()
+        self.mgr.device().do_release()
     }
 
     pub fn open_path(
@@ -272,7 +271,8 @@ where
         &mut self,
         parent_ref: &EntryRef,
         entry_name: &str,
-    ) -> Result<EntryRef, SDCardError> {
+    ) -> Result<EntryRef, SDCardError>
+    {
         if self.opened_entries_ref_counts[parent_ref.0 as usize].ref_count == 0 {
             return Err(SDCardError::InconsistencyError);
         }
@@ -321,9 +321,8 @@ where
                                             Err(SDCardError::MaxOpenDirs)
                                         }
                                     }
-                                    Err(_reason) => {
-                                        #[cfg(feature = "with-defmt")]
-                                        hwa::error!("unable to open entry: {:?}", _reason);
+                                    Err(_e) => {
+                                        hwa::error!("unable to open entry: (TBD)");
                                         Err(SDCardError::InternalError)
                                     }
                                 }
@@ -348,7 +347,7 @@ where
                                         }
                                     }
                                     Err(_reason) => {
-                                        hwa::error!("unable to open file: {:?}", _reason);
+                                        hwa::error!("unable to open file: (TBD)");
                                         Err(SDCardError::InternalError)
                                     }
                                 }
@@ -468,11 +467,11 @@ mod test {
         <<H as hwa::AsyncMutexStrategy>::Resource as hwa::traits::SDBlockDevice>::Error:
             From<SDCardError>,
     {
-        async fn retain(&self) -> Result<(), ()> {
+        async fn do_retain(&self) -> Result<(), ()> {
             self.dev.retain().await
         }
 
-        fn release(&self) -> Result<(), ()> {
+        fn do_release(&self) -> Result<(), ()> {
             self.dev.release()
         }
     }

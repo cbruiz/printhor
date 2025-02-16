@@ -87,7 +87,7 @@ impl HwiContract for Contract {
                             Ok(pos - ANTHROPOMORFIC_WORLD_CENTER_WU)
                         )
                     }
-                    
+
                     /// Apply calculated max feed rate boundaries
                     const CLAMP_MAX_FEED_RATE: bool = false;
 
@@ -406,7 +406,6 @@ impl HwiContract for Contract {
 
     async fn init(_spawner: embassy_executor::Spawner) -> hwa::HwiContext<Self> {
 
-
         //#region "RCC"
         let config = {
             let mut config = embassy_stm32::Config::default();
@@ -492,7 +491,6 @@ impl HwiContract for Contract {
         //#endregion
         hwa::info!("embassy init...");
         let p = embassy_stm32::init(config);
-        embassy_time::Timer::after(Duration::from_millis(1000)).await;
         hwa::info!("embassy init done");
 
         //#region "Prepare shared peripherals"

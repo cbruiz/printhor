@@ -22,61 +22,70 @@ with-print-job = []
 with-serial-port-1 = ["embedded-io-async"]
 with-serial-port-2 = ["embedded-io-async"]
 with-spi = ["embedded-hal"]
+with-i2c = []
 with-hot-end = ["embedded-hal"]
 with-hot-bed = ["embedded-hal"]
 with-motion = []
+with-motion-stepper = []
+with-motion-broadcast = []
+with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
+with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
+with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
 with-probe = ["embedded-hal"]
 with-endstops = []
 with-sd-card = []
 with-fan-layer = ["embedded-hal"]
 with-fan-extra-1 = ["embedded-hal"]
 with-laser = ["embedded-hal"]
-with-defmt = ["printhor-hwa-common/with-defmt", "embassy-rp/defmt", "embassy-executor/defmt"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-rp/defmt", "embassy-executor/defmt"]
 with-trinamic = []
 with-ps-on = []
 
-with-x-axis = []
-with-y-axis = []
-with-z-axis = []
-with-e-axis = []
-with-a-axis = []
-with-b-axis = []
-with-c-axis = []
-with-i-axis = []
-with-j-axis = []
-with-k-axis = []
-with-u-axis = []
-with-v-axis = []
-with-w-axis = []
+with-e-axis = ["printhor-hwa-common/with-e-axis"]
+with-x-axis = ["printhor-hwa-common/with-x-axis"]
+with-y-axis = ["printhor-hwa-common/with-y-axis"]
+with-z-axis = ["printhor-hwa-common/with-z-axis"]
+with-a-axis = ["printhor-hwa-common/with-a-axis"]
+with-b-axis = ["printhor-hwa-common/with-b-axis"]
+with-c-axis = ["printhor-hwa-common/with-c-axis"]
+with-i-axis = ["printhor-hwa-common/with-i-axis"]
+with-j-axis = ["printhor-hwa-common/with-j-axis"]
+with-k-axis = ["printhor-hwa-common/with-k-axis"]
+with-u-axis = ["printhor-hwa-common/with-u-axis"]
+with-v-axis = ["printhor-hwa-common/with-v-axis"]
+with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
 nightly = ["embassy-executor/nightly"]
-cooperative = ["embassy-time/generic-queue-128"]
 verbose-timings = []
 without-uart-until_idle = []
 with-uart-buffered = []
 # with-uart-ringbuffered = [] # Not yet present in embassy-rp
 
 sd-card-uses-spi = []
-ili9341_parallel = []
-ili9341_spi = ["with-spi"]
+
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
-defmt = {version = "0.3", default-features = false}
-cortex-m = { version = "0.7.7", features = ["inline-asm"] }
-cortex-m-rt = { version = "0.7.3", default-features = false }
-alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
+defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
+cortex-m = { version = "0.7.6", features = ["inline-asm"] }
+cortex-m-rt = { version = "0.7.5", default-features = false }
+alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
+critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
 
-embassy-rp = { version = "0", default-features = false, features = ["defmt", "unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
-embassy-executor = { version = "0.7", default-features = false, features = ["defmt", "arch-cortex-m", "executor-thread"] }
-embassy-sync = { version = "0.6", features = ["defmt"] }
-embassy-time = { version = "0.4", features = ["defmt"] }
-embassy-futures = { version = "0", features = ["defmt"] }
+embassy-rp = { version = "0", default-features = false, features = ["unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
+embassy-executor = { version = "0.7", default-features = false, features = ["arch-cortex-m", "executor-thread"] }
+embassy-sync = { version = "0.6", features = [] }
+embassy-time = { version = "0.4", features = ["generic-queue-32"] }
+embassy-futures = { version = "0", features = [] }
 embassy-usb = { version = "0", features = [], optional = true }
 
 portable-atomic = { version = "1", features = ["critical-section"] }
-printhor-hwa-common = { version = "0", features = [] }
+printhor-hwa-common = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-common" }
+printhor-hwa-utils = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-utils" }
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-#futures = { version = "0.3", default-features = false, features = ["async-await", "cfg-target-has-atomic", "unstable"] }
 
 embedded-hal = { version = "1", default-features = false, optional = true, features = [] }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
@@ -85,5 +94,14 @@ embedded-io-async = { version = "0.6.1", default-features = false, optional = tr
 cfg-if = { version = "1" }
 const_env = { version = "0.1" }
 
+rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1" }
+
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }
+embassy-rp = { path = "../../libs/embassy/embassy-rp" }
+embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+embassy-time = { path = "../../libs/embassy/embassy-time" }
+embassy-futures = { path = "../../libs/embassy/embassy-futures" }
+embassy-usb = { path = "../../libs/embassy/embassy-usb" }

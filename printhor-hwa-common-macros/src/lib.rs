@@ -548,6 +548,7 @@ fn do_make_real(input: TokenStream) -> TokenStream {
             let expanded = quote! {
                 hwa::math::Real::from_f32(#number)
             };
+            expanded.into()
         }
         else if #[cfg(feature="float-point-f64-impl")] {
             cfg_if::cfg_if! {
@@ -558,6 +559,7 @@ fn do_make_real(input: TokenStream) -> TokenStream {
             let expanded = quote! {
                 hwa::math::Real::from_f64(#number)
             };
+            expanded.into()
         }
         else if #[cfg(feature="fixed-point-128-impl")] {
             cfg_if::cfg_if! {
@@ -568,12 +570,12 @@ fn do_make_real(input: TokenStream) -> TokenStream {
             let expanded = quote! {
                 hwa::math::Real::from_fixed(rust_decimal_macros::dec!(#number))
             };
+            expanded.into()
         }
         else {
             panic!("No real precision specified");
         }
     }
-    expanded.into()
 }
 
 #[proc_macro]

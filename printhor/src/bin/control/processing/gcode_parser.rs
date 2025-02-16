@@ -391,6 +391,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((2, 0))) => Some(GCodeValue::M2),
         ('m', Some((3, 0))) => Some(GCodeValue::M3),
+        ('m', Some((4, 0))) => Some(GCodeValue::M4),
         ('m', Some((5, 0))) => Some(GCodeValue::M5),
         #[cfg(feature = "with-sd-card")]
         ('m', Some((20, 0))) => Some(GCodeValue::M20(None)),

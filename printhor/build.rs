@@ -16,7 +16,8 @@ fn main() {
         }
         else if #[cfg(feature="rp_2040")] {
             let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-            let memory_x_path = std::path::PathBuf::from(".")
+            let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                .join("..") 
                 .join("hwi-boards")
                 .join("printhor-hwi_rp_2040")
                 .join("memory.x");
@@ -38,7 +39,8 @@ fn main() {
                 }
                 else {
                     let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-                    let memory_x_path = std::path::PathBuf::from(".")
+                    let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                        .join("..") 
                         .join("hwi-boards")
                         .join("printhor-hwi_mks_robin_nano")
                         .join("mks_robin_nano_3_1")
@@ -57,17 +59,20 @@ fn main() {
             println!("cargo:rustc-link-arg-bins=-Tlink.x");
         }
         else if #[cfg(feature="skr_mini_e3_v2")] {
+            
             cfg_if::cfg_if! {
                 if #[cfg(feature="without-bootloader")] {
                 }
                 else {
                     let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-                    let memory_x_path = std::path::PathBuf::from(".")
+                    let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                        .join("..") 
                         .join("hwi-boards")
                         .join("printhor-hwi_skr_mini_e3")
                         .join("skr_mini_e3_v2")
                         .join("memory.x");
                     let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
+                    
                     std::fs::File::create(out.join("memory.x"))
                         .unwrap()
                         .write_all(std::fs::read(memory_x_path_str).unwrap().as_slice())
@@ -85,7 +90,8 @@ fn main() {
                 }
                 else {
                     let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-                    let memory_x_path = std::path::PathBuf::from(".")
+                    let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                        .join("..")    
                         .join("hwi-boards")
                         .join("printhor-hwi_skr_mini_e3")
                         .join("skr_mini_e3_v3")

@@ -9,10 +9,8 @@ pub mod control;
 pub mod helpers;
 pub mod hwa;
 
-use hwa::Contract;
-use hwa::HwiContract;
 #[allow(unused)]
-use hwa::RawHwiResource;
+use hwa::{Contract, HwiContract, RawHwiResource};
 
 use hwa::math;
 #[allow(unused)]
@@ -402,6 +400,10 @@ async fn init_controllers_and_spawn_tasks(
                 hwa::types::MotionConfigMutexStrategy,
                 hwa::controllers::MotionConfigContent::new()
             ));
+            #[cfg(feature = "with-trinamic")]
+            let trinamic_controller = hwa::controllers::TrinamicController::new(
+                _context.trinamic_uart, motion_config.clone()
+            );
             let motion_status = hwa::controllers::MotionStatus::new(hwa::make_static_sync_controller!(
                 "MotionStatus",
                 hwa::types::MotionStatusMutexStrategy,
@@ -414,7 +416,7 @@ async fn init_controllers_and_spawn_tasks(
                     hwa::drivers::MotionDriver::new(
                         motion_pins,
                         #[cfg(feature = "with-trinamic")]
-                        motion_config.clone(),
+                        trinamic_controller,
                         #[cfg(feature = "with-probe")]
                         probe_controller.clone(),
                         #[cfg(feature = "with-fan-layer")]

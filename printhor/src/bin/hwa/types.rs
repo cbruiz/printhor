@@ -30,6 +30,12 @@ cfg_if::cfg_if! {
     }
 }
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-trinamic")] {
+        pub type TrinamicUart = <hwa::Contract as HwiContract>::TrinamicUartDevice;
+    }
+}
+
 pub type WatchDogController =
     hwa::StaticAsyncController<<hwa::Contract as HwiContract>::WatchDogMutexStrategy>;
 

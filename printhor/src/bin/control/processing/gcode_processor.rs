@@ -48,12 +48,9 @@ use crate::hwa;
 use control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use control::{GCodeCmd, GCodeValue};
 use hwa::math;
-#[allow(unused)]
-use hwa::AsyncMutexStrategy;
 use hwa::Contract;
-use hwa::HwiContract;
 #[allow(unused)]
-use hwa::SyncMutexStrategy;
+use hwa::{HwiContract, AsyncMutexStrategy, SyncMutexStrategy};
 
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
@@ -402,6 +399,7 @@ impl GCodeProcessor {
                 Ok(CodeExecutionSuccess::OK)
             }
             GCodeValue::M3 => Ok(CodeExecutionSuccess::OK),
+            GCodeValue::M4 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M5 => Ok(CodeExecutionSuccess::OK),
             GCodeValue::M37(t) => {
                 let dry_run_set = !t.s.unwrap_or(math::ZERO).is_zero();

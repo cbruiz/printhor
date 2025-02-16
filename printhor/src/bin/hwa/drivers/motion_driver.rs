@@ -35,8 +35,8 @@ pub struct MotionDriver {
 impl MotionDriver {
     pub fn new(
         pins: hwa::controllers::MotionPins,
-        //#[cfg(feature = "with-trinamic")]
-        //trinamic_controller: hwa::controllers::TrinamicController::new(params.motion_device.trinamic_uart, params.motion_config, ),
+        #[cfg(feature = "with-trinamic")]
+        trinamic_controller: hwa::controllers::TrinamicController,
         #[cfg(feature = "with-probe")] probe_controller: hwa::types::ProbeController,
         #[cfg(feature = "with-fan-layer")] fan_layer_controller: hwa::types::FanLayerController,
         #[cfg(feature = "with-fan-extra-1")]
@@ -47,10 +47,7 @@ impl MotionDriver {
         Self {
             pins,
             #[cfg(feature = "with-trinamic")]
-            trinamic_controller: hwa::controllers::TrinamicController::new(
-                params.motion_device.trinamic_uart,
-                params.motion_config,
-            ),
+            trinamic_controller,
             #[cfg(feature = "with-probe")]
             probe_controller,
             #[cfg(feature = "with-fan-layer")]

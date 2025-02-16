@@ -43,6 +43,7 @@ cfg_if::cfg_if! {
 
 mod contract;
 mod event_bus_channel;
+pub mod uart;
 pub mod soft_uart;
 pub mod traits;
 
@@ -51,6 +52,12 @@ pub use contract::{HwiContext, HwiContract};
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-sd-card")] {
         pub mod sd_card;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sd-card-spi")] {
+        pub mod sd_card_spi;
     }
 }
 

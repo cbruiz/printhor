@@ -22,14 +22,13 @@ with-defmt = ["defmt"]
 
 [dependencies]
 printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
-portable-atomic = { version = "1",  default-features = false, features = ["critical-section"] }
-static_cell = { version = "2.1",  default-features = false, features = [] }
-const_env = { version = "0.1"}
-embassy-sync = { version = "0.6", features = [] }
-#futures = { version = "0.3", default-features = false }
-cfg-if = { version = "1.0" }
-defmt = {version = "0.3", default-features = false, optional = true}
-log = { version = "0.4", default-features = false, optional = true }
+portable-atomic = { version = "1.10.0",  default-features = false, features = ["critical-section"] }
+static_cell = { version = "2.1.0",  default-features = false, features = [] }
+const_env = { version = "0.1.2"}
+embassy-sync = { version = "0.6.2", features = [] }
+cfg-if = { version = "1.0.0" }
+defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
+log = { version = "0.4.25", default-features = false, optional = true }
 critical-section = { version = "1.2.0", default-features = false, features = []}
 [dev-dependencies]
-futures-test = { version = "0.3", default-features = false }
+futures-test = { version = "0.3.31", default-features = false }

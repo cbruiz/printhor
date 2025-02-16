@@ -1,4 +1,4 @@
-//
+// Device module
 #[allow(unused)]
 use printhor_hwa_common as hwa;
 

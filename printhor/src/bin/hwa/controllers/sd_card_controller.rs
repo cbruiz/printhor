@@ -129,8 +129,9 @@ where
         let mut card = self.card.lock().await;
         hwa::debug!("Retaining device");
         let _r = card.retain_device().await;
-        hwa::info!("releasing path");
+        hwa::debug!("releasing path");
         card.release_path(path);
+        hwa::debug!("Releasing device");
         let _ = card.release_device();
     }
 

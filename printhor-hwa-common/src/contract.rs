@@ -126,10 +126,23 @@ pub trait HwiContract: Sized {
             /// Parameters:
             ///
             /// - `world_pos`: The world position.
-            fn project_to_space(&self, world_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
-                use crate::kinematics::WorldToSpaceTransformer;
-                const TRANSFORMER: hwa::kinematics::Identity = hwa::kinematics::Identity;
-                TRANSFORMER.project_to_space(world_pos)
+            fn project_to_space(&self, _world_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-motion-cartessian-kinematics")] {
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        const TRANSFORMER: hwa::kinematics::cartessian::DefaultTransformer = hwa::kinematics::cartessian::DefaultTransformer;
+                        TRANSFORMER.project_to_space(_world_pos)
+                    }
+                    else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        const TRANSFORMER: hwa::kinematics::core_xy::DefaultTransformer = hwa::kinematics::core_xy::DefaultTransformer;
+                        TRANSFORMER.project_to_space(_world_pos)
+                    }
+                    else {
+                        unreachable!("You must provide the transformer");
+                    }
+                }
+                
             }
 
             /// Transforms a (Work)space position to World position. By default, identity transform applied
@@ -137,10 +150,22 @@ pub trait HwiContract: Sized {
             /// Parameters:
             ///
             /// - `space_pos`: The world position.
-            fn project_to_world(&self, space_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
-                use crate::kinematics::WorldToSpaceTransformer;
-                const TRANSFORMER: hwa::kinematics::Identity = hwa::kinematics::Identity;
-                TRANSFORMER.project_to_world(space_pos)
+            fn project_to_world(&self, _space_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-motion-cartessian-kinematics")] {
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        const TRANSFORMER: hwa::kinematics::cartessian::DefaultTransformer = hwa::kinematics::cartessian::DefaultTransformer;
+                        TRANSFORMER.project_to_world(_space_pos)
+                    }
+                    else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        const TRANSFORMER: hwa::kinematics::core_xy::DefaultTransformer = hwa::kinematics::core_xy::DefaultTransformer;
+                        TRANSFORMER.project_to_world(_space_pos)
+                    }
+                    else {
+                        unreachable!("You must provide the transformer");
+                    }
+                }
             }
             
             /// Apply calculated min speed boundaries
@@ -388,7 +413,7 @@ pub trait HwiContract: Sized {
         if #[cfg(feature = "with-sd-card")] {
             const SD_CARD_MAX_DIRS: usize;
             const SD_CARD_MAX_FILES: usize;
-            type SDCardBlockDevice: traits::AsyncSDBlockDevice;
+            type SDCardBlockDevice: hwa::traits::SDBlockDevice;
         }
     }
 
@@ -409,6 +434,7 @@ pub trait HwiContract: Sized {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-trinamic")] {
             const TRINAMIC_UART_BAUD_RATE: u32;
+            type TrinamicUartDevice: traits::TrinamicUartTrait;
         }
     }
 
@@ -483,6 +509,9 @@ where
     /// As of now, this mut be holdable
     #[cfg(feature = "with-motion")]
     pub motion_pins: C::MotionPins,
+
+    #[cfg(feature = "with-trinamic")]
+    pub trinamic_uart: C::TrinamicUartDevice,
 
     #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
     pub motion_sender: hwa::StaticAsyncController<C::MotionSenderMutexStrategy>,

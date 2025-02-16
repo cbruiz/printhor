@@ -14,67 +14,91 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
+default = ["float-point-f32-impl", "with-serial-usb", "with-spi", "with-sd-card", "sd-card-uses-spi",
+    "with-print-job",
+    "with-e-axis", "with-x-axis", "with-y-axis", "with-z-axis",
+    "with-motion", "with-motion-core-xy-kinematics", "with-motion-stepper"]
 # Hardware device features
-with-serial-usb = ["embassy-usb"]
-with-serial-port-1 = []
-with-serial-port-2 = []
-with-print-job = []
-with-spi = ["embedded-hal"]
-with-hot-end = ["embedded-hal"]
-with-hot-bed = ["embedded-hal"]
-with-motion = []
-with-probe = ["embedded-hal"]
-with-endstops = []
-with-sd-card = []
-with-fan-layer = ["embedded-hal"]
-with-laser = ["embedded-hal"]
-with-defmt = ["printhor-hwa-common/with-defmt"]
-with-trinamic = []
-with-ps-on = []
-with-x-axis = []
-with-y-axis = []
-with-z-axis = []
-with-e-axis = []
-with-a-axis = []
-with-b-axis = []
-with-c-axis = []
-with-i-axis = []
-with-j-axis = []
-with-k-axis = []
-with-u-axis = []
-with-v-axis = []
-with-w-axis = []
+with-serial-usb = ["embassy-usb", "printhor-hwa-common/with-serial-usb"]
+with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1"]
+with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2"]
+with-print-job = ["printhor-hwa-common/with-print-job"]
+with-spi = ["embedded-hal", "printhor-hwa-common/with-spi"]
+with-i2c = ["printhor-hwa-common/with-i2c"]
+with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
+with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
+with-motion = ["printhor-hwa-common/with-motion"]
+with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
+with-motion-stepper = []
+with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
+with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
+with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
+with-probe = ["embedded-hal", "printhor-hwa-common/with-probe"]
+with-sd-card = ["printhor-hwa-common/with-sd-card"]
+with-fan-layer = ["embedded-hal", "printhor-hwa-common/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal", "printhor-hwa-common/with-fan-extra-1"]
+with-laser = ["embedded-hal", "printhor-hwa-common/with-laser"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
+with-trinamic = ["printhor-hwa-common/with-trinamic"]
+with-ps-on = ["printhor-hwa-common/with-ps-on"]
+
+with-e-axis = ["printhor-hwa-common/with-e-axis"]
+with-x-axis = ["printhor-hwa-common/with-x-axis"]
+with-y-axis = ["printhor-hwa-common/with-y-axis"]
+with-z-axis = ["printhor-hwa-common/with-z-axis"]
+with-a-axis = ["printhor-hwa-common/with-a-axis"]
+with-b-axis = ["printhor-hwa-common/with-b-axis"]
+with-c-axis = ["printhor-hwa-common/with-c-axis"]
+with-i-axis = ["printhor-hwa-common/with-i-axis"]
+with-j-axis = ["printhor-hwa-common/with-j-axis"]
+with-k-axis = ["printhor-hwa-common/with-k-axis"]
+with-u-axis = ["printhor-hwa-common/with-u-axis"]
+with-v-axis = ["printhor-hwa-common/with-v-axis"]
+with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
 nightly = []
-cooperative = ["embassy-time/generic-queue-128"]
 without-ringbuffer = []
 verbose-timings = []
-upstream-embassy = []
-sd-card-uses-spi = []
+sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi"]
 without-bootloader = []
 
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
-defmt = {version = "0.3", default-features = false}
-cortex-m = { version = "0.7.7", features = ["inline-asm", "critical-section-single-core"] }
-cortex-m-rt = { version = "0.7.3", default-features = false }
-alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
+defmt = { version = "0.3.10", optional = true, default-features = false, features=["alloc"] }
+cortex-m = { version = "0.7.7", default-features = false, features = ["inline-asm", "critical-section-single-core"] }
+cortex-m-rt = { version = "0.7.5", default-features = false }
+alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
+critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
 
-embassy-stm32 = { version = "0.2", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
-embassy-executor = { version = "0.7", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
-embassy-sync = { version = "0.6", features = [] }
-embassy-time = { version = "0.4", features = ["tick-hz-1_000_000"] }
-embassy-futures = { version = "0.1", features = [] }
-embassy-usb = { version = "0.3", features = [], optional = true }
+embassy-stm32 = { version = "0.2.0", default-features = false, features = ["stm32f407ve", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-tim4"] }
+embassy-executor = { version = "0.7.0", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
+embassy-sync = { version = "0.6.2", default-features = false, features = [] }
+embassy-time = { version = "0.4.0", default-features = false, features = ["tick-hz-1_000_000", "generic-queue-128"] }
+embassy-futures = { version = "0.1.1", default-features = false, features = [] }
+embassy-usb = { version = "0.4.0", default-features = false, features = [], optional = true }
 
-printhor-hwa-common = { version = "0.0"}
-async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
-#futures = { version = "0.3.30", default-features = false, features = [] }
+printhor-hwa-common = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-common" }
+printhor-hwa-utils = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-utils" }
+async-gcode = {version = "0.3.0", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value"] }
+
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2", features = ["unproven", ] }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", default-features = false, features = ["unproven"] }
 
 cfg-if = {version = "1.0.0"}
-const_env = { version = "0.1" }
+const_env = { version = "0.1.2" }
+
+rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, default-features = false, version = "1.36.0" }
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }
+embassy-stm32 = { path = "../../libs/embassy/embassy-stm32" }
+embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+embassy-time = { path = "../../libs/embassy/embassy-time" }
+embassy-futures = { path = "../../libs/embassy/embassy-futures" }
+embassy-usb = { path = "../../libs/embassy/embassy-usb" }

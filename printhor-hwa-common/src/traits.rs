@@ -59,7 +59,7 @@ cfg_if::cfg_if! {
                 self.set_enabled(hwa::CoordSel::all_axis(), false)
             }
 
-            fn set_enabled(&mut self, _channels: hwa::CoordSel, enabled: bool);
+            fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool);
             fn set_forward_direction(&mut self, _channels: hwa::CoordSel, _mask: hwa::CoordSel);
             fn step_toggle(&mut self, _channels: hwa::CoordSel);
             fn step_high(&mut self, _channels: hwa::CoordSel);
@@ -68,6 +68,19 @@ cfg_if::cfg_if! {
         }
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-trinamic")] {
+        pub trait TrinamicUartTrait {
+            fn read_until_idle(&mut self, buffer: &mut [u8]) -> impl core::future::Future<Output=Result<usize, hwa::uart::SerialError>>;
+            fn write(&mut self,buffer: &[u8]) -> impl core::future::Future<Output=Result<(), hwa::uart::SerialError>>;
+            fn flush(&mut self) -> impl core::future::Future<Output=Result<(), hwa::uart::SerialError>>;
+        }
+
+
+    }
+}
+
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -104,8 +117,8 @@ cfg_if::cfg_if! {
         pub use embedded_sdmmc::BlockDevice as SDBlockDevice;
 
         pub trait AsyncSDBlockDevice: embedded_sdmmc::BlockDevice {
-            fn retain(&self) -> impl core::future::Future<Output = Result<(), ()>>;
-            fn release(&self) -> Result<(), ()>;
+            fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>>;
+            fn do_release(&self) -> Result<(), ()>;
         }
     }
 }

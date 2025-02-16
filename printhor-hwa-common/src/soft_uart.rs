@@ -5,11 +5,6 @@ IOPin in a half-duplex mode.
 
 ## Enums
 
-### `SerialError`
-Represents possible errors that can occur during serial communication.
-- `Timeout`: Indicates a read or write operation has timed out.
-- `Framing`: Indicates framing error, where the stop bit was not as expected.
-
 ### `UartChannel`
 Represents different UART channels.
 - `Ch1`: Channel 1
@@ -112,16 +107,6 @@ async fn usage() {
 use crate as hwa;
 use embassy_time::Duration;
 use embassy_time::Timer;
-
-/// Serial communication error type
-#[derive(Debug)]
-#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
-pub enum SerialError {
-    /// Timeout
-    Timeout,
-    /// Framing error
-    Framing,
-}
 
 /// Software UART channel
 #[cfg_attr(feature = "with-log", derive(Debug))]
@@ -229,7 +214,7 @@ impl<RXTX> AsyncWrite<u8> for HalfDuplexSerial<RXTX>
 where
     RXTX: IOPin + Send,
 {
-    type Error = SerialError;
+    type Error = hwa::uart::SerialError;
 
     async fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         let mut data_out = byte;
@@ -285,7 +270,7 @@ impl<RXTX> AsyncRead<u8> for HalfDuplexSerial<RXTX>
 where
     RXTX: IOPin + Send,
 {
-    type Error = SerialError;
+    type Error = hwa::uart::SerialError;
 
     async fn read(&mut self) -> Result<u8, Self::Error> {
         let mut data_in = 0;

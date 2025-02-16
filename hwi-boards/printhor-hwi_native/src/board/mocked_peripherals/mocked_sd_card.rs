@@ -46,10 +46,10 @@ impl MockedSDCardBlockDevice {
 }
 
 impl AsyncSDBlockDevice for MockedSDCardBlockDevice {
-    async fn retain(&self) -> Result<(), ()> {
+    async fn do_retain(&self) -> Result<(), ()> {
         Ok(())
     }
-    fn release(&self) -> Result<(), ()> {
+    fn do_release(&self) -> Result<(), ()> {
         Ok(())
     }
 }
