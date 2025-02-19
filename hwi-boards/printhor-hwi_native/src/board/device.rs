@@ -321,18 +321,6 @@ pub type TrinamicUart = board::comm::SingleWireSoftwareUart;
 #[cfg(feature = "with-trinamic")]
 pub use board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};
 
-#[cfg(feature = "with-trinamic")]
-pub use board::comm::AxisChannel;
-
-#[cfg(feature = "with-trinamic")]
-pub type TMCUartCh1Pin = board::mocked_peripherals::MockedIOPin;
-#[cfg(feature = "with-trinamic")]
-pub type TMCUartCh2Pin = board::mocked_peripherals::MockedIOPin;
-#[cfg(feature = "with-trinamic")]
-pub type TMCUartCh3Pin = board::mocked_peripherals::MockedIOPin;
-#[cfg(feature = "with-trinamic")]
-pub type TMCUartCh4Pin = board::mocked_peripherals::MockedIOPin;
-
 
 #[cfg(feature = "with-display")]
 compile_error!("Pending to recover");

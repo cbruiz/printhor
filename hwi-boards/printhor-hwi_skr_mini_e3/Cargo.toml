@@ -24,6 +24,8 @@ default = [
 skr_mini_e3_v2 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-time/generic-queue-32", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
 skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-time/generic-queue-32", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt", "embassy-usb?/defmt"]
+
+nightly = ["embassy-executor/nightly"]
 # Hardware device features
 
 with-serial-usb = ["embassy-usb", "printhor-hwa-common/with-serial-usb"]
@@ -69,7 +71,6 @@ with-u-axis = ["printhor-hwa-common/with-u-axis"]
 with-v-axis = ["printhor-hwa-common/with-v-axis"]
 with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
-nightly = []
 verbose-timings = []
 sd-card-uses-spi = ["printhor-hwa-common/with-spi", "printhor-hwa-common/with-sd-card", "printhor-hwa-common/sd-card-spi"]
 without-vref-int = []

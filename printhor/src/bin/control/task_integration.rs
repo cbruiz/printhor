@@ -136,8 +136,7 @@ pub async fn task_integration(
     {
         let test_name = "T3 [M502 (Trinamic set)]";
         hwa::info!("## {} - BEGIN", test_name);
-        if params
-            .processor
+        if processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M502),

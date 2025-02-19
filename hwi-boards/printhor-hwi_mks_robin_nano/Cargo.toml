@@ -17,7 +17,9 @@ homepage = "https://github.com/cbruiz/printhor"
 default = ["float-point-f32-impl", "with-serial-usb", "with-spi", "with-sd-card", "sd-card-uses-spi",
     "with-print-job",
     "with-e-axis", "with-x-axis", "with-y-axis", "with-z-axis",
-    "with-motion", "with-motion-core-xy-kinematics", "with-motion-stepper"]
+    "with-motion", "with-motion-cartessian-kinematics", "with-motion-stepper",
+    "with-trinamic"
+]
 # Hardware device features
 with-serial-usb = ["embassy-usb", "printhor-hwa-common/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1"]
@@ -57,7 +59,7 @@ with-u-axis = ["printhor-hwa-common/with-u-axis"]
 with-v-axis = ["printhor-hwa-common/with-v-axis"]
 with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
-nightly = []
+nightly = ["embassy-executor/nightly"]
 without-ringbuffer = []
 verbose-timings = []
 sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi"]

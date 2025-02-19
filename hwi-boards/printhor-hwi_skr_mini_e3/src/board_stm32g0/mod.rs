@@ -55,7 +55,7 @@ impl HwiContract for Contract {
             cfg_if::cfg_if! {
                 if #[cfg(feature = "with-motion-cartessian-kinematics")] {
                      const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=200.0, y=200.0, z=200.0)
+                        hwa::make_vector_real!(x=10.0, y=10.0, z=10.0)
                     };
 
                     const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
@@ -574,7 +574,7 @@ impl HwiContract for Contract {
                     cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
                     cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
                     cfg.parity = embassy_stm32::usart::Parity::ParityNone;
-                    cfg.detect_previous_overrun = true;
+                    cfg.detect_previous_overrun = false;
                     io::TrinamicUartWrapper::new(
                         device::TrinamicUart::new(p.USART4, p.PC11, p.PC10,
                             TrinamicIrqs, p.DMA1_CH7, p.DMA1_CH6,

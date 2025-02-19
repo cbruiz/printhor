@@ -212,8 +212,8 @@ cfg_if::cfg_if! {
 
             fn set_forward_direction(&mut self, _channels: CoordSel, _mask: CoordSel) {
                 #[cfg(feature = "with-x-axis")]
-                if _channels.contains(CoordSel::X) {
-                    if _mask.contains(CoordSel::X) {
+                if _mask.contains(CoordSel::X) {
+                    if _channels.contains(CoordSel::X) {
                         let _ = self.x_dir_pin.set_high();
                     }
                     else {
@@ -221,8 +221,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _channels.contains(CoordSel::Y) {
-                    if _mask.contains(CoordSel::Y)  {
+                if _mask.contains(CoordSel::Y) {
+                    if _channels.contains(CoordSel::Y)  {
                         let _ = self.y_dir_pin.set_high();
                     }
                     else {
@@ -230,8 +230,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _channels.contains(CoordSel::Z) {
-                    if _mask.contains(CoordSel::Z)  {
+                if _mask.contains(CoordSel::Z) {
+                    if _channels.contains(CoordSel::Z)  {
                         let _ = self.z_dir_pin.set_high();
                     }
                     else {
@@ -239,8 +239,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _channels.contains(CoordSel::E) {
-                    if _mask.contains(CoordSel::E)  {
+                if _mask.contains(CoordSel::E) {
+                    if _channels.contains(CoordSel::E)  {
                         let _ = self.e_dir_pin.set_high();
                     }
                     else {

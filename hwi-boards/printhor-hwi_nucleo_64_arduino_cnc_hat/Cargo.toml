@@ -19,6 +19,8 @@ default = ["nucleo64-f410rb", "with-motion", "with-i2c", "printhor-hwa-common/wi
 # Board kind
 nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-time/generic-queue-32", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
 nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-time/generic-queue-32", "hse-stlink-mso", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
+nightly = ["embassy-executor/nightly"]
+
 # Hardware device features
 # Use STLINK MCO as HSE (Not enabled by default in all nucleos)
 hse-stlink-mso = []
@@ -66,7 +68,6 @@ debug-signals = []
 verbose-timings = []
 debug-motion-broadcast = []
 
-nightly = []
 sd-card-uses-spi = []
 ili9341_parallel = []
 ili9341_spi = ["with-spi"]

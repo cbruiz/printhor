@@ -72,6 +72,15 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-trinamic")] {
         pub trait TrinamicUartTrait {
+            /// Selects the TMC stepper to address given coordinate axis.
+            ///
+            /// Normally, single uart is shared for all them. However, if more than one is needed, this
+            /// method selects the one active
+            fn select_stepper_of_axis(&mut self, _channel: hwa::CoordSel) -> Result<(), ()> {
+                Ok(())
+            }
+            /// Gets the TMC Adddress of given coordinate axis
+            fn get_tmc_address(&self, _channel: hwa::CoordSel) -> Result<u8, ()>;
             fn read_until_idle(&mut self, buffer: &mut [u8]) -> impl core::future::Future<Output=Result<usize, hwa::uart::SerialError>>;
             fn write(&mut self,buffer: &[u8]) -> impl core::future::Future<Output=Result<(), hwa::uart::SerialError>>;
             fn flush(&mut self) -> impl core::future::Future<Output=Result<(), hwa::uart::SerialError>>;
@@ -80,7 +89,6 @@ cfg_if::cfg_if! {
 
     }
 }
-
 
 cfg_if::cfg_if! {
     if #[cfg(any(

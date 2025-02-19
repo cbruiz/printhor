@@ -43,9 +43,9 @@ cfg_if::cfg_if! {
 
 mod contract;
 mod event_bus_channel;
-pub mod uart;
 pub mod soft_uart;
 pub mod traits;
+pub mod uart;
 
 pub use contract::{HwiContext, HwiContract};
 

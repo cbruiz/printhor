@@ -63,7 +63,7 @@ with-print-job = ["printhor-hwa-common/with-print-job", "printhor-hwi_native?/wi
 with-endstops = []
 with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic", "printhor-hwi_native?/with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-trinamic", "printhor-hwi_skr_mini_e3?/with-trinamic", "printhor-hwi_mks_robin_nano?/with-trinamic"]
 # Dropped at since https://github.com/cbruiz/printhor/tree/4519dea604030e82b978e658474a44176b0735ea We will get back to that feature after
-with-display = ["printhor-hwi_native?/with-display"]
+#with-display = ["printhor-hwi_native?/with-display"]
 
 without-bootloader = []
 
@@ -101,7 +101,6 @@ trace-commands = []
 
 sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi", "printhor-hwi_skr_mini_e3?/sd-card-uses-spi", "printhor-hwi_mks_robin_nano?/sd-card-uses-spi"]
 adc-is-async = []
-trinamic-uart-multi-channel = []
 enable_vrefint-with-delay = []
 without-vref-int = []
 bypass-hotend = []
@@ -207,7 +206,7 @@ native = [
     "with-print-job",
     "with-fan-extra-1",
     "with-laser",
-    #"with-trinamic",
+    "with-trinamic",
 
     "printhor-hwi_native",
     "embassy-executor/arch-std", "embassy-sync/std", "embassy-time/std",
@@ -222,7 +221,7 @@ mks_robin_nano = [
     "cornering",
     "without-bootloader", "printhor-hwi_mks_robin_nano/without-bootloader", # SHOULD NOT
     "with-defmt",
-    #"with-trinamic", "trinamic-uart-multi-channel", "printhor-hwi_mks_robin_nano/with-trinamic",
+    "with-trinamic",
     "with-motion", "with-motion-cartessian-kinematics", "with-motion-stepper",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
 
@@ -237,7 +236,7 @@ mks_robin_nano = [
     #"with-hot-bed", "printhor-hwi_mks_robin_nano/with-hot-bed",
     #"with-fan-layer", "printhor-hwi_mks_robin_nano/with-fan-layer",
     #"with-laser", "printhor-hwi_mks_robin_nano/with-laser",
-    #"with-ps-on", "printhor-hwi_mks_robin_nano/with-ps-on",
+    "with-ps-on",
 
     "float-point-f32-impl",
     #"float-point-f64-impl",
@@ -354,7 +353,7 @@ skr_mini_e3_v2 = [
     #"debug-motion-broadcast",
     #"verbose-timings",
     #"assert-motion",
-    #"trace-commands",
+    "trace-commands",
 
     #"cornering",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
@@ -385,7 +384,8 @@ skr_mini_e3_v2 = [
 skr_mini_e3_v3 = [
     #"nightly",
     "with-defmt",
-    "debug-position",
+    #"trace-commands",
+    #"debug-position",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"verbose-timings",

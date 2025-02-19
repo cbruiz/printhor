@@ -1,14 +1,14 @@
 use printhor_hwa_common as hwa;
 use embassy_time::Duration;
+use hwa::CoordSel;
 use crate::board;
-use crate::device;
 use crate::board::comm;
+use hwa::traits::TrinamicUartTrait;
 
 // To save CPU
 pub static TRINAMIC_SIMULATOR_PARK_SIGNAL:
-    hwa::PersistentState<hwa::SyncCsMutexType, device::AxisChannel> = hwa::PersistentState::new();
+    hwa::PersistentState<hwa::SyncCsMutexType, CoordSel> = hwa::PersistentState::new();
 
-#[allow(unused)]
 pub struct MockedTrinamicDriver {
     uart_trinamic: comm::SingleWireSoftwareUart,
     sample_time: Duration,
@@ -17,15 +17,26 @@ pub struct MockedTrinamicDriver {
 impl MockedTrinamicDriver {
     pub fn new(
         baud_rate: u32,
-        x_rxtx_pin: board::mocked_peripherals::MockedIOPin,
-        y_rxtx_pin: board::mocked_peripherals::MockedIOPin,
-        z_rxtx_pin: board::mocked_peripherals::MockedIOPin,
-        e_rxtx_pin: board::mocked_peripherals::MockedIOPin
+        #[cfg(feature = "with-x-axis")]
+        x_rxtx_pin: board::comm::AnyPinWrapper,
+        #[cfg(feature = "with-y-axis")]
+        y_rxtx_pin: board::comm::AnyPinWrapper,
+        #[cfg(feature = "with-z-axis")]
+        z_rxtx_pin: board::comm::AnyPinWrapper,
+        #[cfg(feature = "with-e-axis")]
+        e_rxtx_pin: board::comm::AnyPinWrapper
     ) -> Self
     {
         let uart_trinamic = comm::SingleWireSoftwareUart::new(
             baud_rate,
-            x_rxtx_pin, y_rxtx_pin, z_rxtx_pin, e_rxtx_pin
+            #[cfg(feature = "with-x-axis")]
+            x_rxtx_pin,
+            #[cfg(feature = "with-y-axis")]
+            y_rxtx_pin,
+            #[cfg(feature = "with-z-axis")]
+            z_rxtx_pin,
+            #[cfg(feature = "with-e-axis")]
+            e_rxtx_pin
         );
 
         let sample_time = Duration::from_millis(
@@ -51,7 +62,7 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
     loop {
         let channel = TRINAMIC_SIMULATOR_PARK_SIGNAL.wait().await;
         hwa::trace!("[trinamic_driver_simulator] Looking at {:?}", channel);
-        driver.uart_trinamic.set_axis_channel(Some(channel));
+        driver.uart_trinamic.select_stepper_of_axis(channel).unwrap();
 
         loop {
             let mut buff: [u8; 1] = [0; 1];

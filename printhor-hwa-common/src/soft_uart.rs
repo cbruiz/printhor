@@ -108,23 +108,12 @@ use crate as hwa;
 use embassy_time::Duration;
 use embassy_time::Timer;
 
-/// Software UART channel
-#[cfg_attr(feature = "with-log", derive(Debug))]
-#[derive(Copy, Clone)]
-pub enum UartChannel {
-    Ch1,
-    Ch2,
-    Ch3,
-    Ch4,
-}
-
 pub trait IOPin {
     fn set_output(&mut self);
     fn set_input(&mut self);
 
     fn is_high(&mut self) -> bool;
 
-    #[inline]
     fn is_low(&mut self) -> bool {
         !self.is_high()
     }
@@ -134,11 +123,6 @@ pub trait IOPin {
     fn set_low(&mut self);
 
     fn set_open_drain(&mut self);
-}
-
-pub trait MultiChannel {
-    /// Reads a single word from the serial interface
-    fn set_channel(&mut self, channel: Option<UartChannel>);
 }
 
 pub trait AsyncRead<Word> {

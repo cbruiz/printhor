@@ -36,10 +36,11 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-trinamic")] {
-        pub type TrinamicUartPeri = embassy_stm32::peripherals::USART4;
-        pub type TrinamicUartDevice = embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>;
-
-        pub type TrinamicUart = TrinamicUartWrapper;
+        pub type TrinamicUart = crate::board::comm::trinamic::SingleWireSoftwareUart;
+        //pub type TMCUartCh1Pin = embassy_stm32::peripherals::PD5;
+        //pub type TMCUartCh2Pin = embassy_stm32::peripherals::PD1;
+        //pub type TMCUartCh3Pin = embassy_stm32::peripherals::PD4;
+        //pub type TMCUartCh4Pin = embassy_stm32::peripherals::PD9;
     }
 }
 
@@ -88,61 +89,12 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature="with-ps-on")] {
         pub type PsOnPin = embassy_stm32::gpio::Output<'static>;
-        pub type PsOnRef = printhor_hwa_common::StandardControllerRef<PsOnPin>;
     }
 }
-
-
-#[allow(unused)]
-pub use embassy_stm32::timer::GeneralInstance4Channel as PwmTrait;
-
-#[cfg(feature = "with-trinamic")]
-use crate::board_stm32g0::io::TrinamicUartWrapper;
 
 pub type Watchdog =
     embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm32::peripherals::IWDG>;
 
-#[cfg(feature = "with-probe")]
-pub struct ProbePeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmServo>,
-    pub power_channel: PwmChannel,
-}
-
-#[cfg(feature = "with-hot-end")]
-pub struct HotendPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotend>,
-    pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotend>,
-    pub temp_pin: AdcHotendPin,
-    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
-}
-
-#[cfg(feature = "with-hot-bed")]
-pub struct HotbedPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmHotbed>,
-    pub power_channel: PwmChannel,
-    pub temp_adc: printhor_hwa_common::InterruptControllerRef<AdcHotbed>,
-    pub temp_pin: AdcHotbedPin,
-    pub thermistor_properties: &'static printhor_hwa_common::ThermistorProperties,
-}
-
-#[cfg(feature = "with-fan-layer")]
-pub struct FanLayerPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanLayer>,
-    pub power_channel: PwmChannel,
-}
-
-#[cfg(feature = "with-fan-extra-1")]
-pub struct FanExtra1Peripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmFanExtra1>,
-    pub power_channel: PwmChannel,
-}
-
-#[cfg(feature = "with-laser")]
-pub struct LaserPeripherals {
-    pub power_pwm: printhor_hwa_common::InterruptControllerRef<PwmLaser>,
-    pub power_channel: PwmChannel,
-}
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
@@ -226,8 +178,8 @@ cfg_if::cfg_if! {
 
             fn set_forward_direction(&mut self, _channels: hwa::CoordSel, _mask: hwa::CoordSel) {
                 #[cfg(feature = "with-x-axis")]
-                if _channels.contains(hwa::CoordSel::X) {
-                    if _mask.contains(hwa::CoordSel::X) {
+                if _mask.contains(hwa::CoordSel::X) {
+                    if _channels.contains(hwa::CoordSel::X) {
                         let _ = self.x_dir_pin.set_high();
                     }
                     else {
@@ -235,8 +187,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-y-axis")]
-                if _channels.contains(hwa::CoordSel::Y) {
-                    if _mask.contains(hwa::CoordSel::Y)  {
+                if _mask.contains(hwa::CoordSel::Y) {
+                    if _channels.contains(hwa::CoordSel::Y)  {
                         let _ = self.y_dir_pin.set_high();
                     }
                     else {
@@ -244,8 +196,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-z-axis")]
-                if _channels.contains(hwa::CoordSel::Z) {
-                    if _mask.contains(hwa::CoordSel::Z)  {
+                if _mask.contains(hwa::CoordSel::Z) {
+                    if _channels.contains(hwa::CoordSel::Z)  {
                         let _ = self.z_dir_pin.set_high();
                     }
                     else {
@@ -253,8 +205,8 @@ cfg_if::cfg_if! {
                     }
                 }
                 #[cfg(feature = "with-e-axis")]
-                if _channels.contains(hwa::CoordSel::E) {
-                    if _mask.contains(hwa::CoordSel::E)  {
+                if _mask.contains(hwa::CoordSel::E) {
+                    if _channels.contains(hwa::CoordSel::E)  {
                         let _ = self.e_dir_pin.set_high();
                     }
                     else {

@@ -89,16 +89,16 @@ pub enum PlanEntry {
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
     Dwell(hwa::CommChannel, Option<u32>, bool, u32),
-    
+
     /// A SetPosition action request.
     ///
     /// *_1: CommChannel* - The input channel requesting the action.
-    /// 
+    ///
     /// *_2: Position* - The position to set.
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
     SetPosition(hwa::CommChannel, Position, bool, u32),
-    
+
     /// An executing move.
     ///
     /// *_1: MovType* - The type of the move.

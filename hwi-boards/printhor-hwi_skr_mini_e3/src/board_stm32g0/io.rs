@@ -236,30 +236,45 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-trinamic")] {
 
         pub struct TrinamicUartWrapper {
-            rx: embassy_stm32::usart::RingBufferedUartRx<'static>,
+            rx: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>,
             tx: embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>,
         }
 
         impl TrinamicUartWrapper {
             pub fn new(inner: crate::board::device::TrinamicUart) -> Self {
 
-                type TrinamicBufferType = [u8; 32];
-                let trinamic_uart_buffer = hwa::make_static_ref!(
-                    "TrinamicUartRxBuffer",
-                    TrinamicBufferType,
-                    [0; 32],
-                );
                 let (tx, rx) = inner.split();
                 Self {
-                    rx: rx.into_ring_buffered(trinamic_uart_buffer),
+                    rx,
                     tx,
                 }
             }
         }
         impl hwa::traits::TrinamicUartTrait for TrinamicUartWrapper {
 
+            fn get_tmc_address(&self, _coord: hwa::CoordSel) -> Result<u8, ()> {
+                #[cfg(feature="with-x-axis")]
+                if _coord == hwa::CoordSel::X {
+                    return Ok(0)
+                }
+                #[cfg(feature="with-y-axis")]
+                if _coord == hwa::CoordSel::Y {
+                    return Ok(1)
+                }
+                #[cfg(feature="with-z-axis")]
+                if _coord == hwa::CoordSel::Z {
+                    return Ok(2)
+                }
+                #[cfg(feature="with-e-axis")]
+                if _coord == hwa::CoordSel::E {
+                    return Ok(3)
+                }
+                hwa::error!("Uknown TMC stepper axis activation requested: {:?}", _coord);
+                return Err(())
+            }
+
             async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, printhor_hwa_common::uart::SerialError> {
-                match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), self.rx.read(buffer)).await {
+                match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), self.rx.read_until_idle(buffer)).await {
                     Ok(Ok(x)) => {
                         hwa::info!("Ok read: {} bytes", x);
                         Ok(x)
@@ -269,7 +284,7 @@ cfg_if::cfg_if! {
                         Err(hwa::uart::SerialError::Framing)
                     },
                     Err(_) => {
-                        hwa::error!("Timeout");
+                        hwa::warn!("Timeout");
                         Err(hwa::uart::SerialError::Timeout)
                     }
                  }
@@ -280,7 +295,7 @@ cfg_if::cfg_if! {
             }
 
             async fn flush(&mut self) -> Result<(), hwa::uart::SerialError> {
-                Ok(self.tx.blocking_flush().map_err(|_| {hwa::uart::SerialError::Framing})?)
+                Ok(self.tx.flush().await.map_err(|_| {hwa::uart::SerialError::Framing})?)
             }
         }
     }

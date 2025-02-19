@@ -207,8 +207,11 @@ impl MotionPlanner {
                         return ExecPlan::Dwell(sleep, channel, order_num);
                     }
                     PlanEntry::SetPosition(channel, position, _deferred, order_num) => {
-                        rb.data[head] =
-                            PlanEntry::Executing(MovType::SetPosition(channel), _deferred, order_num);
+                        rb.data[head] = PlanEntry::Executing(
+                            MovType::SetPosition(channel),
+                            _deferred,
+                            order_num,
+                        );
                         return ExecPlan::SetPosition(position, channel, order_num);
                     }
                     PlanEntry::PlannedMove(planned_data, action, channel, _deferred, order_num) => {
@@ -747,7 +750,7 @@ impl MotionPlanner {
                         gc.line_tag,
                     )
                     .await?)
-            },
+            }
             control::GCodeValue::G29 => Ok(control::CodeExecutionSuccess::OK),
             control::GCodeValue::G29_1 => Ok(control::CodeExecutionSuccess::OK),
             control::GCodeValue::G29_2 => Ok(control::CodeExecutionSuccess::OK),
@@ -800,11 +803,11 @@ impl MotionPlanner {
         let max_feed_rate = self.motion_config.get_max_feed_rate();
         let max_accel = self.motion_config.get_max_accel();
         let max_jerk = self.motion_config.get_max_jerk();
-        
+
         // Multipliers
         let flow_rate = self.motion_config.get_flow_rate_as_real();
         let speed_rate = self.motion_config.get_speed_rate_as_real();
-        
+
         // Compute distance and decompose as unit vector and module.
         // When dist is zero, value is map to None (NaN).
         // In case o E dimension, flow rate factor is applied
@@ -853,7 +856,7 @@ impl MotionPlanner {
             .clamp_higher_than(min_speed)
             .clamp_lower_than(max_speed)
             .clamp_lower_than(max_feed_rate);
-        
+
         let module_target_speed = speed_vector.norm2().unwrap_or(math::ZERO);
         let module_target_accel = (unit_vector_dir.abs() * max_accel)
             .norm2()
@@ -955,9 +958,17 @@ impl MotionPlanner {
                     order_num,
                     &hwa::controllers::Position::new_with_world_projection(&_pos),
                 );
+                self.motion_status().update_current_position(
+                    order_num,
+                    &hwa::controllers::Position::new_with_world_projection(&_pos),
+                );
             }
             Err(_pos) => {
                 self.motion_status().update_last_planned_position(
+                    order_num,
+                    &hwa::controllers::Position::new_with_world_projection(&_pos),
+                );
+                self.motion_status().update_current_position(
                     order_num,
                     &hwa::controllers::Position::new_with_world_projection(&_pos),
                 );

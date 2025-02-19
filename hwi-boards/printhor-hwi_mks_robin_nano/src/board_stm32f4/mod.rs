@@ -6,10 +6,10 @@
 use hwa::HwiContract;
 use printhor_hwa_common as hwa;
 
-mod device;
-mod io;
-mod types;
-//mod comm;
+pub(crate) mod device;
+pub(crate) mod io;
+pub(crate) mod types;
+pub(crate) mod comm;
 
 #[global_allocator]
 static HEAP: alloc_cortex_m::CortexMHeap = alloc_cortex_m::CortexMHeap::empty();
@@ -96,10 +96,63 @@ impl HwiContract for Contract {
                     #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 10;
                 }
+                else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=200.0, y=200.0, z=200.0)
+                    };
+
+                    const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=100.0, y=100.0, z=100.0)
+                    };
+
+                    const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=600.0, y=600.0, z=100.0, e=300.0)
+                    };
+
+                    const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=9800.0, y=9800.0, z=4800.0, e=9800.0)
+                    };
+
+                    const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=19600.0, y=19600.0, z=9600.0, e=19600.0)
+                    };
+
+                    const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
+                        hwa::make_real!(600.0)
+                    };
+
+                    const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=50.0, y=50.0, z=10.0, e=50.0)
+                    };
+
+
+                    const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
+                        hwa::make_vector!(x=2, y=2, z=2, e=2)
+                    };
+
+                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
+
+                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
+                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    const SEGMENT_QUEUE_SIZE: u8 = 10;
+                }
                 else {
                     compile_error!("kinematics not implemented");
                 }
             }
+        }
+    }
+
+    //#endregion
+
+    //#region "Trinamic"
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-trinamic")] {
+            const TRINAMIC_UART_BAUD_RATE: u32 = 1200;
+            type TrinamicUartDevice = device::TrinamicUart;
         }
     }
 
@@ -301,12 +354,6 @@ impl HwiContract for Contract {
         }
     }
 
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-trinamic")] {
-            const TRINAMIC_UART_BAUD_RATE: u32 = 4096;
-        }
-    }
-
     //#endregion
 
     fn init_heap() {
@@ -325,9 +372,8 @@ impl HwiContract for Contract {
     }
 
     async fn init(_spawner: embassy_executor::Spawner) -> hwa::HwiContext<Self> {
-        hwa::info!("Initializing...");
 
-        // Init
+        //#region "Bootloader reset"
         cfg_if::cfg_if! {
             if #[cfg(not(feature = "without-bootloader"))] {
                 // Reset bootloader state
@@ -381,7 +427,9 @@ impl HwiContract for Contract {
             }
         }
 
-        // RCC
+        //#endregion
+
+        //#region "RCC setup"
         let mut config = embassy_stm32::Config::default();
         config.rcc.hse = Some(embassy_stm32::rcc::Hse {
             freq: embassy_stm32::time::Hertz(8_000_000),
@@ -402,6 +450,10 @@ impl HwiContract for Contract {
         config.rcc.mux.clk48sel = embassy_stm32::rcc::mux::Clk48sel::PLL1_Q;
 
         let p = embassy_stm32::init(config);
+
+        //#endregion
+
+        //#region "with-serial-usb"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-serial-usb")] {
@@ -437,6 +489,10 @@ impl HwiContract for Contract {
             }
         }
 
+        //#endregion
+
+        //#region "with-spi"
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
                 let spi = {
@@ -453,6 +509,10 @@ impl HwiContract for Contract {
             }
         }
 
+        //#endregion
+
+        //#region "with-sd-card"
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
 
@@ -465,6 +525,31 @@ impl HwiContract for Contract {
                 );
             }
         }
+
+        //#endregion
+
+        //#region "with-trinamic"
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-trinamic")] {
+                use embassy_stm32::gpio::Pin;
+                let trinamic_uart = device::TrinamicUart::new(
+                    Self::TRINAMIC_UART_BAUD_RATE,
+                    #[cfg(feature = "with-x-axis")]
+                    comm::trinamic::AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD5.degrade())),
+                    #[cfg(feature = "with-y-axis")]
+                    comm::trinamic::AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD1.degrade())),
+                    #[cfg(feature = "with-z-axis")]
+                    comm::trinamic::AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD4.degrade())),
+                    #[cfg(feature = "with-e-axis")]
+                    comm::trinamic::AnyPinWrapper(embassy_stm32::gpio::Flex::new(p.PD9.degrade())),
+                );
+            }
+        }
+
+        //#endregion
+
+        //#region "with-motion"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
@@ -506,9 +591,25 @@ impl HwiContract for Contract {
             }
         }
 
+        //#endregion
+
+        //#region "with-motion-stepper or with-motion-broadcast"
+
         cfg_if::cfg_if! {
-            if #[cfg(feature = "with-motion")] {
+            if #[cfg(any(feature = "with-motion-stepper", feature = "with-motion-broadcast"))] {
                 setup_timer();
+            }
+        }
+
+        //#endregion
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-ps-on")] {
+                let ps_on = hwa::make_static_sync_controller!(
+                    "PSOn",
+                    types::PSOnMutexStrategy,
+                    device::PsOnPin::new(p.PB2, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::Low)
+                );
             }
         }
 
@@ -537,9 +638,11 @@ impl HwiContract for Contract {
             #[cfg(feature = "with-sd-card")]
             sd_card_block_device,
             #[cfg(feature = "with-ps-on")]
-            ps_on: todo!("fill me"),
+            ps_on,
             #[cfg(feature = "with-motion")]
             motion_pins,
+            #[cfg(feature = "with-trinamic")]
+            trinamic_uart,
             #[cfg(feature = "with-motion-broadcast")]
             motion_sender,
             #[cfg(feature = "with-probe")]

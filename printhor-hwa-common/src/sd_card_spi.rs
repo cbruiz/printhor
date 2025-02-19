@@ -13,11 +13,11 @@ use embedded_sdmmc::sdcard::proto::*;
 
 /// Adapter to manage multiple drivers
 pub struct SPIAdapter<H, PIN>
-    where
-        H: hwa::AsyncMutexStrategy + 'static,
-        <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Transfer<u8>,
-        <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Write<u8>,
-        PIN: embedded_hal_0::digital::v2::OutputPin
+where
+    H: hwa::AsyncMutexStrategy + 'static,
+    <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Transfer<u8>,
+    <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Write<u8>,
+    PIN: embedded_hal_0::digital::v2::OutputPin,
 {
     spi: hwa::StaticAsyncController<H>,
     cs: RefCell<PIN>,
@@ -30,7 +30,7 @@ where
     H: hwa::AsyncMutexStrategy + 'static,
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Transfer<u8>,
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Write<u8>,
-    PIN: embedded_hal_0::digital::v2::OutputPin
+    PIN: embedded_hal_0::digital::v2::OutputPin,
 {
     pub fn new(spi: hwa::StaticAsyncController<H>, cs: PIN) -> Self {
         Self {
@@ -42,7 +42,7 @@ where
     }
 
     pub async fn retain(&self) {
-        let _  = self.spi.retain().await;
+        let _ = self.spi.retain().await;
     }
 
     pub fn release(&self) {
@@ -287,16 +287,13 @@ where
     /// Send one byte and receive one byte over the SPI bus.
     fn transfer_byte(&self, out: u8) -> Result<u8, Error> {
         let mut in_out: [u8; 1] = [out];
-        let _result = self
-            .spi
-            .apply_or_error(
-                |spi| {
-                    use embedded_hal_0::blocking::spi::Transfer;
-                    spi.transfer(&mut in_out)
-                        .map_err(|_| Error::Transport)
-                },
-                Error::Transport,
-            )?;
+        let _result = self.spi.apply_or_error(
+            |spi| {
+                use embedded_hal_0::blocking::spi::Transfer;
+                spi.transfer(&mut in_out).map_err(|_| Error::Transport)
+            },
+            Error::Transport,
+        )?;
         Ok(in_out[0])
     }
 
@@ -316,8 +313,7 @@ where
         self.spi.apply_or_error(
             move |spi| {
                 use embedded_hal_0::blocking::spi::Transfer;
-                spi.transfer(in_out)
-                    .map_err(|_e| Error::Transport)
+                spi.transfer(in_out).map_err(|_e| Error::Transport)
             },
             Error::Transport,
         )
@@ -343,7 +339,7 @@ where
     H: hwa::AsyncMutexStrategy,
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Transfer<u8>,
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Write<u8>,
-    PIN: embedded_hal_0::digital::v2::OutputPin
+    PIN: embedded_hal_0::digital::v2::OutputPin,
 {
     type Error = Error;
 
@@ -399,7 +395,7 @@ where
     H: hwa::AsyncMutexStrategy,
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Transfer<u8>,
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Write<u8>,
-    PIN: embedded_hal_0::digital::v2::OutputPin
+    PIN: embedded_hal_0::digital::v2::OutputPin,
 {
     async fn do_retain(&self) -> Result<(), ()> {
         Ok(self.retain().await)

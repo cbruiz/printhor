@@ -1,9 +1,9 @@
 //! TODO: This feature is still very experimental/preliminar
 use crate::hwa;
 use embassy_time::Instant;
+use hwa::uart::SerialError;
 #[allow(unused)]
 use hwa::Contract;
-use hwa::uart::SerialError;
 use hwa::CoordSel;
 
 /// Represents errors that can occur in the Trinamic UART controller.
@@ -52,9 +52,6 @@ impl TrinamicController {
     pub async fn init(&mut self) -> Result<(), TrinamicError> {
         hwa::debug!("[TrinamicController] Init");
 
-        #[cfg(feature = "native")]
-        hwa::resume_trinamic(CoordSel::X);
-
         let mut init_error = false;
 
         // TODO: 1- Right now, [hwa::CoordSel] is still not feature based, but will be
@@ -65,13 +62,16 @@ impl TrinamicController {
 
         #[cfg(feature = "with-x-axis")]
         {
-            #[cfg(feature = "native")]
-            hwa::resume_trinamic(CoordSel::X);
+            use hwa::traits::TrinamicUartTrait;
+            let address = self
+                .uart
+                .get_tmc_address(CoordSel::X)
+                .map_err(|_| TrinamicError::BadSettings)?;
 
             init_error |= Self::init_channel(
                 &mut self.uart,
                 CoordSel::X,
-                0,
+                address,
                 micro_steps_setting.x.unwrap(),
             )
             .await
@@ -80,13 +80,16 @@ impl TrinamicController {
 
         #[cfg(feature = "with-y-axis")]
         {
-            #[cfg(feature = "native")]
-            hwa::resume_trinamic(CoordSel::Y);
+            use hwa::traits::TrinamicUartTrait;
+            let address = self
+                .uart
+                .get_tmc_address(CoordSel::Y)
+                .map_err(|_| TrinamicError::BadSettings)?;
 
             init_error |= Self::init_channel(
                 &mut self.uart,
                 CoordSel::Y,
-                1,
+                address,
                 micro_steps_setting.y.unwrap(),
             )
             .await
@@ -95,13 +98,16 @@ impl TrinamicController {
 
         #[cfg(feature = "with-z-axis")]
         {
-            #[cfg(feature = "native")]
-            hwa::resume_trinamic(CoordSel::Z);
+            use hwa::traits::TrinamicUartTrait;
+            let address = self
+                .uart
+                .get_tmc_address(CoordSel::Z)
+                .map_err(|_| TrinamicError::BadSettings)?;
 
             init_error |= Self::init_channel(
                 &mut self.uart,
                 CoordSel::Z,
-                2,
+                address,
                 micro_steps_setting.z.unwrap(),
             )
             .await
@@ -110,25 +116,28 @@ impl TrinamicController {
 
         #[cfg(feature = "with-e-axis")]
         {
-            #[cfg(feature = "native")]
-            hwa::resume_trinamic(CoordSel::E);
+            use hwa::traits::TrinamicUartTrait;
+            let address = self
+                .uart
+                .get_tmc_address(CoordSel::E)
+                .map_err(|_| TrinamicError::BadSettings)?;
 
             init_error |= Self::init_channel(
                 &mut self.uart,
                 CoordSel::E,
-                3,
+                address,
                 micro_steps_setting.e.unwrap(),
             )
             .await
             .is_err();
         }
 
-        #[cfg(feature = "native")]
-        hwa::pause_trinamic();
-
         if init_error {
+            hwa::error!("[TrinamicController] returning bad settings error");
             Err(TrinamicError::BadSettings)
         } else {
+            #[cfg(feature = "trace-commands")]
+            hwa::info!("[TrinamicController] returning OK");
             Ok(())
         }
     }
@@ -139,19 +148,17 @@ impl TrinamicController {
         address: u8,
         configured_micro_steps: u16,
     ) -> Result<(), ()> {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "trinamic-uart-multi-channel")] {
-                uart.set_axis_channel(Some(channel));
-            }
-        }
+        use hwa::traits::TrinamicUartTrait;
+        uart.select_stepper_of_axis(channel)?;
         if let Ok(micro_steps_tmc_power_of_two) = to_tmc_micro_steps(configured_micro_steps) {
             match Self::init_stepper(uart, address, micro_steps_tmc_power_of_two).await {
                 Ok(_) => {
                     //#[cfg(feature = "trace-commands")]
                     hwa::info!(
-                        "[trace-commands] [TrinamicController] {} initialized",
+                        "[trace-commands] [TrinamicController] {:?} initialized",
                         channel
                     );
+                    let _ = uart.select_stepper_of_axis(CoordSel::empty());
                     Ok(())
                 }
                 Err(_err) => {
@@ -159,6 +166,7 @@ impl TrinamicController {
                         "[TrinamicController] Unable to initialize stepper: {:?}",
                         channel,
                     );
+                    let _ = uart.select_stepper_of_axis(CoordSel::empty());
                     Err(())
                 }
             }
@@ -168,6 +176,7 @@ impl TrinamicController {
                 channel,
                 configured_micro_steps
             );
+            let _ = uart.select_stepper_of_axis(CoordSel::empty());
             Err(())
         }
     }
@@ -180,32 +189,54 @@ impl TrinamicController {
         //#[cfg(feature = "trace-commands")]
         hwa::info!("[TrinamicController] applying gconf on {}", addr);
 
-        let mut gconf = tmc2209::reg::GCONF::default();
+        let mut g_conf = tmc2209::reg::GCONF::default();
         // Invert direction
-        gconf.set_shaft(false);
+        g_conf.set_shaft(false);
         // Enable UART Comm
-        gconf.set_pdn_disable(true);
+        g_conf.set_pdn_disable(true);
         // Enable Spread Cycle: Higher Torque, more noise
-        gconf.set_en_spread_cycle(true);
+        g_conf.set_en_spread_cycle(true);
         // Enable multistepping
-        gconf.set_mstep_reg_select(true);
-        // Enable multistepping filtering
-        gconf.set_multistep_filt(false);
-        if Self::write_register(uart, addr, gconf).await.is_ok() {
+        g_conf.set_mstep_reg_select(true);
+        // Enable multi-stepping filtering
+        g_conf.set_multistep_filt(false);
+        if Self::write_register(uart, addr, g_conf).await.is_ok() {
             //#[cfg(feature = "trace-commands")]
             hwa::info!("[TrinamicController] applying chopconf on addr {}", addr);
-            let mut chopconf = tmc2209::reg::CHOPCONF::default();
-            chopconf.set_intpol(false);
+            let mut chop_conf = tmc2209::reg::CHOPCONF::default();
+            chop_conf.set_intpol(false);
             #[cfg(not(feature = "pulsed"))]
-            chopconf.set_dedge(true);
-            chopconf.set_mres(micro_steps_pow_of_2);
-            if Self::write_register(uart, addr, chopconf).await.is_ok() {
+            chop_conf.set_dedge(true);
+            chop_conf.set_mres(micro_steps_pow_of_2);
+            if Self::write_register(uart, addr, chop_conf).await.is_ok() {
                 hwa::info!("[TrinamicController] Write OK to addr {}", addr);
             }
         } else {
             hwa::error!("[TrinamicController] Error initializing stepper {}", addr);
         }
+        // TODO this is still a mess
+        // Still not receiving the proper clean result, however the data is properly sent
 
+        if let Ok(chop_conf) = Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await {
+            if chop_conf.ntpol() == false && chop_conf.mres() == micro_steps_pow_of_2 {
+                hwa::warn!(
+                    "[TrinamicController] Trinamic check for stepper {} is OK",
+                    addr
+                );
+            } else {
+                hwa::warn!(
+                    "[TrinamicController] Trinamic check for stepper {} is BAD",
+                    addr
+                )
+            }
+        } else {
+            hwa::warn!(
+                "[TrinamicController] Unable to retrieve status from {}",
+                addr
+            )
+        }
+
+        // TODO: Assuming OK as of now...
         Ok(())
     }
 
@@ -228,10 +259,10 @@ impl TrinamicController {
         hwa::info!("[TrinamicController] Now reading response...");
         let mut buff = [0u8; 32];
         let mut reader = tmc2209::Reader::default();
-        let reception_timeout = Instant::now() + embassy_time::Duration::from_secs(5);
+        let reception_deadline = Instant::now() + embassy_time::Duration::from_secs(5);
         loop {
-            if Instant::now() > reception_timeout {
-                hwa::debug!("TO Req");
+            if Instant::now() > reception_deadline {
+                hwa::warn!("Reception deadline expired!");
                 return Err(TrinamicError::Timeout);
             }
             use hwa::traits::TrinamicUartTrait;
@@ -263,6 +294,7 @@ impl TrinamicController {
                     }
                 }
                 Err(SerialError::Timeout) => {
+                    //hwa::trace!("Frame lost");
                     // Lost one frame.
                     // Continue until [reception_timeout]
                 }
@@ -277,15 +309,16 @@ impl TrinamicController {
         }
     }
 
-    pub async fn raw_write(uart: &mut hwa::types::TrinamicUart, bytes: &[u8]) -> Result<(), TrinamicError> {
+    pub async fn raw_write(
+        uart: &mut hwa::types::TrinamicUart,
+        bytes: &[u8],
+    ) -> Result<(), TrinamicError> {
         hwa::info!("[TrinamicController] sending {:?}", bytes);
         use hwa::traits::TrinamicUartTrait;
         uart.write(bytes)
             .await
             .map_err(|_| TrinamicError::WriteError)?;
-        let _ = uart
-            .flush().await
-            .map_err(|_| TrinamicError::WriteError)?;
+        let _ = uart.flush().await.map_err(|_| TrinamicError::WriteError)?;
         Ok(())
     }
 }

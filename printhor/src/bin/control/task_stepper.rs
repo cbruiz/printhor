@@ -323,7 +323,10 @@ pub async fn task_stepper(
                         hwa::debug!("Relevant coords: [{:?}]", relevant_coords);
                         hwa::debug!("Relevant coords_dir_fwd: [{:?}]", relevant_coords_dir_fwd);
 
-                        #[cfg(any(feature = "debug-motion", feature = "debug-motion-displacement"))]
+                        #[cfg(any(
+                            feature = "debug-motion",
+                            feature = "debug-motion-displacement"
+                        ))]
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory: [ src: [{:?}] dest: [{:?}] {} ] v0: {:?} v1: {:?} vlim: {:?}",
                             _order_num,
@@ -631,7 +634,9 @@ pub async fn task_stepper(
             }
             Ok(ExecPlan::SetPosition(position, _channel, _order_num)) => {
                 // SetPosition
-                motion_planner.motion_status().update_current_position(_order_num, &position);
+                motion_planner
+                    .motion_status()
+                    .update_current_position(_order_num, &position);
                 let moves_left = motion_planner.consume_current_plan(&event_bus).await;
                 moves_left
             }
@@ -648,6 +653,7 @@ pub async fn task_stepper(
                     }
                     cfg_if::cfg_if! {
                         if #[cfg(feature="debug-skip-homing")] {
+                            hwa::info!("Skipping homing for debug purposes");
                             // Do nothing
                         }
                         else {

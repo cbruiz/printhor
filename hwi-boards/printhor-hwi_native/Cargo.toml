@@ -70,11 +70,10 @@ float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
-embassy-executor = { version = "0.7", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-32768"] }
-embassy-sync = { version = "0.6", features = ["std"] }
-embassy-time = { version = "0.4", features = ["std", "generic-queue-64"] }
-embassy-futures = { version = "0.1", features = [] }
-#embassy-embedded-hal = { version = "0.3", features = [] }
+embassy-executor = { version = "0.7.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-65536"] }
+embassy-sync = { version = "0.6.2", features = ["std"] }
+embassy-time = { version = "0.4.0", features = ["std", "generic-queue-64"] }
+embassy-futures = { version = "0.1.1", features = [] }
 
 embedded-io-async = { version = "0.6", optional = true }
 embedded-io = { version = "0.6", optional = true }

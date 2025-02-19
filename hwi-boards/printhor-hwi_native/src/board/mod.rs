@@ -413,6 +413,7 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-trinamic")] {
             const TRINAMIC_UART_BAUD_RATE: u32 = 4096;
+            type TrinamicUartDevice = device::TrinamicUart;
         }
     }
 
@@ -485,30 +486,38 @@ impl hwa::HwiContract for Contract {
             }
         }
 
-        #[cfg(all(feature = "with-trinamic"))]
-        let trinamic_uart = {
-            device::TrinamicUart::new(
-                Self::TRINAMIC_UART_BAUD_RATE,
-                mocked_peripherals::MockedIOPin::new(0, _pin_state),
-                mocked_peripherals::MockedIOPin::new(1, _pin_state),
-                mocked_peripherals::MockedIOPin::new(2, _pin_state),
-                mocked_peripherals::MockedIOPin::new(3, _pin_state),
-            )
-        };
-
-        #[cfg(all(feature = "with-trinamic"))]
-        {
-            _spawner.spawn(
-                device::trinamic_driver_simulator(
-                    device::MockedTrinamicDriver::new(
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-trinamic"))] {
+                let trinamic_uart = {
+                    device::TrinamicUart::new(
                         Self::TRINAMIC_UART_BAUD_RATE,
-                        mocked_peripherals::MockedIOPin::new(0, _pin_state),
-                        mocked_peripherals::MockedIOPin::new(1, _pin_state),
-                        mocked_peripherals::MockedIOPin::new(2, _pin_state),
-                        mocked_peripherals::MockedIOPin::new(3, _pin_state),
+                        #[cfg(feature="with-x-axis")]
+                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(0, _pin_state)),
+                        #[cfg(feature="with-y-axis")]
+                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(1, _pin_state)),
+                        #[cfg(feature="with-z-axis")]
+                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(2, _pin_state)),
+                        #[cfg(feature="with-e-axis")]
+                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(3, _pin_state)),
                     )
-                )
-            ).unwrap();
+                };
+
+                _spawner.spawn(
+                    device::trinamic_driver_simulator(
+                        device::MockedTrinamicDriver::new(
+                            Self::TRINAMIC_UART_BAUD_RATE,
+                            #[cfg(feature="with-x-axis")]
+                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(0, _pin_state)),
+                            #[cfg(feature="with-y-axis")]
+                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(1, _pin_state)),
+                            #[cfg(feature="with-z-axis")]
+                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(2, _pin_state)),
+                            #[cfg(feature="with-e-axis")]
+                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(3, _pin_state)),
+                        )
+                    )
+                ).unwrap();
+            }
         }
 
         cfg_if::cfg_if! {
@@ -673,6 +682,8 @@ impl hwa::HwiContract for Contract {
             motion_pins,
             #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
             motion_sender,
+            #[cfg(feature = "with-trinamic")]
+            trinamic_uart,
             #[cfg(feature = "with-probe")]
             probe_pwm,
             #[cfg(feature = "with-probe")]

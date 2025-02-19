@@ -236,28 +236,33 @@ impl MotionConfig {
     }
 
     pub fn compute_min_speed(&self) {
-        let one_sample_period = Real::new(hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY.into(), 0).recip();
-        let one_step_period = Real::new(hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY.into(), 0).recip();
+        let one_sample_period = Real::new(
+            hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY.into(),
+            0,
+        )
+        .recip();
+        let one_step_period =
+            Real::new(hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY.into(), 0).recip();
         let sample_rate = one_step_period / one_sample_period;
-        let dt = TVector::new_with_coord(CoordSel::all_axis(), Some(
-            one_step_period
-        ));
-        let one_step_space_displacement = TVector::one() / self.get_micro_steps_as_vector() / self.get_units_per_space_magnitude();
+        let dt = TVector::new_with_coord(CoordSel::all_axis(), Some(one_step_period));
+        let one_step_space_displacement = TVector::one()
+            / self.get_micro_steps_as_vector()
+            / self.get_units_per_space_magnitude();
         // v_max is calculated as the velocity doing one step at stepping frequency
         let v_max = if hwa::Contract::CLAMP_MAX_FEED_RATE {
             one_step_space_displacement / dt
-        } else { 
+        } else {
             TVector::new()
         };
 
         let v_min = if hwa::Contract::CLAMP_MIN_SPEED {
-            (one_step_space_displacement / (dt * hwa::math::HALF )) * sample_rate
-        }
-        else {
+            (one_step_space_displacement / (dt * hwa::math::HALF)) * sample_rate
+        } else {
             TVector::new()
         };
 
-        hwa::info!("[MotionConfig:MCUConf] `SegmentSampling`: {} Hz ({} us period)",
+        hwa::info!(
+            "[MotionConfig:MCUConf] `SegmentSampling`: {} Hz ({} us period)",
             Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY,
             crate::control::task_stepper::STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
         );
@@ -266,25 +271,28 @@ impl MotionConfig {
             Contract::STEP_PLANNER_CLOCK_FREQUENCY,
             crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US,
         );
-        hwa::info!("[MotionConfig:ComputedConf] Precision (1 step space width) is space: {:?} {}", one_step_space_displacement, Contract::SPACE_UNIT_MAGNITUDE);
+        hwa::info!(
+            "[MotionConfig:ComputedConf] Precision (1 step space width) is space: {:?} {}",
+            one_step_space_displacement,
+            Contract::SPACE_UNIT_MAGNITUDE
+        );
         if hwa::Contract::CLAMP_MIN_SPEED {
             hwa::info!("[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is space: {:?} {}/s", v_min, Contract::SPACE_UNIT_MAGNITUDE);
-        }
-        else {
-            hwa::info!("[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is UNSET");
+        } else {
+            hwa::info!(
+                "[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is UNSET"
+            );
         }
         if hwa::Contract::CLAMP_MAX_FEED_RATE {
             hwa::info!("[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is space: {:?} {}/s", v_max, Contract::SPACE_UNIT_MAGNITUDE);
-        }
-        else {
+        } else {
             hwa::info!("[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is UNSET");
         }
-        
+
         self.cfg.apply_mut(|m| {
             m.min_speed_su = v_min;
             m.max_feed_rate_su = v_max;
         })
-
     }
 }
 
@@ -316,7 +324,6 @@ impl Clone for MotionConfig {
 /// * `flow_rate` - The flow rate for the motion, represented as a percentage.
 /// * `speed_rate` - The speed rate for the motion, represented as a percentage.
 pub struct MotionConfigContent {
-
     /// The minimum speed for the motion in `space_units`/s
     /// Computed as one single step by [Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY] period
     min_speed_su: TVector<Real>,
@@ -330,15 +337,15 @@ pub struct MotionConfigContent {
     max_accel_su: TVector<Real>,
     /// The maximum jerk for the motion in `space_units`/s^3
     max_jerk_su: TVector<Real>,
-    
+
     /// The default travel speed in `space_units`/s.
     default_travel_speed: Real,
-    
+
     /// The scale of `space_unit` by `space_magnitude`, not considering micro-stepping
     units_per_space_magnitude: TVector<Real>,
     /// The micro-stepping scale for each axis
     micro_steps_per_axis: TVector<u16>,
-    
+
     /// The machine's world center
     world_center_wu: TVector<Real>,
     /// the machine's world size
@@ -348,7 +355,7 @@ pub struct MotionConfigContent {
     nozzle_offset_wu: TVector<Real>,
     /// The machine's probe offset respect to homing end-stops or logical 0
     probe_offset_wu: TVector<Real>,
-    
+
     /// The flow rate for the motion, represented as a percentage.
     flow_rate: u8,
     /// The speed rate for the motion, represented as a percentage.

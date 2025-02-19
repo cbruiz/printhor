@@ -50,7 +50,7 @@ use control::{GCodeCmd, GCodeValue};
 use hwa::math;
 use hwa::Contract;
 #[allow(unused)]
-use hwa::{HwiContract, AsyncMutexStrategy, SyncMutexStrategy};
+use hwa::{AsyncMutexStrategy, HwiContract, SyncMutexStrategy};
 
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
@@ -382,8 +382,7 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::G92(_pos) => {
-                self
-                    .motion_planner
+                self.motion_planner
                     .plan(channel, &gc, _blocking, &self.event_bus)
                     .await?;
                 Ok(CodeExecutionSuccess::OK)
@@ -622,15 +621,62 @@ impl GCodeProcessor {
                     .get_last_planned_position();
                 let _rpos: hwa::controllers::Position =
                     self.motion_planner.motion_status().get_current_position();
-                let _step_pos: hwa::math::TVector<i32> = (
-                    _rpos.world_pos * self.motion_planner.motion_config().get_steps_per_space_unit_as_vector()
-                ).map_values(|_c, _v| {
-                    Some(_v.to_i32().unwrap_or(0))
-                });
+                let _step_pos: hwa::math::TVector<i32> = (_rpos.world_pos
+                    * self
+                        .motion_planner
+                        .motion_config()
+                        .get_steps_per_space_unit_as_vector())
+                .map_values(|_c, _v| Some(_v.to_i32().unwrap_or(0)));
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-x-axis")] {
+                        let r_x = _pos.world_pos.x.unwrap_or(math::ZERO);
+                        let c_x = _step_pos.x.unwrap_or(0);
+                    }
+                    else {
+                        let r_x = math::ZERO;
+                        let c_x = math::ZERO;
+                    }
+                }
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-y-axis")] {
+                        let r_y = _pos.world_pos.y.unwrap_or(math::ZERO);
+                        let c_y = _step_pos.y.unwrap_or(0);
+                    }
+                    else {
+                        let r_y = math::ZERO;
+                        let c_y = math::ZERO;
+                    }
+                }
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-z-axis")] {
+                        let r_z = _pos.world_pos.z.unwrap_or(math::ZERO);
+                        let c_z = _step_pos.z.unwrap_or(0);
+                    }
+                    else {
+                        let r_z = math::ZERO;
+                        let c_z = math::ZERO;
+                    }
+                }
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-z-axis")] {
+                        let r_e = _pos.world_pos.e.unwrap_or(math::ZERO);
+                        let c_e = _step_pos.e.unwrap_or(0);
+                    }
+                    else {
+                        let r_e = math::ZERO;
+                        let c_e = math::ZERO;
+                    }
+                }
                 let z = alloc::format!(
-                    "{:?} Count {:?}\n",
-                    _pos.world_pos,
-                    _step_pos,
+                    "X:{:?} Y:{:?} Z:{:?} E:{:?} Count: X:{:?} Y:{:?} Z:{:?} E:{:?}\n",
+                    r_x,
+                    r_y,
+                    r_z,
+                    r_e,
+                    c_x,
+                    c_y,
+                    c_z,
+                    c_e,
                 );
                 let _ = self.write(channel, z.as_str()).await;
                 let z2 = alloc::format!("echo: Space {:#?}\n", _rpos.space_pos);

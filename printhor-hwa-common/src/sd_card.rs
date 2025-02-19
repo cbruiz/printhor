@@ -1,5 +1,7 @@
 use crate as hwa;
-use embedded_sdmmc::{Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager};
+use embedded_sdmmc::{
+    Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager,
+};
 
 /// Represents various errors that can occur while interacting with an SD card.
 #[derive(Debug)]
@@ -271,8 +273,7 @@ where
         &mut self,
         parent_ref: &EntryRef,
         entry_name: &str,
-    ) -> Result<EntryRef, SDCardError>
-    {
+    ) -> Result<EntryRef, SDCardError> {
         if self.opened_entries_ref_counts[parent_ref.0 as usize].ref_count == 0 {
             return Err(SDCardError::InconsistencyError);
         }

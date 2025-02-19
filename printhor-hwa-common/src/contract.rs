@@ -142,7 +142,7 @@ pub trait HwiContract: Sized {
                         unreachable!("You must provide the transformer");
                     }
                 }
-                
+
             }
 
             /// Transforms a (Work)space position to World position. By default, identity transform applied
@@ -167,7 +167,7 @@ pub trait HwiContract: Sized {
                     }
                 }
             }
-            
+
             /// Apply calculated min speed boundaries
             const CLAMP_MIN_SPEED: bool = true;
             /// Apply calculated max feed rate boundaries

@@ -1,12 +1,11 @@
 use crate as hwa;
 use hwa::kinematics::WorldToSpaceTransformer;
-use hwa::CoordSel;
 use hwa::math::{Real, TVector};
+use hwa::CoordSel;
 
 pub struct CoreXYTransformer;
 impl WorldToSpaceTransformer for CoreXYTransformer {
     fn project_to_space(&self, _world_pos: &TVector<Real>) -> Result<TVector<Real>, ()> {
-        
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))] {
                 let mut space_pos = _world_pos.clone();
