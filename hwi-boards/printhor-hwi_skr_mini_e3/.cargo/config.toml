@@ -22,8 +22,8 @@ HOT_BED_THERM_BETA = "3950.0"
 
 ## Pure technical stuff ##
 
-#DEFMT_LOG = "INFO"
-#RUST_LOG = "INFO"
+DEFMT_LOG = "info"
+RUST_LOG = "warn"
 ASYNC_STD_THREAD_COUNT = "1"
 EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 
@@ -31,35 +31,11 @@ EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 ## Configuration -  END  ##
 ###########################
 
-[target.'cfg(board="native")']
-
-[target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
-runner = "probe-run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s}"
-#rustflags = [ "-C", "linker=flip-link" ]
-#linker = "flip-link"
-
-[target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32L476RGTx --log-format {L}{s}"
-#rustflags = [ "-C", "linker=flip-link" ]
-#linker = "flip-link"
-
 [target.'cfg(all(any(board="skr_mini_e3_v3"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s} --base-address 08002000"
-
-[target.'cfg(all(any(board="skr_mini_e3_v3-no-bootloader"), target_arch="arm", target_os="none"))']
-runner = "echo echo PLEASE DON'T probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s}"
-
-[target.'cfg(all(any(board="mks_robin_nano"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32F407VETx --disable-progressbars --log-format {L}{s} --base-address 08007000"
-
-[target.'cfg(all(any(board="mks_robin_nano-no-bootloader"), target_arch="arm", target_os="none"))']
-runner = "probe-rs echo PLEASE DON'T run --chip STM32F407VETx --disable-progressbars --log-format {L}{s}"
-
-[target.'cfg(all(any(board="rp2040"), target_arch="arm", target_os="none"))']
-#runner = "probe-rs run --chip RP2040"
-runner = "elf2uf2-rs --deploy --serial --verbose"
+runner = "probe-rs run --chip STM32G0B1RETx --log-format {L}{s} --base-address 08002000 --connect-under-reset"
 
 [build]
+target = "thumbv6m-none-eabi"
 
 [profile.dev.package."*"]
 codegen-units = 1

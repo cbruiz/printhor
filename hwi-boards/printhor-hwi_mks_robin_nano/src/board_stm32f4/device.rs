@@ -6,31 +6,22 @@ use printhor_hwa_common as hwa;
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-usb")] {
         pub type USBDrv = embassy_stm32::usb::Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>;
-        pub use crate::board::io::usb_serial::*;
+        pub use crate::board::io::serial_usb::*;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-port-1")] {
-        pub type UartPort1Device = compile_error!("Provide me");
-        pub type UartPort1TxDevice = compile_error!("Provide me");
-        pub type UartPort1RxDevice = compile_error!("Provide me");
-        pub type UartPort1RingBufferedRxDevice = compile_error!("Provide me");
-
-        pub use crate::board::io::uart_port1::UartPort1RxInputStream;
+        pub type SerialPort1Tx = hwa::SerialTxWrapper<embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>>;
+        pub type SerialPort1Rx = super::io::serial_port_1::SerialPort1RxInputStream;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-port-2")] {
 
-        pub type UartPort2Device = embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>;
-        pub type UartPort2TxDevice = embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>;
-        pub type UartPort2RxDevice = embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>;
-        pub type UartPort2RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static>;
-
-        pub type UartPort2TxControllerRef = printhor_hwa_common::StandardControllerRef<printhor_hwa_common::SerialAsyncWrapper<UartPort2TxDevice>>;
-        pub use crate::board::io::uart_port2::UartPort2RxInputStream;
+        pub type SerialPort2Tx = hwa::SerialTxWrapper<embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>>;
+        pub type SerialPort2Rx = super::io::serial_port_2::SerialPort2RxInputStream;
     }
 }
 
@@ -46,12 +37,15 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-spi")] {
+        pub type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
+        //pub type Spi2 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
         pub type Spi3 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-sd-card")] {
+        //pub type SpiLCDCSPin = embassy_stm32::gpio::Output<'static>;
         pub type SpiCardCSPin = embassy_stm32::gpio::Output<'static>;
     }
 }

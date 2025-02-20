@@ -395,7 +395,7 @@ impl HwiContract for Contract {
     fn init_heap() {
         hwa::info!("Initializing heap ({}) bytes", Contract::MAX_HEAP_SIZE_BYTES);
         use core::mem::MaybeUninit;
-        #[link_section = ".bss"]
+        #[unsafe(link_section = ".bss")]
         static mut HEAP_MEM: [MaybeUninit<u8>; Contract::MAX_HEAP_SIZE_BYTES] =
             [MaybeUninit::uninit(); Contract::MAX_HEAP_SIZE_BYTES];
         unsafe {
@@ -411,7 +411,7 @@ impl HwiContract for Contract {
             let mut config = embassy_stm32::Config::default();
 
             cfg_if::cfg_if! {
-                if #[cfg(feature="hse-stlink-mso")] {
+                if #[cfg(feature="hse-stlink-mco")] {
 
                     config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_R;
 
@@ -493,12 +493,12 @@ impl HwiContract for Contract {
         let p = embassy_stm32::init(config);
         hwa::info!("embassy init done");
 
-        //#region "Prepare shared peripherals"
+        //#region "with-serial-port-1"
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-1"))] {
 
-                embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
+                embassy_stm32::bind_interrupts!(struct SerialPort1IRQs {
                     USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
                 });
 
@@ -509,25 +509,33 @@ impl HwiContract for Contract {
                 cfg.parity = embassy_stm32::usart::Parity::ParityNone;
                 cfg.detect_previous_overrun = true;
 
-                let (uart_port1_tx_device, uart_port1_rx_device) = embassy_stm32::usart::Uart::new(
+                let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
                     p.USART2,
                     p.PA3, p.PA2,
-                    UartPort1Irqs,
+                    SerialPort1IRQs,
                     p.DMA1_CH7, p.DMA1_CH6, cfg,
                 ).expect("Ready").split();
-                let serial_port1_tx = hwa::make_static_async_controller!(
-                    "UartPort1Tx",
+                let serial_port_1_tx = hwa::make_static_async_controller!(
+                    "SerialPort1Tx",
                     types::SerialPort1TxMutexStrategy,
-                    hwa::SerialTxWrapper::new(uart_port1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
+                    hwa::SerialTxWrapper::new(serial_port_1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
                 );
-                let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device);
+                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device);
             }
         }
+        
+        //#endregion
+        
+        //#region "with-trinamic"
 
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
             todo!("Not yet implemented")
         };
+        
+        //#endregion
+
+        //#region "with-spi"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
@@ -544,6 +552,10 @@ impl HwiContract for Contract {
                 hwa::debug!("SPI done");
             }
         }
+        
+        //#endregion
+
+        //#region "with-sd-card"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
@@ -557,6 +569,10 @@ impl HwiContract for Contract {
                 }
             }
         }
+        
+        //#endregion
+
+        //#region "with-motion"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
@@ -606,6 +622,10 @@ impl HwiContract for Contract {
                 hwa::debug!("motion_driver done");
             }
         }
+        
+        //#endregion
+
+        //#region "with-fan-layer"
 
         cfg_if::cfg_if!{
             if #[cfg(feature = "with-fan-layer")] {
@@ -623,6 +643,10 @@ impl HwiContract for Contract {
                 );
             }
         }
+        
+        //#endregion
+
+        //#region "with-ps-on"
 
         #[cfg(feature = "with-ps-on")]
         let ps_on = hwa::make_static_sync_controller!(
@@ -630,6 +654,10 @@ impl HwiContract for Contract {
             types::PSOnMutexStrategy,
             device::PsOnPin::new(p.PA4, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::Low)
         );
+        
+        //#endregion
+
+        //#region "with-probe"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
@@ -652,6 +680,10 @@ impl HwiContract for Contract {
                 let probe_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch3);
             }
         }
+        
+        //#endregion
+
+        //#region "with-laser"
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-laser")] {
                 let laser_pwm_device = device::PwmLaser::new(
@@ -673,11 +705,19 @@ impl HwiContract for Contract {
                 let laser_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch4);
             }
         }
+        
+        //#endregion
+
+        //#region "with-fan-extra-1"
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-fan-extra-1")] {
                 compile_error!("Not implemented");
             }
         }
+        
+        //#endregion
+
+        //#region "with-hot-end or hot bed"
 
         cfg_if::cfg_if!{
             if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
@@ -708,6 +748,10 @@ impl HwiContract for Contract {
                 );
             }
         }
+        
+        //#endregion
+
+        //#region "with-hot-end"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-hot-end")] {
@@ -719,6 +763,9 @@ impl HwiContract for Contract {
                 let hot_end_pwm_channel = hwa::HwiResource::new(embassy_stm32::timer::Channel::Ch1);
             }
         }
+        //#endregion
+
+        //#region "with-hot-bed"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-hot-bed")] {
@@ -733,14 +780,14 @@ impl HwiContract for Contract {
 
         //#endregion
 
-        // Return the HWI Context with HWI peripherals and controllers
-
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
                 setup_timer();
             }
         }
 
+        // Return the HWI Context with HWI peripherals and controllers
+        
         hwa::HwiContext {
             sys_watch_dog : hwa::make_static_async_controller!(
                 "WatchDogController",
@@ -749,16 +796,16 @@ impl HwiContract for Contract {
             ),
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx,
-            #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx,
-            #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx,
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_rx_stream,
+            serial_port_1_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port_1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_rx_stream,
+            serial_port_2_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port_2_rx_stream,
             #[cfg(feature = "with-spi")]
             spi,
             #[cfg(feature = "with-i2c")]
@@ -861,7 +908,7 @@ impl HwiContract for Contract {
 
                 #[interrupt]
                 unsafe fn RTC_ALARM() {
-                    EXECUTOR_HIGH.on_interrupt()
+                    unsafe { EXECUTOR_HIGH.on_interrupt() }
                 }
 
                 use embassy_stm32::interrupt;
@@ -878,7 +925,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        extern "Rust" {
+        unsafe extern "Rust" {
             fn do_tick();
         }
 

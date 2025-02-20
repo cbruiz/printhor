@@ -693,7 +693,7 @@ pub static STEP_DRIVER: SoftTimer = SoftTimer::new();
 /// do_tick();
 /// ```
 ///
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "Rust" fn do_tick() {
     critical_section::with(|cs| {
         let mut step_driver = STEP_DRIVER.0.borrow_ref_mut(cs);

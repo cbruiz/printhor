@@ -1,7 +1,7 @@
 [package]
 name = "printhor-hwi_mks_robin_nano"
 version = "0.0.4"
-edition = "2021"
+edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for MKS Robin Nano v3.1 board"
 readme = "README.md"
@@ -14,16 +14,19 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-default = ["float-point-f32-impl", "with-serial-usb", "with-spi", "with-sd-card", "sd-card-uses-spi",
-    "with-print-job",
+default = [
+    "with-serial-usb", "with-serial-port-1", "with-serial-port-2",
+    "with-spi", "with-sd-card", "sd-card-uses-spi", "with-print-job",
+    "float-point-f32-impl",
+    "with-motion", "with-motion-stepper", "with-motion-cartessian-kinematics",
     "with-e-axis", "with-x-axis", "with-y-axis", "with-z-axis",
-    "with-motion", "with-motion-cartessian-kinematics", "with-motion-stepper",
-    "with-trinamic"
+    "with-trinamic",
+    "with-ps-on"
 ]
 # Hardware device features
 with-serial-usb = ["embassy-usb", "printhor-hwa-common/with-serial-usb"]
-with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1"]
-with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2"]
+with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]
+with-serial-port-2 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-2"]
 with-print-job = ["printhor-hwa-common/with-print-job"]
 with-spi = ["embedded-hal", "printhor-hwa-common/with-spi"]
 with-i2c = ["printhor-hwa-common/with-i2c"]
@@ -63,7 +66,7 @@ nightly = ["embassy-executor/nightly"]
 without-ringbuffer = []
 verbose-timings = []
 sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi"]
-without-bootloader = []
+without-bootloader = ["embassy-stm32/memory-x"]
 
 float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
@@ -89,8 +92,9 @@ async-gcode = {version = "0.3.0", default-features = false, features=["parse-che
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
 embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", default-features = false, features = ["unproven"] }
+embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
 
-cfg-if = {version = "1.0.0"}
+cfg-if = { version = "1.0.0"}
 const_env = { version = "0.1.2" }
 
 rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }

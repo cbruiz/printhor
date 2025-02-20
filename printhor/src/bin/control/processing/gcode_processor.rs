@@ -176,6 +176,8 @@ impl GCodeProcessor {
             }
             #[cfg(feature = "with-serial-port-2")]
             CommChannel::SerialPort2 => {
+                #[allow(unused)]
+                use hwa::AsyncWrapperWriter;
                 let mut mg = self.serial_port2_tx.lock().await;
                 let _ = mg.wrapped_write(_msg.as_bytes()).await;
                 mg.wrapped_flush().await;
@@ -658,7 +660,7 @@ impl GCodeProcessor {
                     }
                 }
                 cfg_if::cfg_if! {
-                    if #[cfg(feature = "with-z-axis")] {
+                    if #[cfg(feature = "with-e-axis")] {
                         let r_e = _pos.world_pos.e.unwrap_or(math::ZERO);
                         let c_e = _step_pos.e.unwrap_or(0);
                     }

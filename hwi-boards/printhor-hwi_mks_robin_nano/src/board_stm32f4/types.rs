@@ -29,7 +29,15 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
+        pub type SerialPort1TxLockType = hwa::AsyncNoopMutexType;
         pub type SerialPort1TxMutexStrategy = hwa::AsyncStandardStrategy<SerialPort1TxLockType, super::device::SerialPort1Tx>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-2")] {
+        pub type SerialPort2TxLockType = hwa::AsyncNoopMutexType;
+        pub type SerialPort2TxMutexStrategy = hwa::AsyncStandardStrategy<SerialPort2TxLockType, super::device::SerialPort2Tx>;
     }
 }
 
@@ -71,14 +79,18 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-spi")] {
+        pub type Spi1MutexType = hwa::AsyncNoopMutexType;
+        pub type Spi1MutexStrategyType = hwa::AsyncHoldableStrategy<Spi1MutexType, super::device::Spi1>;
+        //pub type Spi2MutexType = hwa::AsyncNoopMutexType;
+        //pub type Spi2MutexStrategyType = hwa::AsyncHoldableStrategy<Spi1MutexType, super::device::Spi2>;
         pub type Spi3MutexType = hwa::AsyncNoopMutexType;
         pub type Spi3MutexStrategyType = hwa::AsyncHoldableStrategy<Spi3MutexType, super::device::Spi3>;
+
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-sd-card")] {
-        //pub type Spi1MutexType = hwa::AsyncNoopMutexType;
         pub type SDCardBlockDevice = hwa::sd_card_spi::SPIAdapter<
             Spi3MutexStrategyType,
             super::device::SpiCardCSPin,

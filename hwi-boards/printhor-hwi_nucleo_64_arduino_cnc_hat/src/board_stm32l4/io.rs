@@ -8,98 +8,53 @@ use hwa::HwiContract;
 #[cfg(feature = "with-serial-usb")]
 compile_error!("Not supported");
 
-cfg_if::cfg_if! {
-    if #[cfg(all(feature = "with-serial-port-1", not(feature = "uart-uses-ring-buffer")))] {
-        pub mod uart_port1 {
+#[cfg(feature = "with-serial-port-1")]
+pub mod serial_port_1 {
+    use printhor_hwa_common as hwa;
+    use hwa::HwiContract;
 
-            compile_error!("not proper");
+    pub struct SerialPort1RxInputStream {
+        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
+    }
 
-            pub struct UartPort1RxInputStream {
-                receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>,
-            }
+    impl SerialPort1RxInputStream {
+        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
+            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
 
-            impl UartPort1RxInputStream {
-                pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
+            hwa::info!("Creating ring_buffered uart");
 
-                    Self {
-                        receiver,
-                    }
-                }
-            }
-
-            impl async_gcode::ByteStream for UartPort1RxInputStream {
-                type Item = Result<u8, async_gcode::Error>;
-
-                async fn next(&mut self) -> Option<Self::Item> {
-                    // DMA1 REQ:
-                    // USART_2 RX ->    CHANNEL_4, STREAM_5 [CH: I2C1_RX, DAC1]
-                    //                  CHANNEL_6 - STREAM_7 [CH: I2C1_TX, I2C4_TX, I2C2_TX]
-                    // USART_2 TX ->    CHANNEL_4 STREAM_6 [CH: I2C1_TX, TIM5_UP, DAC2]
-                    let mut buff = [0u8];
-
-                    printhor_hwa_common::info!("serial read");
-
-                    match self.receiver.read_until_idle(&mut buff).await {
-                        Ok(_r) => Some(Ok(buff[0])),
-                        Err(_e) => None,
-                    }
-                }
+            Self {
+                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
+                    "UartPort1RXRingBuff",
+                    BufferType,
+                    [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
+                )),
             }
         }
     }
-}
 
-cfg_if::cfg_if! {
-    if #[cfg(all(feature = "with-serial-port-1", feature = "uart-uses-ring-buffer"))] {
-        pub mod uart_port1 {
-            use printhor_hwa_common as hwa;
-            use hwa::HwiContract;
+    impl async_gcode::ByteStream for SerialPort1RxInputStream {
+        type Item = Result<u8, async_gcode::Error>;
 
-            pub struct UartPort1RxInputStream {
-                receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
+        async fn next(&mut self) -> Option<Self::Item> {
+            use embedded_io_async::Read;
+            // DMA1 REQ:
+            // USART_2 RX ->    CHANNEL_4, STREAM_5 [CH: I2C1_RX, DAC1]
+            //                  CHANNEL_6 - STREAM_7 [CH: I2C1_TX, I2C4_TX, I2C2_TX]
+            // USART_2 TX ->    CHANNEL_4 STREAM_6 [CH: I2C1_TX, TIM5_UP, DAC2]
+
+            let mut buff: [u8; 1] = [0; 1];
+            match self.receiver.read_exact(&mut buff).await {
+                Ok(_r) => Some(Ok(buff[0])),
+                Err(_e) => None,
             }
+        }
 
-            impl UartPort1RxInputStream {
-                pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
-                    type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
-
-                    hwa::info!("Creating ring_buffered uart");
-
-                    Self {
-                        receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
-                            "UartPort1RXRingBuff",
-                            BufferType,
-                            [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
-                        )),
-                    }
-                }
-            }
-
-            impl async_gcode::ByteStream for UartPort1RxInputStream {
-                type Item = Result<u8, async_gcode::Error>;
-
-                async fn next(&mut self) -> Option<Self::Item> {
-                    use embedded_io_async::Read;
-                    // DMA1 REQ:
-                    // USART_2 RX ->    CHANNEL_4, STREAM_5 [CH: I2C1_RX, DAC1]
-                    //                  CHANNEL_6 - STREAM_7 [CH: I2C1_TX, I2C4_TX, I2C2_TX]
-                    // USART_2 TX ->    CHANNEL_4 STREAM_6 [CH: I2C1_TX, TIM5_UP, DAC2]
-
-                    let mut buff: [u8; 1] = [0; 1];
-                    match self.receiver.read_exact(&mut buff).await {
-                        Ok(_r) => Some(Ok(buff[0])),
-                        Err(_e) => None,
-                    }
-                }
-
-                async fn recovery_check(&mut self) {
-                    //TODO
-                }
-            }
+        async fn recovery_check(&mut self) {
+            //TODO
         }
     }
 }
-
 
 #[cfg(feature = "with-serial-port-2")]
 compile_error!("Not implemented");

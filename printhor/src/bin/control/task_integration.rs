@@ -75,7 +75,7 @@ pub async fn task_integration(
         let test_name = "T1 [M100 (Machine info)]";
 
         hwa::info!("## {} - BEGIN", test_name);
-        if let Some(_result) = processor
+        match processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M100),
@@ -84,12 +84,12 @@ pub async fn task_integration(
             .await
             .and_then(expect_immediate)
             .ok()
-        {
+        { Some(_result) => {
             hwa::info!("## {} - END", test_name);
-        } else {
+        } _ => {
             finish_task(Err(test_name));
             return;
-        }
+        }}
     }
 
     // Separator
@@ -100,7 +100,7 @@ pub async fn task_integration(
         let test_name = "T2 [M80 (Power On)]";
 
         hwa::info!("## {} - BEGIN", test_name);
-        if let Some(_result) = processor
+        match processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M80),
@@ -109,7 +109,7 @@ pub async fn task_integration(
             .await
             .and_then(expect_immediate)
             .ok()
-        {
+        { Some(_result) => {
             // timeout wait to check effectiveness of the request
             if embassy_time::with_timeout(
                 embassy_time::Duration::from_secs(2),
@@ -123,10 +123,10 @@ pub async fn task_integration(
                 finish_task(Err(test_name));
                 return;
             }
-        } else {
+        } _ => {
             finish_task(Err(test_name));
             return;
-        }
+        }}
     }
 
     // Separator
@@ -163,12 +163,12 @@ pub async fn task_integration(
 
         hwa::info!("## {} - BEGIN", test_name);
         let _t0 = embassy_time::Instant::now();
-        if let Some(evt) = processor
+        match processor
             .execute(CommChannel::Internal, &homing_gcode, false)
             .await
             .and_then(expect_deferred)
             .ok()
-        {
+        { Some(evt) => {
             if subscriber.ft_wait_for(evt).await.is_err() {
                 finish_task(Err(test_name));
                 return;
@@ -176,10 +176,10 @@ pub async fn task_integration(
                 hwa::info!("## {} - END", test_name);
             }
             //hwa::info!("-- G28 OK (took: {} ms)", _t0.elapsed().as_millis());
-        } else {
+        } _ => {
             finish_task(Err(test_name));
             return;
-        }
+        }}
     }
 
     // Separator
@@ -243,12 +243,12 @@ pub async fn task_integration(
             control::GCodeCmd::new(6, Some(6), control::GCodeValue::G4(control::S { s: None }));
 
         hwa::info!("## {} - BEGIN", test_name);
-        if let Some(evt) = processor
+        match processor
             .execute(CommChannel::Internal, &set_pos_gcode, false)
             .await
             .and_then(expect_deferred)
             .ok()
-        {
+        { Some(evt) => {
             if subscriber.ft_wait_for(evt).await.is_ok() {
                 hwa::info!("## {} - END", test_name);
             } else {
@@ -256,10 +256,10 @@ pub async fn task_integration(
                 return;
             }
             hwa::info!("## {} - END", test_name);
-        } else {
+        } _ => {
             finish_task(Err(test_name));
             return;
-        }
+        }}
     }
 
     // Separator

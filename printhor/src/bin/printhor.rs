@@ -448,9 +448,9 @@ async fn init_controllers_and_spawn_tasks(
         #[cfg(feature = "with-serial-usb")]
         _context.serial_usb_tx,
         #[cfg(feature = "with-serial-port-1")]
-        _context.serial_port1_tx,
+        _context.serial_port_1_tx,
         #[cfg(feature = "with-serial-port-2")]
-        _context.serial_port2_tx,
+        _context.serial_port_2_tx,
         #[cfg(feature = "with-motion")]
         motion_planner,
         #[cfg(feature = "with-ps-on")]
@@ -621,9 +621,9 @@ async fn init_controllers_and_spawn_tasks(
                 #[cfg(feature = "with-serial-usb")]
                 _context.serial_usb_rx_stream,
                 #[cfg(feature = "with-serial-port-1")]
-                _context.serial_port1_rx_stream,
+                _context.serial_port_1_rx_stream,
                 #[cfg(feature = "with-serial-port-2")]
-                _context.serial_port2_rx_stream,
+                _context.serial_port_2_rx_stream,
             ),
             #[cfg(feature = "with-print-job")]
             printer_controller.clone(),

@@ -4,33 +4,22 @@ use printhor_hwa_common as hwa;
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-usb")] {
-        pub type USBDrv = embassy_stm32::usb::Driver<'static, embassy_stm32::peripherals::USB>;
-        pub use super::io::usb_serial::*;
+        pub type SerialUsbDriver = embassy_stm32::usb::Driver<'static, embassy_stm32::peripherals::USB>;
+        pub use super::io::serial_usb::*;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-port-1")] {
-        pub type UartPort1Device = embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>;
-        pub type UartPort1TxDevice = embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>;
-        pub type UartPort1RxDevice = embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>;
-        pub type UartPort1RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static>;
-
-        pub type UartPort1TxControllerRef = hwa::StandardControllerRef<hwa::SerialAsyncWrapper<UartPort1TxDevice>>;
-        pub use crate::board::io::uart_port1::UartPort1RxInputStream;
+        pub type SerialPort1Tx = hwa::SerialTxWrapper<embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>>;
+        pub type SerialPort1Rx = super::io::serial_port_1::SerialPort1RxInputStream;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-port-2")] {
-
-        pub type UartPort2Device = embassy_stm32::usart::Uart<'static, embassy_stm32::mode::Async>;
-        pub type UartPort2TxDevice = embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>;
-        pub type UartPort2RxDevice = embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>;
-        pub type UartPort2RingBufferedRxDevice = embassy_stm32::usart::RingBufferedUartRx<'static>;
-
-        pub type UartPort2TxControllerRef = hwa::StandardControllerRef<hwa::SerialAsyncWrapper<UartPort2TxDevice>>;
-        pub use crate::board::io::uart_port2::UartPort2RxInputStream;
+        pub type SerialPort2Tx = hwa::SerialTxWrapper<embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>>;
+        pub type SerialPort2Rx = super::io::serial_port_2::SerialPort2RxInputStream;
     }
 }
 

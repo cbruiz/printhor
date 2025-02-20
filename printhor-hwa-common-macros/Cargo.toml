@@ -1,7 +1,7 @@
 [package]
 name = "printhor-hwa-common-macros"
 version = "0.0.4"
-edition = "2021"
+edition = "2024"
 
 [features]
 float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]

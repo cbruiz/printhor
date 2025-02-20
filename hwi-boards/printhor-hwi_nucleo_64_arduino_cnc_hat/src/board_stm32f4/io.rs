@@ -7,18 +7,18 @@ use hwa::math;
 compile_error!("Not supported");
 
 #[cfg(feature = "with-serial-port-1")]
-pub(crate) mod uart_port1 {
+pub(crate) mod serial_port_1 {
     #[allow(unused)]
     use embedded_io_async::{BufRead, Read};
     use printhor_hwa_common as hwa;
     #[allow(unused)]
     use hwa::HwiContract;
 
-    pub struct UartPort1RxInputStream {
+    pub struct SerialPort1RxInputStream {
         receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
     }
 
-    impl UartPort1RxInputStream {
+    impl SerialPort1RxInputStream {
         pub fn new(receiver: embassy_stm32::usart::RingBufferedUartRx<'static>) -> Self {
 
             Self {
@@ -27,7 +27,7 @@ pub(crate) mod uart_port1 {
         }
     }
 
-    impl async_gcode::ByteStream for UartPort1RxInputStream {
+    impl async_gcode::ByteStream for SerialPort1RxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
@@ -47,8 +47,7 @@ pub(crate) mod uart_port1 {
         }
 
         async fn recovery_check(&mut self) {
-            hwa::warn!("Internal reset");
-            // TODO
+
         }
     }
 }

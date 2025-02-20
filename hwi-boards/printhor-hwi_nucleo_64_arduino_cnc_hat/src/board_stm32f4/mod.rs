@@ -231,7 +231,6 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
             type MotionBroadcastChannelMutexType = types::MotionBroadcastChannelMutexType;
-
             type MotionSenderMutexStrategy = types::MotionSenderMutexStrategy;
         }
     }
@@ -313,7 +312,7 @@ impl HwiContract for Contract {
     fn init_heap() {
         hwa::info!("Initializing heap ({}) bytes", Contract::MAX_HEAP_SIZE_BYTES);
         use core::mem::MaybeUninit;
-        #[link_section = ".bss"]
+        #[unsafe(link_section = ".bss")]
         static mut HEAP_MEM: [MaybeUninit<u8>; Contract::MAX_HEAP_SIZE_BYTES] =
             [MaybeUninit::uninit(); Contract::MAX_HEAP_SIZE_BYTES];
         unsafe {
@@ -361,12 +360,12 @@ impl HwiContract for Contract {
 
         //#endregion
 
-        //#region "Prepare shared peripherals"
+        //#region "with-serial-port-1"
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-1"))] {
 
-                embassy_stm32::bind_interrupts!(struct UartPort1Irqs {
+                embassy_stm32::bind_interrupts!(struct SerialPort1IRQs {
                     USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
                 });
                 {
@@ -386,28 +385,27 @@ impl HwiContract for Contract {
 
                 type RxBuffType = [u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE];
                 let rxb = hwa::make_static_ref!(
-                    "txbuff",
+                    "SerialPort1RxBuff",
                     RxBuffType,
                     [0u8; Contract::SERIAL_PORT1_RX_BUFFER_SIZE]
                 );
 
-                let (uart_port1_tx_device, uart_port1_rx_device) = embassy_stm32::usart::Uart::new(
+                let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
                     p.USART2,
                     p.PA3, p.PA2,
-                    UartPort1Irqs,
+                    SerialPort1IRQs,
                     p.DMA1_CH6,
                     p.DMA1_CH5,
                     cfg,
                 ).expect("Ready").split();
-                let serial_port1_tx = hwa::make_static_async_controller!(
+                let serial_port_1_tx = hwa::make_static_async_controller!(
                     "UartPort1Tx",
                     types::SerialPort1TxMutexStrategy,
-                    hwa::SerialTxWrapper::new(uart_port1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
+                    hwa::SerialTxWrapper::new(serial_port_1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
                 );
-                let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device.into_ring_buffered(
+                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device.into_ring_buffered(
                     rxb
                 ));
-                hwa::info!("serial-port-1 DONE");
             }
         }
 
@@ -418,7 +416,6 @@ impl HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
-                hwa::info!("spi...");
                 let mut cfg = embassy_stm32::spi::Config::default();
                 cfg.frequency = embassy_stm32::time::Hertz(Self::SPI_FREQUENCY);
 
@@ -429,13 +426,11 @@ impl HwiContract for Contract {
                         p.SPI2, p.PB13, p.PB15, p.PB14, p.DMA1_CH4, p.DMA1_CH3, cfg,
                     )
                 );
-                hwa::info!("with-spi done");
             }
         }
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
-                hwa::info!("with-sd-card...");
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-spi")] {
                         let sd_card_device = spi.clone();
@@ -444,7 +439,6 @@ impl HwiContract for Contract {
                         compile_error!("with-sd-card requires with-spi in this board");
                     }
                 }
-                hwa::info!("with-sd-card DONE");
             }
         }
 
@@ -643,15 +637,15 @@ impl HwiContract for Contract {
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx,
+            serial_port_1_tx,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx,
+            serial_port_2_tx,
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_rx_stream,
+            serial_port_1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_rx_stream,
+            serial_port_2_rx_stream,
             #[cfg(feature = "with-spi")]
             spi,
             #[cfg(feature = "with-i2c")]
@@ -754,7 +748,7 @@ impl HwiContract for Contract {
 
                 #[interrupt]
                 unsafe fn RTC_ALARM() {
-                    EXECUTOR_HIGH.on_interrupt()
+                    unsafe { EXECUTOR_HIGH.on_interrupt() }
                 }
 
                 use embassy_stm32::interrupt;
@@ -771,7 +765,7 @@ impl HwiContract for Contract {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        extern "Rust" {
+        unsafe extern "Rust" {
             fn do_tick();
         }
 

@@ -7,7 +7,7 @@ pub type Watchdog = embassy_stm32::wdg::IndependentWatchdog<'static, embassy_stm
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
         pub type SerialPort1Tx = hwa::SerialTxWrapper<embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>>;
-        pub type SerialPort1Rx = super::io::uart_port1::UartPort1RxInputStream;
+        pub type SerialPort1Rx = super::io::serial_port_1::SerialPort1RxInputStream;
     }
 }
 

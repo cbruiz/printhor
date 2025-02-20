@@ -3,7 +3,7 @@ name = "printhor-hwi_skr_mini_e3"
 version = "0.0.4"
 edition = "2021"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
-description = "Printhor Hardware Abstraction for SK3 Mini E3 V2.0 and SK3 Mini E3 V3.0 boards"
+description = "Printhor Hardware Abstraction for SK3 Mini E3 V3.0 board"
 readme = "README.md"
 repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
@@ -21,7 +21,6 @@ default = [
     "with-trinamic", "with-spi", "with-sd-card", "sd-card-uses-spi",
 ]
 # Versions/boards
-skr_mini_e3_v2 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-time/generic-queue-32", "embassy-stm32/stm32f103rc", "embassy-stm32/time-driver-tim4", "without-vref-int"]
 skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-time/generic-queue-32", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
 with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt", "embassy-usb?/defmt"]
 
@@ -33,7 +32,7 @@ with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port
 with-serial-port-2 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-2"]
 
 with-spi = ["embedded-hal", "printhor-hwa-common/with-spi"]
-with-i2c = []
+with-i2c = ["embedded-hal"]
 with-hot-end = ["embedded-hal"]
 with-hot-bed = ["embedded-hal"]
 with-motion = ["printhor-hwa-common/with-motion"]
@@ -44,7 +43,6 @@ with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematic
 with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
 with-motion-broadcast = []
 with-probe = ["embedded-hal"]
-with-endstops = []
 with-sd-card = []
 with-print-job = []
 with-fan-layer = ["embedded-hal"]
@@ -55,6 +53,7 @@ with-trinamic = ["printhor-hwa-common/with-trinamic"]
 with-ps-on = []
 with-display = [] # Broken
 without-bootloader = ["embassy-stm32/memory-x"]
+
 use-hsi = []
 
 with-e-axis = ["printhor-hwa-common/with-e-axis"]
@@ -99,8 +98,8 @@ alloc-cortex-m = { version = "0.4.4", default-features = false, features = []}
 critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
 
 embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2", default-features = false, features = ["unproven"] }
-embedded-io-async = { version = "0.6", default-features = false, optional = true, features = [] }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", default-features = false, features = ["unproven"] }
+embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
 
 async-gcode = {version = "0.3.0", default-features = false, features = ["parse-trailing-comment", "parse-checksum", "optional-value", "string-value"] }
 

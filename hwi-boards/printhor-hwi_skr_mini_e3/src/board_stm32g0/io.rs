@@ -2,28 +2,27 @@
 #[allow(unused)]
 use printhor_hwa_common as hwa;
 #[cfg(feature = "with-serial-usb")]
-pub mod usb_serial {
+pub(crate) mod serial_usb {
     use printhor_hwa_common as hwa;
     use hwa::HwiContract;
-    use crate::board::device::USBDrv;
 
-    pub type USBSerialDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
-    pub type USBSerialDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, USBDrv>;
+    pub type SerialUsbDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, crate::board::device::SerialUsbDriver>;
+    pub type SerialUsbDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, crate::board::device::SerialUsbDriver>;
 
-    pub struct USBSerialDevice {
-        pub builder: Option<embassy_usb::Builder<'static, USBDrv>>,
-        pub sender: USBSerialDeviceSender,
-        pub receiver: USBSerialDeviceReceiver,
+    pub struct SerialUsbDevice {
+        pub builder: Option<embassy_usb::Builder<'static, crate::board::device::SerialUsbDriver>>,
+        pub sender: SerialUsbDeviceSender,
+        pub receiver: SerialUsbDeviceReceiver,
     }
 
     #[embassy_executor::task(pool_size = 1)]
-    pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
+    pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, crate::board::device::SerialUsbDriver>) -> ! {
         hwa::debug!("Running usb task...");
         usb.run().await;
     }
 
-    impl USBSerialDevice {
-        pub fn new(driver: USBDrv) -> Self {
+    impl SerialUsbDevice {
+        pub fn new(driver: crate::board::device::SerialUsbDriver) -> Self {
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
             config.manufacturer = Some("Printhor");
             config.product = Some("Printhor-USBSerial");
@@ -96,20 +95,20 @@ pub mod usb_serial {
                 });
         }
 
-        pub fn split(self) -> (USBSerialDeviceReceiver, USBSerialDeviceSender) {
+        pub fn split(self) -> (SerialUsbDeviceReceiver, SerialUsbDeviceSender) {
             (self.receiver, self.sender)
         }
     }
 
-    pub struct USBSerialDeviceInputStream {
-        receiver: embassy_usb::class::cdc_acm::Receiver<'static, super::super::device::USBDrv>,
+    pub struct SerialUsbRxInputStream {
+        receiver: embassy_usb::class::cdc_acm::Receiver<'static, super::super::device::SerialUsbDriver>,
         buffer: [u8; <crate::Contract as HwiContract>::SERIAL_USB_RX_BUFFER_SIZE],
         bytes_read: u8,
         current_byte_index: u8,
     }
 
-    impl USBSerialDeviceInputStream {
-        pub fn new(receiver: USBSerialDeviceReceiver) -> Self {
+    impl SerialUsbRxInputStream {
+        pub fn new(receiver: SerialUsbDeviceReceiver) -> Self {
             Self {
                 receiver,
                 buffer: [0; <crate::Contract as HwiContract>::SERIAL_USB_RX_BUFFER_SIZE],
@@ -119,7 +118,7 @@ pub mod usb_serial {
         }
     }
 
-    impl async_gcode::ByteStream for USBSerialDeviceInputStream {
+    impl async_gcode::ByteStream for SerialUsbRxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
@@ -154,80 +153,95 @@ pub mod usb_serial {
 }
 
 #[cfg(feature = "with-serial-port-1")]
-pub mod uart_port1 {
-    use crate::board::device::UartPort1RingBufferedRxDevice;
-    use crate::board::device::UartPort1RxDevice;
-    use printhor_hwa_common::TrackedStaticCell;
+pub(crate) mod serial_port_1 {
+    #[allow(unused)]
+    use embedded_io_async::{BufRead, Read};
+    use printhor_hwa_common as hwa;
+    #[allow(unused)]
+    use hwa::HwiContract;
 
-    pub struct UartPort1RxInputStream {
-        receiver: UartPort1RingBufferedRxDevice,
+    pub struct SerialPort1RxInputStream {
+        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
     }
 
-    impl UartPort1RxInputStream {
-        pub fn new(receiver: UartPort1RxDevice) -> Self {
-            #[link_section = ".bss"]
-            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> =
-                TrackedStaticCell::new();
-            let buffer = BUFF.init::<{ crate::board::MAX_STATIC_MEMORY }>(
-                "UartPort1RXRingBuff",
-                [0; crate::UART_PORT1_BUFFER_SIZE],
-            );
+    impl SerialPort1RxInputStream {
+        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
+
+            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
 
             Self {
-                receiver: receiver.into_ring_buffered(buffer),
+                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
+                    "SerialPort1RXRingBuff",
+                    BufferType,
+                    [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
+                )),
             }
         }
     }
 
-    impl async_gcode::ByteStream for UartPort1RxInputStream {
+    impl async_gcode::ByteStream for SerialPort1RxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
+
             let mut buff: [u8; 1] = [0; 1];
 
-            match self.receiver.read(&mut buff).await {
-                Ok(_r) => Some(Ok(buff[0])),
+            match self.receiver.read_exact(&mut buff[..]).await {
+                Ok(_r) => {
+                    Some(Ok(buff[0]))
+                },
                 Err(_e) => None,
             }
+        }
+
+        async fn recovery_check(&mut self) {
+
         }
     }
 }
 
 #[cfg(feature = "with-serial-port-2")]
-pub mod uart_port2 {
-    use crate::board::device::UartPort2RingBufferedRxDevice;
-    use crate::board::device::UartPort2RxDevice;
+pub(crate) mod serial_port_2 {
+    #[allow(unused)]
+    use embedded_io_async::{BufRead, Read};
+    use printhor_hwa_common as hwa;
+    #[allow(unused)]
+    use hwa::HwiContract;
 
-    pub struct UartPort2RxInputStream {
-        receiver: UartPort2RingBufferedRxDevice,
+    pub struct SerialPort2RxInputStream {
+        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
     }
 
-    impl UartPort2RxInputStream {
-        pub fn new(receiver: UartPort2RxDevice) -> Self {
-            #[link_section = ".bss"]
-            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT2_BUFFER_SIZE]> =
-                TrackedStaticCell::new();
-            let buffer = BUFF.init::<{ crate::board::MAX_STATIC_MEMORY }>(
-                "UartPort2RXRingBuff",
-                [0; crate::UART_PORT2_BUFFER_SIZE],
-            );
+    impl SerialPort2RxInputStream {
+        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
+            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
 
             Self {
-                receiver: receiver.into_ring_buffered(buffer),
+                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
+                    "SerialPort2RXRingBuff",
+                    BufferType,
+                    [0; <crate::Contract as HwiContract>::SERIAL_PORT2_RX_BUFFER_SIZE]
+                )),
             }
         }
     }
 
-    impl async_gcode::ByteStream for UartPort2RxInputStream {
+    impl async_gcode::ByteStream for SerialPort2RxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
             let mut buff: [u8; 1] = [0; 1];
 
-            match self.receiver.read(&mut buff).await {
-                Ok(_r) => Some(Ok(buff[0])),
+            match self.receiver.read_exact(&mut buff[..]).await {
+                Ok(_r) => {
+                    Some(Ok(buff[0]))
+                },
                 Err(_e) => None,
             }
+        }
+
+        async fn recovery_check(&mut self) {
+
         }
     }
 }

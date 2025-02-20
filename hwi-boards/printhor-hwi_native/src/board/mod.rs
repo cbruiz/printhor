@@ -464,25 +464,25 @@ impl hwa::HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-1"))] {
-                let (uart_port1_tx_device, uart_port1_rx_device) = device::SerialPort1Device::new(_spawner.make_send()).split();
-                let serial_port1_tx = hwa::make_static_async_controller!(
+                let (serial_port_1_tx_device, serial_port_1_rx_device) = device::SerialPort1Device::new(_spawner.make_send()).split();
+                let serial_port_1_tx = hwa::make_static_async_controller!(
                     "UartPort1Tx",
                     types::SerialPort1TxMutexStrategy,
-                    uart_port1_tx_device
+                    serial_port_1_tx_device
                 );
-                let serial_port1_rx_stream = device::SerialPort1Rx::new(uart_port1_rx_device);
+                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device);
             }
         }
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-2"))] {
-                let (uart_port2_tx_device, uart_port2_rx_device) = device::SerialPort2Device::new().split();
-                let serial_port2_tx = hwa::make_static_async_controller!(
+                let (uart_port_2_tx_device, uart_port_2_rx_device) = device::SerialPort2Device::new().split();
+                let serial_port_2_tx = hwa::make_static_async_controller!(
                     "UartPort2Tx",
                     types::SerialPort2TxMutexStrategy,
-                    uart_port2_tx_device
+                    uart_port_2_tx_device
                 );
-                let serial_port2_rx_stream = device::SerialPort2Rx::new(uart_port2_rx_device);
+                let serial_port_2_rx_stream = device::SerialPort2Rx::new(uart_port_2_rx_device);
             }
         }
 
@@ -602,7 +602,7 @@ impl hwa::HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
                 let probe_pwm = pwm1.clone();
-                let probe_channel = hwa::HwiResource::new(0u8);
+                let probe_pwm_channel = hwa::HwiResource::new(0u8);
             }
         }
         cfg_if::cfg_if! {
@@ -658,16 +658,16 @@ impl hwa::HwiContract for Contract {
             ),
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx,
-            #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx,
-            #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx,
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_rx_stream,
+            serial_port_1_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port_1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_rx_stream,
+            serial_port_2_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port_2_rx_stream,
             #[cfg(feature = "with-spi")]
             spi,
             #[cfg(feature = "with-i2c")]
@@ -687,7 +687,7 @@ impl hwa::HwiContract for Contract {
             #[cfg(feature = "with-probe")]
             probe_pwm,
             #[cfg(feature = "with-probe")]
-            probe_pwm_channel: probe_channel,
+            probe_pwm_channel,
             #[cfg(feature = "with-laser")]
             laser_pwm,
             #[cfg(feature = "with-laser")]

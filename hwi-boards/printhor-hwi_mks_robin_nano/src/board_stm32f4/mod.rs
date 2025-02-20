@@ -234,7 +234,7 @@ impl HwiContract for Contract {
             const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
-            type SerialUsbRx = io::usb_serial::SerialUsbInputStream;
+            type SerialUsbRx = io::serial_usb::SerialUsbInputStream;
         }
     }
 
@@ -253,7 +253,13 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            compile_error!("Not implemented");
+            #[const_env::from_env("SERIAL_PORT1_BAUD_RATE")]
+            const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
+            #[const_env::from_env("SERIAL_PORT1_RX_BUFFER_SIZE")]
+            const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 128;
+
+            type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
+            type SerialPort2Rx = device::SerialPort2Rx;
         }
     }
 
@@ -362,7 +368,7 @@ impl HwiContract for Contract {
             Contract::MAX_HEAP_SIZE_BYTES
         );
         use core::mem::MaybeUninit;
-        #[link_section = ".bss"]
+        #[unsafe(link_section = ".bss")]
         static mut HEAP_MEM: [MaybeUninit<u8>; Contract::MAX_HEAP_SIZE_BYTES] =
             [MaybeUninit::uninit(); Contract::MAX_HEAP_SIZE_BYTES];
         unsafe {
@@ -374,6 +380,7 @@ impl HwiContract for Contract {
     async fn init(_spawner: embassy_executor::Spawner) -> hwa::HwiContext<Self> {
 
         //#region "Bootloader reset"
+
         cfg_if::cfg_if! {
             if #[cfg(not(feature = "without-bootloader"))] {
                 // Reset bootloader state
@@ -430,6 +437,7 @@ impl HwiContract for Contract {
         //#endregion
 
         //#region "RCC setup"
+
         let mut config = embassy_stm32::Config::default();
         config.rcc.hse = Some(embassy_stm32::rcc::Hse {
             freq: embassy_stm32::time::Hertz(8_000_000),
@@ -472,7 +480,7 @@ impl HwiContract for Contract {
                     [0; 256]
                 );
                 let drv = embassy_stm32::usb::Driver::new_fs(p.USB_OTG_FS, UsbIrqs, p.PA12, p.PA11, buff, usb_cfg);
-                let mut usb_serial_device = io::usb_serial::SerialUsbDevice::new(
+                let mut usb_serial_device = io::serial_usb::SerialUsbDevice::new(
                     drv
                 );
                 hwa::info!("Spawning USB Driver Task");
@@ -491,11 +499,75 @@ impl HwiContract for Contract {
 
         //#endregion
 
+        //#region "with-serial-port-1"
+
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-serial-port-1"))] {
+
+                embassy_stm32::bind_interrupts!(struct SerialPort1IRQs {
+                    USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+                });
+
+                let mut cfg = embassy_stm32::usart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
+                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
+                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
+                cfg.detect_previous_overrun = true;
+
+                let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
+                    p.USART1, p.PA10, p.PA9,
+                    SerialPort1IRQs, p.DMA2_CH7, p.DMA2_CH5,
+                    cfg,
+                ).expect("Ready").split();
+                let serial_port_1_tx = hwa::make_static_async_controller!(
+                    "SerialPort1Tx",
+                    types::SerialPort1TxMutexStrategy,
+                    hwa::SerialTxWrapper::new(serial_port_1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
+                );
+                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device);
+            }
+        }
+
+        //#endregion
+
+        //#region "with-serial-port-1"
+
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-serial-port-2"))] {
+
+                embassy_stm32::bind_interrupts!(struct SerialPort2IRQs {
+                    USART3 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART3>;
+                });
+
+                let mut cfg = embassy_stm32::usart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT2_BAUD_RATE;
+                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
+                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
+                cfg.detect_previous_overrun = true;
+
+                let (serial_port_2_tx_device, serial_port_2_rx_device) = embassy_stm32::usart::Uart::new(
+                    p.USART3, p.PB11, p.PB10,
+                    SerialPort2IRQs, p.DMA1_CH4, p.DMA1_CH1,
+                    cfg,
+                ).expect("Ready").split();
+                let serial_port_2_tx = hwa::make_static_async_controller!(
+                    "SerialPort2Tx",
+                    types::SerialPort2TxMutexStrategy,
+                    hwa::SerialTxWrapper::new(serial_port_2_tx_device, Self::SERIAL_PORT2_BAUD_RATE)
+                );
+                let serial_port_2_rx_stream = device::SerialPort2Rx::new(serial_port_2_rx_device);
+            }
+        }
+
+        //#endregion
+
         //#region "with-spi"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
-                let spi = {
+                let spi3 = {
                     let mut cfg = embassy_stm32::spi::Config::default();
                     cfg.frequency = embassy_stm32::time::Hertz(Self::SPI_FREQUENCY);
                     hwa::make_static_async_controller!(
@@ -509,15 +581,30 @@ impl HwiContract for Contract {
             }
         }
 
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-spi")] {
+                let spi1 = {
+                    let mut cfg = embassy_stm32::spi::Config::default();
+                    cfg.frequency = embassy_stm32::time::Hertz(Self::SPI_FREQUENCY);
+                    hwa::make_static_async_controller!(
+                        "SPI1Controller",
+                        types::Spi1MutexStrategyType,
+                        device::Spi1::new(
+                            p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA2_CH3, p.DMA2_CH2, cfg,
+                        )
+                    )
+                };
+            }
+        }
+
         //#endregion
 
         //#region "with-sd-card"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
-
                 let sd_card_block_device = hwa::sd_card_spi::SPIAdapter::new(
-                    spi.clone(),
+                    spi3.clone(),
                     embassy_stm32::gpio::Output::new(p.PC9,
                         embassy_stm32::gpio::Level::High,
                         embassy_stm32::gpio::Speed::VeryHigh
@@ -613,6 +700,9 @@ impl HwiContract for Contract {
             }
         }
 
+        //let lcd_on = device::PsOnPin::new(p.PD13, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::Low);
+        //let lcd_rst = device::PsOnPin::new(p.PC6, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::Low);
+
         hwa::HwiContext {
             sys_watch_dog: hwa::make_static_async_controller!(
                 "WatchDogController",
@@ -621,18 +711,18 @@ impl HwiContract for Contract {
             ),
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx,
-            #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx: todo!("fill me"),
-            #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx: todo!("fill me"),
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_rx_stream,
+            serial_port_1_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port_1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_rx_stream,
+            serial_port_2_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port_2_rx_stream,
             #[cfg(feature = "with-spi")]
-            spi,
+            spi: spi1,
             #[cfg(feature = "with-i2c")]
             i2c: todo!("fill me"),
             #[cfg(feature = "with-sd-card")]
@@ -739,7 +829,7 @@ impl HwiContract for Contract {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        extern "Rust" {
+        unsafe extern "Rust" {
             fn do_tick();
         }
 

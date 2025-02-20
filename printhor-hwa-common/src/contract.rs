@@ -488,14 +488,14 @@ where
     pub serial_usb_rx_stream: C::SerialUsbRx,
 
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_tx: hwa::StaticAsyncController<C::SerialPort1Tx>,
+    pub serial_port_1_tx: hwa::StaticAsyncController<C::SerialPort1Tx>,
     #[cfg(feature = "with-serial-port-1")]
-    pub serial_port1_rx_stream: C::SerialPort1Rx,
+    pub serial_port_1_rx_stream: C::SerialPort1Rx,
 
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_tx: hwa::StaticAsyncController<C::SerialPort2Tx>,
+    pub serial_port_2_tx: hwa::StaticAsyncController<C::SerialPort2Tx>,
     #[cfg(feature = "with-serial-port-2")]
-    pub serial_port2_rx_stream: C::SerialPort2Rx,
+    pub serial_port_2_rx_stream: C::SerialPort2Rx,
 
     #[cfg(feature = "with-spi")]
     pub spi: hwa::StaticAsyncController<C::SpiController>,

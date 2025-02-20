@@ -217,7 +217,7 @@ impl TrinamicController {
         // TODO this is still a mess
         // Still not receiving the proper clean result, however the data is properly sent
 
-        if let Ok(chop_conf) = Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await {
+        match Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await { Ok(chop_conf) => {
             if chop_conf.ntpol() == false && chop_conf.mres() == micro_steps_pow_of_2 {
                 hwa::warn!(
                     "[TrinamicController] Trinamic check for stepper {} is OK",
@@ -229,12 +229,12 @@ impl TrinamicController {
                     addr
                 )
             }
-        } else {
+        } _ => {
             hwa::warn!(
                 "[TrinamicController] Unable to retrieve status from {}",
                 addr
             )
-        }
+        }}
 
         // TODO: Assuming OK as of now...
         Ok(())

@@ -9,11 +9,6 @@ pub type EventBusLockType = hwa::AsyncNoopMutexType;
 //#region "HWI Shared controllers lock types"
 pub type WatchDogLockType = hwa::AsyncNoopMutexType;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-serial-port-1")] {
-        pub type SerialPort1TxLockType = hwa::AsyncNoopMutexType;
-    }
-}
 //#endregion
 
 //#region "General controllers locking strategy customization"
@@ -26,14 +21,21 @@ pub type WatchDogMutexStrategy = hwa::AsyncStandardStrategy<WatchDogLockType, cr
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-usb")] {
         pub type SerialUsbTxLockType = hwa::AsyncNoopMutexType;
-
-        pub type SerialUsbTxMutexStrategy = hwa::AsyncStandardStrategy<SerialUsbTxLockType, crate::board::io::usb_serial::USBSerialDeviceSender>;
+        pub type SerialUsbTxMutexStrategy = hwa::AsyncStandardStrategy<SerialUsbTxLockType, crate::board::io::serial_usb::SerialUsbDeviceSender>;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
+        pub type SerialPort1TxLockType = hwa::AsyncNoopMutexType;
         pub type SerialPort1TxMutexStrategy = hwa::AsyncStandardStrategy<SerialPort1TxLockType, crate::board::device::SerialPort1Tx>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-2")] {
+        pub type SerialPort2TxLockType = hwa::AsyncNoopMutexType;
+        pub type SerialPort2TxMutexStrategy = hwa::AsyncStandardStrategy<SerialPort2TxLockType, crate::board::device::SerialPort2Tx>;
     }
 }
 

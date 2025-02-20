@@ -221,13 +221,17 @@ impl HwiContract for Contract {
     //#region Locking strategies for shared devices/controllers/adaptors [...]
     type EventBusMutexStrategy = types::EventBusMutexStrategy;
 
+    //#endregion
+
+    //#region "devices declarations and constant parameters"
+
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
             #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
             const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
-            type SerialUsbRx = io::usb_serial::USBSerialDeviceInputStream;
+            type SerialUsbRx = io::serial_usb::SerialUsbRxInputStream;
         }
     }
 
@@ -246,7 +250,13 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            compile_error!("Not implemented");
+            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
+            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 128;
+
+            type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
+            type SerialPort2Rx = device::SerialPort2Rx;
         }
     }
 
@@ -371,7 +381,7 @@ impl HwiContract for Contract {
 
     async fn init(_spawner: embassy_executor::Spawner) -> hwa::HwiContext<Self> {
 
-        let mut config = embassy_stm32::Config::default();
+        //#region "Bootloader reset"
 
         cfg_if::cfg_if! {
             if #[cfg(not(feature = "without-bootloader"))] {
@@ -425,7 +435,12 @@ impl HwiContract for Contract {
                 compile_error!("You should not compile without bootloader")
             }
         }
-        hwa::trace!("PLL...");
+        //#endregion
+
+        //#region "RCC setup"
+
+        let mut config = embassy_stm32::Config::default();
+
         config.rcc.hsi = None;
         config.rcc.hse = Some(
             Hse {
@@ -469,6 +484,10 @@ impl HwiContract for Contract {
             w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
         });
 
+        //#endregion
+
+        //#region "with-serial-usb"
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-serial-usb")] {
 
@@ -477,7 +496,7 @@ impl HwiContract for Contract {
                 });
 
                 hwa::info!("Creating USB Driver");
-                let mut usb_serial_device = io::usb_serial::USBSerialDevice::new(
+                let mut usb_serial_device = io::serial_usb::SerialUsbDevice::new(
                     embassy_stm32::usb::Driver::new(p.USB, UsbIrqs, p.PA12, p.PA11)
                 );
                 hwa::info!("Spawning USB Driver Task");
@@ -490,9 +509,79 @@ impl HwiContract for Contract {
                     sender
                 );
 
-                let serial_usb_rx_stream = device::USBSerialDeviceInputStream::new(usb_serial_rx_device);
+                let serial_usb_rx_stream = device::SerialUsbRxInputStream::new(usb_serial_rx_device);
             }
         }
+
+        //#endregion
+
+        //#region "with-serial-port-1"
+
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-serial-port-1"))] {
+
+                embassy_stm32::bind_interrupts!(struct SerialPort1IRQs {
+                    USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
+                });
+
+                let mut cfg = embassy_stm32::usart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
+                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
+                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
+                cfg.detect_previous_overrun = true;
+
+                let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
+                    p.USART1, p.PA10, p.PA9,
+                    SerialPort1IRQs,
+                    p.DMA2_CH2, p.DMA2_CH1,
+                    cfg,
+                ).expect("Ready").split();
+                let serial_port_1_tx = hwa::make_static_async_controller!(
+                    "SerialPort1Tx",
+                    types::SerialPort1TxMutexStrategy,
+                    hwa::SerialTxWrapper::new(serial_port_1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
+                );
+                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device);
+            }
+        }
+
+        //#endregion
+
+        //#region "with-serial-port-2"
+
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-serial-port-2"))] {
+
+                embassy_stm32::bind_interrupts!(struct SerialPort2IRQs {
+                    USART2_LPUART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+                });
+
+                let mut cfg = embassy_stm32::usart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT2_BAUD_RATE;
+                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
+                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
+                cfg.detect_previous_overrun = true;
+
+                let (serial_port_2_tx_device, serial_port_2_rx_device) = embassy_stm32::usart::Uart::new(
+                    p.USART2, p.PA3, p.PA2,
+                    SerialPort2IRQs,
+                    p.DMA2_CH4, p.DMA2_CH3,
+                    cfg,
+                ).expect("Ready").split();
+                let serial_port_2_tx = hwa::make_static_async_controller!(
+                    "SerialPort2Tx",
+                    types::SerialPort2TxMutexStrategy,
+                    hwa::SerialTxWrapper::new(serial_port_2_tx_device, Self::SERIAL_PORT2_BAUD_RATE)
+                );
+                let serial_port_2_rx_stream = device::SerialPort2Rx::new(serial_port_2_rx_device);
+            }
+        }
+
+        //#endregion
+
+        //#region "with-motion"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
@@ -532,6 +621,8 @@ impl HwiContract for Contract {
                 };
             }
         }
+
+        //#endregion
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
@@ -610,16 +701,16 @@ impl HwiContract for Contract {
             ),
             #[cfg(feature = "with-serial-usb")]
             serial_usb_tx,
-            #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx: todo!("fill me"),
-            #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx: todo!("fill me"),
             #[cfg(feature = "with-serial-usb")]
             serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_rx_stream: todo!("fill me"),
+            serial_port_1_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port_1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_rx_stream: todo!("fill me"),
+            serial_port_2_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port_2_rx_stream,
             #[cfg(feature = "with-spi")]
             spi,
             #[cfg(feature = "with-sd-card")]
