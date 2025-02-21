@@ -53,7 +53,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-motion")]
-pub struct MotionPins {
+pub struct StepActuator {
     pub x_enable_pin: board::mocked_peripherals::MockedIOPin,
     pub y_enable_pin: board::mocked_peripherals::MockedIOPin,
     pub z_enable_pin: board::mocked_peripherals::MockedIOPin,
@@ -76,7 +76,7 @@ pub struct MotionPins {
 }
 
 #[cfg(feature = "with-motion")]
-impl hwa::traits::MotionPinsTrait for MotionPins {
+impl hwa::traits::StepActuatorTrait for StepActuator {
     fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(hwa::CoordSel::X) {

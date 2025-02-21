@@ -2,7 +2,7 @@
 //! Basically, a copy of embassy_sync::Signal with a dirty hack to not lose the consumed value
 use crate as hwa;
 use core::cell::Cell;
-use core::future::{poll_fn, Future};
+use core::future::{Future, poll_fn};
 use core::task::{Context, Poll, Waker};
 use embassy_sync::blocking_mutex::Mutex;
 use hwa::AsyncRawMutex;

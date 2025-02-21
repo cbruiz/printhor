@@ -1,7 +1,7 @@
 use crate::hwa;
-use crate::hwa::controllers::{MultiTimer, StepPlanner};
+use crate::hwa::controllers::{MultiTimer, StepPlan};
 use core::cell::RefCell;
-use core::future::{poll_fn, Future};
+use core::future::{Future, poll_fn};
 use core::task::{Context, Poll};
 use critical_section::Mutex as CsMutex;
 use embassy_sync::waitqueue::WakerRegistration;
@@ -12,24 +12,24 @@ const TIMER_QUEUE_SIZE: usize = 4;
 
 /// Represents the state of the soft timer driver.
 #[derive(PartialEq)]
-pub enum State {
+pub enum StepPlannerExecutorState {
     Idle,
     Duty,
 }
 
 /// The driver for the soft timer, managing timed operations for stepper motors.
-pub struct SoftTimerDriver {
+pub struct StepPlanExecutor {
     /// The current step planner in use.
-    current: StepPlanner,
+    current: StepPlan,
 
     /// The current state of the driver.
-    pub state: State,
+    pub state: StepPlannerExecutorState,
 
     /// The tick count for the current timer.
     tick_count: u32,
 
     /// The queue of step planners to be executed.
-    queue: [Option<StepPlanner>; TIMER_QUEUE_SIZE],
+    queue: [Option<StepPlan>; TIMER_QUEUE_SIZE],
 
     /// The head index of the queue.
     head: u8,
@@ -41,7 +41,7 @@ pub struct SoftTimerDriver {
     num_queued: u8,
 
     /// Reference to the motion driver.
-    pins: Option<hwa::controllers::MotionPins>,
+    actuator: Option<hwa::controllers::StepActuatorController>,
 
     /// The waker registration for waking up tasks.
     waker: WakerRegistration,
@@ -57,7 +57,7 @@ pub struct SoftTimerDriver {
     pub pulses: hwa::math::TVector<u32>,
 }
 
-impl SoftTimerDriver {
+impl StepPlanExecutor {
     /// Tries to consume the next `StepPlanner` from the queue and setup the current timer.
     ///
     /// This method checks if there are any `StepPlanner` instances queued. If there are, it
@@ -90,7 +90,7 @@ impl SoftTimerDriver {
                 self.current = timer;
                 self.tick_count = 0;
 
-                match self.pins.as_ref() {
+                match self.actuator.as_ref() {
                     None => {
                         unreachable!("Driver instance not set")
                     }
@@ -137,7 +137,7 @@ impl SoftTimerDriver {
             } else {
                 unreachable!("Unable to deque!!!")
             }
-            self.state = State::Duty;
+            self.state = StepPlannerExecutorState::Duty;
             self.head += 1;
             if self.head as usize == self.queue.len() {
                 self.head = 0;
@@ -145,7 +145,7 @@ impl SoftTimerDriver {
             self.num_queued -= 1;
             true
         } else {
-            self.state = State::Idle;
+            self.state = StepPlannerExecutorState::Idle;
             // Quickly return as there is no work to do
             false
         }
@@ -197,10 +197,11 @@ impl SoftTimerDriver {
     /// // Assuming you have a `SoftTimerDriver` instance named `driver`
     /// driver.on_interrupt();
     /// ```
+    #[inline]
     pub fn on_interrupt(&mut self) {
         core::sync::atomic::compiler_fence(core::sync::atomic::Ordering::SeqCst);
 
-        if self.state == State::Idle {
+        if self.state == StepPlannerExecutorState::Idle {
             if !self.try_consume() {
                 self.notify();
                 return;
@@ -226,7 +227,7 @@ impl SoftTimerDriver {
             if self.try_consume() {}
             cfg_if::cfg_if! {
                 if #[cfg(feature = "debug-signals")] {
-                    match self.pins.as_ref() {
+                    match self.actuator.as_ref() {
                         None => {}
                         Some(pins) => {
                             pins.set_forward_direction(hwa::CoordSel::empty(), hwa::CoordSel::Y);
@@ -271,18 +272,19 @@ impl SoftTimerDriver {
         if channels.is_empty() {
             true
         } else {
-            match self.pins.as_ref() {
+            match self.actuator.as_ref() {
                 None => false,
-                Some(pins) => {
+                Some(actuator) => {
                     cfg_if::cfg_if! {
                         if #[cfg(feature = "pulsed")] {
                             todo!("Not yet implemented")
-                            //pins.step_pin_high(channels);
+                            //actuator.step_pin_high(channels);
                             //s_block_for(STEPPER_PULSE_WIDTH_US);
-                            //pins.step_pin_high(channels);
+                            //actuator.step_pin_high(channels);
                         }
                         else {
-                            pins.step_toggle(channels);
+                            actuator
+                            .step_toggle(channels);
                         }
                     }
                     cfg_if::cfg_if! {
@@ -336,7 +338,7 @@ impl SoftTimerDriver {
 /// let stepper_dir_fwd_flags = StepperChannel::X; // Forward direction for X channel
 /// let push_future = timer.push(multi_timer, stepper_enable_flags, stepper_dir_fwd_flags);
 /// ```
-pub struct SoftTimer(pub CsMutex<RefCell<SoftTimerDriver>>);
+pub struct SoftTimer(pub CsMutex<RefCell<StepPlanExecutor>>);
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "assert-motion", test))] {
@@ -371,19 +373,19 @@ impl SoftTimer {
     /// let timer = SoftTimer::new();
     /// ```
     pub const fn new() -> Self {
-        Self(CsMutex::new(RefCell::new(SoftTimerDriver {
-            current: StepPlanner::new(
+        Self(CsMutex::new(RefCell::new(StepPlanExecutor {
+            current: StepPlan::new(
                 #[cfg(feature = "with-motion-broadcast")]
                 hwa::MotionDelta::new(),
             ),
-            state: State::Idle,
+            state: StepPlannerExecutorState::Idle,
             queue: [None; TIMER_QUEUE_SIZE],
             head: 0,
             tick_count: 0,
             waker: WakerRegistration::new(),
             num_queued: 0,
             tail: 0,
-            pins: None,
+            actuator: None,
             current_stepper_enable_flags: hwa::CoordSel::empty(),
             current_stepper_dir_fwd_flags: hwa::CoordSel::empty(),
             #[cfg(any(feature = "assert-motion", test))]
@@ -412,10 +414,10 @@ impl SoftTimer {
     /// let motion_driver_ref = ...; // Provide a motion driver reference
     /// timer.setup(motion_driver_ref);
     /// ```
-    pub fn setup(&self, _pins: hwa::controllers::MotionPins) {
+    pub fn setup(&self, _pins: hwa::controllers::StepActuatorController) {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
-            r.pins.replace(_pins);
+            r.actuator.replace(_pins);
         })
     }
 
@@ -500,7 +502,7 @@ impl SoftTimer {
                 r.num_queued += 1;
                 let current_tail = r.tail;
                 hwa::trace!("u-segment queued at {}", current_tail);
-                r.queue[current_tail as usize] = Some(StepPlanner::from(
+                r.queue[current_tail as usize] = Some(StepPlan::from(
                     #[cfg(feature = "with-motion-broadcast")]
                     delta,
                     multi_timer,
@@ -600,7 +602,7 @@ impl SoftTimer {
     fn poll_flush(&self, cx: &mut Context<'_>) -> Poll<FlushResult> {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
-            if r.num_queued > 0 || r.state != State::Idle {
+            if r.num_queued > 0 || r.state != StepPlannerExecutorState::Idle {
                 r.waker.register(cx.waker());
                 Poll::Pending
             } else {
@@ -699,7 +701,7 @@ pub extern "Rust" fn do_tick() {
         let mut step_driver = STEP_DRIVER.0.borrow_ref_mut(cs);
         cfg_if::cfg_if! {
             if #[cfg(feature = "debug-signals")] {
-                match &step_driver.pins {
+                match &step_driver.actuator {
                     None => {}
                     Some(pins) => {
                         pins.set_forward_direction(hwa::CoordSel::X, hwa::CoordSel::X)
@@ -710,7 +712,7 @@ pub extern "Rust" fn do_tick() {
         step_driver.on_interrupt();
         cfg_if::cfg_if! {
             if #[cfg(feature = "debug-signals")] {
-                match &step_driver.pins {
+                match &step_driver.actuator {
                     None => {}
                     Some(pins) => {
                         pins.set_forward_direction(hwa::CoordSel::empty(), hwa::CoordSel::X)

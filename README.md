@@ -805,7 +805,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M503</td>
         <td>*</td>
         <td>Report Current Settings</td>
-        <td>TODO</td>
+        <td>WIP</td>
     </tr>
     <tr>
         <td rowspan="1">M504</td>

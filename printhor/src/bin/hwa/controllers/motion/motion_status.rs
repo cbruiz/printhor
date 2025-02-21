@@ -1,6 +1,6 @@
 use crate::hwa;
-use hwa::math::{CoordSel, Real, TVector};
 use hwa::SyncMutexStrategy;
+use hwa::math::{CoordSel, Real, TVector};
 #[allow(unused)]
 use hwa::{Contract, HwiContract};
 

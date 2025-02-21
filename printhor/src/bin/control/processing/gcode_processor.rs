@@ -47,8 +47,8 @@ use crate::control;
 use crate::hwa;
 use control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
 use control::{GCodeCmd, GCodeValue};
-use hwa::math;
 use hwa::Contract;
+use hwa::math;
 #[allow(unused)]
 use hwa::{AsyncMutexStrategy, HwiContract, SyncMutexStrategy};
 
@@ -537,7 +537,7 @@ impl GCodeProcessor {
                         )
                     }
                     #[cfg(not(feature = "with-hot-end"))]
-                    alloc::string::String::new()
+                    alloc::string::String::from(" T:0 /0 T@:0")
                 };
                 let hotbed_temp_report = {
                     #[cfg(feature = "with-hot-bed")]
@@ -552,7 +552,7 @@ impl GCodeProcessor {
                         )
                     }
                     #[cfg(not(feature = "with-hot-bed"))]
-                    alloc::string::String::new()
+                    alloc::string::String::from(" B:0 /0 B@:0")
                 };
 
                 let report = alloc::format!("ok{}{}\n", hotend_temp_report, hotbed_temp_report);
@@ -708,48 +708,42 @@ impl GCodeProcessor {
             }
             GCodeValue::M117(_msg) => {
                 if let Some(msg) = _msg {
-                    let target_channel = Contract::display_channel();
-                    let _ = self.write(target_channel, "echo: ").await;
-                    let _ = self.write(target_channel, msg.as_str()).await;
-                    let _ = self.write(target_channel, "\n").await;
+                    let _ = self.write(Contract::DISPLAY_CHANNEL, "echo: ").await;
+                    let _ = self.write(Contract::DISPLAY_CHANNEL, msg.as_str()).await;
+                    let _ = self.write(Contract::DISPLAY_CHANNEL, "\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
             GCodeValue::M118(_msg) => {
                 if let Some(msg) = _msg {
-                    let _ = self.write(channel, "echo: ").await;
-                    let _ = self.write(channel, msg.as_str()).await;
-                    let _ = self.write(channel, "\n").await;
+                    let _ = self.write(Contract::HOST_CHANNEL, "echo: ").await;
+                    let _ = self.write(Contract::HOST_CHANNEL, msg.as_str()).await;
+                    let _ = self.write(Contract::HOST_CHANNEL, "\n").await;
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::M119 => {
-                todo!("")
-                /*
-                let mut d = self.motion_planner.motion_driver.lock().await;
-                let z = alloc::format!(
-                    "M119 X {} Y {} Z {}\n",
-                    if d.endstop_triggered(StepperChannel::X) {
-                        "1"
-                    } else {
-                        "0"
-                    },
-                    if d.endstop_triggered(StepperChannel::Y) {
-                        "1"
-                    } else {
-                        "0"
-                    },
-                    if d.endstop_triggered(StepperChannel::Z) {
-                        "1"
-                    } else {
-                        "0"
-                    },
-                );
-                drop(d);
+                let mg = self.motion_planner.motion_driver().lock().await;
+                let x_endstop = if mg.pins.end_stop_triggered(hwa::CoordSel::X) {
+                    1
+                } else {
+                    0
+                };
+                let y_endstop = if mg.pins.end_stop_triggered(hwa::CoordSel::Y) {
+                    1
+                } else {
+                    0
+                };
+                let z_endstop = if mg.pins.end_stop_triggered(hwa::CoordSel::Z) {
+                    1
+                } else {
+                    0
+                };
+                drop(mg);
+                let z = alloc::format!("M119 X {} Y {} Z {}\n", x_endstop, y_endstop, z_endstop);
                 let _ = self.write(channel, z.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
-                 */
             }
             // Set hot-bed temperature
             // An immediate command
@@ -833,6 +827,71 @@ impl GCodeProcessor {
                 } else {
                     let _ = self.write(channel, "error; M502 (internal error)\n").await;
                 }
+                Ok(CodeExecutionSuccess::OK)
+            }
+            GCodeValue::M503(_param) => {
+                let detailed = !_param.s.unwrap_or(hwa::math::ONE).is_zero();
+                self.write(channel, "echo:  G21").await;
+                if detailed {
+                    self.write(channel, "; Units in mm (mm)").await;
+                    self.write(channel, "\necho:; Filament settings: Disabled")
+                        .await;
+                }
+                self.write(channel, "\necho:  M200 T0 D1.75").await;
+                self.write(channel, "\necho:  M200 S0").await;
+                if detailed {
+                    self.write(channel, "\necho:; Steps per unit:").await;
+                }
+                self.write(channel, "\necho:  M92 X80.00 Y80.00 Z400.00 E133.00")
+                    .await;
+                if detailed {
+                    self.write(channel, "\necho:; Maximum feedrates (units/s):")
+                        .await;
+                }
+                self.write(channel, "\necho:  M203 X300.00 Y300.00 Z5.00 E25.00")
+                    .await;
+                if detailed {
+                    self.write(channel, "\necho:; Maximum Acceleration (units/s2)")
+                        .await;
+                }
+                self.write(channel, "\necho:  M201 X3000.00 Y3000.00 Z100.00 E10000.00")
+                    .await;
+                if detailed {
+                    self.write(channel, "\necho:; Acceleration (units/s2): P<print_accel> R<retract_accel> T<travel_accel>").await;
+                }
+                self.write(channel, "\necho:  M204 P3000.00 R3000.00 T3000.00")
+                    .await;
+                if detailed {
+                    self.write(channel, "\necho:; Advanced: B<min_segment_time_us> S<min_feedrate> T<min_travel_feedrate> J<junc_dev>").await;
+                }
+                self.write(channel, "\necho:  M205 B20000.00 S0.00 T0.00 J0.01")
+                    .await;
+                if detailed {
+                    self.write(channel, "\necho:; Home offset:").await;
+                }
+                self.write(channel, "\necho:  M206 X0.00 Y0.00 Z0.00").await;
+                if detailed {
+                    self.write(channel, "\necho:; Hotend offsets:").await;
+                }
+                self.write(channel, "\necho:  M218 T1 X0.00 Y0.00 Z0.000")
+                    .await;
+                if detailed {
+                    self.write(channel, "\necho:; PID settings:").await;
+                }
+                self.write(channel, "\necho:  M301 P5.0 I0.01 D1.5").await;
+                self.write(channel, "\necho:  M301 P5.0 I0.01 D1.5").await;
+                if detailed {
+                    self.write(channel, "\necho:; Stepper driver current: ")
+                        .await;
+                }
+                self.write(channel, "\necho:  M906 X800 Y800 Z800").await;
+                self.write(channel, "\necho:  M906 T0 E800").await;
+                self.write(channel, "\necho:  M906 T1 E800").await;
+                if detailed {
+                    self.write(channel, "\necho:; Driver stepping mode:").await;
+                }
+                self.write(channel, "\necho:  M569 S1 X Y Z").await;
+                self.write(channel, "\necho:  M569 M569 S1 T0 E").await;
                 Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]

@@ -4,7 +4,7 @@
 //! Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
 use crate::hwa;
 use crate::hwa::{CommChannel, DeferAction, DeferEvent};
-use embassy_time::{with_timeout, Duration};
+use embassy_time::{Duration, with_timeout};
 
 #[derive(Clone, Copy, Default)]
 struct SubscriptionCounting {

@@ -1,7 +1,8 @@
 #[allow(unused)]
-use crate::control::{GCodeCmd, GCodeValue, EFSXYZ, EXYZ, FXYZ, N, S};
+use crate::control::{EFSXYZ, EXYZ, FXYZ, GCodeCmd, GCodeValue, N, S};
 use crate::helpers;
 use crate::hwa;
+use hwa::CommChannel;
 
 #[cfg_attr(not(feature = "with-defmt"), derive(Debug))]
 pub enum GCodeLineParserError {
@@ -14,6 +15,114 @@ pub enum GCodeLineParserError {
     /// Unexpected fatal error
     #[allow(unused)]
     FatalError,
+}
+
+#[cfg(feature = "debug-gcode")]
+struct FormatableGCode<'a>(&'a async_gcode::GCode);
+
+#[cfg(feature = "debug-gcode")]
+impl core::fmt::Debug for FormatableGCode<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.0 {
+            async_gcode::GCode::StatusCommand => {
+                f.write_str("StatusCommand")?;
+            }
+            async_gcode::GCode::BlockDelete => {
+                f.write_str("BlockDelete")?;
+            }
+            async_gcode::GCode::LineNumber(_ln) => {
+                core::write!(f, "LineNumber<{:?}>", _ln)?;
+            }
+            async_gcode::GCode::Word(_w, _v) => {
+                core::write!(f, "Word[{}", _w.to_uppercase())?;
+                match _v {
+                    async_gcode::RealValue::Literal(_l) => {
+                        match _l {
+                            async_gcode::Literal::RealNumber(_r) => {
+                                let div = 10_i32.pow(_r.scale().into());
+                                let w0 = _r.integer_part() / div;
+                                let w1 = _r.integer_part() % div;
+                                core::write!(
+                                    f,
+                                    "{}.{:0width$}",
+                                    w0,
+                                    w1,
+                                    width = _r.scale() as usize
+                                )?;
+                            }
+                            async_gcode::Literal::String(_s) => {
+                                core::write!(f, " {}", _s)?;
+                            }
+                        }
+                        core::write!(f, "]")?;
+                    }
+                    _ => {}
+                }
+            }
+            async_gcode::GCode::Text(_t) => match _t {
+                async_gcode::RealValue::Literal(async_gcode::Literal::String(_s)) => {
+                    core::write!(f, "String[{}]", _s)?;
+                }
+                _ => {}
+            },
+            async_gcode::GCode::Execute => {
+                core::write!(f, "Execute")?;
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+        Ok(())
+    }
+}
+#[cfg(all(feature = "with-defmt", feature = "debug-gcode"))]
+impl defmt::Format for FormatableGCode<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        match self.0 {
+            async_gcode::GCode::StatusCommand => {
+                defmt::write!(f, "StatusCommand");
+            }
+            async_gcode::GCode::BlockDelete => {
+                defmt::write!(f, "BlockDelete");
+            }
+            async_gcode::GCode::LineNumber(_ln) => {
+                defmt::write!(f, "LineNumber<{:?}>", _ln);
+            }
+            async_gcode::GCode::Word(_w, _v) => {
+                use alloc::string::ToString;
+                defmt::write!(f, "Word[{:?}", _w.to_uppercase().to_string().as_str());
+                match _v {
+                    async_gcode::RealValue::Literal(_l) => {
+                        match _l {
+                            async_gcode::Literal::RealNumber(_r) => {
+                                defmt::write!(
+                                    f,
+                                    " val: {}, scale: {}",
+                                    _r.integer_part(),
+                                    _r.scale()
+                                );
+                            }
+                            async_gcode::Literal::String(_s) => {
+                                defmt::write!(f, " {}", _s.as_str());
+                            }
+                        }
+                        defmt::write!(f, "]");
+                    }
+                    _ => {}
+                }
+            }
+            async_gcode::GCode::Text(_t) => match _t {
+                async_gcode::RealValue::Literal(async_gcode::Literal::String(_s)) => {
+                    defmt::write!(f, "String[{}]", _s.as_str());
+                }
+                _ => {}
+            },
+            async_gcode::GCode::Execute => {
+                defmt::write!(f, "Execute");
+            }
+            #[allow(unreachable_patterns)]
+            _ => {}
+        }
+    }
 }
 
 #[cfg(feature = "with-defmt")]
@@ -138,7 +247,10 @@ where
         self.gcode_line
     }
 
-    pub async fn next_gcode(&mut self) -> Result<GCodeCmd, GCodeLineParserError> {
+    pub async fn next_gcode(
+        &mut self,
+        _channel: CommChannel,
+    ) -> Result<GCodeCmd, GCodeLineParserError> {
         // The GcodeCmd being constructed.
         // * Initially set to none
         // * Reset back to None when built, updated and returned
@@ -177,6 +289,12 @@ where
                 Some(parser_gcode) => {
                     match parser_gcode {
                         Ok(g) => {
+                            #[cfg(feature = "debug-gcode")]
+                            hwa::info!(
+                                "[debug-gcode] channel: {:?} gcode: {:?}",
+                                _channel,
+                                FormatableGCode(&g)
+                            );
                             match g {
                                 // FIXME Undo this hacky temporary solution in async-gcode.
                                 // A sub-protocol approach is preferred
@@ -186,7 +304,7 @@ where
                                         self.raw_parser.get_current_line(),
                                         tagged_line_num,
                                         GCodeValue::Status,
-                                    ))
+                                    ));
                                 }
                                 async_gcode::GCode::BlockDelete => {
                                     skip_gcode = true;
@@ -275,7 +393,7 @@ where
                                     return Err(GCodeLineParserError::GCodeNotImplemented(
                                         self.raw_parser.get_current_line(),
                                         alloc::string::String::from("N/A"),
-                                    ))
+                                    ));
                                 }
                             }
                         }
@@ -445,6 +563,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((220, 0))) => Some(GCodeValue::M220(S::new())),
         ('m', Some((221, 0))) => Some(GCodeValue::M221(S::new())),
         ('m', Some((502, 0))) => Some(GCodeValue::M502),
+        ('m', Some((503, 0))) => Some(GCodeValue::M503(S::new())),
         #[cfg(feature = "with-motion")]
         ('m', Some((8621, 1))) => Some(GCodeValue::M862_1),
         #[cfg(feature = "with-motion")]
@@ -466,7 +585,7 @@ fn update_current(
     match &mut gcode_cmd.value {
         #[cfg(feature = "grbl-compat")]
         GCodeValue::Status => match (ch, frx) {
-            ('I', Some(val)) => {
+            ('I', Some(_val)) => {
                 hwa::warn!("TODO!!");
             }
             _ => {}
@@ -780,10 +899,17 @@ fn update_current(
             }
             _ => {}
         },
+        GCodeValue::M503(param) => match (ch, frx) {
+            ('s', Some(val)) => {
+                param.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
         _ => {}
     }
 }
 
+#[cfg(feature = "native")]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -813,7 +939,7 @@ mod tests {
     }
 
     async fn check_m32_benchy_result(parser: &mut GCodeLineParser<BufferStream>) {
-        match parser.next_gcode().await {
+        match parser.next_gcode(CommChannel::Internal).await {
             Ok(_cmd) => match _cmd.value {
                 GCodeValue::M23(Some(_path)) => {
                     assert!(_path.eq("BENCHY.G"), "Got the proper string param")
@@ -827,7 +953,7 @@ mod tests {
     }
 
     async fn check_display_m117_result(parser: &mut GCodeLineParser<BufferStream>) {
-        match parser.next_gcode().await {
+        match parser.next_gcode(CommChannel::Internal).await {
             Ok(_cmd) => match _cmd.value {
                 GCodeValue::M117(Some(_msg)) => {
                     assert!(_msg.eq("Hello World!"), "Got the proper string param")
@@ -840,7 +966,7 @@ mod tests {
         }
     }
     async fn check_display_m118_result(parser: &mut GCodeLineParser<BufferStream>) {
-        match parser.next_gcode().await {
+        match parser.next_gcode(CommChannel::Internal).await {
             Ok(_cmd) => match _cmd.value {
                 GCodeValue::M118(Some(_msg)) => {
                     assert!(_msg.eq("Hello World!"), "Got the proper string param")

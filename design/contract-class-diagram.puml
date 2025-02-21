@@ -99,7 +99,7 @@ package "printhor" as printhor <<frame>> {
 
             namespace traits {
                 interface GCodeByteStream
-                interface MotionPinsTrait
+                interface StepActuatorTrait
             }
 
         }
@@ -161,20 +161,20 @@ package "printhor" as printhor <<frame>> {
             }
 
             together {
-                class MotionPinsMutexStrategy<MotionPinsMutexType,MotionPins>
-                class MotionPinsMutexType
-                class MotionPins
+                class StepActuatorMutexStrategy<StepActuatorMutexType,StepActuator>
+                class StepActuatorMutexType
+                class StepActuator
 
-                MotionPinsMutexStrategy -u- isAnySyncMutexStrategy : "IS A"
-                MotionPinsMutexStrategy -.r-> MotionPinsMutexType
-                MotionPinsMutexType -u- isAnySyncMutexType : "IS A"
-                MotionPinsMutexStrategy -.r-> MotionPins
-                MotionPins -.u-|> MotionPinsTrait
+                StepActuatorMutexStrategy -u- isAnySyncMutexStrategy : "IS A"
+                StepActuatorMutexStrategy -.r-> StepActuatorMutexType
+                StepActuatorMutexType -u- isAnySyncMutexType : "IS A"
+                StepActuatorMutexStrategy -.r-> StepActuator
+                StepActuator -.u-|> StepActuatorTrait
             }
 
 
            SerialUsbRxMutexStrategy <-- Contract
-           MotionPinsMutexStrategy <-- Contract
+           StepActuatorMutexStrategy <-- Contract
 
         }
     }
@@ -187,7 +187,7 @@ package "printhor" as printhor <<frame>> {
     metaclass "<<task_defer>>" as task_defer
 
     class SerialUsbRxController<AsyncMutexStrategy, SerialUsbRx>
-    class MotionPinsController<SyncMutexStrategy, MotionPins>
+    class StepActuatorController<SyncMutexStrategy, StepActuator>
 
     main -.u-> Contract: <<creates>>
 
@@ -195,15 +195,15 @@ package "printhor" as printhor <<frame>> {
     GCodeMultiplexedInputStream *-l-> GCodeLineParser
     GCodeLineParser *-r-> SerialUsbRxController
 
-    main -.u-> MotionPinsController: <<creates>>
+    main -.u-> StepActuatorController: <<creates>>
 
     SerialUsbRxController -u-|> StaticAsyncController
     SerialUsbRxController -u.-> SerialUsbRxMutexStrategy
 
-    MotionPinsController -u-|> StaticSyncController
-    MotionPinsController -u.-> MotionPinsMutexStrategy
+    StepActuatorController -u-|> StaticSyncController
+    StepActuatorController -u.-> StepActuatorMutexStrategy
 
-    MotionDriver *-d-> MotionPinsController
+    MotionDriver *-d-> StepActuatorController
 
     main -.r-> task_control: <<spawns>>
     main -.r-> task_stepper: <<spawns>>

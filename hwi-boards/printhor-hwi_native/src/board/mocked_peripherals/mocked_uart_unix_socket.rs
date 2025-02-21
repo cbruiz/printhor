@@ -187,7 +187,7 @@ impl MockedUartNamedPipeTx {
 
 pub struct MockedUartNamedPipeRxInputStream {
     pub receiver: MockedUartNamedPipeRx,
-    buffer: [u8; Contract::SERIAL_USB_RX_BUFFER_SIZE],
+    buffer: [u8; Contract::SERIAL_USB_PACKET_SIZE],
     bytes_read: u8,
     current_byte_index: u8,
 }
@@ -196,7 +196,7 @@ impl MockedUartNamedPipeRxInputStream {
     pub fn new(receiver: MockedUartNamedPipeRx) -> Self {
         Self {
             receiver,
-            buffer: [0; Contract::SERIAL_USB_RX_BUFFER_SIZE],
+            buffer: [0; Contract::SERIAL_USB_PACKET_SIZE],
             bytes_read: 0,
             current_byte_index: 0,
         }

@@ -4,7 +4,7 @@ cfg_if::cfg_if! {
         use crate as hwa;
         use core::cmp::Ordering;
         use core::ops::*;
-        use core::fmt::{Debug, Display, Formatter};
+        use core::fmt::{Debug, Formatter};
         #[cfg(feature = "with-defmt")]
         use defmt::Format;
         use num_traits::{ToPrimitive, Zero};
@@ -325,12 +325,6 @@ cfg_if::cfg_if! {
 
             fn neg(self) -> Self::Output {
                 Real(self.0.neg())
-            }
-        }
-
-        impl Display for Real {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                core::fmt::Display::fmt(&self.0, f)
             }
         }
 

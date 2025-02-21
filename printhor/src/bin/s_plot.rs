@@ -28,7 +28,7 @@ use crate::hwa::controllers::StepPlanner;
 use crate::hwa::device::MotionDevice;
 use crate::hwa::drivers::{MotionDriver, MotionDriverParams};
 use crate::hwa::CommChannel;
-use crate::math::{RealInclusiveRange, TWO, ZERO};
+use crate::math::{TWO, ZERO};
 use crate::prelude::hwa::controllers::ExecPlan;
 use crate::math::{CoordSel, TVector};
 
@@ -237,7 +237,7 @@ async fn main(spawner: embassy_executor::Spawner) {
     );
 
     let driver_device = hwa::drivers::MotionDriver{
-        pins: hwa::device::MotionPins::new(),
+        pins: hwa::device::StepActuator::new(),
     };
 
     let motion_driver = hwa::make_static_controller!(

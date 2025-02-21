@@ -20,19 +20,19 @@ mod motion_interpolation;
 mod motion_timing;
 
 /// The module to provide a software time driver to schedule multi-axis steps with variable timings each at fixed rate
-mod motion_time_driver;
+mod motion_step_planner;
 
 /// The module to drive the step pins.
-mod motion_pins;
+mod motion_step_actuator;
 
 use crate::hwa;
 pub use motion_config::*;
 pub use motion_interpolation::*;
-pub use motion_pins::*;
+pub use motion_step_actuator::*;
 pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;
-pub use motion_time_driver::*;
+pub use motion_step_planner::*;
 pub use motion_timing::*;
 
 pub(in crate::hwa) use motion_ring_buffer::RingBuffer;

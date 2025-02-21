@@ -170,7 +170,7 @@ pub struct LaserPeripherals {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        pub struct MotionPins {
+        pub struct StepActuator {
             pub x_enable_pin: embassy_stm32::gpio::Output<'static>,
             pub y_enable_pin: embassy_stm32::gpio::Output<'static>,
             pub z_enable_pin: embassy_stm32::gpio::Output<'static>,
@@ -199,7 +199,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-motion")]
-impl MotionPins {
+impl StepActuator {
     #[inline]
     pub fn enable_x_stepper(&mut self) {
         self.x_enable_pin.set_low();

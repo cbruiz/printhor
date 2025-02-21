@@ -147,7 +147,7 @@ impl MultiTimer {
 /// - Iterator ceases when **`t(i)`** surpasses [`interval_width`](MultiTimer) for all channels.
 ///
 #[derive(Clone, Copy)]
-pub struct StepPlanner {
+pub struct StepPlan {
     /// The interval width for the step planner in microseconds
     pub interval_width: u32,
     #[cfg(feature = "with-motion-broadcast")]
@@ -164,7 +164,7 @@ pub struct StepPlanner {
     pub stepper_dir_fwd_flags: CoordSel,
 }
 
-impl StepPlanner {
+impl StepPlan {
     /// Creates a new StepPlanner with default values.
     ///
     /// # Returns
@@ -271,6 +271,9 @@ mod tests {
         // This test ensures that the StepPlanner struct size does not exceed 60 bytes
         // because it will be used in a CAN FD bus frame.
         let struct_size = size_of::<ChannelStatus>() / 2;
-        assert!(struct_size <= 8, "StepPlanner size exceeds expectations for a canbus frame (CAN protocol version 2.0 A, B)");
+        assert!(
+            struct_size <= 8,
+            "StepPlanner size exceeds expectations for a canbus frame (CAN protocol version 2.0 A, B)"
+        );
     }
 }

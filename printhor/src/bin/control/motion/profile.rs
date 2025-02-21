@@ -301,7 +301,9 @@ impl SCurveMotionProfile {
 
         if not_feasible {
             #[cfg(feature = "verbose-timings")]
-            hwa::warn!("[SCurveMotionProfile] Movement NOT FEASIBLE. Performing unconstrained parabolic blends");
+            hwa::warn!(
+                "[SCurveMotionProfile] Movement NOT FEASIBLE. Performing unconstrained parabolic blends"
+            );
 
             // y := j_max
             // e1: q1 = (y * t^3) / 6 + v0 * t
@@ -833,15 +835,22 @@ impl SCurveMotionProfile {
     }
 
     pub fn params_dump(&self) {
-        hwa::debug!("Params:\nq_{{1}} = {:?}\nv_{{0}} = {:?}\nv_{{1}} = {:?}\nv_{{max}} = {:?}\na_{{max}} = {:?}\nj_{{max}} = {:?}\nT_{{j1}} = {:?}\nT_{{a}} = {:?}\nT_{{v}} = {:?}\nT_{{j2}} = {:?}\nT_{{d}} = {:?}\na_{{lima}} = {:?}\na_{{limd}} = {:?}\nv_{{lim}} = {:?}",
-            self.q1, self.v_0, self.v_1,
+        hwa::debug!(
+            "Params:\nq_{{1}} = {:?}\nv_{{0}} = {:?}\nv_{{1}} = {:?}\nv_{{max}} = {:?}\na_{{max}} = {:?}\nj_{{max}} = {:?}\nT_{{j1}} = {:?}\nT_{{a}} = {:?}\nT_{{v}} = {:?}\nT_{{j2}} = {:?}\nT_{{d}} = {:?}\na_{{lima}} = {:?}\na_{{limd}} = {:?}\nv_{{lim}} = {:?}",
+            self.q1,
+            self.v_0,
+            self.v_1,
             self.constraints.v_max,
             self.constraints.a_max,
             self.constraints.j_max,
-            self.t_j1, self.t_a,
+            self.t_j1,
+            self.t_a,
             self.t_v,
-            self.t_j2, self.t_d,
-            self.a_lim_a, self.a_lim_d, self.v_lim,
+            self.t_j2,
+            self.t_d,
+            self.a_lim_a,
+            self.a_lim_d,
+            self.v_lim,
         );
 
         hwa::debug!("V_{{1}}(t) = v_{{0}} + j_{{max}} * \\frac{{t^2}}{{2}}");
@@ -851,12 +860,18 @@ impl SCurveMotionProfile {
         hwa::debug!(
             "V_{{5}}(t) = v_{{lim}} - j_{{max}} * \\frac{{(t - T_{{a}} - T_{{v}})^2}}{{2}}"
         );
-        hwa::debug!("V_{{6}}(t) = v_{{lim}} - a_{{limd}} * (t - T_{{a}} - T_{{v}} - \\frac{{T_{{j2}}}}{{2}})");
+        hwa::debug!(
+            "V_{{6}}(t) = v_{{lim}} - a_{{limd}} * (t - T_{{a}} - T_{{v}} - \\frac{{T_{{j2}}}}{{2}})"
+        );
         hwa::debug!(
             "V_{{7}}(t) = v_{{1}} + j_{{max}} * \\frac{{(t - T_{{a}} - T_{{v}} - T_{{d}})^2}}{{2}}"
         );
-        hwa::debug!("V(t) = if( t < 0, v_{{0}}, if( 0 <= t < T_{{j1}}, V_{{1}}(t), if( T_{{j1}} <= t < T_{{a}} - T_{{j1}}, V_{{2}}(t), if( T_{{a}} - T_{{j1}} <= t < T_{{a}}, V_{{3}}(t), if( T_{{a}} <= t < T_{{a}} + T_{{v}}, V_{{4}}(t), if( T_{{a}} + T_{{v}} <= t < T_{{a}} + T_{{v}} + T_{{j2}}, V_{{5}}(t), if( T_{{a}} + T_{{v}} + T_{{j2}} <= t < T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}}, V_{{6}}(t), if( T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}} <= t < T_{{a}} + T_{{v}} + T_{{d}}, V_{{7}}(t), v_{{1}} ) ) ) ) ) ) ) )");
-        hwa::debug!("Points:\nP_{{j1a}}=(T_{{j1}}, 0)\nP_{{j1d}}=(T_{{a}} - T_{{j1}}, 0)\nP_{{a}}=(T_{{a}}, 0)\nP_{{v}}=(T_{{a}} + T_{{v}}, 0)\nP_{{v}}=(T_{{a}} + T_{{v}}, 0)\nP_{{j2a}}=(T_{{a}} + T_{{v}} + T_{{j2}}, 0)\nP_{{j2d}}=(T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}}, 0)\nP_{{j2a}}=(T_{{a}} + T_{{v}} + T_{{d}}, 0)");
+        hwa::debug!(
+            "V(t) = if( t < 0, v_{{0}}, if( 0 <= t < T_{{j1}}, V_{{1}}(t), if( T_{{j1}} <= t < T_{{a}} - T_{{j1}}, V_{{2}}(t), if( T_{{a}} - T_{{j1}} <= t < T_{{a}}, V_{{3}}(t), if( T_{{a}} <= t < T_{{a}} + T_{{v}}, V_{{4}}(t), if( T_{{a}} + T_{{v}} <= t < T_{{a}} + T_{{v}} + T_{{j2}}, V_{{5}}(t), if( T_{{a}} + T_{{v}} + T_{{j2}} <= t < T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}}, V_{{6}}(t), if( T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}} <= t < T_{{a}} + T_{{v}} + T_{{d}}, V_{{7}}(t), v_{{1}} ) ) ) ) ) ) ) )"
+        );
+        hwa::debug!(
+            "Points:\nP_{{j1a}}=(T_{{j1}}, 0)\nP_{{j1d}}=(T_{{a}} - T_{{j1}}, 0)\nP_{{a}}=(T_{{a}}, 0)\nP_{{v}}=(T_{{a}} + T_{{v}}, 0)\nP_{{v}}=(T_{{a}} + T_{{v}}, 0)\nP_{{j2a}}=(T_{{a}} + T_{{v}} + T_{{j2}}, 0)\nP_{{j2d}}=(T_{{a}} + T_{{v}} + T_{{d}} - T_{{j2}}, 0)\nP_{{j2a}}=(T_{{a}} + T_{{v}} + T_{{d}}, 0)"
+        );
         hwa::debug!("s_i7 = {:?}", self.s_i7(&self.i7_end()));
         hwa::debug!("--");
     }
@@ -1206,11 +1221,11 @@ impl core::fmt::Display for SCurveMotionProfile {
 pub mod test {
     //Example 3.9
 
-    use crate::control::motion::{Constraints, SCurveMotionProfile};
     use crate::control::CodeExecutionFailure;
+    use crate::control::motion::{Constraints, SCurveMotionProfile};
+    use crate::hwa;
     use crate::hwa::math::Real;
     use num_traits::ToPrimitive;
-    use crate::hwa;
 
     pub fn do_compute(
         q1: f32,

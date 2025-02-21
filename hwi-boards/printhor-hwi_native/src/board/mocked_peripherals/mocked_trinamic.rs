@@ -1,3 +1,5 @@
+use std::collections;
+use std::collections::HashMap;
 use printhor_hwa_common as hwa;
 use embassy_time::Duration;
 use hwa::CoordSel;
@@ -57,9 +59,14 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
 
     let mut ticker = embassy_time::Ticker::every(driver.sample_time);
     let mut trinamic_cmd: [u8; 7] = [0; 7];
+    // The index of the current byte in the trinamic cmd packet block: [SYNC, ADDR, CMD_ID ... ]
     let mut trinamic_cmd_index = 0;
 
+    let mut persistent_state: HashMap<(u16, u8), tmc2209::reg::State> = collections::HashMap::new();
+
+
     loop {
+        hwa::trace!("[trinamic_driver_simulator] Awaiting");
         let channel = TRINAMIC_SIMULATOR_PARK_SIGNAL.wait().await;
         hwa::trace!("[trinamic_driver_simulator] Looking at {:?}", channel);
         driver.uart_trinamic.select_stepper_of_axis(channel).unwrap();
@@ -93,16 +100,23 @@ pub async fn trinamic_driver_simulator(mut driver: MockedTrinamicDriver) {
                                     match tmc2209::reg::Address::try_from(req_addr_value)
                                     {
                                         Ok(req_addr) => {
-                                            match tmc2209::reg::State::from_addr_and_data(
+                                            let state = tmc2209::reg::State::from_addr_and_data(
                                                 req_addr,
                                                 u32::from_be_bytes([trinamic_cmd[3], trinamic_cmd[4], trinamic_cmd[5], trinamic_cmd[6]])
-                                            ) {
+                                            );
+                                            match state {
                                                 tmc2209::reg::State::GCONF(_gconf) => {
-                                                    hwa::debug!("[trinamic_driver_simulator] {:?} GConf {:?}", channel, _gconf);
+                                                    hwa::info!("[trinamic_driver_simulator] {:?} GConf {:?}", channel, _gconf);
+                                                    persistent_state.insert(
+                                                        (channel.bits().into(), req_addr_value), state
+                                                    );
                                                     // Ok
                                                 }
                                                 tmc2209::reg::State::CHOPCONF(_chopconf) => {
-                                                    hwa::debug!("[trinamic_driver_simulator] {:?} ChopConf {:?}", channel, _chopconf);
+                                                    hwa::info!("[trinamic_driver_simulator] {:?} ChopConf {:?}", channel, _chopconf);
+                                                    persistent_state.insert(
+                                                        (channel.bits().into(), req_addr_value), state
+                                                    );
                                                     // Ok
                                                 }
                                                 _ => {

@@ -641,7 +641,11 @@ mod test {
         );
 
         let the_flags = subscriber.get_status().await;
-        assert_eq!(the_flags, EventFlags::SYS_BOOTING, "StateChecks [1]: Again, flag SYS_BOOTING read from a lately created subscriber (idempotence test)");
+        assert_eq!(
+            the_flags,
+            EventFlags::SYS_BOOTING,
+            "StateChecks [1]: Again, flag SYS_BOOTING read from a lately created subscriber (idempotence test)"
+        );
 
         future::poll_fn(|cx| {
             {

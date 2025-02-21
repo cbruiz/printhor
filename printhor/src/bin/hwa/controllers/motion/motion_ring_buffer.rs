@@ -1,6 +1,6 @@
 use crate::hwa;
-use hwa::controllers::{motion, PlanEntry};
 use hwa::HwiContract;
+use hwa::controllers::{PlanEntry, motion};
 
 /// A ring buffer data structure designed for storing `PlanEntry` items efficiently.
 ///

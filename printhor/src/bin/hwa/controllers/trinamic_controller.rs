@@ -1,10 +1,10 @@
 //! TODO: This feature is still very experimental/preliminar
 use crate::hwa;
 use embassy_time::Instant;
-use hwa::uart::SerialError;
 #[allow(unused)]
 use hwa::Contract;
 use hwa::CoordSel;
+use hwa::uart::SerialError;
 
 /// Represents errors that can occur in the Trinamic UART controller.
 #[derive(Debug, Clone, Copy)]
@@ -217,24 +217,27 @@ impl TrinamicController {
         // TODO this is still a mess
         // Still not receiving the proper clean result, however the data is properly sent
 
-        match Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await { Ok(chop_conf) => {
-            if chop_conf.ntpol() == false && chop_conf.mres() == micro_steps_pow_of_2 {
+        match Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await {
+            Ok(chop_conf) => {
+                if chop_conf.ntpol() == false && chop_conf.mres() == micro_steps_pow_of_2 {
+                    hwa::warn!(
+                        "[TrinamicController] Trinamic check for stepper {} is OK",
+                        addr
+                    );
+                } else {
+                    hwa::warn!(
+                        "[TrinamicController] Trinamic check for stepper {} is BAD",
+                        addr
+                    )
+                }
+            }
+            _ => {
                 hwa::warn!(
-                    "[TrinamicController] Trinamic check for stepper {} is OK",
-                    addr
-                );
-            } else {
-                hwa::warn!(
-                    "[TrinamicController] Trinamic check for stepper {} is BAD",
+                    "[TrinamicController] Unable to retrieve status from {}",
                     addr
                 )
             }
-        } _ => {
-            hwa::warn!(
-                "[TrinamicController] Unable to retrieve status from {}",
-                addr
-            )
-        }}
+        }
 
         // TODO: Assuming OK as of now...
         Ok(())
@@ -279,7 +282,7 @@ impl TrinamicController {
                                         Ok(r)
                                     }
                                     _ => Err(TrinamicError::ReadError),
-                                }
+                                };
                             }
                             (n, None) => {
                                 let x = alloc::format!("{:?}", reader.awaiting());

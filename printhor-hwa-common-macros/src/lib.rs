@@ -2,7 +2,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream};
-use syn::{parse_macro_input, Expr, LitStr, Token, TypePath};
+use syn::{Expr, LitStr, Token, TypePath, parse_macro_input};
 
 //#region "The make_static_ref macro"
 

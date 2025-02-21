@@ -121,7 +121,7 @@ pub type Watchdog =
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        pub struct MotionPins {
+        pub struct StepActuator {
             #[cfg(feature = "with-x-axis")]
             pub x_enable_pin: embassy_stm32::gpio::Output<'static>,
             #[cfg(feature = "with-y-axis")]
@@ -159,7 +159,7 @@ cfg_if::cfg_if! {
             pub e_dir_pin: embassy_stm32::gpio::Output<'static>,
         }
 
-        impl hwa::traits::MotionPinsTrait for MotionPins {
+        impl hwa::traits::StepActuatorTrait for StepActuator {
             fn set_enabled(&mut self, _channels: CoordSel, _enabled: bool) {
                 #[cfg(feature = "with-x-axis")]
                 if _channels.contains(CoordSel::X) {

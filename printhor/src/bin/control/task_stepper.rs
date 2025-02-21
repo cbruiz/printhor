@@ -18,10 +18,10 @@ use crate::hwa;
 use control::motion::MotionProfile;
 use control::motion::SCurveMotionProfile;
 use embassy_time::Duration;
-use hwa::controllers::motion::SegmentIterator;
-use hwa::controllers::motion::STEP_DRIVER;
 use hwa::controllers::ExecPlan;
 use hwa::controllers::LinearMicrosegmentStepInterpolator;
+use hwa::controllers::motion::STEP_DRIVER;
+use hwa::controllers::motion::SegmentIterator;
 use hwa::math;
 
 use hwa::math::{CoordSel, Real, TVector};
@@ -255,7 +255,8 @@ pub async fn task_stepper(
                     Contract::SPACE_UNIT_MAGNITUDE,
                 );
                 #[cfg(feature = "debug-motion")]
-                hwa::info!("[task_stepper] order_num:{:?} MotionPlan dequeued. vector displacement space: [{:#?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
+                hwa::info!(
+                    "[task_stepper] order_num:{:?} MotionPlan dequeued. vector displacement space: [{:#?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
                     _order_num,
                     segment.unit_vector_dir * segment.displacement_su,
                     Contract::SPACE_UNIT_MAGNITUDE,
@@ -283,7 +284,8 @@ pub async fn task_stepper(
                 );
 
                 #[cfg(feature = "debug-motion")]
-                hwa::info!("[task_stepper] order_num:{:?} MotionPlan refined. vector displacement space: [{:#?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
+                hwa::info!(
+                    "[task_stepper] order_num:{:?} MotionPlan refined. vector displacement space: [{:#?}] {}, speed: [ vin: {:?}, vout: {:?} ]",
                     _order_num,
                     segment.unit_vector_dir * segment.displacement_su,
                     Contract::SPACE_UNIT_MAGNITUDE,
@@ -304,7 +306,8 @@ pub async fn task_stepper(
                 ) {
                     Ok(trajectory) => {
                         #[cfg(feature = "debug-motion")]
-                        hwa::info!("[task_stepper] order_num:{:?} Trajectory computed. linear displacement: {:?} time: {:?} vlim: {:?}",
+                        hwa::info!(
+                            "[task_stepper] order_num:{:?} Trajectory computed. linear displacement: {:?} time: {:?} vlim: {:?}",
                             _order_num,
                             trajectory.end_pos(),
                             trajectory.end_time(),
@@ -435,8 +438,11 @@ pub async fn task_stepper(
                                 #[cfg(feature = "verbose-timings")]
                                 hwa::info!(
                                     "[task_stepper] order_num:{}|{} Trajectory micro-segment sampled at {:?} secs. dt = {:?} ds = {:?} v = {:?}",
-                                    _order_num, micro_segment_id, segment_iterator.current_time(),
-                                    segment_iterator.dt(), segment_iterator.ds(),
+                                    _order_num,
+                                    micro_segment_id,
+                                    segment_iterator.current_time(),
+                                    segment_iterator.dt(),
+                                    segment_iterator.ds(),
                                     segment_iterator.speed(),
                                 );
 
@@ -453,13 +459,13 @@ pub async fn task_stepper(
                                     "[task_stepper] order_num:{:?}|{:?} Trajectory micro-segment advanced: {:?} {} {:?} steps",
                                     _order_num,
                                     micro_segment_id,
-                                    micro_segment_interpolator.advanced_units().map_nan_coords(
-                                        relevant_coords, &math::ZERO
-                                    ),
+                                    micro_segment_interpolator
+                                        .advanced_units()
+                                        .map_nan_coords(relevant_coords, &math::ZERO),
                                     Contract::SPACE_UNIT_MAGNITUDE,
-                                    micro_segment_interpolator.advanced_steps().map_nan_coords(
-                                        relevant_coords, &0
-                                    ),
+                                    micro_segment_interpolator
+                                        .advanced_steps()
+                                        .map_nan_coords(relevant_coords, &0),
                                 );
 
                                 cfg_if::cfg_if! {
@@ -511,14 +517,20 @@ pub async fn task_stepper(
                         let adv_pos = micro_segment_interpolator.advanced_units();
 
                         #[cfg(feature = "debug-motion")]
-                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {}, vlim: {:?} {}/s",
-                            _order_num, adv_pos, Contract::SPACE_UNIT_MAGNITUDE,
-                            trajectory.v_lim, Contract::SPACE_UNIT_MAGNITUDE
+                        hwa::info!(
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {}, vlim: {:?} {}/s",
+                            _order_num,
+                            adv_pos,
+                            Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.v_lim,
+                            Contract::SPACE_UNIT_MAGNITUDE
                         );
 
                         #[cfg(feature = "debug-motion")]
-                        hwa::info!("[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] steps",
-                            _order_num, adv_steps.excluding_negligible()
+                        hwa::info!(
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] steps",
+                            _order_num,
+                            adv_steps.excluding_negligible()
                         );
 
                         cfg_if::cfg_if! {

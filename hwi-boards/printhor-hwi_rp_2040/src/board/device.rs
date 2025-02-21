@@ -77,7 +77,7 @@ pub type Watchdog = WatchdogAdapter;
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
 
-        pub struct MotionPins {
+        pub struct StepActuator {
             pub x_enable_pin: Output<'static>,
             pub y_enable_pin: Output<'static>,
             pub z_enable_pin: Output<'static>,
@@ -99,7 +99,7 @@ cfg_if::cfg_if! {
             pub e_dir_pin: Output<'static>,
         }
 
-        impl MotionPins {
+        impl StepActuator {
 
             pub fn disable(&mut self, _channels: printhor_hwa_common::StepperChannel)
             {
@@ -281,7 +281,7 @@ cfg_if::cfg_if! {
             #[cfg(feature = "with-trinamic")]
             pub trinamic_uart: TrinamicUart,
 
-            pub motion_pins: MotionPins,
+            pub motion_pins: StepActuator,
         }
     }
 }

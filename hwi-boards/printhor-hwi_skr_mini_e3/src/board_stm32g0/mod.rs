@@ -25,6 +25,12 @@ impl HwiContract for Contract {
 
     const PROCESSOR_SYS_CK_MHZ: u32 = 64_000_000;
 
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort2;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialUsb;
+
     //#endregion
 
     //#region "Watchdog settings"
@@ -207,7 +213,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType = types::MotionPinsMutexType;
+            type StepActuatorMutexType = types::StepActuatorMutexType;
             type MotionSignalMutexType = types::MotionSignalMutexType;
             type MotionRingBufferMutexType = types::MotionRingBufferMutexType;
             type MotionConfigMutexType = types::MotionConfigMutexType;
@@ -227,8 +233,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
-            const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
+            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            const SERIAL_USB_PACKET_SIZE: usize = 64;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
             type SerialUsbRx = io::serial_usb::SerialUsbRxInputStream;
@@ -278,8 +284,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy = types::MotionPinsMuxtexStrategy;
-            type MotionPins = device::MotionPins;
+            type StepActuatorMutexStrategy = types::StepActuatorMuxtexStrategy;
+            type StepActuator = device::StepActuator;
         }
     }
 
@@ -471,6 +477,16 @@ impl HwiContract for Contract {
 
         //#endregion
 
+        embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
+            // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
+            //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)
+            let val = true;
+            let off = 3usize;
+            w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
+            let off = 4usize;
+            w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
+        });
+
         //#region "with-serial-usb"
 
         cfg_if::cfg_if! {
@@ -587,7 +603,7 @@ impl HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
-                let motion_pins = device::MotionPins {
+                let motion_pins = device::StepActuator {
                     #[cfg(feature = "with-x-axis")]
                     x_enable_pin: embassy_stm32::gpio::Output::new(p.PB14, embassy_stm32::gpio::Level::High, embassy_stm32::gpio::Speed::VeryHigh),
                     #[cfg(feature = "with-y-axis")]

@@ -27,6 +27,12 @@ impl HwiContract for Contract {
     const MACHINE_PROCESSOR: &'static str = "STM32L476RG";
     const PROCESSOR_SYS_CK_MHZ: u32 = 80_000_000;
 
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort1;
+
     //#endregion
 
     //#region "Watchdog settings"
@@ -248,7 +254,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType = types::MotionPinsMutexType;
+            type StepActuatorMutexType = types::StepActuatorMutexType;
             type MotionSignalMutexType = types::MotionSignalMutexType;
             type MotionRingBufferMutexType = types::MotionRingBufferMutexType;
             type MotionConfigMutexType = types::MotionConfigMutexType;
@@ -283,7 +289,13 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            compile_error!("Not implemented");
+            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
+            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 512;
+
+            type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
+            type SerialPort2Rx = device::SerialPort2Rx;
         }
     }
 
@@ -305,8 +317,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy = types::MotionPinsMuxtexStrategy;
-            type MotionPins = device::MotionPins;
+            type StepActuatorMutexStrategy = types::StepActuatorMuxtexStrategy;
+            type StepActuator = device::StepActuator;
         }
     }
 
@@ -505,8 +517,8 @@ impl HwiContract for Contract {
                 {
                     use embassy_stm32::interrupt::InterruptExt;
                     embassy_stm32::interrupt::USART2.set_priority(embassy_stm32::interrupt::Priority::P3);
-                    embassy_stm32::interrupt::DMA1_STREAM7.set_priority(embassy_stm32::interrupt::Priority::P3);
-                    embassy_stm32::interrupt::DMA1_STREAM6.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_CHANNEL7.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_CHANNEL6.set_priority(embassy_stm32::interrupt::Priority::P3);
                 }
 
                 let mut cfg = embassy_stm32::usart::Config::default();
@@ -537,30 +549,8 @@ impl HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-2"))] {
-
-                embassy_stm32::bind_interrupts!(struct SerialPort2IRQs {
-                    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
-                });
-
-                let mut cfg = embassy_stm32::usart::Config::default();
-                cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
-                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
-                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
-                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
-                cfg.detect_previous_overrun = true;
-
-                let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
-                    p.USART2,
-                    p.PA3, p.PA2,
-                    SerialPort1IRQs,
-                    p.DMA1_CH7, p.DMA1_CH6, cfg,
-                ).expect("Ready").split();
-                let serial_port_1_tx = hwa::make_static_async_controller!(
-                    "SerialPort1Tx",
-                    types::SerialPort1TxMutexStrategy,
-                    hwa::SerialTxWrapper::new(serial_port_1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
-                );
-                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device);
+                let serial_port_2_tx = compile_error!("Not (yet) implemented");
+                let serial_port_2_rx_stream = compile_error!("Not (yet) implemented");
             }
         }
 
@@ -616,7 +606,7 @@ impl HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
-                let motion_pins = device::MotionPins {
+                let motion_pins = device::StepActuator {
                     all_enable_pin: embassy_stm32::gpio::Output::new(p.PA9, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                     x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC7, embassy_stm32::gpio::Pull::Down),
                     y_endstop_pin: embassy_stm32::gpio::Input::new(p.PB6, embassy_stm32::gpio::Pull::Down),

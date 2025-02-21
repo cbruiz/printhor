@@ -25,6 +25,12 @@ impl HwiContract for Contract {
 
     const PROCESSOR_SYS_CK_MHZ: u32 = 168_000_000;
 
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort1;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialUsb;
+
     //#endregion
 
     //#region "Watchdog settings"
@@ -214,7 +220,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType = types::MotionPinsMutexType;
+            type StepActuatorMutexType = types::StepActuatorMutexType;
             type MotionSignalMutexType = types::MotionSignalMutexType;
             type MotionRingBufferMutexType = types::MotionRingBufferMutexType;
             type MotionConfigMutexType = types::MotionConfigMutexType;
@@ -230,8 +236,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
-            const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
+            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            const SERIAL_USB_PACKET_SIZE: usize = 64;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
             type SerialUsbRx = io::serial_usb::SerialUsbInputStream;
@@ -281,8 +287,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy = types::MotionPinsMuxtexStrategy;
-            type MotionPins = device::MotionPins;
+            type StepActuatorMutexStrategy = types::StepActuatorMuxtexStrategy;
+            type StepActuator = device::StepActuator;
         }
     }
 
@@ -641,7 +647,7 @@ impl HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
 
-                let motion_pins = device::MotionPins {
+                let motion_pins = device::StepActuator {
                     #[cfg(feature = "with-x-axis")]
                     x_enable_pin: embassy_stm32::gpio::Output::new(p.PE4, embassy_stm32::gpio::Level::High, embassy_stm32::gpio::Speed::VeryHigh),
                     #[cfg(feature = "with-y-axis")]

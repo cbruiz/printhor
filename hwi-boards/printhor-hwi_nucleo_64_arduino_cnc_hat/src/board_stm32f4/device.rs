@@ -11,6 +11,13 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-2")] {
+        pub type SerialPort2Tx = hwa::SerialTxWrapper<embassy_stm32::usart::UartTx<'static, embassy_stm32::mode::Async>>;
+        pub type SerialPort2Rx = super::io::serial_port_2::SerialPort2RxInputStream;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-spi")] {
         pub type Spi = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
     }
@@ -24,7 +31,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        pub struct MotionPins {
+        pub struct StepActuator {
             pub all_enable_pin: embassy_stm32::gpio::Output<'static>, // D8
 
             pub x_endstop_pin: embassy_stm32::gpio::Input<'static>, // D9
@@ -40,7 +47,7 @@ cfg_if::cfg_if! {
             pub z_dir_pin: embassy_stm32::gpio::Output<'static>, // D7
         }
 
-        impl hwa::traits::MotionPinsTrait for MotionPins {
+        impl hwa::traits::StepActuatorTrait for StepActuator {
             fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool) {
                 if _enabled {
                     self.all_enable_pin.set_low();

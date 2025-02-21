@@ -20,15 +20,6 @@ default = [
     "native",
 ]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
-verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
-# A specific hack to verify motion distances match the expectations
-
-debug-position = []
-debug-motion = []
-debug-motion-displacement = []
-debug-motion-broadcast = []
-
-assert-motion = []
 
 with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper", "printhor-hwi_skr_mini_e3?/with-motion-stepper", "printhor-hwi_mks_robin_nano?/with-motion-stepper", "printhor-hwi_rp_2040?/with-motion-stepper"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast", "printhor-hwi_skr_mini_e3?/with-motion-broadcast", "printhor-hwi_mks_robin_nano?/with-motion-broadcast", "printhor-hwi_rp_2040?/with-motion-broadcast"]
@@ -94,10 +85,22 @@ float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl", "printhor-hw
 fixed-point-128-impl = ["rust_decimal", "rust_decimal_macros", "printhor-hwa-common/fixed-point-128-impl", "printhor-hwi_native?/fixed-point-128-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/fixed-point-128-impl", "printhor-hwi_skr_mini_e3?/fixed-point-128-impl", "printhor-hwi_mks_robin_nano?/fixed-point-128-impl", "printhor-hwi_rp_2040?/fixed-point-128-impl"]
 
 # Debug trick for testing timings with digital probe. Enable is threated as reference output clock.
+
+trace-commands = []
+numerical-robusticity-check = []
+
 debug-skip-homing = []
 debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
-numerical-robusticity-check = []
-trace-commands = []
+debug-gcode = []
+debug-position = []
+debug-motion = []
+debug-motion-displacement = []
+debug-motion-broadcast = []
+# A specific hack to verify motion distances match the expectations
+assert-motion = []
+# Timmins instrumentation
+verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
+
 
 sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi", "printhor-hwi_skr_mini_e3?/sd-card-uses-spi", "printhor-hwi_mks_robin_nano?/sd-card-uses-spi"]
 adc-is-async = []
@@ -167,6 +170,7 @@ native = [
     #"debug-motion-displacement",
     #"debug-motion",
     #"debug-motion-broadcast",
+    #"debug-gcode",
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
@@ -189,7 +193,6 @@ native = [
     #"with-a-axis", "with-b-axis", "with-c-axis",
     #"with-i-axis", "with-j-axis", "with-k-axis",
     #"with-u-axis", "with-v-axis", "with-w-axis",
-
 
     "with-serial-usb",
     "with-serial-port-1",
@@ -259,6 +262,7 @@ nucleo64-l476rg = [
     #"verbose-timings",
     #"assert-motion",
     #"trace-commands",
+    #"debug-gcode",
 
     "cornering",
 
@@ -351,6 +355,7 @@ skr_mini_e3_v3 = [
     #"debug-position",
     #"debug-motion",
     #"debug-motion-broadcast",
+    "debug-gcode",
     #"verbose-timings",
 
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",

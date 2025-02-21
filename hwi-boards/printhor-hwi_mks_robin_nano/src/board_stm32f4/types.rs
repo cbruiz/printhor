@@ -49,14 +49,14 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        pub type MotionPinsMutexType = hwa::SyncCsMutexType;
+        pub type StepActuatorMutexType = hwa::SyncCsMutexType;
         pub type MotionSignalMutexType = hwa::AsyncNoopMutexType;
         pub type MotionRingBufferMutexType = hwa::AsyncNoopMutexType;
         pub type MotionConfigMutexType = hwa::AsyncCsMutexType;
         pub type MotionStatusMutexType = hwa::AsyncNoopMutexType;
         pub type MotionDriverMutexType = hwa::AsyncNoopMutexType;
 
-        pub type MotionPinsMuxtexStrategy = hwa::SyncStandardStrategy<MotionPinsMutexType, super::device::MotionPins>;
+        pub type StepActuatorMuxtexStrategy = hwa::SyncStandardStrategy<StepActuatorMutexType, super::device::StepActuator>;
     }
 }
 

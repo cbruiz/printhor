@@ -6,6 +6,7 @@ use crate::control;
 use crate::hwa;
 use control::{GCodeCmd, GCodeLineParserError};
 use embassy_futures::select::Either3;
+use printhor_hwa_common::CommChannel;
 
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
@@ -40,7 +41,7 @@ impl GCodeMultiplexedInputStream {
     ) -> (Result<GCodeCmd, GCodeLineParserError>, hwa::CommChannel) {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-usb")] {
-                let f1 = self.serial_usb_line_parser.next_gcode();
+                let f1 = self.serial_usb_line_parser.next_gcode(CommChannel::SerialUsb);
             }
             else {
                 let f1 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
@@ -48,7 +49,7 @@ impl GCodeMultiplexedInputStream {
         }
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-port-1")] {
-                let f2 = self.serial_port1_line_parser.next_gcode();
+                let f2 = self.serial_port1_line_parser.next_gcode(CommChannel::SerialPort1);
             }
             else {
                 let f2 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
@@ -56,7 +57,7 @@ impl GCodeMultiplexedInputStream {
         }
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-port-2")] {
-                let f3 = self.serial_port2_line_parser.next_gcode();
+                let f3 = self.serial_port2_line_parser.next_gcode(CommChannel::SerialPort2);
             }
             else {
                 let f3 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();

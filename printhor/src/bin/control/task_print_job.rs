@@ -19,7 +19,7 @@
 use crate::control;
 use crate::hwa;
 use embassy_time::Duration;
-use embassy_time::{Instant, Timer};
+use embassy_time::Instant;
 
 use crate::control::GCodeValue;
 use control::{CodeExecutionFailure, CodeExecutionSuccess};
@@ -311,7 +311,6 @@ pub async fn task_print_job(
                 continue;
             }
         }
-        Timer::after(Duration::from_secs(2)).await;
     }
 }
 
@@ -319,10 +318,13 @@ async fn gcode_pull(
     print_job_parser: &mut Option<hwa::types::SDCardLineParser>,
 ) -> Result<GCodeCmd, GCodeLineParserError> {
     match print_job_parser.as_mut() {
-        Some(parser) => parser.next_gcode().await.map(|mut gc| {
-            gc.order_num = parser.get_line();
-            gc
-        }),
+        Some(parser) => parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .map(|mut gc| {
+                gc.order_num = parser.get_line();
+                gc
+            }),
         None => Err(GCodeLineParserError::FatalError),
     }
 }

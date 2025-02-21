@@ -42,8 +42,8 @@ pub type WatchDogController =
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
 
-        pub type MotionPinsMutexStrategy = <hwa::Contract as HwiContract>::MotionPinsMutexStrategy;
-        pub type HwaMotionPins = hwa::StaticSyncController<MotionPinsMutexStrategy>;
+        pub type StepActuatorMutexStrategy = <hwa::Contract as HwiContract>::StepActuatorMutexStrategy;
+        pub type HwaStepActuator = hwa::StaticSyncController<StepActuatorMutexStrategy>;
 
         pub type MotionSignalMutexType = <hwa::Contract as HwiContract>::MotionSignalMutexType;
 

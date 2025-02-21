@@ -67,10 +67,14 @@ pub async fn task_motion_broadcast(
                 });
 
                 #[cfg(feature = "debug-motion-broadcast")]
-                hwa::info!("[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] pos: [{:?}] applied: {:?}",
-                    Real::from_f32((_elapsed as f32) / 1000000.0).rdp(4), motion_event.micro_segment_time.rdp(4),
-                    motion_event.order_num, motion_event.micro_segment_id,
-                    motion_event.pos_wu, changed
+                hwa::info!(
+                    "[task_motion_broadcast] at: [t: {:?} s, t_ref: {:?} us] #[{:?}, {:?}] pos: [{:?}] applied: {:?}",
+                    Real::from_f32((_elapsed as f32) / 1000000.0).rdp(4),
+                    motion_event.micro_segment_time.rdp(4),
+                    motion_event.order_num,
+                    motion_event.micro_segment_id,
+                    motion_event.pos_wu,
+                    changed
                 );
                 if changed {
                     mg.apply().await;

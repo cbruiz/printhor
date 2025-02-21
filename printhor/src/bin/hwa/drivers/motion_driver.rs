@@ -4,19 +4,19 @@ use crate::hwa;
 #[allow(unused)]
 use core::ops::Neg;
 use embassy_time::Duration;
+use hwa::Contract;
+#[allow(unused)]
+use hwa::HwiContract;
 #[allow(unused)]
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 use hwa::math;
-use hwa::Contract;
-#[allow(unused)]
-use hwa::HwiContract;
 use math::Real;
 use math::{ArithmeticOps, CoordSel, TVector};
 
 pub struct MotionDriver {
     #[cfg(feature = "with-motion")]
-    pub pins: hwa::controllers::MotionPins,
+    pub pins: hwa::controllers::StepActuatorController,
     #[cfg(feature = "with-trinamic")]
     pub trinamic_controller: hwa::controllers::TrinamicController,
     #[cfg(feature = "with-probe")]
@@ -34,7 +34,7 @@ pub struct MotionDriver {
 #[cfg(feature = "with-motion")]
 impl MotionDriver {
     pub fn new(
-        pins: hwa::controllers::MotionPins,
+        pins: hwa::controllers::StepActuatorController,
         #[cfg(feature = "with-trinamic")] trinamic_controller: hwa::controllers::TrinamicController,
         #[cfg(feature = "with-probe")] probe_controller: hwa::types::ProbeController,
         #[cfg(feature = "with-fan-layer")] fan_layer_controller: hwa::types::FanLayerController,
@@ -60,7 +60,7 @@ impl MotionDriver {
         }
     }
 
-    pub fn pins(&self) -> &hwa::controllers::MotionPins {
+    pub fn pins(&self) -> &hwa::controllers::StepActuatorController {
         &self.pins
     }
 

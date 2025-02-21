@@ -2,7 +2,6 @@ use crate as hwa;
 #[allow(unused)]
 use hwa::traits;
 
-use crate::CommChannel;
 use core::future;
 
 ///! This module contains the interface contract of HWI boards
@@ -15,11 +14,6 @@ pub trait HwiContract: Sized {
     const FIRMWARE_VERSION: &'static str = env!("CARGO_PKG_VERSION");
     const FIRMWARE_URL: &'static str = "https://github.com/cbruiz/printhor";
     const MACHINE_UUID: &'static str = "00000000-0000-0000-0000-000000000000";
-
-    /// The display channel for M118
-    fn display_channel() -> CommChannel {
-        CommChannel::Internal
-    }
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-e-axis")] {
@@ -44,6 +38,12 @@ pub trait HwiContract: Sized {
     ///
     /// In native (std), embassy-executor is hard-coded to 1GHz
     const PROCESSOR_SYS_CK_MHZ: u32;
+
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
 
     //#endregion
 
@@ -298,7 +298,7 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType: hwa::SyncRawMutex;
+            type StepActuatorMutexType: hwa::SyncRawMutex;
             type MotionRingBufferMutexType: hwa::AsyncRawMutex;
             type MotionSignalMutexType: hwa::AsyncRawMutex;
             type MotionConfigMutexType: hwa::SyncRawMutex;
@@ -324,7 +324,7 @@ pub trait HwiContract: Sized {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
 
-            const SERIAL_USB_RX_BUFFER_SIZE: usize;
+            const SERIAL_USB_PACKET_SIZE: usize = 64;
 
             type SerialUsbTx: hwa::AsyncMutexStrategy;
             type SerialUsbRx: traits::GCodeByteStream;
@@ -366,8 +366,8 @@ pub trait HwiContract: Sized {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy: hwa::SyncMutexStrategy;
-            type MotionPins: traits::MotionPinsTrait;
+            type StepActuatorMutexStrategy: hwa::SyncMutexStrategy;
+            type StepActuator: traits::StepActuatorTrait;
         }
     }
 
@@ -508,7 +508,7 @@ where
 
     /// As of now, this mut be holdable
     #[cfg(feature = "with-motion")]
-    pub motion_pins: C::MotionPins,
+    pub motion_pins: C::StepActuator,
 
     #[cfg(feature = "with-trinamic")]
     pub trinamic_uart: C::TrinamicUartDevice,

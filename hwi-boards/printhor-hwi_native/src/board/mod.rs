@@ -26,6 +26,12 @@ impl hwa::HwiContract for Contract {
     #[const_env::from_env("PROCESSOR_SYS_CK_MHZ")]
     const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort1;
+
     //#endregion
 
     //#region "Watchdog settings"
@@ -264,7 +270,7 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType = types::MotionPinsMutexType;
+            type StepActuatorMutexType = types::StepActuatorMutexType;
             type MotionSignalMutexType = types::MotionSignalMutexType;
             type MotionRingBufferMutexType = types::MotionRingBufferMutexType;
             type MotionConfigMutexType = types::MotionConfigMutexType;
@@ -290,8 +296,8 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
-            const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
+            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            const SERIAL_USB_PACKET_SIZE: usize = 64;
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
             type SerialUsbRx = device::SerialUsbRx;
         }
@@ -339,8 +345,8 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy = types::MotionPinsMutexStrategy;
-            type MotionPins = device::MotionPins;
+            type StepActuatorMutexStrategy = types::StepActuatorMutexStrategy;
+            type StepActuator = device::StepActuator;
         }
     }
 
@@ -412,7 +418,7 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-trinamic")] {
-            const TRINAMIC_UART_BAUD_RATE: u32 = 4096;
+            const TRINAMIC_UART_BAUD_RATE: u32 = 32;
             type TrinamicUartDevice = device::TrinamicUart;
         }
     }
@@ -547,7 +553,7 @@ impl hwa::HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
-                let motion_pins = device::MotionPins {
+                let motion_pins = device::StepActuator {
                     x_enable_pin: mocked_peripherals::MockedIOPin::new(4, _pin_state),
                     y_enable_pin: mocked_peripherals::MockedIOPin::new(5, _pin_state),
                     z_enable_pin: mocked_peripherals::MockedIOPin::new(6, _pin_state),

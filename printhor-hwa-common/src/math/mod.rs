@@ -26,3 +26,16 @@ cfg_if::cfg_if! {
 }
 mod geometry;
 pub use geometry::*;
+
+#[test]
+mod test {
+    use crate as hwa;
+    #[test]
+    fn it_works() {
+        let zero = hwa::math::ZERO;
+        let one = hwa::math::ZERO;
+        let x = hwa::make_real!(1.0);
+        assert_eq!(x.ceil(), zero, "ceil(0) is zero");
+        assert_eq!(x.ceil(), zero, "ceil(0.51) is one");
+    }
+}

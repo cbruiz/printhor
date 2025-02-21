@@ -1,7 +1,6 @@
 //! A Blank boilerplate template for board support
 //!
 //!
-//!
 
 use std::alloc::Layout;
 use printhor_hwa_common as hwa;
@@ -47,6 +46,12 @@ impl HwiContract for Contract {
     const MACHINE_PROCESSOR: &'static str = "TBD";
 
     const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000;
+
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
 
     //#endregion
 
@@ -181,7 +186,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType = types::MotionPinsMutexType;
+            type StepActuatorMutexType = types::StepActuatorMutexType;
             type MotionSignalMutexType = types::MotionSignalMutexType;
             type MotionRingBufferMutexType = types::MotionRingBufferMutexType;
             type MotionConfigMutexType = types::MotionConfigMutexType;
@@ -197,8 +202,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_RX_BUFFER_SIZE")]
-            const SERIAL_USB_RX_BUFFER_SIZE: usize = 128;
+            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            const SERIAL_USB_PACKET_SIZE: usize = 64;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
             type SerialUsbRx = io::usb_serial::USBSerialDeviceInputStream;
@@ -242,8 +247,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy = types::MotionPinsMuxtexStrategy;
-            type MotionPins = device::MotionPins;
+            type StepActuatorMutexStrategy = types::StepActuatorMuxtexStrategy;
+            type StepActuator = device::StepActuator;
         }
     }
 

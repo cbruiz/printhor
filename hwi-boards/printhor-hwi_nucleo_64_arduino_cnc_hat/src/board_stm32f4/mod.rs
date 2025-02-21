@@ -27,6 +27,12 @@ impl HwiContract for Contract {
 
     const PROCESSOR_SYS_CK_MHZ: u32 = 100_000_000;
 
+    /// The target [hwa::CommChannel] for M117 (display)
+    const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+
+    /// The target [hwa::CommChannel] for M118 (host)
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort1;
+
     //#endregion
 
     //#region "Watchdog settings"
@@ -166,7 +172,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexType = types::MotionPinsMutexType;
+            type StepActuatorMutexType = types::StepActuatorMutexType;
             type MotionSignalMutexType = types::MotionSignalMutexType;
             type MotionRingBufferMutexType = types::MotionRingBufferMutexType;
             type MotionConfigMutexType = types::MotionConfigMutexType;
@@ -201,7 +207,13 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            compile_error!("Not implemented");
+            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
+            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 512;
+
+            type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
+            type SerialPort2Rx = device::SerialPort2Rx;
         }
     }
 
@@ -223,8 +235,8 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            type MotionPinsMutexStrategy = types::MotionPinsMuxtexStrategy;
-            type MotionPins = device::MotionPins;
+            type StepActuatorMutexStrategy = types::StepActuatorMuxtexStrategy;
+            type StepActuator = device::StepActuator;
         }
     }
 
@@ -409,6 +421,13 @@ impl HwiContract for Contract {
             }
         }
 
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-serial-port-2"))] {
+                let serial_port_2_tx = compile_error!("Not (yet) implemented");
+                let serial_port_2_rx_stream = compile_error!("Not (yet) implemented");
+            }
+        }
+
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
             todo!("Not implemented")
@@ -445,7 +464,7 @@ impl HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
                 hwa::info!("with-motion...");
-                let motion_pins = device::MotionPins {
+                let motion_pins = device::StepActuator {
                     all_enable_pin: embassy_stm32::gpio::Output::new(p.PA9, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                     x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC7, embassy_stm32::gpio::Pull::Down),
                     y_endstop_pin: embassy_stm32::gpio::Input::new(p.PB6, embassy_stm32::gpio::Pull::Down),

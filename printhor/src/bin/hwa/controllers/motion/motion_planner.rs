@@ -1,11 +1,11 @@
 use crate::{control, hwa};
-use hwa::controllers::ExecPlan::Homing;
-use hwa::math;
 use hwa::Contract;
 use hwa::HwiContract;
+use hwa::controllers::ExecPlan::Homing;
+use hwa::math;
 
 use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
-use hwa::controllers::{motion, MovType, PlanEntry, ScheduledMove};
+use hwa::controllers::{MovType, PlanEntry, ScheduledMove, motion};
 use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
 
@@ -497,13 +497,21 @@ impl MotionPlanner {
                                             .unit_vector_dir
                                             .orthogonal_projection(curr_segment.unit_vector_dir);
                                         if proj.is_defined_positive() {
-                                            hwa::debug!("RingBuffer [{:?}, {:?}] chained: ({:?}) proj ({:?}) = ({:?})", prev_index, curr_insert_index,
-                                                prev_segment.unit_vector_dir, curr_segment.unit_vector_dir, proj
+                                            hwa::debug!(
+                                                "RingBuffer [{:?}, {:?}] chained: ({:?}) proj ({:?}) = ({:?})",
+                                                prev_index,
+                                                curr_insert_index,
+                                                prev_segment.unit_vector_dir,
+                                                curr_segment.unit_vector_dir,
+                                                proj
                                             );
-                                            hwa::debug!("\ts : vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}]:",
-                                                prev_segment.speed_enter_su_s, prev_segment.speed_enter_constrained_su_s,
+                                            hwa::debug!(
+                                                "\ts : vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}]:",
+                                                prev_segment.speed_enter_su_s,
+                                                prev_segment.speed_enter_constrained_su_s,
                                                 prev_segment.speed_target_su_s,
-                                                prev_segment.speed_exit_su_s, prev_segment.speed_exit_constrained_su_s,
+                                                prev_segment.speed_exit_su_s,
+                                                prev_segment.speed_exit_constrained_su_s,
                                             );
                                             hwa::debug!("\t\tproj = {:?}", proj);
                                             cfg_if::cfg_if! {
@@ -521,8 +529,10 @@ impl MotionPlanner {
                             #[cfg(feature = "debug-motion")]
                             hwa::info!(
                                 "[MotionPlanner] order_num:{:?} L:{:?} MotionPlan queued. space src: [{:#?}], dest: [{:#?}], vmax: [ {:?}, [{:?}] ]",
-                                order_num, line_tag.unwrap_or(0),
-                                curr_segment.src_pos, curr_segment.dest_pos,
+                                order_num,
+                                line_tag.unwrap_or(0),
+                                curr_segment.src_pos,
+                                curr_segment.dest_pos,
                                 curr_segment.speed_target_su_s,
                                 curr_segment.unit_vector_dir.abs() * curr_segment.speed_target_su_s
                             );
@@ -780,11 +790,15 @@ impl MotionPlanner {
         #[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Received motion. relevant world coords: [{:?}] world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
-            num, line.unwrap_or(0),
+            num,
+            line.unwrap_or(0),
             relevant_world_coords,
-            p0_pos.world_pos.selecting(relevant_world_coords), Contract::WORLD_UNIT_MAGNITUDE,
-            p1_wu, Contract::WORLD_UNIT_MAGNITUDE,
-            self.motion_status.is_absolute_positioning(), requested_motion_speed,
+            p0_pos.world_pos.selecting(relevant_world_coords),
+            Contract::WORLD_UNIT_MAGNITUDE,
+            p1_wu,
+            Contract::WORLD_UNIT_MAGNITUDE,
+            self.motion_status.is_absolute_positioning(),
+            requested_motion_speed,
             Contract::WORLD_UNIT_MAGNITUDE
         );
 
@@ -825,7 +839,9 @@ impl MotionPlanner {
         #[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Motion transformed to space [ src: [{:#?}] dest: [{:#?}] ] {}, speed: {:?} {}/s",
-            num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords),
+            num,
+            line.unwrap_or(0),
+            p0_pos.space_pos.selecting(relevant_space_coords),
             p1_pos.space_pos.selecting(relevant_space_coords),
             Contract::SPACE_UNIT_MAGNITUDE,
             requested_motion_speed,
@@ -869,8 +885,12 @@ impl MotionPlanner {
             #[cfg(feature = "debug-motion")]
             hwa::info!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Discarding plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
-                num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords),
-                p1_pos.space_pos.selecting(relevant_space_coords), module_target_speed.rdp(3), speed_vector
+                num,
+                line.unwrap_or(0),
+                p0_pos.space_pos.selecting(relevant_space_coords),
+                p1_pos.space_pos.selecting(relevant_space_coords),
+                module_target_speed.rdp(3),
+                speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
         } else if !module_target_speed.is_zero()
@@ -923,7 +943,12 @@ impl MotionPlanner {
         } else {
             hwa::warn!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Bad plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
-                num, line.unwrap_or(0), p0_pos.space_pos.selecting(relevant_space_coords), p1_pos.space_pos.selecting(relevant_space_coords), module_target_speed, speed_vector
+                num,
+                line.unwrap_or(0),
+                p0_pos.space_pos.selecting(relevant_space_coords),
+                p1_pos.space_pos.selecting(relevant_space_coords),
+                module_target_speed,
+                speed_vector
             );
             Ok(control::CodeExecutionSuccess::OK)
         };

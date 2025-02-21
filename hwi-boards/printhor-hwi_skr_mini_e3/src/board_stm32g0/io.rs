@@ -25,8 +25,8 @@ pub(crate) mod serial_usb {
         pub fn new(driver: crate::board::device::SerialUsbDriver) -> Self {
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
             config.manufacturer = Some("Printhor");
-            config.product = Some("Printhor-USBSerial");
-            config.serial_number = Some("");
+            config.product = Some("Printhor USBSerial");
+            config.serial_number = Some("printhor0");
 
             config.device_class = 0xEF;
             config.device_sub_class = 0x02;
@@ -102,7 +102,7 @@ pub(crate) mod serial_usb {
 
     pub struct SerialUsbRxInputStream {
         receiver: embassy_usb::class::cdc_acm::Receiver<'static, super::super::device::SerialUsbDriver>,
-        buffer: [u8; <crate::Contract as HwiContract>::SERIAL_USB_RX_BUFFER_SIZE],
+        buffer: [u8; <crate::Contract as HwiContract>::SERIAL_USB_PACKET_SIZE],
         bytes_read: u8,
         current_byte_index: u8,
     }
@@ -111,7 +111,7 @@ pub(crate) mod serial_usb {
         pub fn new(receiver: SerialUsbDeviceReceiver) -> Self {
             Self {
                 receiver,
-                buffer: [0; <crate::Contract as HwiContract>::SERIAL_USB_RX_BUFFER_SIZE],
+                buffer: [0; <crate::Contract as HwiContract>::SERIAL_USB_PACKET_SIZE],
                 bytes_read: 0,
                 current_byte_index: 0,
             }

@@ -7,7 +7,7 @@ use embassy_executor::Spawner;
 use embassy_rp::config::Config;
 
 #[cfg(feature = "with-motion")]
-use device::{MotionDevice, MotionPins};
+use device::{MotionDevice, StepActuator};
 #[cfg(any(
     feature = "with-serial-port-1",
     feature = "with-serial-port-2",
@@ -30,6 +30,13 @@ cfg_if::cfg_if! {
         pub const MACHINE_BOARD: &str = "TBD";
         #[allow(unused)]
         pub const PROCESSOR_SYS_CK_MHZ: &str = "133_000_000";
+        
+        /// The target [hwa::CommChannel] for M117 (display)
+        const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+    
+        /// The target [hwa::CommChannel] for M118 (host)
+        const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
+        
         pub const ADC_START_TIME_US: u16 = 10;
         pub const ADC_VREF_DEFAULT_MV: u16 = 1210;
     }
@@ -311,7 +318,7 @@ pub async fn setup(
     let motion_devices = MotionDevice {
         #[cfg(feature = "with-trinamic")]
         trinamic_uart,
-        motion_pins: MotionPins {
+        motion_pins: StepActuator {
             all_enable_pin: embassy_rp::gpio::Output::new(p.PIN_2, embassy_rp::gpio::Level::Low),
             x_endstop_pin: embassy_rp::gpio::Input::new(p.PIN_3, embassy_rp::gpio::Pull::Down),
             y_endstop_pin: embassy_rp::gpio::Input::new(p.PIN_6, embassy_rp::gpio::Pull::Down),

@@ -4,11 +4,11 @@ use crate::hwa;
 use crate::hwa::GCodeProcessor;
 use alloc::string::ToString;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use hwa::math;
 use hwa::CoordSel;
 #[allow(unused)]
 use hwa::HwiContract;
 use hwa::PersistentState;
+use hwa::math;
 #[allow(unused)]
 use hwa::{CommChannel, EventBusSubscriber, EventFlags, EventStatus};
 #[allow(unused)]
@@ -57,7 +57,10 @@ pub async fn task_integration(
     }
 
     hwa::info!("[task_integration] Got SYS_READY. Continuing");
-
+    hwa::info!(
+        "[task_integration] EventBus status is [{:?}]",
+        event_bus.get_status().await
+    );
     hwa::info!("##");
     hwa::info!("# Integration_task START.");
 
@@ -84,12 +87,15 @@ pub async fn task_integration(
             .await
             .and_then(expect_immediate)
             .ok()
-        { Some(_result) => {
-            hwa::info!("## {} - END", test_name);
-        } _ => {
-            finish_task(Err(test_name));
-            return;
-        }}
+        {
+            Some(_result) => {
+                hwa::info!("## {} - END", test_name);
+            }
+            _ => {
+                finish_task(Err(test_name));
+                return;
+            }
+        }
     }
 
     // Separator
@@ -109,24 +115,27 @@ pub async fn task_integration(
             .await
             .and_then(expect_immediate)
             .ok()
-        { Some(_result) => {
-            // timeout wait to check effectiveness of the request
-            if embassy_time::with_timeout(
-                embassy_time::Duration::from_secs(2),
-                subscriber.ft_wait_until(EventFlags::ATX_ON),
-            )
-            .await
-            .is_ok()
-            {
-                hwa::info!("## {} - END", test_name);
-            } else {
+        {
+            Some(_result) => {
+                // timeout wait to check effectiveness of the request
+                if embassy_time::with_timeout(
+                    embassy_time::Duration::from_secs(2),
+                    subscriber.ft_wait_until(EventFlags::ATX_ON),
+                )
+                .await
+                .is_ok()
+                {
+                    hwa::info!("## {} - END", test_name);
+                } else {
+                    finish_task(Err(test_name));
+                    return;
+                }
+            }
+            _ => {
                 finish_task(Err(test_name));
                 return;
             }
-        } _ => {
-            finish_task(Err(test_name));
-            return;
-        }}
+        }
     }
 
     // Separator
@@ -168,18 +177,21 @@ pub async fn task_integration(
             .await
             .and_then(expect_deferred)
             .ok()
-        { Some(evt) => {
-            if subscriber.ft_wait_for(evt).await.is_err() {
+        {
+            Some(evt) => {
+                if subscriber.ft_wait_for(evt).await.is_err() {
+                    finish_task(Err(test_name));
+                    return;
+                } else {
+                    hwa::info!("## {} - END", test_name);
+                }
+                //hwa::info!("-- G28 OK (took: {} ms)", _t0.elapsed().as_millis());
+            }
+            _ => {
                 finish_task(Err(test_name));
                 return;
-            } else {
-                hwa::info!("## {} - END", test_name);
             }
-            //hwa::info!("-- G28 OK (took: {} ms)", _t0.elapsed().as_millis());
-        } _ => {
-            finish_task(Err(test_name));
-            return;
-        }}
+        }
     }
 
     // Separator
@@ -248,18 +260,21 @@ pub async fn task_integration(
             .await
             .and_then(expect_deferred)
             .ok()
-        { Some(evt) => {
-            if subscriber.ft_wait_for(evt).await.is_ok() {
+        {
+            Some(evt) => {
+                if subscriber.ft_wait_for(evt).await.is_ok() {
+                    hwa::info!("## {} - END", test_name);
+                } else {
+                    finish_task(Err(test_name));
+                    return;
+                }
                 hwa::info!("## {} - END", test_name);
-            } else {
+            }
+            _ => {
                 finish_task(Err(test_name));
                 return;
             }
-            hwa::info!("## {} - END", test_name);
-        } _ => {
-            finish_task(Err(test_name));
-            return;
-        }}
+        }
     }
 
     // Separator

@@ -1,9 +1,9 @@
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use hwa::math;
-use hwa::traits::UnifiedAdc16;
 use hwa::AsyncMutexStrategy;
 use hwa::StaticAsyncController;
+use hwa::math;
+use hwa::traits::UnifiedAdc16;
 
 /// A controller for managing ADCs.
 pub struct GenericAdcController<H>

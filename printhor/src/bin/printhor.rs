@@ -386,10 +386,10 @@ async fn init_controllers_and_spawn_tasks(
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            let motion_pins = hwa::controllers::MotionPins::new(
+            let motion_pins = hwa::controllers::StepActuatorController::new(
                 hwa::make_static_sync_controller!(
-                    "MotionPins",
-                    hwa::types::MotionPinsMutexStrategy,
+                    "StepActuator",
+                    hwa::types::StepActuatorMutexStrategy,
                     _context.motion_pins,
                 ),
                 #[cfg(feature = "with-motion-broadcast")]

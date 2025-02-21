@@ -24,9 +24,9 @@ pub mod usbserial {
     impl USBSerialDevice {
         pub fn new(driver: USBDrv) -> Self {
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
-            config.manufacturer = Some("Printor");
-            config.product = Some("Printor-USBSerial");
-            config.serial_number = Some("");
+            config.manufacturer = Some("Printhor");
+            config.product = Some("Printor USBSerial");
+            config.serial_number = Some("printhor0");
 
             config.device_class = 0xEF;
             config.device_sub_class = 0x02;

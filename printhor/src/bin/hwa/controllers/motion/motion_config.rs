@@ -1,10 +1,10 @@
 use crate::hwa;
-use hwa::math::{CoordSel, Real, TVector};
 #[allow(unused)]
 use hwa::Contract;
 #[allow(unused)]
 use hwa::HwiContract;
 use hwa::SyncMutexStrategy;
+use hwa::math::{CoordSel, Real, TVector};
 
 /// Configuration structure for motion parameters.
 ///
@@ -277,16 +277,26 @@ impl MotionConfig {
             Contract::SPACE_UNIT_MAGNITUDE
         );
         if hwa::Contract::CLAMP_MIN_SPEED {
-            hwa::info!("[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is space: {:?} {}/s", v_min, Contract::SPACE_UNIT_MAGNITUDE);
+            hwa::info!(
+                "[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is space: {:?} {}/s",
+                v_min,
+                Contract::SPACE_UNIT_MAGNITUDE
+            );
         } else {
             hwa::info!(
                 "[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is UNSET"
             );
         }
         if hwa::Contract::CLAMP_MAX_FEED_RATE {
-            hwa::info!("[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is space: {:?} {}/s", v_max, Contract::SPACE_UNIT_MAGNITUDE);
+            hwa::info!(
+                "[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is space: {:?} {}/s",
+                v_max,
+                Contract::SPACE_UNIT_MAGNITUDE
+            );
         } else {
-            hwa::info!("[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is UNSET");
+            hwa::info!(
+                "[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is UNSET"
+            );
         }
 
         self.cfg.apply_mut(|m| {

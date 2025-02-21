@@ -14,7 +14,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        pub trait MotionPinsTrait {
+        pub trait StepActuatorTrait {
             fn enable_all_steppers(&mut self) {
                 self.set_enabled(hwa::CoordSel::all_axis(), true)
             }

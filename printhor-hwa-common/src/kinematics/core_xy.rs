@@ -1,7 +1,7 @@
 use crate as hwa;
+use hwa::CoordSel;
 use hwa::kinematics::WorldToSpaceTransformer;
 use hwa::math::{Real, TVector};
-use hwa::CoordSel;
 
 pub struct CoreXYTransformer;
 impl WorldToSpaceTransformer for CoreXYTransformer {

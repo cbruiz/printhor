@@ -1,7 +1,7 @@
 use crate::hwa;
+use hwa::CoordSel;
 use hwa::controllers::MultiTimer;
 use hwa::math;
-use hwa::CoordSel;
 use math::{Real, TVector};
 
 /// A struct for interpolating microsteps along linear trajectories.

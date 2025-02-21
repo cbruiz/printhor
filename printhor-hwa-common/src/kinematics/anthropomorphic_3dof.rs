@@ -441,7 +441,7 @@ fn direct_kinematics(
 mod tests {
     use crate as hwa;
     use crate::kinematics::anthropomorphic_3dof::{
-        direct_kinematics, inverse_kinematics, SingleActuator,
+        SingleActuator, direct_kinematics, inverse_kinematics,
     };
 
     const fn top_right_actuator() -> SingleActuator {

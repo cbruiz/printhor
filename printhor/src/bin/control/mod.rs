@@ -825,6 +825,9 @@ pub enum GCodeValue {
     /// Restore Default Settings
     M502,
 
+    /// Report Current Settings
+    M503(S),
+
     M504,
 
     M505, // EEProm/State

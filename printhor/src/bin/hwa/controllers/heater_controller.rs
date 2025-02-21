@@ -79,11 +79,11 @@
 //! </dl>
 //!
 use crate::hwa;
+use hwa::DeferEvent::{AwaitRequested, Completed};
 #[allow(unused)]
 use hwa::math::ArithmeticOps;
 #[allow(unused)]
 use hwa::math::Real;
-use hwa::DeferEvent::{AwaitRequested, Completed};
 use hwa::{AsyncMutexStrategy, SyncMutexStrategy};
 use hwa::{CommChannel, DeferAction};
 use hwa::{EventFlags, EventStatus};
@@ -111,10 +111,8 @@ pub struct HeaterController<HA, HP>
 where
     HA: AsyncMutexStrategy + 'static,
     HA::Resource: hwa::traits::UnifiedAdc16 + 'static,
-
     HP: SyncMutexStrategy + 'static,
     HP::Resource: hwa::traits::Pwm + 'static,
-
     <HP::Resource as hwa::traits::Pwm>::Channel: Copy,
     <HP::Resource as hwa::traits::Pwm>::Duty:
         core::fmt::Debug + Copy + Ord + Into<u32> + From<u16> + TryFrom<u32>,
@@ -147,7 +145,6 @@ where
     HA: AsyncMutexStrategy + 'static,
     HA::Resource: 'static,
     HA::Resource: hwa::traits::UnifiedAdc16 + 'static,
-
     HP: SyncMutexStrategy + 'static,
     HP::Resource: hwa::traits::Pwm + 'static,
     <HP::Resource as hwa::traits::Pwm>::Channel: Copy,
