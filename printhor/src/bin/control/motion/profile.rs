@@ -81,110 +81,6 @@ pub struct ProfileConfig {
     pub error_correction: Option<Real>,
 }
 
-/// Implementation of the motion profile configuration struct.
-impl ProfileConfig {
-    /// Creates a new instance of `ProfileConfig` with default values.
-    ///
-    /// # Returns
-    ///
-    /// A new instance of `ProfileConfig`.
-    #[allow(unused)]
-    pub const fn new() -> Self {
-        Self {
-            constraints: Constraints {
-                v_max: ZERO,
-                a_max: ZERO,
-                j_max: ZERO,
-            },
-            times: Times {
-                t_j1: ZERO,
-                t_a: ZERO,
-                t_v: ZERO,
-                t_d: ZERO,
-                t_j2: ZERO,
-            },
-            initial_velocity: ZERO,
-            final_velocity: ZERO,
-            error_correction: None,
-        }
-    }
-
-    /// Sets the constraints for the motion profile configuration.
-    ///
-    /// # Parameters
-    ///
-    /// - `constraints`: The constraints to be applied.
-    ///
-    /// # Returns
-    ///
-    /// The updated instance of `ProfileConfig`.
-    #[allow(unused)]
-    pub fn with_constraints(mut self, constraints: Constraints) -> Self {
-        self.constraints = constraints;
-        self
-    }
-
-    /// Sets the time parameters for the motion profile configuration.
-    ///
-    /// # Parameters
-    ///
-    /// - `times`: The time parameters to be applied.
-    ///
-    /// # Returns
-    ///
-    /// The updated instance of `ProfileConfig`.
-    #[allow(unused)]
-    pub fn with_times(mut self, times: Times) -> Self {
-        self.times = times;
-        self
-    }
-
-    /// Sets the initial velocity for the motion profile configuration.
-    ///
-    /// # Parameters
-    ///
-    /// - `initial_velocity`: The initial velocity (in mm/s).
-    ///
-    /// # Returns
-    ///
-    /// The updated instance of `ProfileConfig`.
-    #[allow(unused)]
-    pub fn with_initial_velocity(mut self, initial_velocity: Real) -> Self {
-        self.initial_velocity = initial_velocity;
-        self
-    }
-
-    /// Sets the final velocity for the motion profile configuration.
-    ///
-    /// # Parameters
-    ///
-    /// - `final_velocity`: The final velocity (in mm/s).
-    ///
-    /// # Returns
-    ///
-    /// The updated instance of `ProfileConfig`.
-    #[allow(unused)]
-    pub fn with_final_velocity(mut self, final_velocity: Real) -> Self {
-        self.final_velocity = final_velocity;
-        self
-    }
-
-    /// Sets the optional error correction factor for the motion profile configuration.
-    ///
-    /// # Parameters
-    ///
-    /// - `error_correction`: The error correction factor.
-    ///
-    /// # Returns
-    ///
-    /// The updated instance of `ProfileConfig`.
-    #[allow(unused)]
-    pub fn with_error_correction(mut self, error_correction: Real) -> Self {
-        self.error_correction = Some(error_correction);
-        self
-    }
-}
-
 /// The `Constraints` struct represents the limits of the motion profile in terms of velocity, acceleration, and jerk.
 ///
 /// # Fields
@@ -1314,6 +1210,7 @@ pub mod test {
     use crate::control::CodeExecutionFailure;
     use crate::hwa::math::Real;
     use num_traits::ToPrimitive;
+    use crate::hwa;
 
     pub fn do_compute(
         q1: f32,
@@ -1343,7 +1240,6 @@ pub mod test {
         assert!(ok, "{} = {} but should be = {}", what, v1, expected);
     }
 
-    //#[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_9() {
         // With: q_1 = 10, v_0 = 1, v_1 = 0
@@ -1358,7 +1254,6 @@ pub mod test {
         approx_equal("T_v", r.t_v, 1.1433, 0.001);
     }
 
-    //#[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_10() {
         // With: q_1 = 10, v_0 = 1, v_1 = 0
@@ -1374,22 +1269,24 @@ pub mod test {
         approx_equal("v_lim", r.v_lim, 8.4136, 0.001);
     }
 
-    #[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_11() {
         // With: q_1 = 10, v_0 = 7, v_1 = 0
         // Given: v_max = 10, a_max = 10, j_max = 30
+        // According to the paper is:
         // Exp: Ta = 0.4666, T_v = 0.0, T_d = 1.4718, T_j1 = 0.2321, T_j2 = 0.2321, vlim = 8.6329
+        // But with the less costly descend:
+        // Exp: Ta = 0.4526, T_v = 0.0, T_d = 1.5195, T_j1 = 0.2186, T_j2 = 0.2186, vlim = 8.5347
         let r = do_compute(10., 7., 0., 10., 10., 30.).unwrap();
 
-        approx_equal("T_a", r.t_a, 0.4666, 0.01);
+        approx_equal("T_a", r.t_a, 0.4526, 0.001);
         approx_equal("T_v", r.t_v, 0.0, 0.001);
-        approx_equal("T_d", r.t_d, 1.4718, 0.01);
-        approx_equal("T_j1", r.t_j1, 0.2321, 0.01);
-        approx_equal("T_j2", r.t_j2, 0.2321, 0.01);
+        approx_equal("T_d", r.t_d, 1.5195, 0.001);
+        approx_equal("T_j1", r.t_j1, 0.2186, 0.001);
+        approx_equal("T_j2", r.t_j2, 0.2186, 0.001);
+        approx_equal("vlim", r.v_lim, 8.5347, 0.001);
     }
 
-    //#[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_12() {
         // With: q_1 = 10, v_0 = 7.5, v_1 = 0
@@ -1405,13 +1302,15 @@ pub mod test {
         approx_equal("v_lim", r.v_lim, 7.5, 0.01);
     }
 
-    #[cfg(feature = "wip-tests")]
     #[test]
     fn ex_3_13() {
         // With: q_1 = 10, v_0 = 0, v_1 = 0
         // Given: v_max = 10, a_max = 20, j_max = 30
         // Exp: Ta = 1.1006, T_v = 0.0, T_d = 1.1006, T_j1 = 0.5503, T_j2 = 0.5503, vlim = 9.0826
         let r = do_compute(10., 0.0, 0., 10., 20., 30.).unwrap();
+
+        hwa::info!("profile: {}", r);
+        hwa::info!("constraints: {:?}", r.constraints);
 
         approx_equal("T_a", r.t_a, 1.1006, 0.01);
         approx_equal("T_v", r.t_v, 0.0, 0.001);
