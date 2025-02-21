@@ -1309,6 +1309,7 @@ pub mod test {
         // Exp: Ta = 1.1006, T_v = 0.0, T_d = 1.1006, T_j1 = 0.5503, T_j2 = 0.5503, vlim = 9.0826
         let r = do_compute(10., 0.0, 0., 10., 20., 30.).unwrap();
 
+        r.params_dump();
         hwa::info!("profile: {}", r);
         hwa::info!("constraints: {:?}", r.constraints);
 
