@@ -27,15 +27,16 @@ cfg_if::cfg_if! {
 mod geometry;
 pub use geometry::*;
 
-#[test]
+#[cfg(test)]
 mod test {
     use crate as hwa;
     #[test]
     fn it_works() {
         let zero = hwa::math::ZERO;
-        let one = hwa::math::ZERO;
-        let x = hwa::make_real!(1.0);
+        let one = hwa::math::ONE;
+        let x = hwa::make_real!(0.0);
         assert_eq!(x.ceil(), zero, "ceil(0) is zero");
-        assert_eq!(x.ceil(), zero, "ceil(0.51) is one");
+        let y = hwa::make_real!(0.55);
+        assert_eq!(y.ceil(), one, "ceil(0.51) is one");
     }
 }
