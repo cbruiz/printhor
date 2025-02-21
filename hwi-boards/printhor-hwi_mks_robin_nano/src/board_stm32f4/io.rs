@@ -168,14 +168,13 @@ pub mod serial_port_1 {
 
         async fn next(&mut self) -> Option<Self::Item> {
             use embedded_io_async::Read;
-            // DMA1 REQ:
-            // USART_2 RX ->    CHANNEL_4, STREAM_5 [CH: I2C1_RX, DAC1]
-            //                  CHANNEL_6 - STREAM_7 [CH: I2C1_TX, I2C4_TX, I2C2_TX]
-            // USART_2 TX ->    CHANNEL_4 STREAM_6 [CH: I2C1_TX, TIM5_UP, DAC2]
 
             let mut buff: [u8; 1] = [0; 1];
             match self.receiver.read_exact(&mut buff).await {
-                Ok(_r) => Some(Ok(buff[0])),
+                Ok(_r) => {
+                    hwa::trace!("read {}", buff[0] as char);
+                    Some(Ok(buff[0]))
+                },
                 Err(_e) => None,
             }
         }
@@ -213,14 +212,12 @@ pub mod serial_port_2 {
 
         async fn next(&mut self) -> Option<Self::Item> {
             use embedded_io_async::Read;
-            // DMA1 REQ:
-            // USART_2 RX ->    CHANNEL_4, STREAM_5 [CH: I2C1_RX, DAC1]
-            //                  CHANNEL_6 - STREAM_7 [CH: I2C1_TX, I2C4_TX, I2C2_TX]
-            // USART_2 TX ->    CHANNEL_4 STREAM_6 [CH: I2C1_TX, TIM5_UP, DAC2]
-
             let mut buff: [u8; 1] = [0; 1];
             match self.receiver.read_exact(&mut buff).await {
-                Ok(_r) => Some(Ok(buff[0])),
+                Ok(_r) => {
+                    hwa::trace!("read {}", buff[0] as char);
+                    Some(Ok(buff[0]))
+                },
                 Err(_e) => None,
             }
         }

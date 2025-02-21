@@ -359,7 +359,7 @@ skr_mini_e3_v3 = [
     "with-sd-card", "sd-card-uses-spi",
     "with-print-job",
     "with-serial-usb",
-    "with-serial-port-1", # Broken
+    #"with-serial-port-1", # Disabled for BTT TFT35, which does not use this
     "with-serial-port-2",
     "with-trinamic",
     #"with-laser",

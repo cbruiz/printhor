@@ -388,39 +388,34 @@ impl HwiContract for Contract {
 
                 // Reset bootloader state
 
-                #[allow(unused)]
-                use embassy_stm32::pac::*;
-                #[allow(unused)]
-                use embassy_stm32::rcc::*;
-
                 // SYSCFG: Dead battery pull-down resistors functionality should be enabled by default on startup
-                SYSCFG.cfgr1().modify(|w| {
+                embassy_stm32::pac::SYSCFG.cfgr1().modify(|w| {
                     w.set_ucpd1_strobe(true);
                     w.set_ucpd2_strobe(true);
                 });
 
                 // RCC: Enable HSI and wait for it to be ready
-                RCC.cr().modify(|w| {
+                embassy_stm32::pac::RCC.cr().modify(|w| {
                     w.set_hsion(true)
                 });
-                while !RCC.cr().read().hsirdy() {}
+                while !embassy_stm32::pac::RCC.cr().read().hsirdy() {}
 
                 // CFGR: Write its default
-                RCC.cfgr().write(|_w| {
+                embassy_stm32::pac::RCC.cfgr().write(|_w| {
                 });
 
                 // RCC: Enable HSI only. Wait for PLL to be unready
-                RCC.cr().write(|w| {
+                embassy_stm32::pac::RCC.cr().write(|w| {
                     w.set_hsion(true)
                 });
-                while RCC.cr().read().pllrdy() {}
+                while embassy_stm32::pac::RCC.cr().read().pllrdy() {}
 
                 // Reset values from datasheet
-                RCC.pllcfgr().write_value(rcc::regs::Pllcfgr(0x00001000));
-                RCC.gpioenr().write_value(rcc::regs::Gpioenr(0x00001000));
-                RCC.ahbenr().write_value(rcc::regs::Ahbenr(0x000000100));
-                RCC.apbenr1().write_value(rcc::regs::Apbenr1(0x000000000));
-                RCC.apbenr2().write_value(rcc::regs::Apbenr2(0x000000000));
+                embassy_stm32::pac::RCC.pllcfgr().write_value(embassy_stm32::pac::rcc::regs::Pllcfgr(0x00001000));
+                embassy_stm32::pac::RCC.gpioenr().write_value(embassy_stm32::pac::rcc::regs::Gpioenr(0x00001000));
+                embassy_stm32::pac::RCC.ahbenr().write_value(embassy_stm32::pac::rcc::regs::Ahbenr(0x000000100));
+                embassy_stm32::pac::RCC.apbenr1().write_value(embassy_stm32::pac::rcc::regs::Apbenr1(0x000000000));
+                embassy_stm32::pac::RCC.apbenr2().write_value(embassy_stm32::pac::rcc::regs::Apbenr2(0x000000000));
 
                 unsafe {
                     hwa::trace!("Setting VTOR...");
@@ -443,46 +438,36 @@ impl HwiContract for Contract {
 
         config.rcc.hsi = None;
         config.rcc.hse = Some(
-            Hse {
+            embassy_stm32::rcc::Hse {
                 freq: embassy_stm32::time::Hertz(8_000_000),
-                mode: HseMode::Oscillator
+                mode: embassy_stm32::rcc::HseMode::Oscillator
             }
         );
         config.rcc.pll = Some(
-            Pll {
+            embassy_stm32::rcc::Pll {
                 // HSE = 8MHz
-                source: PllSource::HSE,
-                prediv: PllPreDiv::DIV1,
-                mul: PllMul::MUL24,
+                source: embassy_stm32::rcc::PllSource::HSE,
+                prediv: embassy_stm32::rcc::PllPreDiv::DIV1,
+                mul: embassy_stm32::rcc::PllMul::MUL24,
                 // SysClk = 8 / 1 * 24 / 3 = 64MHz
-                divr: Some(PllRDiv::DIV3),
+                divr: Some(embassy_stm32::rcc::PllRDiv::DIV3),
                 // PLLQ = 8 / 1 * 24 / 4 = 48MHz
-                divq: Some(PllQDiv::DIV4),
+                divq: Some(embassy_stm32::rcc::PllQDiv::DIV4),
                 // PLLP = 8 / 1 * 24 / 3 = 64MHz
-                divp: Some(PllPDiv::DIV3),
+                divp: Some(embassy_stm32::rcc::PllPDiv::DIV3),
             }
         );
-        config.rcc.sys = Sysclk::PLL1_R;
+        config.rcc.sys = embassy_stm32::rcc::Sysclk::PLL1_R;
         // PllQ does not work for Usb in this board (so far)
-        config.rcc.hsi48 = Some(Hsi48Config { sync_from_usb: true });
-        config.rcc.mux.usbsel = mux::Usbsel::HSI48;
+        config.rcc.hsi48 = Some(embassy_stm32::rcc::Hsi48Config { sync_from_usb: true });
+        config.rcc.mux.usbsel = embassy_stm32::rcc::mux::Usbsel::HSI48;
         // HCLK = {Power, AHB bus, core, memory, DMA, System timer, FCLK} = 64MHz
-        config.rcc.ahb_pre = AHBPrescaler::DIV1;
+        config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
         // PCLK = APB peripheral clocks = 64MHz
         // TPCLK = APOB timer clocks = 64MHz
-        config.rcc.ahb_pre = AHBPrescaler::DIV1;
+        config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
         config.rcc.low_power_run = false;
         let p = embassy_stm32::init(config);
-
-        embassy_stm32::pac::SYSCFG.cfgr1().write(|w| {
-            // https://www.st.com/resource/en/reference_manual/rm0454-stm32g0x0-advanced-armbased-32bit-mcus-stmicroelectronics.pdf
-            //  set_pa11_rmp and set_pa12_rmp (bits 3 and 4)
-            let val = true;
-            let off = 3usize;
-            w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
-            let off = 4usize;
-            w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
-        });
 
         //#endregion
 
@@ -494,6 +479,11 @@ impl HwiContract for Contract {
                 embassy_stm32::bind_interrupts!(struct UsbIrqs {
                     USB_UCPD1_2 => embassy_stm32::usb::InterruptHandler<embassy_stm32::peripherals::USB>;
                 });
+
+                {
+                    use embassy_stm32::interrupt::InterruptExt;
+                    embassy_stm32::interrupt::USB_UCPD1_2.set_priority(embassy_stm32::interrupt::Priority::P3);
+                }
 
                 hwa::info!("Creating USB Driver");
                 let mut usb_serial_device = io::serial_usb::SerialUsbDevice::new(
@@ -524,6 +514,12 @@ impl HwiContract for Contract {
                     USART1 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART1>;
                 });
 
+                {
+                    use embassy_stm32::interrupt::InterruptExt;
+                    embassy_stm32::interrupt::USART1.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_CHANNEL2_3.set_priority(embassy_stm32::interrupt::Priority::P3);
+                }
+
                 let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
                 cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
@@ -534,7 +530,7 @@ impl HwiContract for Contract {
                 let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
                     p.USART1, p.PA10, p.PA9,
                     SerialPort1IRQs,
-                    p.DMA2_CH2, p.DMA2_CH1,
+                    p.DMA2_CH3, p.DMA2_CH2,
                     cfg,
                 ).expect("Ready").split();
                 let serial_port_1_tx = hwa::make_static_async_controller!(
@@ -557,6 +553,12 @@ impl HwiContract for Contract {
                     USART2_LPUART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
                 });
 
+                {
+                    use embassy_stm32::interrupt::InterruptExt;
+                    embassy_stm32::interrupt::USART2_LPUART2.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_CH4_7_DMA2_CH1_5_DMAMUX1_OVR.set_priority(embassy_stm32::interrupt::Priority::P3);
+                }
+
                 let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = Self::SERIAL_PORT2_BAUD_RATE;
                 cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
@@ -567,7 +569,7 @@ impl HwiContract for Contract {
                 let (serial_port_2_tx_device, serial_port_2_rx_device) = embassy_stm32::usart::Uart::new(
                     p.USART2, p.PA3, p.PA2,
                     SerialPort2IRQs,
-                    p.DMA2_CH4, p.DMA2_CH3,
+                    p.DMA2_CH5, p.DMA2_CH4,
                     cfg,
                 ).expect("Ready").split();
                 let serial_port_2_tx = hwa::make_static_async_controller!(
@@ -626,6 +628,13 @@ impl HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
+
+                {
+                    use embassy_stm32::interrupt::InterruptExt;
+                    embassy_stm32::interrupt::SPI1.set_priority(embassy_stm32::interrupt::Priority::P4);
+                    embassy_stm32::interrupt::DMA1_CHANNEL2_3.set_priority(embassy_stm32::interrupt::Priority::P4);
+                }
+
                 let spi = {
                     let mut cfg = embassy_stm32::spi::Config::default();
                     cfg.frequency = embassy_stm32::time::Hertz(Self::SPI_FREQUENCY);
@@ -633,7 +642,7 @@ impl HwiContract for Contract {
                         "SPI1Controller",
                         types::Spi1MutexStrategyType,
                         device::Spi1::new(
-                            p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH4, p.DMA1_CH3, cfg
+                            p.SPI1, p.PA5, p.PA7, p.PA6, p.DMA1_CH3, p.DMA1_CH2, cfg
                         )
                     )
                 };

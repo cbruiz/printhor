@@ -44,7 +44,7 @@ runner = "probe-rs run --chip STM32L476RGTx --log-format {L}{s}"
 #linker = "flip-link"
 
 [target.'cfg(all(any(board="skr_mini_e3_v3"), target_arch="arm", target_os="none"))']
-runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s} --base-address 08002000"
+runner = "probe-rs run --chip STM32G0B1RETx --log-format {L}{s} --base-address 08002000"
 
 [target.'cfg(all(any(board="skr_mini_e3_v3-no-bootloader"), target_arch="arm", target_os="none"))']
 runner = "echo echo PLEASE DON'T probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s}"

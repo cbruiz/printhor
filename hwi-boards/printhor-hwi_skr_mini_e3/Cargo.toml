@@ -16,7 +16,8 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 default = [
     "skr_mini_e3_v3", "float-point-f32-impl",
-    "with-serial-usb", "with-motion", "with-x-axis", "with-y-axis",
+    "with-serial-usb", "with-serial-port-1", "with-serial-port-2",
+    "with-motion", "with-x-axis", "with-y-axis",
     "with-motion-stepper", "with-motion-cartessian-kinematics",
     "with-trinamic", "with-spi", "with-sd-card", "sd-card-uses-spi",
 ]

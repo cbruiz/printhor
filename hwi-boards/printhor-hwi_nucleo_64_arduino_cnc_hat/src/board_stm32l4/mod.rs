@@ -502,6 +502,13 @@ impl HwiContract for Contract {
                     USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
                 });
 
+                {
+                    use embassy_stm32::interrupt::InterruptExt;
+                    embassy_stm32::interrupt::USART2.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_STREAM7.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::DMA1_STREAM6.set_priority(embassy_stm32::interrupt::Priority::P3);
+                }
+
                 let mut cfg = embassy_stm32::usart::Config::default();
                 cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
                 cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
@@ -524,6 +531,39 @@ impl HwiContract for Contract {
             }
         }
         
+        //#endregion
+
+        //#region "with-serial-port-2"
+
+        cfg_if::cfg_if! {
+            if #[cfg(all(feature = "with-serial-port-2"))] {
+
+                embassy_stm32::bind_interrupts!(struct SerialPort2IRQs {
+                    USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+                });
+
+                let mut cfg = embassy_stm32::usart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
+                cfg.data_bits = embassy_stm32::usart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_stm32::usart::StopBits::STOP1;
+                cfg.parity = embassy_stm32::usart::Parity::ParityNone;
+                cfg.detect_previous_overrun = true;
+
+                let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
+                    p.USART2,
+                    p.PA3, p.PA2,
+                    SerialPort1IRQs,
+                    p.DMA1_CH7, p.DMA1_CH6, cfg,
+                ).expect("Ready").split();
+                let serial_port_1_tx = hwa::make_static_async_controller!(
+                    "SerialPort1Tx",
+                    types::SerialPort1TxMutexStrategy,
+                    hwa::SerialTxWrapper::new(serial_port_1_tx_device, Self::SERIAL_PORT1_BAUD_RATE)
+                );
+                let serial_port_1_rx_stream = device::SerialPort1Rx::new(serial_port_1_rx_device);
+            }
+        }
+
         //#endregion
         
         //#region "with-trinamic"

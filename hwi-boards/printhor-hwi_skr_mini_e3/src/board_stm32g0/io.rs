@@ -214,7 +214,7 @@ pub(crate) mod serial_port_2 {
 
     impl SerialPort2RxInputStream {
         pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
-            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
+            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT2_RX_BUFFER_SIZE];
 
             Self {
                 receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
