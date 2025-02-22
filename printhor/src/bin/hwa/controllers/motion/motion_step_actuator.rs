@@ -23,7 +23,8 @@ impl StepActuatorController {
     pub fn enable_steppers(&self, channels: hwa::CoordSel) {
         use hwa::traits::StepActuatorTrait;
         hwa::trace!("enable_steppers {:?}", channels);
-        self.actuator.apply_mut(|pins| pins.set_enabled(channels, true))
+        self.actuator
+            .apply_mut(|pins| pins.set_enabled(channels, true))
     }
 
     pub fn set_forward_direction(&self, channels: hwa::CoordSel, mask: hwa::CoordSel) {
@@ -60,12 +61,14 @@ impl StepActuatorController {
 
     pub fn end_stop_triggered(&self, channels: hwa::CoordSel) -> bool {
         use hwa::traits::StepActuatorTrait;
-        self.actuator.apply_mut(|pins| pins.endstop_triggered(channels))
+        self.actuator
+            .apply_mut(|pins| pins.endstop_triggered(channels))
     }
 
     pub fn step_toggle(&self, channels: hwa::CoordSel) {
         use hwa::traits::StepActuatorTrait;
-        hwa::trace!("step_togle {:?}", channels);
+        hwa::trace!("step_toggle {:?}", channels);
+
         self.actuator.apply_mut(|pins| pins.step_toggle(channels));
     }
 }
@@ -79,3 +82,19 @@ impl Clone for StepActuatorController {
         )
     }
 }
+/*
+#[cfg(feature = "assert-motion")]
+pub mod assertion {
+    pub struct MotionStepActuatorStateController {
+
+    }
+
+    impl MotionStepActuatorStateController {
+
+    }
+
+    pub static ACTUATOR_STATE: MotionStepActuatorStateController = MotionStepActuatorStateController {
+
+    };
+}
+*/

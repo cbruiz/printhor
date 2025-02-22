@@ -777,7 +777,7 @@ impl MotionPlanner {
         requested_motion_speed: Option<Real>,
         blocking: bool,
         event_bus: &hwa::types::EventBus,
-        num: u32,
+        _order_num: u32,
         line: Option<u32>,
     ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
         let p0_pos = self.motion_status.get_last_planned_position();
@@ -790,7 +790,7 @@ impl MotionPlanner {
         #[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Received motion. relevant world coords: [{:?}] world: src [{:?}] {} dest: [{:?}] {}, absolute: {}, speed: {:?} {}/s",
-            num,
+            _order_num,
             line.unwrap_or(0),
             relevant_world_coords,
             p0_pos.world_pos.selecting(relevant_world_coords),
@@ -831,7 +831,7 @@ impl MotionPlanner {
         #[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Relevant space coords: [{:#?}]",
-            num,
+            _order_num,
             line.unwrap_or(0),
             relevant_space_coords
         );
@@ -839,7 +839,7 @@ impl MotionPlanner {
         #[cfg(feature = "debug-motion")]
         hwa::info!(
             "[MotionPlanner] order_num:{:?} L:{:?} Motion transformed to space [ src: [{:#?}] dest: [{:#?}] ] {}, speed: {:?} {}/s",
-            num,
+            _order_num,
             line.unwrap_or(0),
             p0_pos.space_pos.selecting(relevant_space_coords),
             p1_pos.space_pos.selecting(relevant_space_coords),
@@ -885,7 +885,7 @@ impl MotionPlanner {
             #[cfg(feature = "debug-motion")]
             hwa::info!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Discarding plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
-                num,
+                _order_num,
                 line.unwrap_or(0),
                 p0_pos.space_pos.selecting(relevant_space_coords),
                 p1_pos.space_pos.selecting(relevant_space_coords),
@@ -923,10 +923,10 @@ impl MotionPlanner {
                     mnemonic,
                     channel,
                     action,
-                    ScheduledMove::Move(segment_data, num),
+                    ScheduledMove::Move(segment_data, _order_num),
                     blocking,
                     event_bus,
-                    num,
+                    _order_num,
                     line,
                 )
                 .await?;
@@ -943,7 +943,7 @@ impl MotionPlanner {
         } else {
             hwa::warn!(
                 "[MotionPlanner] order_num:{:?} L:{:?} Bad plan. src: [{:?}], dest: [{:?}], vmax: [ {:?}, [{:?}] ]",
-                num,
+                _order_num,
                 line.unwrap_or(0),
                 p0_pos.space_pos.selecting(relevant_space_coords),
                 p1_pos.space_pos.selecting(relevant_space_coords),

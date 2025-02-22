@@ -72,7 +72,6 @@ pub fn make_static_ref(input: TokenStream) -> TokenStream {
     TokenStream::from(quote! {
         {
             #[cfg_attr(not(target_arch = "aarch64"), unsafe(link_section = ".bss"))]
-            #[cfg_attr(target_arch = "aarch64", unsafe(link_section = "__DATA,.bss"))]
             #[link_name = #instance_name]
             static CELL_INSTANCE: printhor_hwa_utils::StaticCell<#var_type> = printhor_hwa_utils::StaticCell::new();
             match printhor_hwa_utils::stack_allocation_increment(core::mem::size_of::<printhor_hwa_utils::StaticCell<#var_type>>()) {
@@ -175,7 +174,6 @@ pub fn make_static_sync_controller(input: TokenStream) -> TokenStream {
             type D = <#mutex_strategy_type as printhor_hwa_utils::SyncMutexStrategy>::Resource;
 
             #[cfg_attr(not(target_arch = "aarch64"), unsafe(link_section = ".bss"))]
-            #[cfg_attr(target_arch = "aarch64", unsafe(link_section = "__DATA,.bss"))]
             #[link_name = #instance_name]
             static CELL_INSTANCE: printhor_hwa_utils::StaticCell<printhor_hwa_utils::SyncMutex<M, D>> = printhor_hwa_utils::StaticCell::new();
 
@@ -286,7 +284,6 @@ pub fn make_static_async_controller(input: TokenStream) -> TokenStream {
             type D = <#mutex_strategy_type as printhor_hwa_utils::AsyncMutexStrategy>::Resource;
 
             #[cfg_attr(not(target_arch = "aarch64"), unsafe(link_section = ".bss"))]
-            #[cfg_attr(target_arch = "aarch64", unsafe(link_section = "__DATA,.bss"))]
             #[link_name = #instance_name]
             static CELL_INSTANCE: printhor_hwa_utils::StaticCell<printhor_hwa_utils::AsyncMutex<M, D>> = printhor_hwa_utils::StaticCell::new();
 

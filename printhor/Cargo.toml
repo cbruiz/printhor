@@ -31,7 +31,7 @@ with-motion-anthropomorphic-kinematics = ["printhor-hwi_native?/with-motion-anth
 # Hardware device features
 
 with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt", "printhor-hwi_skr_mini_e3?/with-defmt", "printhor-hwi_mks_robin_nano?/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "embedded-sdmmc?/defmt-log"]
-with-log = ["printhor-hwa-common/with-log", "printhor-hwa-utils/with-log", "printhor-hwi_native/with-log", "embedded-sdmmc?/defmt-log"]
+with-log = ["printhor-hwa-common/with-log", "printhor-hwi_native?/with-log"]
 with-serial-usb = ["printhor-hwa-common/with-serial-usb", "printhor-hwi_native?/with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-usb", "printhor-hwi_skr_mini_e3?/with-serial-usb", "printhor-hwi_mks_robin_nano?/with-serial-usb", "printhor-hwi_rp_2040?/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwa-common/with-serial-port-1", "printhor-hwi_native?/with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-1", "printhor-hwi_skr_mini_e3?/with-serial-port-1", "printhor-hwi_mks_robin_nano?/with-serial-port-1", "printhor-hwi_rp_2040?/with-serial-port-1"]
 with-serial-port-2 = ["printhor-hwa-common/with-serial-port-2", "printhor-hwi_native?/with-serial-port-2", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-2", "printhor-hwi_skr_mini_e3?/with-serial-port-2", "printhor-hwi_mks_robin_nano?/with-serial-port-2", "printhor-hwi_rp_2040?/with-serial-port-2"]
@@ -93,6 +93,7 @@ debug-skip-homing = []
 debug-signals = ["printhor-hwi_nucleo_64_arduino_cnc_hat?/debug-signals"]
 debug-gcode = []
 debug-position = []
+debug-position-deviation = []
 debug-motion = []
 debug-motion-displacement = []
 debug-motion-broadcast = []
@@ -167,12 +168,13 @@ plot-motion-plan = ["gnuplot"]
 native = [
     "with-log",
     #"debug-position",
+    "debug-position-deviation",
     #"debug-motion-displacement",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"debug-gcode",
     #"verbose-timings",
-    #"assert-motion",
+    "assert-motion",
     #"trace-commands",
 
     "cornering",

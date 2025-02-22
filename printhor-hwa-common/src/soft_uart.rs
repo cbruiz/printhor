@@ -324,7 +324,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate as hwa;
-    use crate::soft_uart::{IOPin};
+    use crate::soft_uart::IOPin;
 
     /// A custom Pin actor implementation
     struct MyPinImpl {

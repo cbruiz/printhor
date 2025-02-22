@@ -265,7 +265,11 @@ pub async fn task_stepper(
                 );
 
                 let position_offset = segment.src_pos - current_real_pos.space_pos;
-                #[cfg(any(feature = "debug-motion", feature = "debug-position"))]
+                #[cfg(any(
+                    feature = "debug-motion",
+                    feature = "debug-position",
+                    feature = "debug-position-deviation"
+                ))]
                 hwa::info!(
                     "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
                     _order_num,
@@ -480,6 +484,7 @@ pub async fn task_stepper(
                                 if !do_dry_run {
                                     STEP_DRIVER
                                         .push(
+                                            _order_num,
                                             #[cfg(feature = "with-motion-broadcast")]
                                             delta,
                                             micro_segment_interpolator.state().clone(),
@@ -535,23 +540,24 @@ pub async fn task_stepper(
 
                         cfg_if::cfg_if! {
                             if #[cfg(feature="assert-motion")] {
-                                cfg_if::cfg_if! {
-                                    if #[cfg(feature="assert-motion")] {
-                                        steps_advanced += STEP_DRIVER.flush().await;
+                                if !do_dry_run {
+                                    cfg_if::cfg_if! {
+                                        if #[cfg(feature="assert-motion")] {
+                                            steps_advanced += STEP_DRIVER.flush().await;
+                                        }
                                     }
-                                }
-                                if steps_advanced != steps_to_advance {
-                                    hwa::error!("[task_stepper] order_num:{:?} Motion assertion failure. Advanced: {} Expected: {}",
-                                        _order_num, steps_advanced, steps_to_advance);
-                                }
-                                else {
-                                    hwa::info!("[task_stepper] order_num:{:?} Motion assertion succeeded",
-                                        _order_num
-                                    );
+                                    if steps_advanced != steps_to_advance {
+                                        hwa::error!("[task_stepper] order_num:{:?} Motion assertion failure. Advanced: {:?} Expected: {:?}",
+                                            _order_num, steps_advanced, steps_to_advance);
+                                    }
+                                    else {
+                                        hwa::info!("[task_stepper] order_num:{:?} Motion assertion succeeded",
+                                            _order_num
+                                        );
+                                    }
                                 }
                             }
                         }
-
                         {
                             let adv_delta = segment.unit_vector_dir.sign() * adv_pos;
                             #[cfg(feature = "debug-motion")]

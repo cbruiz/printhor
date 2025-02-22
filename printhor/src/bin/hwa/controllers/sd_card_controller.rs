@@ -343,6 +343,8 @@ pub struct SDCardStream<
     #[allow(unused)]
     path: heapless::Vec<hwa::sd_card::EntryRef, MAX_OPENED_ENTRIES>,
     buffer: [u8; BSIZE],
+    #[cfg(feature = "native")]
+    buff_str: String,
     bytes_read: u8,
     current_byte_index: u8,
 }
@@ -360,6 +362,8 @@ where
             card_controller,
             path,
             buffer: [0; BSIZE],
+            #[cfg(feature = "native")]
+            buff_str: String::new(),
             bytes_read: 0,
             current_byte_index: 0,
         }
@@ -387,6 +391,11 @@ where
             };
             match result {
                 Ok(bytes_read) => {
+                    #[cfg(feature = "native")]
+                    {
+                        self.buff_str =
+                            String::from_utf8(self.buffer[..bytes_read].to_vec()).unwrap();
+                    }
                     self.bytes_read = bytes_read as u8;
                     if bytes_read > 0 {
                         let byte = self.buffer[self.current_byte_index as usize];

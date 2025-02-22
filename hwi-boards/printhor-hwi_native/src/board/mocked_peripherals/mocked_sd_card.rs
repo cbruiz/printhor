@@ -28,19 +28,18 @@ impl From<embedded_sdmmc::SdCardError> for Error {
 
 pub struct MockedSDCardBlockDevice {
     file: RefCell<File>,
-    print_blocks: bool,
 }
 
 impl MockedSDCardBlockDevice {
-    pub fn new<P>(device_name: P, print_blocks: bool) -> Result<MockedSDCardBlockDevice, std::io::Error>
-        where
-            P: AsRef<Path>,
+    pub fn new<P>(device_name: P) -> Result<MockedSDCardBlockDevice, std::io::Error>
+        where P: AsRef<Path>,
     {
-        hwa::debug!("Cwd: Opening {}/{:?}", std::env::current_dir().as_ref().unwrap().to_str().unwrap(),  device_name.as_ref().to_str().unwrap());
+        hwa::debug!("Cwd: Opening {}/{:?}",
+            std::env::current_dir().as_ref().unwrap().to_str().unwrap(),
+            device_name.as_ref().to_str().unwrap());
 
         Ok(MockedSDCardBlockDevice {
             file: RefCell::new(File::open(device_name)?),
-            print_blocks,
         })
     }
 }
@@ -61,19 +60,13 @@ impl SDBlockDevice for MockedSDCardBlockDevice {
         &self,
         blocks: &mut [Block],
         start_block_idx: BlockIdx,
-        reason: &str,
+        _reason: &str,
     ) -> Result<(), Self::Error> {
         self.file
             .borrow_mut()
             .seek(SeekFrom::Start(start_block_idx.into_bytes()))?;
         for block in blocks.iter_mut() {
             self.file.borrow_mut().read_exact(&mut block.contents)?;
-            if self.print_blocks {
-                println!(
-                    "Read block ({}) {:?}: {:?}",
-                    reason, start_block_idx, &block
-                );
-            }
         }
         Ok(())
     }
@@ -84,9 +77,6 @@ impl SDBlockDevice for MockedSDCardBlockDevice {
             .seek(SeekFrom::Start(start_block_idx.into_bytes()))?;
         for block in blocks.iter() {
             self.file.borrow_mut().write_all(&block.contents)?;
-            if self.print_blocks {
-                println!("Wrote: {:?}", &block);
-            }
         }
         Ok(())
     }

@@ -17,10 +17,10 @@ mod motion_planner;
 mod motion_interpolation;
 
 /// The module for motion timing (formally: the StepPlan generator).
-mod motion_timing;
+mod motion_step_plan;
 
 /// The module to provide a software time driver to schedule multi-axis steps with variable timings each at fixed rate
-mod motion_step_planner;
+mod motion_step_plan_executor;
 
 /// The module to drive the step pins.
 mod motion_step_actuator;
@@ -28,12 +28,12 @@ mod motion_step_actuator;
 use crate::hwa;
 pub use motion_config::*;
 pub use motion_interpolation::*;
-pub use motion_step_actuator::*;
 pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;
-pub use motion_step_planner::*;
-pub use motion_timing::*;
+pub use motion_step_actuator::*;
+pub use motion_step_plan::*;
+pub use motion_step_plan_executor::*;
 
 pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
 

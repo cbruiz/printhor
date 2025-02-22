@@ -148,6 +148,8 @@ impl MultiTimer {
 ///
 #[derive(Clone, Copy)]
 pub struct StepPlan {
+    /// The order number, for traceability
+    pub _order_num: u32,
     /// The interval width for the step planner in microseconds
     pub interval_width: u32,
     #[cfg(feature = "with-motion-broadcast")]
@@ -172,6 +174,7 @@ impl StepPlan {
     /// A new StepPlanner instance.
     pub const fn new(#[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta) -> Self {
         Self {
+            _order_num: 0,
             #[cfg(feature = "with-motion-broadcast")]
             delta,
             ref_time_us: 0,
@@ -195,12 +198,14 @@ impl StepPlan {
     ///
     /// A new StepPlanner instance.
     pub fn from(
+        _order_num: u32,
         #[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
         stepper_enable_flags: CoordSel,
         stepper_dir_fwd_flags: CoordSel,
     ) -> Self {
         let mut instance = Self {
+            _order_num,
             #[cfg(feature = "with-motion-broadcast")]
             delta,
             ref_time_us: 0,

@@ -16,7 +16,7 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 default = []
 # Hardware device features
-with-log = ["env_logger"]
+with-log = ["env_logger", "printhor-hwa-common/with-log"]
 with-serial-usb = ["async-std"]
 with-serial-port-1 = ["async-std"]
 with-serial-port-2 = ["async-std"]
@@ -75,33 +75,32 @@ embassy-sync = { version = "0.6.2", features = ["std"] }
 embassy-time = { version = "0.4.0", features = ["std", "generic-queue-64"] }
 embassy-futures = { version = "0.1.1", features = [] }
 
-embedded-io-async = { version = "0.6", optional = true }
-embedded-io = { version = "0.6", optional = true }
+#embedded-io-async = { version = "0.6", optional = true }
+#embedded-io = { version = "0.6", optional = true }
 
-async-std = { version = "1", optional = true}
-sysinfo = { version = "0", default-features = false, features = ["default"]}
+async-std = { version = "1.13.0", optional = true}
+sysinfo = { version = "0.33.1", default-features = false, features = ["default"]}
 gnuplot = {version = "0.0", default-features = false, features=[], optional = true}
-env_logger = { version = "0.11", optional = true }
+env_logger = { version = "0.11.6", optional = true }
 printhor-hwa-common = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
 printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
 async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
-embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
-embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven" ], optional = true }
-#futures = { version = "0.3", default-features = false, features = [] }
-embedded-sdmmc = { version = "0.8", default-features = false, optional = true }
+embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ], optional = true }
+embedded-sdmmc = { version = "0.8.1", default-features = false, optional = true }
 
 pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
 
 #lvgl = { version="0", default-features = false, features =[], optional = true }
-nb = {version = "1.1", default-features = false, features = []}
-tmc2209 = { version = "0.2", optional = true }
-thread-priority = { version = "1.1"}
+#nb = {version = "1.1", default-features = false, features = []}
+tmc2209 = { version = "0.2.2", optional = true }
+thread-priority = { version = "1.2.0"}
 
-cfg-if = {version = "1.0"}
-const_env = { version = "0.1" }
+cfg-if = {version = "1.0.0"}
+const_env = { version = "0.1.2" }
 
-rust_decimal = { optional = true, version = "1", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { optional = true, version = "1" }
+rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1.36.0" }
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }

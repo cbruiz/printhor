@@ -637,7 +637,7 @@ impl hwa::HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
                 let sd_card_block_device = {
-                     device::SDCardBlockDevice::new("data/sdcard.img", false).unwrap()
+                     device::SDCardBlockDevice::new("data/sdcard.img").unwrap()
                 };
             }
         }
@@ -817,7 +817,6 @@ cfg_if::cfg_if! {
                     let mut next_frame = std::time::Instant::now();
                     // This is printed out from within the spawned thread.
                     loop {
-
                         if TERMINATION.signaled() {
                             break;
                         }

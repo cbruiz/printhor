@@ -455,6 +455,7 @@ impl SoftTimer {
     /// A future that resolves to `()` once the segment has been successfully queued.
     pub fn push(
         &self,
+        _order_num: u32,
         #[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
         stepper_enable_flags: hwa::CoordSel,
@@ -463,6 +464,7 @@ impl SoftTimer {
         poll_fn(move |cx| {
             self.poll_push(
                 cx,
+                _order_num,
                 #[cfg(feature = "with-motion-broadcast")]
                 delta,
                 multi_timer,
@@ -488,6 +490,7 @@ impl SoftTimer {
     fn poll_push(
         &self,
         cx: &mut Context<'_>,
+        _order_num: u32,
         #[cfg(feature = "with-motion-broadcast")] delta: hwa::MotionDelta,
         multi_timer: MultiTimer,
         stepper_enable_flags: hwa::CoordSel,
@@ -503,6 +506,7 @@ impl SoftTimer {
                 let current_tail = r.tail;
                 hwa::trace!("u-segment queued at {}", current_tail);
                 r.queue[current_tail as usize] = Some(StepPlan::from(
+                    _order_num,
                     #[cfg(feature = "with-motion-broadcast")]
                     delta,
                     multi_timer,

@@ -168,26 +168,41 @@ pub async fn task_print_job(
 
                                     match processor.execute(CHANNEL, &gcode, true).await {
                                         Ok(CodeExecutionSuccess::OK) => {
-                                            hwa::debug!("Response: OK {} (I)", gcode);
+                                            hwa::debug!(
+                                                "[task-print-job] Response: OK {} (I)",
+                                                gcode
+                                            );
                                         }
                                         Ok(CodeExecutionSuccess::CONSUMED) => {
-                                            hwa::debug!("Response: OK {} (C)", gcode);
+                                            hwa::debug!(
+                                                "[task-print-job] Response: OK {} (C)",
+                                                gcode
+                                            );
                                         }
                                         Ok(CodeExecutionSuccess::QUEUED) => {
-                                            hwa::debug!("Response: OK {} (Q)", gcode);
+                                            hwa::debug!(
+                                                "[task-print-job] Response: OK {} (Q)",
+                                                gcode
+                                            );
                                         }
                                         Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
-                                            hwa::debug!("Deferred {} (D)", gcode);
+                                            hwa::debug!("[task-print-job] Deferred {} (D)", gcode);
                                             if subscriber.ft_wait_for(_status).await.is_err() {
                                                 // Must pause. Recoverable when SYS_ALARM go down
                                                 break;
                                             } else {
-                                                hwa::debug!("Response: OK {} (D)", gcode);
+                                                hwa::debug!(
+                                                    "[task-print-job] Response: OK {} (D)",
+                                                    gcode
+                                                );
                                             }
                                         }
                                         Err(CodeExecutionFailure::BUSY) => {
                                             fatal_error = true;
-                                            hwa::error!("Response: BUSY {}", gcode);
+                                            hwa::error!(
+                                                "[task-print-job] Response: BUSY {}",
+                                                gcode
+                                            );
                                             break;
                                         }
                                         Err(
@@ -195,16 +210,19 @@ pub async fn task_print_job(
                                             | CodeExecutionFailure::NumericalError,
                                         ) => {
                                             fatal_error = true;
-                                            hwa::error!("Response: ERR {}", gcode);
+                                            hwa::error!("[task-print-job] Response: ERR {}", gcode);
                                             break;
                                         }
                                         Err(CodeExecutionFailure::NotYetImplemented) => {
-                                            hwa::warn!("Ignoring GCode not implemented {}", gcode);
+                                            hwa::warn!(
+                                                "[task-print-job] Ignoring GCode not implemented {}",
+                                                gcode
+                                            );
                                         }
                                         Err(CodeExecutionFailure::HomingRequired) => {
                                             fatal_error = true;
                                             hwa::error!(
-                                                "Unexpected HomingRequired before {}",
+                                                "[task-print-job] Unexpected HomingRequired before {}",
                                                 gcode
                                             );
                                             break;
@@ -212,7 +230,7 @@ pub async fn task_print_job(
                                         Err(CodeExecutionFailure::PowerRequired) => {
                                             fatal_error = true;
                                             hwa::error!(
-                                                "Unexpected PowerRequired before {}",
+                                                "[task-print-job] Unexpected PowerRequired before {}",
                                                 gcode
                                             );
                                             break;
@@ -233,7 +251,10 @@ pub async fn task_print_job(
                                 GCodeLineParserError::FatalError => {
                                     // Fatal
                                     fatal_error = true;
-                                    hwa::error!("Fatal error at line {}", current_line);
+                                    hwa::error!(
+                                        "[task-print-job] Fatal error at line {}",
+                                        current_line
+                                    );
                                     break;
                                 }
                                 GCodeLineParserError::GCodeNotImplemented(_ln, _gcode) => {
@@ -241,7 +262,7 @@ pub async fn task_print_job(
                                         .write(
                                             channel,
                                             alloc::format!(
-                                                "Ignoring gcode not supported: {} at {}\n",
+                                                "[task-print-job] Ignoring gcode not supported: {} at {}\n",
                                                 _gcode,
                                                 current_line
                                             )
@@ -249,13 +270,16 @@ pub async fn task_print_job(
                                         )
                                         .await;
                                     hwa::warn!(
-                                        "Ignoring GCode not supported {} at line {}",
+                                        "[task-print-job] Ignoring GCode not supported {} at line {}",
                                         _gcode.as_str(),
                                         current_line
                                     );
                                 }
                                 GCodeLineParserError::ParseError(_ln) => {
-                                    hwa::warn!("Parse error at {}", current_line);
+                                    hwa::warn!(
+                                        "[task-print-job] Parse error at line {}",
+                                        current_line
+                                    );
                                 }
                             }
                         }
@@ -271,7 +295,7 @@ pub async fn task_print_job(
                     .await
                     .is_err()
                 {
-                    hwa::warn!("SYS_ALARM raised");
+                    hwa::warn!("[task-print-job] SYS_ALARM raised");
                 }
                 job_time += job_t0.elapsed();
                 if fatal_error {
@@ -293,7 +317,7 @@ pub async fn task_print_job(
                         Some(mut p) => p.close().await,
                     }
                     hwa::info!(
-                        "Job completed in {:03} seconds",
+                        "[task-print-job] Job completed in {:03} seconds",
                         job_time.as_millis() as f64 / 1000.0
                     );
                 }
@@ -304,10 +328,10 @@ pub async fn task_print_job(
                     None => {}
                     Some(mut p) => p.close().await,
                 }
-                hwa::debug!("File done");
+                hwa::debug!("[task-print-job] File done");
             }
             Ok(_) => {
-                hwa::warn!("unexpected event");
+                hwa::warn!("[task-print-job] Unexpected event");
                 continue;
             }
         }
