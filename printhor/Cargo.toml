@@ -23,10 +23,10 @@ nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-
 
 with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper", "printhor-hwi_skr_mini_e3?/with-motion-stepper", "printhor-hwi_mks_robin_nano?/with-motion-stepper", "printhor-hwi_rp_2040?/with-motion-stepper"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast", "printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast", "printhor-hwi_skr_mini_e3?/with-motion-broadcast", "printhor-hwi_mks_robin_nano?/with-motion-broadcast", "printhor-hwi_rp_2040?/with-motion-broadcast"]
-with-motion-cartessian-kinematics = ["printhor-hwi_native?/with-motion-cartessian-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-cartessian-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-cartessian-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-cartessian-kinematics", "printhor-hwi_rp_2040?/with-motion-cartessian-kinematics"]
-with-motion-core-xy-kinematics = ["printhor-hwi_native?/with-motion-core-xy-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-core-xy-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-core-xy-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-core-xy-kinematics", "printhor-hwi_rp_2040?/with-motion-core-xy-kinematics"]
-with-motion-delta-kinematics = ["printhor-hwi_native?/with-motion-delta-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-delta-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-delta-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-delta-kinematics", "printhor-hwi_rp_2040?/with-motion-delta-kinematics"]
-with-motion-anthropomorphic-kinematics = ["printhor-hwi_native?/with-motion-anthropomorphic-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-anthropomorphic-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-anthropomorphic-kinematics", "printhor-hwi_rp_2040?/with-motion-anthropomorphic-kinematics"]
+with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian-kinematics", "printhor-hwi_native?/with-motion-cartessian-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-cartessian-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-cartessian-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-cartessian-kinematics", "printhor-hwi_rp_2040?/with-motion-cartessian-kinematics"]
+with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics", "printhor-hwi_native?/with-motion-core-xy-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-core-xy-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-core-xy-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-core-xy-kinematics", "printhor-hwi_rp_2040?/with-motion-core-xy-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics", "printhor-hwi_native?/with-motion-delta-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-delta-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-delta-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-delta-kinematics", "printhor-hwi_rp_2040?/with-motion-delta-kinematics"]
+with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics", "printhor-hwi_native?/with-motion-anthropomorphic-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-anthropomorphic-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-anthropomorphic-kinematics", "printhor-hwi_rp_2040?/with-motion-anthropomorphic-kinematics"]
 
 # Hardware device features
 
@@ -180,8 +180,8 @@ native = [
     "cornering",
     #"trace-commands",
 
-    #"with-motion-cartessian-kinematics",
-    "with-motion-core-xy-kinematics",
+    "with-motion-cartessian-kinematics",
+    #"with-motion-core-xy-kinematics",
     #"with-motion-anthropomorphic-kinematics",
     #"with-motion-delta-kinematics",
 
@@ -192,9 +192,9 @@ native = [
     "with-motion-broadcast",
     "with-e-axis",
     "with-x-axis", "with-y-axis", "with-z-axis",
-    #"with-a-axis", "with-b-axis", "with-c-axis",
-    #"with-i-axis", "with-j-axis", "with-k-axis",
-    #"with-u-axis", "with-v-axis", "with-w-axis",
+    "with-a-axis", "with-b-axis", "with-c-axis",
+    "with-i-axis", "with-j-axis", "with-k-axis",
+    "with-u-axis", "with-v-axis", "with-w-axis",
 
     "with-serial-usb",
     "with-serial-port-1",
@@ -372,7 +372,7 @@ skr_mini_e3_v3 = [
     #"with-laser",
     #"with-hot-end",
     #"with-hot-bed",
-    #"with-probe",
+    "with-probe",
     #"with-fan-layer",
     "with-ps-on",
 

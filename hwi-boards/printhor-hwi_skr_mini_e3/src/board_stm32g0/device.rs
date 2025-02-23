@@ -90,13 +90,19 @@ use hwa::CoordSel;
 #[cfg(feature = "with-trinamic")]
 use crate::board_stm32g0::io::TrinamicUartWrapper;
 
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-probe",
-    feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]
-pub type PwmImpl<TimPeri> = embassy_stm32::timer::simple_pwm::SimplePwm<'static, TimPeri>;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-probe")] {
+        pub type PwmServo = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+    }
+}
 
-#[cfg(any(feature = "with-probe"))]
-pub type PwmServo =
-    embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM2>;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-probe")] {
+        pub type PwmProbe = PwmServo;
+        pub type PwmProbeChannel = PwmChannel;
+    }
+}
+
 
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1"))]
 pub type PwmFan0Fan1HotendHotbed =

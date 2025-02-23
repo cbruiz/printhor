@@ -20,6 +20,8 @@ default = [
     "with-motion", "with-x-axis", "with-y-axis",
     "with-motion-stepper", "with-motion-cartessian-kinematics",
     "with-trinamic", "with-spi", "with-sd-card", "sd-card-uses-spi",
+    "with-ps-on",
+    "with-probe"
 ]
 # Versions/boards
 skr_mini_e3_v3 = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-16384", "embassy-time/generic-queue-32", "embassy-stm32/stm32g0b1re", "embassy-stm32/time-driver-tim4"]
@@ -37,21 +39,20 @@ with-i2c = ["embedded-hal"]
 with-hot-end = ["embedded-hal"]
 with-hot-bed = ["embedded-hal"]
 with-motion = ["printhor-hwa-common/with-motion"]
-with-motion-stepper = []
 with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian-kinematics"]
 with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
 with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
 with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
-with-motion-broadcast = []
-with-probe = ["embedded-hal"]
-with-sd-card = []
-with-print-job = []
-with-fan-layer = ["embedded-hal"]
-with-fan-extra-1 = ["embedded-hal"]
-with-laser = ["embedded-hal"]
-with-neo = ["embedded-hal"]
+with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
+with-motion-stepper = []
+with-probe = ["embedded-hal", "printhor-hwa-common/with-probe"]
+with-sd-card = ["printhor-hwa-common/with-sd-card"]
+with-print-job = ["printhor-hwa-common/with-print-job"]
+with-fan-layer = ["embedded-hal", "printhor-hwa-common/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal", "printhor-hwa-common/with-fan-extra-1"]
+with-laser = ["embedded-hal", "printhor-hwa-common/with-laser"]
 with-trinamic = ["printhor-hwa-common/with-trinamic"]
-with-ps-on = []
+with-ps-on = ["printhor-hwa-common/with-ps-on"]
 with-display = [] # Broken
 without-bootloader = ["embassy-stm32/memory-x"]
 

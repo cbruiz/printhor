@@ -262,7 +262,7 @@ impl TrinamicController {
         hwa::info!("[TrinamicController] Now reading response...");
         let mut buff = [0u8; 32];
         let mut reader = tmc2209::Reader::default();
-        let reception_deadline = Instant::now() + embassy_time::Duration::from_secs(5);
+        let reception_deadline = Instant::now() + embassy_time::Duration::from_secs(1);
         loop {
             if Instant::now() > reception_deadline {
                 hwa::warn!("Reception deadline expired!");

@@ -65,29 +65,29 @@ with-w-axis = []
 [dependencies]
 printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
 printhor-hwa-utils = { version = "0",  default-features = false, path = "../printhor-hwa-utils", features = [] }
-const_env = { version = "0.1"}
+const_env = { version = "0.1.2"}
 
-embassy-sync = { version = "0.6", features = [] }
-embassy-executor = { version = "0.7", features = [] }
-embassy-time = { version = "0.4", features = [] }
+embassy-sync = { version = "0.6.2", features = [] }
+embassy-executor = { version = "0.7.0", features = [] }
+embassy-time = { version = "0.4.0", features = [] }
 embassy-embedded-hal = { version = "0.3.0", optional = true, default-features = false, features = [] }
 
-embedded-hal-1 = { package = "embedded-hal", version = "1.0", default-features = false, optional = true }
-embedded-hal-0 = { package = "embedded-hal", version = "0.2", features = ["unproven"], optional = true }
-embedded-sdmmc = { version = "0.8.0", default-features = false, features = [], optional = true }
-embedded-io-async = { version = "0.6", default-features = false, features = [], optional = true }
-async-gcode = { version = "0.3", default-features = false, features = [], optional = true}
+embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"], optional = true }
+embedded-sdmmc = { version = "0.8.1", default-features = false, features = [], optional = true }
+embedded-io-async = { version = "0.6.1", default-features = false, features = [], optional = true }
+async-gcode = { version = "0.3.0", default-features = false, features = [], optional = true}
 
 heapless = { version = "0.8.0", default-features = false, features = [], optional = true }
 
 bitflags = { version = "2.8.0", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0.0" }
 defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
-log = { version = "0.4.25", default-features = false, optional = true }
+log = { version = "0.4.26", default-features = false, optional = true }
 strum = { version = "0.27.1", default-features = false, features = ["derive"] }
 
-num-traits = { version = "0.2", default-features = false, features = [] }
-micromath = { version = "2.1", default-features = false, features = [] }
+num-traits = { version = "0.2.19", default-features = false, features = [] }
+micromath = { version = "2.1.0", default-features = false, features = [] }
 rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { optional = true, version = "1.36.0" }
 ryu = {version = "1.0.19", default-features = false}

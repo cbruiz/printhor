@@ -98,27 +98,13 @@ pub use static_cell::StaticCell;
 //#region "Utilities"
 
 /// Global counter to keep track of memory allocation.
-#[const_env::from_env("MAX_STATIC_ALLOC_BYTES")]
-pub const MAX_STATIC_ALLOC_BYTES: usize = 16384;
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// Increments the stack reservation counter.
-///
-/// This function checks if the number of bytes `nbytes` exceeds the `MAX_SIZE`.
-/// If it does, it panics. Otherwise, it increments a global counter by `nbytes`.
-///
-/// # Panics
-///
-/// Panics if `nbytes` is greater than `MAX_SIZE`.
 pub fn stack_allocation_increment(nbytes: usize) -> Result<usize, usize> {
-    let prev_size = COUNTER.fetch_add(nbytes, Ordering::Relaxed);
-    if prev_size + nbytes > MAX_STATIC_ALLOC_BYTES {
-        COUNTER.sub(nbytes, Ordering::Relaxed);
-        Err(nbytes)
-    } else {
-        Ok(nbytes)
-    }
+    let _ = COUNTER.fetch_add(nbytes, Ordering::Relaxed);
+    Ok(nbytes)
 }
 
 pub fn stack_allocation_get() -> usize {

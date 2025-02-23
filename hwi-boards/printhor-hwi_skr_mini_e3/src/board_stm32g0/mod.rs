@@ -709,6 +709,32 @@ impl HwiContract for Contract {
                 );
             }
         }
+        
+        cfg_if::cfg_if!{
+            if #[cfg(any(feature = "with-probe"))] {
+                let pwm_servo = hwa::make_static_sync_controller!(
+                    "PwmServo",
+                    types::ServoPwmMutexStrategy,
+                    device::PwmServo::new(
+                        p.TIM2,
+                        None, // PA0 | PA15 | PA5 | PC4
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(p.PA1, embassy_stm32::gpio::OutputType::PushPull)), // PA1 | PB3 | PC5
+                        None, // PA2 | PB10 | PC6
+                        None, // PA3 | PB11 | PC7
+                        embassy_stm32::time::hz(50),
+                        embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
+                    )
+                );
+                
+            }
+        }
+
+        cfg_if::cfg_if!{
+            if #[cfg(any(feature = "with-probe"))] {
+                let probe_pwm = pwm_servo.clone();
+                let probe_pwm_channel = hwa::HwiResource::new(device::PwmProbeChannel::Ch2);
+            }
+        }
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
@@ -741,7 +767,7 @@ impl HwiContract for Contract {
             #[cfg(feature = "with-sd-card")]
             sd_card_block_device,
             #[cfg(feature = "with-i2c")]
-            i2c: todo!("fill me"),
+            i2c,
             #[cfg(feature = "with-ps-on")]
             ps_on,
             #[cfg(feature = "with-motion")]
@@ -749,39 +775,39 @@ impl HwiContract for Contract {
             #[cfg(feature = "with-trinamic")]
             trinamic_uart,
             #[cfg(feature = "with-motion-broadcast")]
-            motion_sender: todo!("fill me"),
+            motion_sender,
             #[cfg(feature = "with-probe")]
-            probe_pwm: todo!("fill me"),
+            probe_pwm,
             #[cfg(feature = "with-probe")]
-            probe_pwm_channel: todo!("fill me"),
+            probe_pwm_channel,
             #[cfg(feature = "with-laser")]
-            laser_pwm: todo!("fill me"),
+            laser_pwm,
             #[cfg(feature = "with-laser")]
-            laser_pwm_channel: todo!("fill me"),
+            laser_pwm_channel,
             #[cfg(feature = "with-fan-layer")]
-            fan_layer_pwm: todo!("fill me"),
+            fan_layer_pwm,
             #[cfg(feature = "with-fan-layer")]
-            fan_layer_pwm_channel: todo!("fill me"),
+            fan_layer_pwm_channel,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra1_pwm: todo!("fill me"),
+            fan_extra1_pwm,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra1_pwm_channel: todo!("fill me"),
+            fan_extra1_pwm_channel,
             #[cfg(feature = "with-hot-end")]
-            hot_end_adc: todo!("fill me"),
+            hot_end_adc,
             #[cfg(feature = "with-hot-end")]
-            hot_end_adc_pin: todo!("fill me"),
+            hot_end_adc_pin,
             #[cfg(feature = "with-hot-end")]
-            hot_end_pwm: todo!("fill me"),
+            hot_end_pwm,
             #[cfg(feature = "with-hot-end")]
-            hot_end_pwm_channel: todo!("fill me"),
+            hot_end_pwm_channel,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_adc: todo!("fill me"),
+            hot_bed_adc,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_adc_pin: todo!("fill me"),
+            hot_bed_adc_pin,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_pwm: todo!("fill me"),
+            hot_bed_pwm,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_pwm_channel: todo!("fill me"),
+            hot_bed_pwm_channel,
             #[cfg(feature = "with-motion-broadcast")]
             high_priority_core: hwa::NoDevice,
         }

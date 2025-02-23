@@ -418,7 +418,7 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-trinamic")] {
-            const TRINAMIC_UART_BAUD_RATE: u32 = 32;
+            const TRINAMIC_UART_BAUD_RATE: u32 = 128;
             type TrinamicUartDevice = device::TrinamicUart;
         }
     }

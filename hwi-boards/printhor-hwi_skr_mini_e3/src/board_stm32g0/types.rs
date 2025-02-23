@@ -120,9 +120,15 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-probe"))] {
+        pub type ServoMutexType = hwa::SyncCsMutexType;
+        pub type ServoPwmMutexStrategy = hwa::SyncStandardStrategy<ProbeMutexType, crate::board::device::PwmProbe>;
+    }
+}
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-probe")] {
-        pub type ProbeMutexType = hwa::SyncCsMutexType;
-        pub type ProbePwmMutexStrategy = hwa::SyncStandardStrategy<ProbeMutexType, crate::board::device::PwmProbe>;
+        pub type ProbeMutexType = ServoMutexType;
+        pub type ProbePwmMutexStrategy = ServoPwmMutexStrategy;
     }
 }
 

@@ -80,14 +80,12 @@ pub fn make_static_ref(input: TokenStream) -> TokenStream {
                     CELL_INSTANCE.init(#owned_instance)
                 }
                 Err(_num_bytes) => {
-                    printhor_hwa_utils::error!("Unable to allocated {} bytes for {} (max: {}, actual: {})",
+                    printhor_hwa_utils::error!("Unable to allocated {} bytes for {} (actual: {})",
                         _num_bytes, #instance_name,
-                        printhor_hwa_utils::MAX_STATIC_ALLOC_BYTES,
                         printhor_hwa_utils::stack_allocation_get(),
                     );
-                    panic!("Unable to allocated {} bytes for {} (max: {}, actual: {})",
+                    panic!("Unable to allocated {} bytes for {} (actual: {})",
                         _num_bytes, #instance_name,
-                        printhor_hwa_utils::MAX_STATIC_ALLOC_BYTES,
                         printhor_hwa_utils::stack_allocation_get(),
                     )
                 }
@@ -190,14 +188,12 @@ pub fn make_static_sync_controller(input: TokenStream) -> TokenStream {
                     controller
                 }
                 Err(_num_bytes) => {
-                    printhor_hwa_utils::error!("Unable to allocated {} bytes for {} (max: {}, actual: {})",
+                    printhor_hwa_utils::error!("Unable to allocated {} bytes for {} (actual: {})",
                         _num_bytes, #instance_name,
-                        printhor_hwa_utils::MAX_STATIC_ALLOC_BYTES,
                         printhor_hwa_utils::stack_allocation_get(),
                     );
-                    panic!("Unable to allocated {} bytes for {} (max: {}, actual: {})",
+                    panic!("Unable to allocated {} bytes for {} (actual: {})",
                         _num_bytes, #instance_name,
-                        printhor_hwa_utils::MAX_STATIC_ALLOC_BYTES,
                         printhor_hwa_utils::stack_allocation_get(),
                     )
                 }
@@ -300,14 +296,12 @@ pub fn make_static_async_controller(input: TokenStream) -> TokenStream {
                     controller
                 }
                 Err(_num_bytes) => {
-                    printhor_hwa_utils::error!("Unable to allocated {} bytes for {} (max: {}, actual: {})",
+                    printhor_hwa_utils::error!("Unable to allocated {} bytes for {} (actual: {})",
                         _num_bytes, #instance_name,
-                        printhor_hwa_utils::MAX_STATIC_ALLOC_BYTES,
                         printhor_hwa_utils::stack_allocation_get(),
                     );
-                    panic!("Unable to allocated {} bytes for {} (max: {}, actual: {})",
+                    panic!("Unable to allocated {} bytes for {} (actual: {})",
                         _num_bytes, #instance_name,
-                        printhor_hwa_utils::MAX_STATIC_ALLOC_BYTES,
                         printhor_hwa_utils::stack_allocation_get(),
                     )
                 }
