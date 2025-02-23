@@ -75,7 +75,7 @@ pub async fn task_integration(
     }
 
     {
-        let test_name = "T1 [M100 (Machine info)]";
+        let test_name = "T1 [status: M100 (Machine info), M105, M115, M503, M119, M]";
 
         hwa::info!("## {} - BEGIN", test_name);
         match processor
@@ -89,13 +89,107 @@ pub async fn task_integration(
             .ok()
         {
             Some(_result) => {
-                hwa::info!("## {} - END", test_name);
             }
             _ => {
                 finish_task(Err(test_name));
                 return;
             }
         }
+        match processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M105),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .ok()
+        {
+            Some(_result) => {
+                
+            }
+            _ => {
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+
+        match processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M115),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .ok()
+        {
+            Some(_result) => {
+
+            }
+            _ => {
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+
+        match processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M503(control::S{ s: Some(math::ONE) })),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .ok()
+        {
+            Some(_result) => {
+
+            }
+            _ => {
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+        match processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M503(control::S{ s: Some(math::ZERO) })),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .ok()
+        {
+            Some(_result) => {
+
+            }
+            _ => {
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+
+        match processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M119),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .ok()
+        {
+            Some(_result) => {
+
+            }
+            _ => {
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+
+        hwa::info!("## {} - END", test_name);
     }
 
     // Separator

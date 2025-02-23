@@ -20,7 +20,8 @@ pub struct GCodeMultiplexedInputStream {
 
 impl GCodeMultiplexedInputStream {
     pub fn new(
-        #[cfg(feature = "with-serial-usb")] serial_usb_rx_stream: hwa::types::SerialUsbInputStream,
+        #[cfg(feature = "with-serial-usb")]
+        serial_usb_rx_stream: hwa::types::SerialUsbInputStream,
         #[cfg(feature = "with-serial-port-1")]
         serial_port1_rx_stream: hwa::types::SerialPort1InputStream,
         #[cfg(feature = "with-serial-port-2")]
@@ -101,7 +102,6 @@ impl GCodeMultiplexedInputStream {
         }
     }
 
-    #[allow(unused)]
     pub fn get_state(&self, channel: hwa::CommChannel) -> async_gcode::AsyncParserState {
         match channel {
             #[cfg(feature = "with-serial-usb")]
@@ -110,12 +110,11 @@ impl GCodeMultiplexedInputStream {
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.get_state(),
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.get_state(),
-            hwa::CommChannel::Internal => async_gcode::AsyncParserState::ErrorRecovery,
-            hwa::CommChannel::Sink => async_gcode::AsyncParserState::ErrorRecovery,
+            _ => async_gcode::AsyncParserState::ErrorRecovery,
         }
     }
 
-    #[allow(unused)]
+    #[cfg(feature = "trace-commands")]
     pub fn get_line(&self, channel: hwa::CommChannel) -> u32 {
         match channel {
             #[cfg(feature = "with-serial-usb")]
@@ -124,11 +123,11 @@ impl GCodeMultiplexedInputStream {
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.get_line(),
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.get_line(),
-            hwa::CommChannel::Internal => 0,
-            hwa::CommChannel::Sink => 0,
+            _ => 0,
         }
     }
 
+    #[cfg(feature = "trace-commands")]
     pub fn get_gcode_line(&self, channel: hwa::CommChannel) -> Option<u32> {
         match channel {
             #[cfg(feature = "with-serial-usb")]
@@ -137,8 +136,7 @@ impl GCodeMultiplexedInputStream {
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.gcode_line(),
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.gcode_line(),
-            hwa::CommChannel::Internal => None,
-            hwa::CommChannel::Sink => None,
+            _ => None,
         }
     }
 
@@ -150,8 +148,7 @@ impl GCodeMultiplexedInputStream {
             hwa::CommChannel::SerialPort1 => self.serial_port1_line_parser.reset().await,
             #[cfg(feature = "with-serial-port-2")]
             hwa::CommChannel::SerialPort2 => self.serial_port2_line_parser.reset().await,
-            hwa::CommChannel::Internal => {}
-            hwa::CommChannel::Sink => {}
+            _ => {}
         }
     }
 }
