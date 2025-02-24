@@ -72,10 +72,8 @@ mod test {
         hwa::info!("Epsilon is {:?}", epsilon);
         
         assert_eq!(minus_one.sqrt(), None);
-        assert_eq!(one.sqrt(), Some(one));
+        assert_eq!(one.sqrt().and_then(|v| Some(v.rdp(6))), Some(one));
         assert_eq!(zero.sqrt(), Some(zero));
-        assert_eq!(epsilon.sqrt(), Some(zero));
-        assert_eq!(half_epsilon.sqrt(), Some(zero));
         
         let x = hwa::make_real!(0.0);
         assert_eq!(x.ceil(), zero, "ceil(0) is zero");

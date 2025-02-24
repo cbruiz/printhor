@@ -2630,39 +2630,39 @@ where
         }
     }
 
-    pub fn rdp(&self, digits: u32) -> TVector<T> {
+    pub fn rdp(&self, _digits: u32) -> TVector<T> {
         Self {
             _phantom: PhantomData,
             #[cfg(feature = "with-e-axis")]
-            e: self.e.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            e: self.e.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             //
             #[cfg(feature = "with-x-axis")]
-            x: self.x.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            x: self.x.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-y-axis")]
-            y: self.y.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            y: self.y.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-z-axis")]
-            z: self.z.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            z: self.z.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             //
             #[cfg(feature = "with-a-axis")]
-            a: self.a.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            a: self.a.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-b-axis")]
-            b: self.b.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            b: self.b.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-c-axis")]
-            c: self.c.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            c: self.c.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             //
             #[cfg(feature = "with-i-axis")]
-            i: self.i.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            i: self.i.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-j-axis")]
-            j: self.j.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            j: self.j.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-k-axis")]
-            k: self.k.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            k: self.k.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             //
             #[cfg(feature = "with-u-axis")]
-            u: self.u.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            u: self.u.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-v-axis")]
-            v: self.v.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            v: self.v.map_or_else(|| None, |v| Some(v.rdp(_digits))),
             #[cfg(feature = "with-w-axis")]
-            w: self.w.map_or_else(|| None, |v| Some(v.rdp(digits))),
+            w: self.w.map_or_else(|| None, |v| Some(v.rdp(_digits))),
         }
     }
 
