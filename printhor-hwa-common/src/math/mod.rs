@@ -355,4 +355,112 @@ mod test {
         let zero = hwa::make_vector_real!(x=0.0, y=0.0, z=0.0);
         assert_eq!(zero, zero.floor());
     }
+    
+    #[test]
+    fn test_axis() {
+        use crate as printhor_hwa_common;
+        let c = CoordSel::X;
+        assert!(!c.is_alternate());
+        assert_eq!(CoordSel::UNSET.name(), "?");
+        // Format works
+        let _ = format!("{:?}", c);
+        // Alternate format works
+        let _ = format!("{:#?}", c);
+        
+        let one  = TVector::one();
+        let two = one.copy_with_coords(CoordSel::all_axis(), Some(2));
+        assert_eq!(one + one, two);
+        let empty = TVector::new_with_coord(CoordSel::empty(), Some(1));
+       
+        assert_eq!(empty + empty, empty);
+        
+        let mut t2 = empty;
+        t2.set_coord(CoordSel::E, Some(1));
+        assert_ne!(t2, empty);
+        t2.set_coord(CoordSel::E, None);
+        assert_eq!(t2, empty);
+
+        assert!(TVector::<Real>::new().is_nan_or_zero());
+        assert!(!hwa::make_vector!(e=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(x=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(y=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(z=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(a=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(b=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(c=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(i=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(j=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(k=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(u=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(v=1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(w=1).is_nan_or_zero());
+        
+        assert_eq!(TVector::new_with_const_value(1.0), TVector::one());
+        assert_eq!(TVector::new().map_nan(&Real::one()), TVector::one());
+        
+        assert_eq!(TVector::new().map_coords(CoordSel::all(), &Some(math::ONE) ), TVector::one());
+        assert_eq!(TVector::new().map_coords(CoordSel::empty(), &Some(math::ONE) ), TVector::new());
+        
+        assert_eq!(TVector::<Real>::one().selecting(CoordSel::all()), TVector::one());
+        assert_eq!(TVector::<Real>::one().selecting(CoordSel::empty()), TVector::new());
+
+        assert_eq!(TVector::<Real>::one().selecting_negligible(CoordSel::all()), TVector::new());
+        assert_eq!(TVector::<Real>::zero().selecting_negligible(CoordSel::all()), TVector::zero());
+        assert_eq!(TVector::<Real>::new().selecting_negligible(CoordSel::all()), TVector::new());
+
+        assert_eq!(TVector::<Real>::one().excluding(CoordSel::all()), TVector::new());
+        assert_eq!(TVector::<Real>::one().excluding(CoordSel::empty()), TVector::one());
+
+        assert_eq!(TVector::<Real>::one().excluding_negligible(), TVector::one());
+        assert_eq!(TVector::<Real>::zero().excluding_negligible(), TVector::new());
+        assert_eq!(TVector::<Real>::new().excluding_negligible(), TVector::new());
+
+        assert_eq!(TVector::new().map_nan_coords(CoordSel::all(), &math::ONE), TVector::one());
+        assert_eq!(TVector::new().map_nan_coords(CoordSel::empty(), &math::ONE), TVector::new());
+
+        assert_eq!(TVector::<Real>::new().map_val(&math::ONE), TVector::new());
+        assert_eq!(TVector::<Real>::one().map_val(&math::ZERO), TVector::zero());
+
+        assert_eq!(TVector::<Real>::one().sum(), Real::from_lit(CoordSel::num_axis() as i64,0));
+
+        assert_eq!(TVector::<Real>::one().pow(1), TVector::<Real>::one());
+
+        assert_eq!(TVector::<Real>::new().norm2(), Some(math::ZERO));
+        assert_eq!(TVector::<Real>::one().norm2(), Real::from_lit(CoordSel::num_axis() as i64,0).sqrt());
+
+        assert_eq!(TVector::<Real>::new().round(), TVector::new());
+        assert_eq!(TVector::<Real>::zero().round(), TVector::zero());
+
+        assert_eq!(TVector::<Real>::default(), TVector::new());
+
+        let _ = std::format!("{:?}", TVector::<Real>::zero());
+        let _ = std::format!("{:?}", TVector::<Real>::new());
+
+        let _ = std::format!("{:#?}", TVector::<Real>::zero());
+        let _ = std::format!("{:#?}", TVector::<Real>::new());
+
+        let one = TVector::<Real>::one();
+        let zero = TVector::<Real>::zero();
+        let none = TVector::<Real>::new();
+        assert_eq!(one + zero, one);
+        let mut zero_prima = zero;
+        zero_prima += zero;
+        assert_eq!(zero_prima, zero);
+        zero_prima += one;
+        assert_eq!(zero_prima, one);
+        zero_prima -= one;
+        assert_eq!(zero_prima, zero);
+
+        assert_eq!(zero_prima * one, zero);
+        
+        assert_eq!(one * none, none);
+        assert_eq!(one / none, none);
+        assert_eq!(one / one, one);
+        assert_eq!(one / zero, none);
+
+        assert_eq!(one * math::ONE, one);
+        assert_eq!(one / math::ONE, one);
+        assert_eq!(one / math::ZERO, none);
+        
+    }
 }
