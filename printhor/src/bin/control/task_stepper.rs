@@ -550,11 +550,6 @@ pub async fn task_stepper(
                                         hwa::error!("[task_stepper] order_num:{:?} Motion assertion failure. Advanced: {:?} Expected: {:?}",
                                             _order_num, steps_advanced, steps_to_advance);
                                     }
-                                    else {
-                                        hwa::info!("[task_stepper] order_num:{:?} Motion assertion succeeded",
-                                            _order_num
-                                        );
-                                    }
                                 }
                             }
                         }

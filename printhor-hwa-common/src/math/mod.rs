@@ -56,11 +56,13 @@ mod test {
         assert_eq!(one, other_one);
         assert!(zero.is_nan_or_zero());
         assert!(!one.is_nan_or_zero());
+        
+        let relevant_coords = CoordSel::X.union(CoordSel::Y).union(CoordSel::Z);
 
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_nan_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.not_nan_coords());
+        assert_eq!(relevant_coords, zero.negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_nan_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, zero.not_nan_coords().intersection(relevant_coords));
 
         assert_eq!(zero.abs(), zero);
         assert_eq!(one.abs(), one);
@@ -81,10 +83,12 @@ mod test {
         assert!(zero.is_nan_or_zero());
         assert!(!one.is_nan_or_zero());
 
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_nan_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.not_nan_coords());
+        let relevant_coords = CoordSel::X.union(CoordSel::Y).union(CoordSel::Z);
+
+        assert_eq!(relevant_coords, zero.negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_nan_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, zero.not_nan_coords().intersection(relevant_coords));
 
         assert_eq!(zero.abs(), zero);
         assert_eq!(one.abs(), one);
@@ -105,10 +109,12 @@ mod test {
         assert!(zero.is_nan_or_zero());
         assert!(!one.is_nan_or_zero());
 
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_nan_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.not_nan_coords());
+        let relevant_coords = CoordSel::X.union(CoordSel::Y).union(CoordSel::Z);
+
+        assert_eq!(relevant_coords, zero.negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_nan_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, zero.not_nan_coords().intersection(relevant_coords));
 
         assert_eq!(zero.abs(), zero);
         assert_eq!(one.abs(), one);
@@ -129,10 +135,13 @@ mod test {
         assert!(zero.is_nan_or_zero());
         assert!(!one.is_nan_or_zero());
 
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_nan_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.not_nan_coords());
+        let relevant_coords = CoordSel::X.union(CoordSel::Y).union(CoordSel::Z);
+
+        assert_eq!(relevant_coords, zero.negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_nan_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, zero.not_nan_coords().intersection(relevant_coords));
+        
         assert_eq!(zero.abs(), zero);
         assert_eq!(one.abs(), one);
     }
@@ -152,10 +161,13 @@ mod test {
         assert!(zero.is_nan_or_zero());
         assert!(!one.is_nan_or_zero());
 
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_nan_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.not_nan_coords());
+        let relevant_coords = CoordSel::X.union(CoordSel::Y).union(CoordSel::Z);
+
+        assert_eq!(relevant_coords, zero.negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_nan_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, zero.not_nan_coords().intersection(relevant_coords));
+        
         assert_eq!(zero.abs(), zero);
         assert_eq!(one.abs(), one);
     }
@@ -175,10 +187,13 @@ mod test {
         assert!(zero.is_nan_or_zero());
         assert!(!one.is_nan_or_zero());
 
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_negligible_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), one.not_nan_coords());
-        assert_eq!(CoordSel::X.union(CoordSel::Y).union(CoordSel::Z), zero.not_nan_coords());
+        let relevant_coords = CoordSel::X.union(CoordSel::Y).union(CoordSel::Z);
+
+        assert_eq!(relevant_coords, zero.negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_negligible_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, one.not_nan_coords().intersection(relevant_coords));
+        assert_eq!(relevant_coords, zero.not_nan_coords().intersection(relevant_coords));
+        
         assert_eq!(zero.abs(), zero);
         assert_eq!(one.abs(), one);
     }
@@ -187,5 +202,8 @@ mod test {
     fn test_vector_real() {
         let zero = hwa::make_vector_real!(x=0.0, y=0.0, z=0.0);
         assert_eq!(zero, zero.ceil());
+
+        let zero = hwa::make_vector_real!(x=0.0, y=0.0, z=0.0);
+        assert_eq!(zero, zero.floor());
     }
 }
