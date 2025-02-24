@@ -4,9 +4,10 @@
 use crate as hwa;
 use bitflags::bitflags;
 use core::marker::PhantomData;
-use core::ops::Mul;
 use hwa::math::Real;
 use num_traits::float::FloatCore;
+#[allow(unused)]
+use num_traits::ToPrimitive;
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-c-axis", feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis",
@@ -2574,6 +2575,8 @@ where
     where
         T: RealOps + core::ops::AddAssign<T>,
     {
+        #[allow(unused)]
+        use core::ops::Mul;
         let n = self.mul(*self).sum();
         let r = n.sqrt();
         r
@@ -3584,9 +3587,16 @@ impl RealOps for f32 {
     where
         Self: Sized,
     {
-        if !self.is_sign_negative() {
-            //Some(micromath::F32(*self).sqrt().0)
-            Real::from_f32(*self).sqrt().map(|v| v.0)
+        if !self.is_sign_negative()  {
+            cfg_if::cfg_if! {
+                if #[cfg(feature = "fixed-point-128-impl")] {
+                    Real::from_f32(*self).sqrt().map(|v| v.0.to_f32())?
+                }
+                else {
+                    Real((*self).into()).sqrt().map(|v| v.0 as f32)
+                }
+            }
+            
         } else {
             None
         }

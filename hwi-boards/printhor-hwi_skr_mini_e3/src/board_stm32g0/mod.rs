@@ -61,11 +61,11 @@ impl HwiContract for Contract {
             cfg_if::cfg_if! {
                 if #[cfg(feature = "with-motion-cartessian-kinematics")] {
                      const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=10.0, y=10.0, z=10.0)
+                        hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
                     };
 
                     const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=100.0, y=100.0, z=100.0)
+                        hwa::make_vector_real!(x=105.0, y=105.0, z=105.0)
                     };
 
                     const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
@@ -73,11 +73,11 @@ impl HwiContract for Contract {
                     };
 
                     const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=9800.0, y=9800.0, z=4800.0, e=9800.0)
+                        hwa::make_vector_real!(x=2400.0, y=2400.0, z=2400.0, e=2400.0)
                     };
 
                     const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=19600.0, y=19600.0, z=9600.0, e=19600.0)
+                        hwa::make_vector_real!(x=4800.0, y=4800.0, z=4800.0, e=4800.0)
                     };
 
                     const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
@@ -85,11 +85,11 @@ impl HwiContract for Contract {
                     };
 
                     const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=50.0, y=50.0, z=10.0, e=50.0)
+                        hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=50.0)
                     };
 
                     const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
-                        hwa::make_vector!(x=2, y=2, z=2, e=2)
+                        hwa::make_vector!(x=8, y=8, z=8, e=8)
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
@@ -99,15 +99,15 @@ impl HwiContract for Contract {
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
                     #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
-                    const SEGMENT_QUEUE_SIZE: u8 = 10;
+                    const SEGMENT_QUEUE_SIZE: u8 = 40;
                 }
                 else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=200.0, y=200.0, z=200.0)
+                        hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
                     };
 
                     const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=100.0, y=100.0, z=100.0)
+                        hwa::make_vector_real!(x=105.0, y=105.0, z=105.0)
                     };
 
                     const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
@@ -127,22 +127,22 @@ impl HwiContract for Contract {
                     };
 
                     const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=50.0, y=50.0, z=10.0, e=50.0)
+                        hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=50.0)
                     };
 
 
                     const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
-                        hwa::make_vector!(x=2, y=2, z=2, e=2)
+                        hwa::make_vector!(x=8, y=8, z=8, e=8)
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
 
                     #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
-                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 10_000;
 
                     #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
-                    const SEGMENT_QUEUE_SIZE: u8 = 10;
+                    const SEGMENT_QUEUE_SIZE: u8 = 40;
 
                 }
                 else if #[cfg(feature = "with-motion-delta-kinematics")] {
@@ -901,7 +901,6 @@ cfg_if::cfg_if! {
                 let p = cortex_m::Peripherals::steal();
                 let mut syst = p.SYST;
                 syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-                // Target: 0.000010 seg (10us)
                 let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
                 hwa::info!(
                     "SYST reload set to {} ({} Hz)",

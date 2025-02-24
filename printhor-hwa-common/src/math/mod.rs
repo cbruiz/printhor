@@ -37,27 +37,105 @@ mod test {
 
     #[test]
     fn test_real() {
-        let zero = hwa::math::ZERO;
-        let one = hwa::math::ONE;
-        
-        assert_eq!(Real::zero(), zero);
+        let zero = math::ZERO;
+        let one = math::ONE;
+        let two = math::TWO;
+        let four = math::TWO + math::TWO;
+        let epsilon = Real::epsilon();
+        let half_epsilon = epsilon / two;
+
+        use core::ops::Neg;
+        let minus_one = one.neg();
+        assert_eq!(minus_one, zero - one);
+
         assert_eq!(Real::one(), one);
+        assert_eq!(Real::new(0, 0), zero);
+        assert_eq!(Real::new(1, 0), one);
+        assert_eq!(Real::new(2, 0), two);
+        assert!(Real::one().is_positive());
+        assert!(!Real::zero().is_defined_positive());
+
+        assert_eq!(minus_one.abs(), one);
+        assert_eq!(minus_one.powi(2), one);
+        assert_eq!(minus_one.powi(2), one);
+        assert_eq!(two.powi(2), four);
+        //assert!(<Real as RealOps>::sqrt(&zero));
+        assert_eq!(two.recip(), math::HALF);
+        assert_eq!(epsilon, math::EPSILON);
+        assert!(epsilon >= zero);
+        assert!(!epsilon.is_negligible());
+        assert!(half_epsilon.is_negligible());
+        assert_eq!(epsilon.round(), zero);
+        assert!(!one.is_negligible());
+        assert!(!minus_one.is_negligible());
+        
+        hwa::info!("Epsilon is {:?}", epsilon);
+        
+        assert_eq!(minus_one.sqrt(), None);
+        assert_eq!(one.sqrt(), Some(one));
+        assert_eq!(zero.sqrt(), Some(zero));
+        assert_eq!(epsilon.sqrt(), Some(zero));
+        assert_eq!(half_epsilon.sqrt(), Some(zero));
         
         let x = hwa::make_real!(0.0);
         assert_eq!(x.ceil(), zero, "ceil(0) is zero");
         let y = hwa::make_real!(0.55);
         assert_eq!(y.ceil(), one, "ceil(0.51) is one");
+
+        assert_eq!(Real::vmax(None, None), None);
+        assert_eq!(Real::vmax(Some(zero), Some(one)), Some(one));
+        assert_eq!(Real::vmax(Some(one), None), Some(one));
+        assert_eq!(Real::vmax(None, Some(one)), None);
+
+        assert_eq!(Real::vmin(None, None), None);
+        assert_eq!(Real::vmin(Some(zero), Some(one)), Some(zero));
+        assert_eq!(Real::vmin(Some(zero), None), Some(zero));
+        assert_eq!(Real::vmin(None, Some(zero)), None);
         
         assert!(one.is_positive());
-        assert_eq!(zero, hwa::math::Real::from_inner(0.0));
+        assert_eq!(zero, Real::from_inner(0.0));
         assert_eq!(1i64, one.to_i64().unwrap());
+        assert_eq!(1i32, one.rdp(0).to_i32().unwrap());
         assert_eq!(1i64, one.int());
         assert_eq!(1f64, one.to_f64());
+        assert_eq!(2i32, (math::ONE + math::ONE + math::ONE + math::ONE).sqrt().unwrap().to_i32().unwrap());
         assert_eq!(Real::vmax(Some(one), Some(zero)), Some(one));
         assert_eq!(Real::vmax(None, Some(zero)), None);
         assert_eq!(Real::vmax(Some(one), None), Some(one));
         assert!(one > zero);
         assert_eq!(one.clamp(zero, zero), zero);
+        
+        let mut sum = one;
+        sum += one;
+        assert_eq!(sum, two);
+        sum -= one;
+        assert_eq!(sum, one);
+
+        let mut scale = two;
+        scale *= two;
+        assert_eq!(scale, four);
+        scale /= two;
+        assert_eq!(scale, two);
+        
+        assert_eq!(two.partial_cmp(&two), Some(core::cmp::Ordering::Equal));
+        assert!(two.cmp(&two).is_eq());
+        let ordering_result = one.cmp(&two);
+        assert!(ordering_result.is_ne());
+        assert!(ordering_result.is_le());
+        
+        assert_eq!(one.max(epsilon), one);
+        assert_eq!(epsilon.max(one), one);
+        assert_eq!(epsilon.max(zero), epsilon);
+        assert_eq!(epsilon.clamp(zero, one), epsilon);
+        assert_eq!(minus_one.clamp(zero, one), zero);
+        assert_eq!(two.clamp(zero, one), one);
+        
+        
+    }
+
+    #[test]
+    fn test_format() {
+        assert_eq!(format!("{:?}", math::ZERO).as_str(), "0.0");
     }
 
     #[test]

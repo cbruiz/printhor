@@ -459,7 +459,7 @@ impl MotionPlanner {
                                         break;
                                     } else {
                                         if curr_vmax < v_0 || curr_vmax < v_1 {
-                                            hwa::warn!("TODO: Check this case");
+                                            //TODO: Study this case
                                             break;
                                         }
                                         curr_vmax *= Real::from_f32(0.5);

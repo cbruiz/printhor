@@ -16,7 +16,13 @@ homepage = "https://github.com/cbruiz/printhor"
 
 [features]
 std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std"]
-default = ["std", "with-motion", "with-log", "float-point-f32-impl", "with-x-axis", "with-y-axis", "with-z-axis"]
+default = ["std", "with-motion", "with-log", "float-point-f32-impl",
+    "with-x-axis", "with-y-axis", "with-z-axis",
+    "with-a-axis", "with-b-axis", "with-c-axis",
+    "with-i-axis", "with-j-axis", "with-k-axis",
+    "with-u-axis", "with-v-axis", "with-w-axis",
+
+]
 nightly = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
 with-defmt = ["defmt", "printhor-hwa-utils/with-defmt", "embedded-sdmmc/defmt-log"]

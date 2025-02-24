@@ -357,7 +357,7 @@ skr_mini_e3_v3 = [
     #"debug-position",
     #"debug-motion",
     #"debug-motion-broadcast",
-    "debug-gcode",
+    #"debug-gcode",
     #"verbose-timings",
 
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",

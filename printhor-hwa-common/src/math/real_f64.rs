@@ -2,11 +2,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature="float-point-f64-impl")] {
         #[allow(unused)]
         use crate as hwa;
-        use core::cmp::Ordering;
-        use core::ops::*;
-        use core::fmt::{Debug, Formatter};
-        #[cfg(feature = "with-defmt")]
-        use defmt::Format;
+        use hwa::math;
         use num_traits::{ToPrimitive, Zero};
         #[allow(unused)]
         use num_traits::float::FloatCore;
@@ -32,6 +28,10 @@ cfg_if::cfg_if! {
             }
 
             pub const fn from_f64(num: f64) -> Self {
+                Self(num)
+            }
+
+            pub const fn from_inner(num: f64) -> Self {
                 Self(num)
             }
 
@@ -124,26 +124,28 @@ cfg_if::cfg_if! {
             }
 
             pub fn sqrt(self) -> Option<Self> {
-                //#[cfg(feature = "native")]
-                //let v = self.0.sqrt();
-                let v = 1.0f64 / Self::quake_isqrt(self.0);
-                //let v = 1.0f64 / core::intrinsics::sqrt(self.0);
-                //let x = micromath::F32Ext::sqrt(self.0 as f32);
-                //#[cfg(not(feature = "native"))]
-                //let v = micromath::F32(self.0 as f32).sqrt().0; // Pfffff.....
-                if v.is_nan() {
+                if self < math::ZERO {
                     None
                 }
+                else if self == math::ZERO {
+                    Some(math::ZERO)
+                }
                 else {
-                    Some(Self(v as f64))
+                    // The famous inverse square root approximation of 'ID Software'
+                    let r = math::ONE / Real::from_inner(Self::quake_isqrt(self.inner()));
+                    if self < math::EPSILON {
+                        hwa::trace!("Very small sqrt calculation: sqrt({:?}) = {:?} ", self.0, r);
+                    }
+                    Some(r)
                 }
             }
 
             fn quake_isqrt(number: f64) -> f64 {
-                let mut i: i64 = number.to_bits() as i64;
-                i = 0x5fe6ec85e7de30da_i64.wrapping_sub(i >> 1);
-                let y = f64::from_bits(i as u64);
-                y * (1.5 - (number * 0.5 * y * y))
+                let xhalf = number * 0.5;
+                let mut y = f64::from_bits(0x5fe6ec85e7de30da_i64.wrapping_sub(number.to_bits() as i64 >> 1) as u64);
+                y = y * (1.5 - xhalf * y * y);
+                y = y * (1.5 - xhalf * y * y);
+                y
             }
 
             pub fn sin(self) -> Self {
@@ -216,7 +218,7 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl Add for Real {
+        impl core::ops::Add for Real {
             type Output = Self;
 
             fn add(self, rhs: Self) -> Self::Output {
@@ -224,14 +226,14 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl AddAssign for Real {
+        impl core::ops::AddAssign for Real {
 
             fn add_assign(&mut self, rhs: Self) {
                 self.0.add_assign(rhs.0)
             }
         }
 
-        impl Sub for Real {
+        impl core::ops::Sub for Real {
             type Output = Self;
 
             fn sub(self, rhs: Self) -> Self::Output {
@@ -239,14 +241,14 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl SubAssign for Real {
+        impl core::ops::SubAssign for Real {
 
             fn sub_assign(&mut self, rhs: Self) {
                 self.0.sub_assign(rhs.0)
             }
         }
 
-        impl Mul for Real {
+        impl core::ops::Mul for Real {
             type Output = Self;
 
             fn mul(self, rhs: Self) -> Self::Output {
@@ -254,14 +256,14 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl MulAssign for Real {
+        impl core::ops::MulAssign for Real {
             fn mul_assign(&mut self, rhs: Self) {
                 self.0.mul_assign(rhs.0)
 
             }
         }
 
-        impl Div for Real {
+        impl core::ops::Div for Real {
             type Output = Self;
 
             fn div(self, rhs: Self) -> Self::Output {
@@ -269,9 +271,16 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl PartialOrd<Self> for Real {
+        impl core::ops::DivAssign for Real {
 
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            fn div_assign(&mut self, rhs: Self) {
+                self.0.div_assign(rhs.0)
+            }
+        }
+
+        impl core::cmp::PartialOrd<Self> for Real {
+
+            fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
                 self.0.partial_cmp(&other.0)
             }
 
@@ -302,8 +311,8 @@ cfg_if::cfg_if! {
 
         }
 
-        impl Ord for Real {
-            fn cmp(&self, other: &Self) -> Ordering {
+        impl core::cmp::Ord for Real {
+            fn cmp(&self, other: &Self) -> core::cmp::Ordering {
                 self.0.total_cmp(&other.0)
             }
 
@@ -320,7 +329,7 @@ cfg_if::cfg_if! {
             }
         }
 
-        impl Neg for Real {
+        impl core::ops::Neg for Real {
             type Output = Self;
 
             fn neg(self) -> Self::Output {
@@ -329,7 +338,7 @@ cfg_if::cfg_if! {
         }
 
         #[cfg(feature = "with-defmt")]
-        impl Format for Real {
+        impl defmt::Format for Real {
             fn format(&self, fmt: defmt::Formatter) {
                 defmt::write!(fmt, "{:?}", self.0.to_f64());
             }
