@@ -297,7 +297,7 @@ pub async fn task_stepper(
                     segment.speed_exit_su_s,
                 );
 
-                //#[cfg(feature = "verbose-timings")]
+                #[cfg(feature = "verbose-timings")]
                 let t_calc = embassy_time::Instant::now();
 
                 // Compute the Motion Profile
@@ -378,7 +378,7 @@ pub async fn task_stepper(
                                 steps_per_su.with_coord(relevant_coords.complement(), None),
                             );
 
-                        //#[cfg(feature = "verbose-timings")]
+                        #[cfg(feature = "verbose-timings")]
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory computation took: {} us. displacement: {:?} {} in {:?} s",
                             _order_num,
@@ -693,7 +693,7 @@ pub async fn task_stepper(
                 moves_left
             }
         };
-        hwa::info!("Moves left: {}", _moves_left);
+        hwa::trace!("Moves left: {}", _moves_left);
     }
 }
 
