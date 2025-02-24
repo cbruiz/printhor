@@ -425,8 +425,10 @@ mod test {
 
         assert_eq!(TVector::<Real>::one().pow(1), TVector::<Real>::one());
 
+        let num_axis = Real::from_lit(CoordSel::num_axis() as i64,0);
         assert_eq!(TVector::<Real>::new().norm2(), Some(math::ZERO));
-        assert_eq!(TVector::<Real>::one().norm2(), Real::from_lit(CoordSel::num_axis() as i64,0).sqrt());
+        assert_eq!(TVector::one().with_coord_if_set(CoordSel::all(), Some(math::TWO)).unit().norm2().unwrap().rdp(6), math::ONE);
+        assert_eq!(TVector::<Real>::one().norm2(), num_axis.sqrt());
 
         assert_eq!(TVector::<Real>::new().round(), TVector::new());
         assert_eq!(TVector::<Real>::zero().round(), TVector::zero());
@@ -461,6 +463,94 @@ mod test {
         assert_eq!(one * math::ONE, one);
         assert_eq!(one / math::ONE, one);
         assert_eq!(one / math::ZERO, none);
+
+        assert_eq!(one.get_coord(CoordSel::E), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::X), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::Y), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::Z), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::A), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::B), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::C), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::I), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::J), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::K), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::U), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::V), Some(math::ONE));
+        assert_eq!(one.get_coord(CoordSel::W), Some(math::ONE));
+        
+        use core::ops::Neg;
+        let minus_one = one.neg();
+        let mut acc = zero;
+        acc.increment(CoordSel::all(), math::ONE);
+        assert_eq!(acc, one);
+        acc.decrement_if_positive(CoordSel::all());
+        assert_eq!(acc, zero);
+        acc.increment(CoordSel::empty(), math::ONE);
+        assert_eq!(acc, zero);
+        let mut acc2 = minus_one;
+        acc2.decrement_if_positive(CoordSel::all());
+        assert_eq!(acc2, minus_one);
+        acc2.decrement_if_positive(CoordSel::empty());
+        assert_eq!(acc2, minus_one);
+        
+        acc2.assign(CoordSel::empty(), &one);
+        assert_eq!(acc2, minus_one);
+        acc2.assign(CoordSel::all(), &one);
+        assert_eq!(acc2, one);
+        
+        acc2 = acc2.with_coord_if_set(CoordSel::empty(), Some(math::TWO));
+        assert_eq!(acc2, one);
+        acc2 = acc2.with_coord_if_set(CoordSel::all(), Some(math::ZERO - math::ONE));
+        assert_eq!(acc2, minus_one);
+
+        acc2 = acc2.with_coords_if_set(CoordSel::empty(), &one);
+        assert_eq!(acc2, minus_one);
+        acc2 = acc2.with_coords_if_set(CoordSel::all(), &one);
+        assert_eq!(acc2, one);
+        
+        assert_eq!(minus_one.clamp_lower_than(zero), minus_one);
+        assert_eq!(minus_one.clamp_lower_than(none), minus_one);
+        
+        assert_eq!(minus_one.clamp_higher_than(zero), zero);
+        assert_eq!(one.clamp_higher_than(zero), one);
+        assert_eq!(one.clamp_higher_than(none), one);
+        let two = one + one;
+
+        assert_eq!(two.copy_with_coords(CoordSel::E, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::E, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::X, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::X, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::Y, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::Y, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::Z, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::Z, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::A, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::A, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::B, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::B, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::C, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::C, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::I, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::I, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::J, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::J, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::K, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::K, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::U, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::U, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::V, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::V, Some(math::ONE)).vmin(), Some(math::ONE));
+        assert_eq!(two.copy_with_coords(CoordSel::W, Some(math::ONE)).vmax(), Some(math::TWO));
+        assert_eq!(two.copy_with_coords(CoordSel::W, Some(math::ONE)).vmin(), Some(math::ONE));
+        
+        let (_, _) = one.decompose_normal();
+        
+
+        
+        
+        // vmax, vmin
+        
+        // unit
         
     }
 }
