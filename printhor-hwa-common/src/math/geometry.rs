@@ -2663,7 +2663,6 @@ where
         }
     }
 
-    #[allow(unused)]
     pub fn floor(&self) -> TVector<T>
     where
         T: RealOps,
@@ -2703,7 +2702,6 @@ where
         }
     }
 
-    #[allow(unused)]
     pub fn ceil(&self) -> TVector<T>
     where
         T: RealOps,
@@ -2743,7 +2741,6 @@ where
         }
     }
 
-    #[allow(unused)]
     pub fn round(&self) -> TVector<T> {
         Self {
             _phantom: PhantomData,

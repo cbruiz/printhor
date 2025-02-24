@@ -84,8 +84,35 @@ mod test {
 
         assert_eq!(four_four.sqrt().rdp(6), two_two);
         
+    }
+
+    #[test]
+    fn test_vector_bounds_etc() {
+
+        let empty = TVector::new();
+        let one = TVector::one();
+        let zero = TVector::zero();
+        let one_prima = zero.with_coord_if_set(CoordSel::all_axis(), Some(math::ONE));
+        assert_eq!(one, one_prima);
+        let empty_prima = empty.with_coord_if_set(CoordSel::all_axis(), Some(math::ONE));
+        assert_eq!(empty, empty_prima);
+
+        assert_eq!(one.vmax(), Some(math::ONE));
+        assert_eq!(one.vmin(), Some(math::ONE));
+        assert_eq!(zero.vmin(), Some(math::ZERO));
+        assert_eq!(zero.vmax(), Some(math::ZERO));
+        assert_eq!(empty.vmax(), None);
+        assert_eq!(empty.vmin(), None);
         
+        assert!(!one.bounded_by(&zero));
+        assert!(zero.bounded_by(&one));
+        assert!(!zero.bounded_by(&empty));
+        assert!(!one.bounded_by(&empty));
         
+        assert!(zero.is_nan_or_zero());
+        assert!(empty.is_nan_or_zero());
+        assert!(!one.is_nan_or_zero());
+
     }
 
     #[test]
