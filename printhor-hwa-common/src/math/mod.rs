@@ -30,37 +30,62 @@ pub use geometry::*;
 #[cfg(test)]
 mod test {
     use crate as hwa;
-    use hwa::CoordSel;
-    use crate::math;
-    use crate::math::Real;
+    use hwa::math;
+    use math::CoordSel;
+    use math::Real;
+    use math::TVector;
 
     #[test]
     fn test_real() {
         let zero = hwa::math::ZERO;
         let one = hwa::math::ONE;
+        
+        assert_eq!(Real::zero(), zero);
+        assert_eq!(Real::one(), one);
+        
         let x = hwa::make_real!(0.0);
         assert_eq!(x.ceil(), zero, "ceil(0) is zero");
         let y = hwa::make_real!(0.55);
         assert_eq!(y.ceil(), one, "ceil(0.51) is one");
-        
-        assert_eq!(zero.sin(), zero, "sin(0.0) is zero");
-        assert_eq!(zero.cos(), one, "cos(0.0) is zero");
         
         assert!(one.is_positive());
         assert_eq!(zero, hwa::math::Real::from_inner(0.0));
         assert_eq!(1i64, one.to_i64().unwrap());
         assert_eq!(1i64, one.int());
         assert_eq!(1f64, one.to_f64());
-        assert_eq!(Real::from_f32(180.0f32), math::PI.r2d());
-        assert_eq!(math::PI, Real::from_f32(180.0f32).d2r());
-        assert_eq!(Real::from_f32(180.0f32).sign(), one);
         assert_eq!(Real::vmax(Some(one), Some(zero)), Some(one));
         assert_eq!(Real::vmax(None, Some(zero)), None);
         assert_eq!(Real::vmax(Some(one), None), Some(one));
         assert!(one > zero);
         assert_eq!(one.clamp(zero, zero), zero);
+    }
+
+    #[test]
+    fn test_trigonometry() {
+
+        assert_eq!(math::ZERO.sin(), math::ZERO, "sin(0.0) is zero");
+        assert_eq!(math::ZERO.cos(), math::ONE, "cos(0.0) is zero");
+        assert_eq!(math::ONE.acos(), math::ZERO, "acos(1.0) is zero");
+        
+        assert_eq!(math::ONE.ln().exp(), math::ONE, "exp(ln(1)) is ONE");
+        
+        assert_eq!(Real::from_f32(180.0f32), math::PI.r2d());
+        assert_eq!(math::PI, Real::from_f32(180.0f32).d2r());
+        assert_eq!(Real::from_f32(180.0f32).sign(), math::ONE);
         assert_eq!((math::PI / math::FOUR).tan(), math::ONE);
         assert_eq!(math::HALF.atan2(math::HALF), math::PI / math::FOUR);
+        
+        let _one: TVector<f32> = TVector::one();
+        let _zero: TVector<f32> = TVector::zero();
+        
+        let _two = math::TWO.to_f64() as f32;
+        let four_four = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(4.0f32));
+        let two_two = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(2.0f32));
+
+        assert_eq!(four_four.sqrt().rdp(6), two_two);
+        
+        
+        
     }
 
     #[test]

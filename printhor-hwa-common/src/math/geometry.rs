@@ -2627,7 +2627,6 @@ where
         }
     }
 
-    #[allow(unused)]
     pub fn rdp(&self, digits: u32) -> TVector<T> {
         Self {
             _phantom: PhantomData,
@@ -3589,8 +3588,8 @@ impl RealOps for f32 {
         Self: Sized,
     {
         if !self.is_sign_negative() {
-            Some(micromath::F32(*self).sqrt().0)
-            //f32::sqrt(self)
+            //Some(micromath::F32(*self).sqrt().0)
+            Real::from_f32(*self).sqrt().map(|v| v.0)
         } else {
             None
         }
@@ -3598,7 +3597,7 @@ impl RealOps for f32 {
 
     fn rdp(&self, digits: u32) -> Self {
         let dd = 10.0f32.powi(digits as i32);
-        (self * dd).round() * dd
+        (self * dd).round() / dd
     }
     fn floor(&self) -> Self {
         <f32 as FloatCore>::floor(*self)
