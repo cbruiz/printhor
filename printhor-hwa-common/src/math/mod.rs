@@ -31,6 +31,8 @@ pub use geometry::*;
 mod test {
     use crate as hwa;
     use hwa::CoordSel;
+    use crate::math;
+    use crate::math::Real;
 
     #[test]
     fn test_real() {
@@ -40,6 +42,25 @@ mod test {
         assert_eq!(x.ceil(), zero, "ceil(0) is zero");
         let y = hwa::make_real!(0.55);
         assert_eq!(y.ceil(), one, "ceil(0.51) is one");
+        
+        assert_eq!(zero.sin(), zero, "sin(0.0) is zero");
+        assert_eq!(zero.cos(), one, "cos(0.0) is zero");
+        
+        assert!(one.is_positive());
+        assert_eq!(zero, hwa::math::Real::from_inner(0.0));
+        assert_eq!(1i64, one.to_i64().unwrap());
+        assert_eq!(1i64, one.int());
+        assert_eq!(1f64, one.to_f64());
+        assert_eq!(Real::from_f32(180.0f32), math::PI.r2d());
+        assert_eq!(math::PI, Real::from_f32(180.0f32).d2r());
+        assert_eq!(Real::from_f32(180.0f32).sign(), one);
+        assert_eq!(Real::vmax(Some(one), Some(zero)), Some(one));
+        assert_eq!(Real::vmax(None, Some(zero)), None);
+        assert_eq!(Real::vmax(Some(one), None), Some(one));
+        assert!(one > zero);
+        assert_eq!(one.clamp(zero, zero), zero);
+        assert_eq!((math::PI / math::FOUR).tan(), math::ONE);
+        assert_eq!(math::HALF.atan2(math::HALF), math::PI / math::FOUR);
     }
 
     #[test]

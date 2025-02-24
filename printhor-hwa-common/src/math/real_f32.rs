@@ -167,36 +167,6 @@ cfg_if::cfg_if! {
                 y
             }
 
-            fn iterative_sqrt(_number: f32) -> f32 {
-                /* TODO: migrate
-                https://www.pertinentdetail.org/sqrt
-                https://github.com/SolraBizna/ieee-apsqrt/blob/main/src/lib.rs
-                https://github.com/ARM-software/CMSIS_4/blob/master/CMSIS/DSP_Lib/Source/FastMathFunctions/arm_sqrt_q31.c
-                https://forum.mikroe.com/viewtopic.php?t=65263
-                https://www.ganssle.com/approx-2.htm
-                https://www.reddit.com/r/rust/comments/1722v9d/help_with_sqrt_hardware_implementation_on_arm/
-                uint32 isqrt3(uint32 n)
-                {
-                    uint32 root = 0, bit, trial;
-                    bit = (n >= 0x10000) ? 1<<30 : 1<<14;
-                    do
-                    {
-                        trial = root+bit;
-                        if (n >= trial)
-                        {
-                        n -= trial;
-                        root = trial+bit;
-                        }
-                        root >>= 1;
-                        bit >>= 2;
-                    } while (bit);
-                    return root;
-                }
-
-                 */
-                todo!("Not implemented")
-            }
-
             pub fn sin(self) -> Self {
                 Real(self.0.sin())
             }
