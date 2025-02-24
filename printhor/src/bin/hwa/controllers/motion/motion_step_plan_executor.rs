@@ -283,8 +283,7 @@ impl StepPlanExecutor {
                             //actuator.step_pin_high(channels);
                         }
                         else {
-                            actuator
-                            .step_toggle(channels);
+                            actuator.step_toggle(channels);
                         }
                     }
                     cfg_if::cfg_if! {

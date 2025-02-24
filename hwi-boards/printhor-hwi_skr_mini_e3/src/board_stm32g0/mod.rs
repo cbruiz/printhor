@@ -487,6 +487,11 @@ impl HwiContract for Contract {
             w.0 = (w.0 & !(0x01 << off)) | (((val as u32) & 0x01) << off);
         });
 
+        {
+            use embassy_stm32::interrupt::InterruptExt;
+            embassy_stm32::interrupt::TIM3_TIM4.set_priority(embassy_stm32::interrupt::Priority::P3);
+        }
+
         //#region "with-serial-usb"
 
         cfg_if::cfg_if! {
@@ -498,7 +503,7 @@ impl HwiContract for Contract {
 
                 {
                     use embassy_stm32::interrupt::InterruptExt;
-                    embassy_stm32::interrupt::USB_UCPD1_2.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::USB_UCPD1_2.set_priority(embassy_stm32::interrupt::Priority::P4);
                 }
 
                 hwa::info!("Creating USB Driver");
@@ -532,8 +537,8 @@ impl HwiContract for Contract {
 
                 {
                     use embassy_stm32::interrupt::InterruptExt;
-                    embassy_stm32::interrupt::USART1.set_priority(embassy_stm32::interrupt::Priority::P3);
-                    embassy_stm32::interrupt::DMA1_CHANNEL2_3.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::USART1.set_priority(embassy_stm32::interrupt::Priority::P4);
+                    embassy_stm32::interrupt::DMA1_CHANNEL2_3.set_priority(embassy_stm32::interrupt::Priority::P4);
                 }
 
                 let mut cfg = embassy_stm32::usart::Config::default();
@@ -571,8 +576,8 @@ impl HwiContract for Contract {
 
                 {
                     use embassy_stm32::interrupt::InterruptExt;
-                    embassy_stm32::interrupt::USART2_LPUART2.set_priority(embassy_stm32::interrupt::Priority::P3);
-                    embassy_stm32::interrupt::DMA1_CH4_7_DMA2_CH1_5_DMAMUX1_OVR.set_priority(embassy_stm32::interrupt::Priority::P3);
+                    embassy_stm32::interrupt::USART2_LPUART2.set_priority(embassy_stm32::interrupt::Priority::P4);
+                    embassy_stm32::interrupt::DMA1_CH4_7_DMA2_CH1_5_DMAMUX1_OVR.set_priority(embassy_stm32::interrupt::Priority::P4);
                 }
 
                 let mut cfg = embassy_stm32::usart::Config::default();
@@ -847,6 +852,7 @@ impl HwiContract for Contract {
                 unsafe {
                     let p = cortex_m::Peripherals::steal();
                     let mut syst = p.SYST;
+                    syst.clear_current();
                     syst.enable_counter();
                     syst.enable_interrupt();
                 }
@@ -898,7 +904,7 @@ cfg_if::cfg_if! {
 
         pub fn setup_timer() {
             unsafe {
-                let p = cortex_m::Peripherals::steal();
+                let mut p = cortex_m::Peripherals::steal();
                 let mut syst = p.SYST;
                 syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
                 let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
@@ -908,6 +914,8 @@ cfg_if::cfg_if! {
                     Contract::STEP_PLANNER_CLOCK_FREQUENCY
                 );
                 syst.set_reload(reload);
+                syst.clear_current();
+                p.SCB.set_priority(cortex_m::peripheral::scb::SystemHandler::SysTick, 2);
             }
         }
     }
