@@ -13,7 +13,7 @@ cfg_if::cfg_if! {
     else if #[cfg(feature="nucleo_64_arduino_cnc_hat")] {
         pub use printhor_hwi_nucleo_64_arduino_cnc_hat::*;
     }
-    else if #[cfg(feature="tst-rp2040")] {
+    else if #[cfg(feature="rp-2040")] {
         pub use printhor_hwi_rp_2040::*;
     }
     else if #[cfg(feature="native")] {

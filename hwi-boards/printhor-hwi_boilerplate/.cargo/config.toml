@@ -1,0 +1,62 @@
+[env]
+
+###########################
+## Configuration - BEGIN ##
+###########################
+
+## Heater and bed configuration (thermistor based) ##
+
+# [Depends on the board] the pull-up resistance of hot-end sensor circuit in ohms
+HOT_END_THERM_PULL_UP_RESISTANCE = "4685.0"
+# Nominal resistance of hot-end NTC thermistor at 25ºC
+HOT_END_THERM_NOMINAL_RESISTANCE = "100000.0"
+# BETA value of hot-end NTC thermistor
+HOT_END_THERM_BETA = "3950.0"
+
+# [Depends on the board] the pull-up resistance of hot-bed sensor circuit in ohms
+HOT_BED_THERM_PULL_UP_RESISTANCE = "4685.0"
+# Nominal resistance of hot-bed NTC thermistor at 25ºC
+HOT_BED_THERM_NOMINAL_RESISTANCE = "100000.0"
+# BETA value of hot-bed NTC thermistor
+HOT_BED_THERM_BETA = "3950.0"
+
+## Pure technical stuff ##
+
+DEFMT_LOG = "info"
+RUST_LOG = "warn"
+ASYNC_STD_THREAD_COUNT = "1"
+EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
+
+###########################
+## Configuration -  END  ##
+###########################
+
+[target.'cfg(all(any(board="TBD"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run [...]"
+
+[build]
+#target = "thumbv7em-none-eabihf"
+
+[profile.dev.package."*"]
+codegen-units = 1
+incremental = false
+#opt-level = "s" # Set to "s" or even disable to play with GDB
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release-opt.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 0
+debug-assertions = false
+overflow-checks = false

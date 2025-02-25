@@ -641,12 +641,6 @@ impl HwiContract for Contract {
 
         // Return the HWI Context with HWI peripherals and controllers
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-motion")] {
-                setup_timer();
-            }
-        }
-
         hwa::HwiContext {
             sys_watch_dog : hwa::make_static_async_controller!(
                 "WatchDogController",
@@ -733,6 +727,24 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
+
+            fn setup_ticker() {
+                unsafe {
+                    let mut p = cortex_m::Peripherals::steal();
+                    let mut syst = p.SYST;
+                    syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+                    let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
+                    hwa::info!(
+                        "SYST reload set to {} ({} Hz)",
+                        reload,
+                        Contract::STEP_PLANNER_CLOCK_FREQUENCY
+                    );
+                    syst.set_reload(reload);
+                    syst.clear_current();
+                    p.SCB.set_priority(cortex_m::peripheral::scb::SystemHandler::SysTick, 2);
+                }
+            }
+
             fn pause_ticker() {
                 unsafe {
                     let p = cortex_m::Peripherals::steal();
@@ -794,22 +806,6 @@ cfg_if::cfg_if! {
             #[cfg(feature = "with-motion")]
             unsafe {
                 do_tick();
-            }
-        }
-
-        pub fn setup_timer() {
-            unsafe {
-                let p = cortex_m::Peripherals::steal();
-                let mut syst = p.SYST;
-                syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-                // Target: 0.000010 seg (10us)
-                let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
-                hwa::info!(
-                    "SYST reload set to {} ({} Hz)",
-                    reload,
-                    Contract::STEP_PLANNER_CLOCK_FREQUENCY
-                );
-                syst.set_reload(reload);
             }
         }
     }

@@ -5,24 +5,25 @@ use printhor_hwa_common as hwa;
 pub(crate) mod serial_usb {
     use printhor_hwa_common as hwa;
     use hwa::HwiContract;
+    use super::super::device::SerialUsbDriver;
 
-    pub type SerialUsbDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, crate::board::device::SerialUsbDriver>;
-    pub type SerialUsbDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, crate::board::device::SerialUsbDriver>;
+    pub type SerialUsbDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, SerialUsbDriver>;
+    pub type SerialUsbDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, SerialUsbDriver>;
 
     pub struct SerialUsbDevice {
-        pub builder: Option<embassy_usb::Builder<'static, crate::board::device::SerialUsbDriver>>,
+        pub builder: Option<embassy_usb::Builder<'static, SerialUsbDriver>>,
         pub sender: SerialUsbDeviceSender,
         pub receiver: SerialUsbDeviceReceiver,
     }
 
     #[embassy_executor::task(pool_size = 1)]
-    pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, crate::board::device::SerialUsbDriver>) -> ! {
+    pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, SerialUsbDriver>) -> ! {
         hwa::debug!("Running usb task...");
         usb.run().await;
     }
 
     impl SerialUsbDevice {
-        pub fn new(driver: crate::board::device::SerialUsbDriver) -> Self {
+        pub fn new(driver: SerialUsbDriver) -> Self {
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
             config.manufacturer = Some("Printhor");
             config.product = Some("Printhor USBSerial");

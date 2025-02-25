@@ -34,7 +34,9 @@ EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 [target.'cfg(board="native")']
 
 [target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
-runner = "probe-run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s}"
+#runner = "probe-run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s}"
+runner = "probe-rs run --chip STM32F410RBTx --connect-under-reset --log-format {L}{s}"
+
 #rustflags = [ "-C", "linker=flip-link" ]
 #linker = "flip-link"
 

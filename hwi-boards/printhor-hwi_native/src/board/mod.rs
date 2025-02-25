@@ -447,9 +447,6 @@ impl hwa::HwiContract for Contract {
     // The HWI initialization
     async fn init(_spawner: embassy_executor::Spawner) -> HwiContext<Self> {
 
-        #[cfg(feature = "with-motion")]
-        launch_task_stepper_ticker();
-
         let _pin_state = hwa::make_static_ref!(
             "GlobalPinState",
             mocked_peripherals::PinsCell<mocked_peripherals::PinState>,
@@ -749,16 +746,51 @@ impl hwa::HwiContract for Contract {
         f()
     }
 
-    #[cfg(feature = "with-motion")]
-    fn pause_ticker() {
-        hwa::debug!("Ticker Paused");
-        TICKER_SIGNAL.reset();
-    }
 
-    #[cfg(feature = "with-motion")]
-    fn resume_ticker() {
-        hwa::debug!("Ticker Resumed");
-        TICKER_SIGNAL.signal(true);
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "with-motion")] {
+            fn setup_ticker() {
+                hwa::info!("[task_stepper_ticker] starting");
+
+                let _ = thread_priority::ThreadBuilder::default().name("Ticker")
+                    .spawn(move |_result| {
+                        let max_freq = Contract::STEP_PLANNER_CLOCK_FREQUENCY as f32;
+                        let pulse_period = std::time::Duration::from_secs_f32(1.0/max_freq);
+                        let mut next_frame = std::time::Instant::now();
+                        // This is printed out from within the spawned thread.
+                        loop {
+                            if TERMINATION.signaled() {
+                                break;
+                            }
+                            if TICKER_SIGNAL.signaled() {
+                                unsafe {
+                                    do_tick();
+                                }
+                                if let Some(delay) = next_frame.checked_duration_since(
+                                    std::time::Instant::now()
+                                ) {
+                                    std::thread::sleep(delay);
+                                }
+                                next_frame += pulse_period;
+                            }
+                            else {
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                                next_frame = std::time::Instant::now();
+                            }
+                        }
+                    }).unwrap();
+            }
+
+            fn pause_ticker() {
+                hwa::debug!("Ticker Paused");
+                TICKER_SIGNAL.reset();
+            }
+
+            fn resume_ticker() {
+                hwa::debug!("Ticker Resumed");
+                TICKER_SIGNAL.signal(true);
+            }
+        }
     }
 
     cfg_if::cfg_if! {
@@ -804,42 +836,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
         pub(crate) static TICKER_SIGNAL: hwa::PersistentState<hwa::AsyncCsMutexType, bool> = hwa::PersistentState::new();
 
-        pub fn launch_task_stepper_ticker()
-        {
-            use hwa::HwiContract;
-
-            hwa::info!("[task_stepper_ticker] starting");
-
-            let _ = thread_priority::ThreadBuilder::default().name("Ticker")
-                .spawn(move |_result| {
-                    let max_freq = Contract::STEP_PLANNER_CLOCK_FREQUENCY as f32;
-                    let pulse_period = std::time::Duration::from_secs_f32(1.0/max_freq);
-                    let mut next_frame = std::time::Instant::now();
-                    // This is printed out from within the spawned thread.
-                    loop {
-                        if TERMINATION.signaled() {
-                            break;
-                        }
-                        if TICKER_SIGNAL.signaled() {
-                            unsafe {
-                                do_tick();
-                            }
-                            if let Some(delay) = next_frame.checked_duration_since(
-                                std::time::Instant::now()
-                            ) {
-                                std::thread::sleep(delay);
-                            }
-                            next_frame += pulse_period;
-                        }
-                        else {
-                            std::thread::sleep(std::time::Duration::from_millis(500));
-                            next_frame = std::time::Instant::now();
-                        }
-                    }
-                }).unwrap();
-        }
-
-        extern "Rust" {fn do_tick();}
+        unsafe extern "Rust" {fn do_tick();}
     }
 }
 

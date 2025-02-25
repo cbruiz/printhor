@@ -461,6 +461,9 @@ pub trait HwiContract: Sized {
         F: FnOnce() -> R;
 
     #[cfg(feature = "with-motion")]
+    fn setup_ticker();
+
+    #[cfg(feature = "with-motion")]
     fn pause_ticker();
 
     #[cfg(feature = "with-motion")]

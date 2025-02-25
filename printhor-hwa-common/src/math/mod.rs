@@ -159,7 +159,6 @@ mod test {
         let two_two = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(2.0f32));
 
         assert_eq!(four_four.sqrt().rdp(6), two_two);
-        
     }
 
     #[test]

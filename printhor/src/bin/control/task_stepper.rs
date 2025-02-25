@@ -152,7 +152,7 @@ pub async fn task_stepper(
 
     motion_planner.start(&event_bus).await;
 
-    STEP_DRIVER.setup(motion_planner.motion_driver().lock().await.pins().clone());
+    STEP_DRIVER.setup(motion_planner.motion_driver().lock().await.step_actuator().clone());
 
     #[allow(unused_mut)]
     let mut _s = event_bus.subscriber().await;
@@ -671,6 +671,7 @@ pub async fn task_stepper(
                         }
                         else {
                             if !motion_planner.do_homing(_order_num, &event_bus).await.is_ok() {
+                                hwa::error!("Error homing");
                                 // TODO
                             }
                         }
@@ -705,7 +706,7 @@ async fn park(motion_planner: &hwa::controllers::MotionPlanner) {
         .motion_driver()
         .lock()
         .await
-        .pins()
+        .step_actuator()
         .disable_steppers(CoordSel::all_axis());
     STEP_DRIVER.reset();
     Contract::pause_ticker();
@@ -719,7 +720,7 @@ async fn unpark(motion_planner: &hwa::controllers::MotionPlanner, enable_stepper
             .motion_driver()
             .lock()
             .await
-            .pins()
+            .step_actuator()
             .enable_steppers(CoordSel::all_axis());
         STEP_DRIVER.reset();
     }

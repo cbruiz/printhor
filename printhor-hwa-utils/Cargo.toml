@@ -22,7 +22,7 @@ with-defmt = ["defmt"]
 
 [dependencies]
 printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
-portable-atomic = { version = "1.10.0",  default-features = false, features = ["critical-section"] }
+portable-atomic = { version = "1.11.0",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.1.0",  default-features = false, features = [] }
 const_env = { version = "0.1.2"}
 embassy-sync = { version = "0.6.2", features = [] }

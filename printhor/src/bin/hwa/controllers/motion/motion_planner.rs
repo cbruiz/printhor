@@ -971,6 +971,10 @@ impl MotionPlanner {
         order_num: u32,
         event_bus: &hwa::types::EventBus,
     ) -> Result<(), ()> {
+
+        #[cfg(feature = "trace-commands")]
+        hwa::info!("[trace-commands] Locking for homming");
+
         match self
             .motion_driver
             .lock()
@@ -1006,28 +1010,6 @@ impl MotionPlanner {
             .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))
             .await;
         Ok(())
-    }
-
-    #[cfg(all(feature = "native", feature = "plot-timings"))]
-    pub async fn start_segment(
-        &self,
-        ref_time: embassy_time::Instant,
-        real_time: embassy_time::Instant,
-    ) {
-        self.motion_driver
-            .lock()
-            .await
-            .start_segment(ref_time, real_time)
-    }
-
-    #[cfg(all(feature = "native", feature = "plot-timings"))]
-    pub async fn end_segment(&self) {
-        self.motion_driver.lock().await.end_segment()
-    }
-
-    #[cfg(all(feature = "native", feature = "plot-timings"))]
-    pub async fn mark_microsegment(&self) {
-        self.motion_driver.lock().await.mark_microsegment();
     }
 }
 

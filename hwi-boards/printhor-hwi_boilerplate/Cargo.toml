@@ -1,35 +1,23 @@
 [package]
-name = "printhor-hwi_rp_2040"
-version = "0.0.1"
+name = "printhor-hwi_boilerplate"
+version = "0.0.4"
 edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
-description = "Printhor Hardware Abstraction for RP-2040"
-readme = "README.md"
+description = "Printhor Hardware Abstraction starter project"
 repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
 license = "MIT"
-documentation = "https://docs.rs/printhor-hwi_rp_2040"
+documentation = "https://docs.rs/prinThor"
 homepage = "https://github.com/cbruiz/printhor"
 
 [lib]
 
 [features]
 default = [
-    "rp-2040",
-    "float-point-f32-impl",
-    "with-defmt",
-    "with-serial-usb",
-    "with-serial-port-1",
-    "with-serial-port-2",
-    "with-motion", "with-motion-cartessian-kinematics", "with-motion-stepper",
-    "with-ps-on",
-    "with-z-axis",
+    "float-point-f32-impl"
 ]
-
-# Board kind
-rp-2040 = ["embassy-executor/task-arena-size-16384"]
-
-with-serial-usb = ["embedded-io-async", "embassy-usb", "printhor-hwa-common/with-serial-usb"]
+# Hardware device features
+with-serial-usb = ["embassy-usb", "printhor-hwa-common/with-serial-usb"]
 with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]
 with-serial-port-2 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-2"]
 with-print-job = ["printhor-hwa-common/with-print-job"]
@@ -49,7 +37,7 @@ with-sd-card = ["printhor-hwa-common/with-sd-card"]
 with-fan-layer = ["embedded-hal", "printhor-hwa-common/with-fan-layer"]
 with-fan-extra-1 = ["embedded-hal", "printhor-hwa-common/with-fan-extra-1"]
 with-laser = ["embedded-hal", "printhor-hwa-common/with-laser"]
-with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-rp/defmt", "embassy-executor/defmt"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-stm32/defmt", "embassy-executor/defmt"]
 with-trinamic = ["printhor-hwa-common/with-trinamic"]
 with-ps-on = ["printhor-hwa-common/with-ps-on"]
 
@@ -71,43 +59,43 @@ nightly = ["embassy-executor/nightly"]
 without-ringbuffer = []
 verbose-timings = []
 sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi"]
+without-bootloader = ["embassy-stm32/memory-x"]
 
 float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
-defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
-cortex-m = { version = "0.7.7", default-features = false, features = ["inline-asm"] }
-cortex-m-rt = { version = "0.7.5", default-features = false, features = [] }
-alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
-critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-u8"]}
+#defmt = { version = "0.3.10", optional = true, default-features = false, features=["alloc"] }
+#cortex-m = { version = "0.7.7", default-features = false, features = ["inline-asm", "critical-section-single-core"] }
+#cortex-m-rt = { version = "0.7.5", default-features = false }
+#alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
+critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
 
-embassy-rp = { version = "0.3.0", default-features = false, features = ["unstable-pac", "time-driver", "critical-section-impl", "rt", "rp2040"]}
-embassy-executor = { version = "0.7.0", default-features = false, features = ["arch-cortex-m", "executor-thread"] }
-embassy-sync = { version = "0.6.2", features = [] }
-embassy-time = { version = "0.4.0", features = ["generic-queue-32"] }
-embassy-futures = { version = "0.1.1", features = [] }
-embassy-usb = { version = "0.4.0", optional = true, features = []}
+#embassy-stm32 = { version = "0.2.0", default-features = false, features = ["[...]", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-..."] }
+embassy-executor = { version = "0.7.0", default-features = false, features = ["executor-thread", "arch-cortex-m", "task-arena-size-16384"] }
+embassy-sync = { version = "0.6.2", default-features = false, features = [] }
+embassy-time = { version = "0.4.0", default-features = false, features = ["tick-hz-1_000_000", "generic-queue-128"] }
+embassy-futures = { version = "0.1.1", default-features = false, features = [] }
+embassy-usb = { version = "0.4.0", default-features = false, features = [], optional = true }
 
-portable-atomic = { version = "1.11.0", features = ["critical-section"] }
 printhor-hwa-common = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-utils" }
-async-gcode = {version = "0.3.0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
+async-gcode = {version = "0.3.0", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value"] }
 
-embedded-hal = { version = "1.0.0", optional = true, default-features = false, features = [] }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", optional = true, features = ["unproven", ] }
-embedded-io-async = { version = "0.6.1", optional = true, default-features = false, features = [] }
+embedded-hal = { version = "1.0.0", default-features = false, optional = true }
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", default-features = false, features = ["unproven"] }
+embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
 
-cfg-if = { version = "1.0.0" }
+cfg-if = { version = "1.0.0"}
 const_env = { version = "0.1.2" }
 
 rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { optional = true, version = "1.36.0" }
+rust_decimal_macros = { optional = true, default-features = false, version = "1.36.0" }
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }
-embassy-rp = { path = "../../libs/embassy/embassy-rp" }
+#embassy-stm32 = { path = "../../libs/embassy/embassy-stm32" }
 embassy-executor = { path = "../../libs/embassy/embassy-executor" }
 embassy-sync = { path = "../../libs/embassy/embassy-sync" }
 embassy-time = { path = "../../libs/embassy/embassy-time" }

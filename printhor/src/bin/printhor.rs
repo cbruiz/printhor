@@ -15,6 +15,7 @@ use hwa::{Contract, HwiContract, RawHwiResource};
 use hwa::math;
 #[allow(unused)]
 use math::{Real, TVector};
+use printhor_hwa_common::CoordSel;
 
 //noinspection RsUnresolvedReference
 #[cfg_attr(doc, aquamarine::aquamarine)]
@@ -134,6 +135,14 @@ async fn sys_start(
     let sys_watch_dog = context.sys_watch_dog.clone();
     sys_watch_dog.lock().await.unleash();
 
+    //#endregion
+
+    //#region "Init controllers and spawn Tasks"
+    cfg_if::cfg_if! {
+        if #[cfg(any(feature="with-motion-stepper", feature="with-motion-broadcast"))] {
+            Contract::setup_ticker()
+        }
+    }
     //#endregion
 
     //#region "Init controllers and spawn Tasks"
@@ -386,7 +395,7 @@ async fn init_controllers_and_spawn_tasks(
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-            let motion_pins = hwa::controllers::StepActuatorController::new(
+            let step_actuator = hwa::controllers::StepActuatorController::new(
                 hwa::make_static_sync_controller!(
                     "StepActuator",
                     hwa::types::StepActuatorMutexStrategy,
@@ -395,6 +404,10 @@ async fn init_controllers_and_spawn_tasks(
                 #[cfg(feature = "with-motion-broadcast")]
                 _motion_broadcast_channel.clone(),
             );
+            
+            step_actuator.disable_steppers(CoordSel::all_axis());
+            step_actuator.set_forward_direction(CoordSel::all_axis(), CoordSel::all_axis());
+            
             let motion_config = hwa::controllers::MotionConfig::new(hwa::make_static_sync_controller!(
                 "MotionConfig",
                 hwa::types::MotionConfigMutexStrategy,
@@ -414,7 +427,7 @@ async fn init_controllers_and_spawn_tasks(
                     "MotionDriver",
                     hwa::types::MotionDriverMutexStrategy,
                     hwa::drivers::MotionDriver::new(
-                        motion_pins,
+                        step_actuator,
                         #[cfg(feature = "with-trinamic")]
                         trinamic_controller,
                         #[cfg(feature = "with-probe")]

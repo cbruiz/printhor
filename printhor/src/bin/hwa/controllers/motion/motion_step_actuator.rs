@@ -8,7 +8,7 @@ pub struct StepActuatorController {
 }
 
 impl StepActuatorController {
-    pub fn new(
+    pub const fn new(
         actuator: hwa::StaticSyncController<hwa::types::StepActuatorMutexStrategy>,
         #[cfg(feature = "with-motion-broadcast")]
         broadcast_channel: hwa::types::MotionBroadcastChannel,

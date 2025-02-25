@@ -1,6 +1,6 @@
-//! A Blank boilerplate template for board support
+//! HWI module for RPI Pico (RP 2040)
 //!
-//!
+//! https://github.com/raspberrypi/pico-sdk/blob/1.5.0/src/rp2040/hardware_regs/rp2040.svd
 
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
@@ -10,39 +10,20 @@ mod types;
 
 pub(crate) mod io;
 
-struct Allocator;
-unsafe impl core::alloc::GlobalAlloc for Allocator {
-    unsafe fn alloc(&self, _layout: core::alloc::Layout) -> *mut u8 {
-        todo!()
-    }
-
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {
-        todo!()
-    }
-}
-impl Allocator {
-    pub const fn used(&self) -> usize {
-        todo!()
-    }
-    pub const fn init(&self, _ptr: usize, _len: usize) {
-        todo!()
-    }
-}
-
 #[global_allocator]
-static HEAP: Allocator = Allocator{};
+static HEAP: alloc_cortex_m::CortexMHeap = alloc_cortex_m::CortexMHeap::empty();
 
 pub struct Contract;
 impl HwiContract for Contract {
 
     //#region "Board specific constants"
 
-    const MACHINE_TYPE: &'static str = "TBD";
+    const MACHINE_TYPE: &'static str = "RP2040";
     const MACHINE_BOARD: &'static str = "TBD";
-    /// {CPU} @{MHZ}MHZ, {SRAM}kB SRAM, {FLASH}kB Program
-    const MACHINE_PROCESSOR: &'static str = "TBD";
+    /// ARM Cortex M0+ @133MHZ, 264kB SRAM, 2048kB Program
+    const MACHINE_PROCESSOR: &'static str = "RP2040";
 
-    const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000;
+    const PROCESSOR_SYS_CK_MHZ: u32 = 133_000_000;
 
     /// The target [hwa::CommChannel] for M117 (display)
     const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
@@ -55,7 +36,7 @@ impl HwiContract for Contract {
     //#region "Watchdog settings"
 
     #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
-    const WATCHDOG_TIMEOUT_US: u32 = 8_000_000;
+    const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
 
     //#endregion
 
@@ -341,7 +322,10 @@ impl HwiContract for Contract {
     //#endregion
 
     fn init_heap() {
-        hwa::info!("Initializing heap ({}) bytes", Contract::MAX_HEAP_SIZE_BYTES);
+        hwa::info!(
+            "Initializing heap ({}) bytes",
+            Contract::MAX_HEAP_SIZE_BYTES
+        );
         use core::mem::MaybeUninit;
         #[unsafe(link_section = ".bss")]
         static mut HEAP_MEM: [MaybeUninit<u8>; Contract::MAX_HEAP_SIZE_BYTES] =
@@ -360,21 +344,30 @@ impl HwiContract for Contract {
 
         //#region "RCC setup"
 
-        let p = todo!("Peripherals init");
+        let config = {
+            let config = embassy_rp::config::Config::default();
+            config
+        };
 
-        //#enregion
+        let p = embassy_rp::init(config);
 
-        let watchdog = todo!("Provide me");
+        let watchdog = device::Watchdog::new(p.WATCHDOG);
+
+        //#endregion
 
         //#region "with-serial-usb"
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-serial-usb")] {
 
+                embassy_rp::bind_interrupts!(struct UsbIrqs {
+                    USBCTRL_IRQ => embassy_rp::usb::InterruptHandler<embassy_rp::peripherals::USB>;
+                });
+
                 hwa::info!("Creating USB Driver");
 
                 let mut usb_serial_device = io::serial_usb::SerialUsbDevice::new(
-                    todo!("Provide me")
+                    device::SerialUsbDriver::new(p.USB, UsbIrqs)
                 );
                 hwa::info!("Spawning USB Driver Task");
                 usb_serial_device.spawn(_spawner);
@@ -391,18 +384,37 @@ impl HwiContract for Contract {
             }
         }
 
+        //#endregion
+
         //#region "with-serial-port-1"
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-1"))] {
 
-                let dev = compile_error!("Provide me");
-                let (serial_port1_rx_device, serial_port1_tx_device) = dev.split()
+                embassy_rp::bind_interrupts!(struct SerialPort1IRQs {
+                    UART0_IRQ => embassy_rp::uart::InterruptHandler<embassy_rp::peripherals::UART0>;
+                });
+
+                let mut cfg = embassy_rp::uart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
+                cfg.data_bits = embassy_rp::uart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_rp::uart::StopBits::STOP1;
+                cfg.parity = embassy_rp::uart::Parity::ParityNone;
+
+                let dev = embassy_rp::uart::Uart::new(p.UART0,
+                    p.PIN_0, p.PIN_1,
+                    SerialPort1IRQs,
+                    p.DMA_CH0,
+                    p.DMA_CH1,
+                    cfg,
+                );
+                let (serial_port_1_tx_device, serial_port1_rx_device) =
+                    dev.split();
 
                 let serial_port_1_tx = hwa::make_static_async_controller!(
                     "SerialPort1Tx",
                     types::SerialPort1TxMutexStrategy,
-                    serial_port1_tx_device
+                    serial_port_1_tx_device,
                 );
                 let serial_port_1_rx_stream = io::serial_port_1::SerialPort1RxInputStream::new(serial_port1_rx_device);
             }
@@ -415,19 +427,116 @@ impl HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-2"))] {
 
-                let dev = compile_error!("Provide me");
-                let (serial_port2_rx_device, serial_port2_tx_device) = dev.split()
+                embassy_rp::bind_interrupts!(struct SerialPort2IRQs {
+                    UART1_IRQ => embassy_rp::uart::InterruptHandler<embassy_rp::peripherals::UART1>;
+                });
+
+                let mut cfg = embassy_rp::uart::Config::default();
+                cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
+                cfg.data_bits = embassy_rp::uart::DataBits::DataBits8;
+                cfg.stop_bits = embassy_rp::uart::StopBits::STOP1;
+                cfg.parity = embassy_rp::uart::Parity::ParityNone;
+
+                let dev = embassy_rp::uart::Uart::new(p.UART1,
+                    p.PIN_4, p.PIN_5,
+                    SerialPort2IRQs,
+                    p.DMA_CH2,
+                    p.DMA_CH3,
+                    cfg,
+                );
+                let (serial_port_2_tx_device, serial_port2_rx_device) =
+                    dev.split();
 
                 let serial_port_2_tx = hwa::make_static_async_controller!(
                     "SerialPort2Tx",
                     types::SerialPort2TxMutexStrategy,
-                    serial_port2_tx_device
+                    serial_port_2_tx_device,
                 );
                 let serial_port_2_rx_stream = io::serial_port_2::SerialPort2RxInputStream::new(serial_port2_rx_device);
             }
         }
 
         //#endregion
+
+        //#region "with-spi"
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-spi")] {
+                let spi1 = compile_error!("Provide me")
+            }
+        }
+
+        //#endregion
+
+        //#region "with-sd-card"
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-sd-card")] {
+                let sd_card_block_device = hwa::sd_card_spi::SPIAdapter::new(
+                    compile_error!("Provide me")
+                );
+            }
+        }
+
+        //#endregion
+
+        //#region "with-trinamic"
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-trinamic")] {
+                let trinamic_uart = compile_error!("Provide me");
+            }
+        }
+
+        //#endregion
+
+        //#region "with-motion"
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-motion")] {
+
+                let motion_pins = device::StepActuator {
+                    #[cfg(any(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis", feature = "with-e-axis"))]
+                    all_enable_pin: embassy_rp::gpio::Output::new(p.PIN_2, embassy_rp::gpio::Level::High),
+                    #[cfg(feature = "with-x-axis")]
+                    x_endstop_pin: embassy_rp::gpio::Input::new(p.PIN_3, embassy_rp::gpio::Pull::Down),
+                    #[cfg(feature = "with-y-axis")]
+                    y_endstop_pin: embassy_rp::gpio::Input::new(p.PIN_6, embassy_rp::gpio::Pull::Down),
+                    #[cfg(feature = "with-z-axis")]
+                    z_endstop_pin: embassy_rp::gpio::Input::new(p.PIN_7, embassy_rp::gpio::Pull::Down),
+                    #[cfg(feature = "with-e-axis")]
+                    e_endstop_pin: compile_error!("Provide me"),
+                    #[cfg(feature = "with-x-axis")]
+                    x_step_pin: embassy_rp::gpio::Output::new(p.PIN_8, embassy_rp::gpio::Level::Low),
+                    #[cfg(feature = "with-y-axis")]
+                    y_step_pin: embassy_rp::gpio::Output::new(p.PIN_9, embassy_rp::gpio::Level::Low),
+                    #[cfg(feature = "with-z-axis")]
+                    z_step_pin: embassy_rp::gpio::Output::new(p.PIN_10, embassy_rp::gpio::Level::Low),
+                    #[cfg(feature = "with-e-axis")]
+                    e_step_pin: compile_error!("Provide me"),
+                    #[cfg(feature = "with-x-axis")]
+                    x_dir_pin: embassy_rp::gpio::Output::new(p.PIN_11, embassy_rp::gpio::Level::Low),
+                    #[cfg(feature = "with-y-axis")]
+                    y_dir_pin: embassy_rp::gpio::Output::new(p.PIN_12, embassy_rp::gpio::Level::Low),
+                    #[cfg(feature = "with-z-axis")]
+                    z_dir_pin: embassy_rp::gpio::Output::new(p.PIN_13, embassy_rp::gpio::Level::Low),
+                    #[cfg(feature = "with-e-axis")]
+                    e_dir_pin: compile_error!("Provide me"),
+                };
+            }
+        }
+
+        //#endregion
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-ps-on")] {
+                let ps_on = hwa::make_static_sync_controller!(
+                    "PSOn",
+                    types::PSOnMutexStrategy,
+                    device::PsOnPin::new(p.PIN_14, embassy_rp::gpio::Level::Low)
+                );
+            }
+        }
 
         hwa::HwiContext {
             sys_watch_dog : hwa::make_static_async_controller!(
@@ -436,70 +545,70 @@ impl HwiContract for Contract {
                 watchdog
             ),
             #[cfg(feature = "with-serial-usb")]
-            serial_usb_tx: todo!("fill me"),
-            #[cfg(feature = "with-serial-port-1")]
-            serial_port1_tx,
-            #[cfg(feature = "with-serial-port-2")]
-            serial_port2_tx,
+            serial_usb_tx,
             #[cfg(feature = "with-serial-usb")]
-            serial_usb_rx_stream: todo!("fill me"),
+            serial_usb_rx_stream,
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_rx_stream: todo!("fill me"),
+            serial_port_1_tx,
+            #[cfg(feature = "with-serial-port-1")]
+            serial_port_1_rx_stream,
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_rx_stream: todo!("fill me"),
+            serial_port_2_tx,
+            #[cfg(feature = "with-serial-port-2")]
+            serial_port_2_rx_stream,
             #[cfg(feature = "with-spi")]
-            spi: todo!("fill me"),
+            spi,
             #[cfg(feature = "with-i2c")]
-            i2c: todo!("fill me"),
+            i2c,
             #[cfg(feature = "with-ps-on")]
-            ps_on: todo!("fill me"),
+            ps_on,
             #[cfg(feature = "with-motion")]
-            motion_pins: todo!("fill me"),
+            motion_pins,
             #[cfg(feature = "with-motion-broadcast")]
-            motion_sender: todo!("fill me"),
+            motion_sender,
             #[cfg(feature = "with-probe")]
-            probe_pwm: todo!("fill me"),
+            probe_pwm,
             #[cfg(feature = "with-probe")]
-            probe_pwm_channel: todo!("fill me"),
+            probe_pwm_channel,
             #[cfg(feature = "with-laser")]
-            laser_pwm: todo!("fill me"),
+            laser_pwm,
             #[cfg(feature = "with-laser")]
-            laser_pwm_channel: todo!("fill me"),
+            laser_pwm_channel,
             #[cfg(feature = "with-fan-layer")]
-            fan_layer_pwm: todo!("fill me"),
+            fan_layer_pwm,
             #[cfg(feature = "with-fan-layer")]
-            fan_layer_pwm_channel: todo!("fill me"),
+            fan_layer_pwm_channel,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra1_pwm: todo!("fill me"),
+            fan_extra1_pwm,
             #[cfg(feature = "with-fan-extra-1")]
-            fan_extra1_pwm_channel: todo!("fill me"),
+            fan_extra1_pwm_channel,
             #[cfg(feature = "with-hot-end")]
-            hot_end_adc: todo!("fill me"),
+            hot_end_adc,
             #[cfg(feature = "with-hot-end")]
-            hot_end_adc_pin: todo!("fill me"),
+            hot_end_adc_pin,
             #[cfg(feature = "with-hot-end")]
-            hot_end_pwm: todo!("fill me"),
+            hot_end_pwm,
             #[cfg(feature = "with-hot-end")]
-            hot_end_pwm_channel: todo!("fill me"),
+            hot_end_pwm_channel,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_adc: todo!("fill me"),
+            hot_bed_adc,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_adc_pin: todo!("fill me"),
+            hot_bed_adc_pin,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_pwm: todo!("fill me"),
+            hot_bed_pwm,
             #[cfg(feature = "with-hot-bed")]
-            hot_bed_pwm_channel: todo!("fill me"),
+            hot_bed_pwm_channel,
             #[cfg(feature = "with-motion-broadcast")]
             high_priority_core: hwa::NoDevice,
         }
     }
 
     fn sys_reset() {
-        compile_error!("Provide me")
+        cortex_m::peripheral::SCB::sys_reset();
     }
 
     fn sys_stop() {
-        // Not needed
+        cortex_m::peripheral::SCB::sys_reset();
     }
 
     // Execute closure f in an interrupt-free context.
@@ -513,10 +622,11 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
+            
             fn setup_ticker() {
                 compile_error!("Provide me")
             }
-
+            
             fn pause_ticker() {
                 compile_error!("Provide me")
             }
@@ -534,7 +644,34 @@ impl HwiContract for Contract {
 
             fn launch_high_priotity<S: 'static + Sized + Send>(_core: Self::HighPriorityCore, _token: embassy_executor::SpawnToken<S>) -> Result<(),()>
             {
-                todo!()
+                use embassy_executor::Executor;
+                use embassy_rp::multicore::{spawn_core1, Stack};
+                use printhor_hwa_common::TrackedStaticCell;
+                
+                #[unsafe(link_section = ".bss")]
+                static CORE1_STACK: TrackedStaticCell<Stack<4096>> = TrackedStaticCell::new();
+                #[unsafe(link_section = ".bss")]
+                static EXECUTOR_HIGH: TrackedStaticCell<Executor> = TrackedStaticCell::new();
+                
+                struct TokenHolder<S> {
+                    token: embassy_executor::SpawnToken<S>,
+                }
+                
+                unsafe impl<S> Sync for TokenHolder<S> {}
+                unsafe impl<S> Send for TokenHolder<S> {}
+                
+                
+                // TODO: There must be a better way to tackle this
+                let r = Box::new(TokenHolder { token });
+                let stack = CORE1_STACK.init::<{ crate::MAX_STATIC_MEMORY }>("executor1::stack", Stack::new());
+            
+                spawn_core1(core, stack, || {
+                    let executor1 =
+                        EXECUTOR_HIGH.init::<{ crate::MAX_STATIC_MEMORY }>("executor1", Executor::new());
+                    executor1.run(|spawner| unwrap!(spawner.spawn(r.token)))
+                });
+                Ok(())
+                
             }
         }
     }

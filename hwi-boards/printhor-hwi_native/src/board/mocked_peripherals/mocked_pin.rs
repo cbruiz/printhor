@@ -1,5 +1,3 @@
-use embassy_time::{Duration, Timer};
-
 pub(crate) type PinsCell<T> = std::sync::Mutex<T>;
 
 pub type PinStateRef = &'static PinsCell<PinState>;
@@ -17,12 +15,10 @@ impl PinState {
         }
     }
 
-    #[inline]
     pub(crate) fn set(&mut self, id: u8, state: bool) {
         self.digital[id as usize] = state
     }
 
-    #[inline]
     pub(crate) fn get(&self, id: u8) -> bool {
         self.digital[id as usize]
     }
@@ -103,12 +99,6 @@ impl MockedIOPin {
                 }
             }
         }
-    }
-
-    #[allow(unused)]
-    pub async fn wait_for_any_edge<'b>(&'b mut self) {
-        //println!("wait_edge");
-        Timer::after(Duration::from_secs(10)).await;
     }
 }
 

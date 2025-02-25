@@ -76,7 +76,7 @@ pub mod serial_usb {
                 .map(|builder| match spawner.spawn(serial_usb_task(builder.build())) {
                     Ok(_) => (),
                     Err(_) => {
-                        core::panic!("Unable to spawn USB task")
+                        panic!("Unable to spawn USB task")
                     }
                 });
         }
@@ -139,26 +139,25 @@ pub mod serial_usb {
         }
     }
 }
-
 #[cfg(feature = "with-serial-port-1")]
 pub mod serial_port_1 {
     use printhor_hwa_common as hwa;
+    #[allow(unused)]
     use hwa::HwiContract;
 
+    type UartDevice = embassy_rp::uart::UartRx<'static,
+        embassy_rp::peripherals::UART0,
+        embassy_rp::uart::Async>;
+
     pub struct SerialPort1RxInputStream {
-        receiver: compile_error!("Provide me"),
+        receiver: UartDevice,
     }
 
     impl SerialPort1RxInputStream {
-        pub fn new(receiver: compile_error!("Provide me")) -> Self {
-            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
+        pub fn new(receiver: UartDevice) -> Self {
 
             Self {
-                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
-                    "SerialPort1RXRingBuff",
-                    BufferType,
-                    [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
-                )),
+                receiver,
             }
         }
     }
@@ -167,10 +166,10 @@ pub mod serial_port_1 {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
-            use embedded_io_async::Read;
+            //use embedded_io_async::Read;
 
             let mut buff: [u8; 1] = [0; 1];
-            match self.receiver.read_exact(&mut buff).await {
+            match self.receiver.read(&mut buff).await {
                 Ok(_r) => {
                     hwa::trace!("read {}", buff[0] as char);
                     Some(Ok(buff[0]))
@@ -187,22 +186,21 @@ pub mod serial_port_1 {
 #[cfg(feature = "with-serial-port-2")]
 pub mod serial_port_2 {
     use printhor_hwa_common as hwa;
+    #[allow(unused)]
     use hwa::HwiContract;
 
+    type UartDevice = embassy_rp::uart::UartRx<'static,
+        embassy_rp::peripherals::UART1,
+        embassy_rp::uart::Async>;
+
     pub struct SerialPort2RxInputStream {
-        receiver: compile_error!("Provide me"),
+        receiver: UartDevice,
     }
 
     impl SerialPort2RxInputStream {
-        pub fn new(receiver: compile_error!("Provide me")) -> Self {
-            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT2_RX_BUFFER_SIZE];
-
+        pub fn new(receiver: UartDevice) -> Self {
             Self {
-                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
-                    "UartPort2RXRingBuff",
-                    BufferType,
-                    [0; <crate::Contract as HwiContract>::SERIAL_PORT2_RX_BUFFER_SIZE]
-                )),
+                receiver,
             }
         }
     }
@@ -211,9 +209,10 @@ pub mod serial_port_2 {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
+            #[allow(unused)]
             use embedded_io_async::Read;
             let mut buff: [u8; 1] = [0; 1];
-            match self.receiver.read_exact(&mut buff).await {
+            match self.receiver.read(&mut buff).await {
                 Ok(_r) => {
                     hwa::trace!("read {}", buff[0] as char);
                     Some(Ok(buff[0]))

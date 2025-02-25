@@ -686,16 +686,6 @@ impl HwiContract for Contract {
 
         //#endregion
 
-        //#region "with-motion-stepper or with-motion-broadcast"
-
-        cfg_if::cfg_if! {
-            if #[cfg(any(feature = "with-motion-stepper", feature = "with-motion-broadcast"))] {
-                setup_timer();
-            }
-        }
-
-        //#endregion
-
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-ps-on")] {
                 let ps_on = hwa::make_static_sync_controller!(
@@ -797,6 +787,24 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
+
+            fn setup_ticker() {
+                unsafe {
+                    let mut p = cortex_m::Peripherals::steal();
+                    let mut syst = p.SYST;
+                    syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+                    let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
+                    hwa::info!(
+                        "SYST reload set to {} ({} Hz)",
+                        reload,
+                        Contract::STEP_PLANNER_CLOCK_FREQUENCY
+                    );
+                    syst.set_reload(reload);
+                    syst.clear_current();
+                    p.SCB.set_priority(cortex_m::peripheral::scb::SystemHandler::SysTick, 2);
+                }
+            }
+
             fn pause_ticker() {
                 unsafe {
                     let p = cortex_m::Peripherals::steal();
@@ -827,7 +835,7 @@ impl HwiContract for Contract {
 
             fn launch_high_priotity<S: 'static + Sized + Send>(_core: Self::HighPriorityCore, _token: embassy_executor::SpawnToken<S>) -> Result<(),()>
             {
-                todo!()
+                compile_error!("Provide me")
             }
         }
     }
@@ -845,22 +853,6 @@ cfg_if::cfg_if! {
             #[cfg(feature = "with-motion")]
             unsafe {
                 do_tick();
-            }
-        }
-
-        pub fn setup_timer() {
-            unsafe {
-                let p = cortex_m::Peripherals::steal();
-                let mut syst = p.SYST;
-                syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
-                // Target: 0.000010 seg (10us)
-                let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
-                hwa::info!(
-                    "SYST reload set to {} ({} Hz)",
-                    reload,
-                    Contract::STEP_PLANNER_CLOCK_FREQUENCY
-                );
-                syst.set_reload(reload);
             }
         }
     }

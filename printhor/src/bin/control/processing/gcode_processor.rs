@@ -725,17 +725,17 @@ impl GCodeProcessor {
             #[cfg(feature = "with-motion")]
             GCodeValue::M119 => {
                 let mg = self.motion_planner.motion_driver().lock().await;
-                let x_endstop = if mg.pins.end_stop_triggered(hwa::CoordSel::X) {
+                let x_endstop = if mg.step_actuator.end_stop_triggered(hwa::CoordSel::X) {
                     1
                 } else {
                     0
                 };
-                let y_endstop = if mg.pins.end_stop_triggered(hwa::CoordSel::Y) {
+                let y_endstop = if mg.step_actuator.end_stop_triggered(hwa::CoordSel::Y) {
                     1
                 } else {
                     0
                 };
-                let z_endstop = if mg.pins.end_stop_triggered(hwa::CoordSel::Z) {
+                let z_endstop = if mg.step_actuator.end_stop_triggered(hwa::CoordSel::Z) {
                     1
                 } else {
                     0

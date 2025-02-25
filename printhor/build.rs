@@ -20,6 +20,7 @@ fn main() {
                 .join("..")
                 .join("hwi-boards")
                 .join("printhor-hwi_rp_2040")
+                .join("rpi-pico")
                 .join("memory.x");
             let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
             std::fs::File::create(out.join("memory.x"))

@@ -36,7 +36,7 @@ default = [ "_defaults_f4" ]
 
 # Board kind
 nucleo64-l476rg = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-time/generic-queue-32", "embassy-stm32/stm32l476rg", "embassy-stm32/time-driver-tim5"]
-nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-time/generic-queue-32", "hse-stlink-mco", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
+nucleo64-f410rb = ["embassy-time/tick-hz-1_000_000", "embassy-executor/task-arena-size-8192", "embassy-time/generic-queue-16", "hse-stlink-mco", "embassy-stm32/stm32f410rb", "embassy-stm32/time-driver-tim9"]
 nightly = ["embassy-executor/nightly"]
 
 # Hardware device features

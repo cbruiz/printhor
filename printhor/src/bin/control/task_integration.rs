@@ -67,11 +67,10 @@ pub async fn task_integration(
     hwa::info!("##");
 
     // Set endstops up for simulation for homing to be completed properly
-    #[cfg(feature = "with-motion")]
+    #[cfg(all(feature = "with-motion", feature = "native"))]
     {
         let dg = processor.motion_planner.motion_driver().lock().await;
-        dg.pins
-            .set_end_stop_high(CoordSel::X | CoordSel::Y | CoordSel::Z)
+        dg.step_actuator.set_end_stop_high(CoordSel::X | CoordSel::Y | CoordSel::Z)
     }
 
     {

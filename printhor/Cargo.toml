@@ -126,7 +126,6 @@ integration-test = [
     #"integration-test-benchy",
     "integration-test-pen",
     "integration-test-laser-engrave",
-    #"plot-timings",
     #"debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
@@ -153,9 +152,6 @@ integration-test-trinamic = []
 std = []
 arch-std = []
 _arch = []
-
-plot-timings = []
-plot-motion-plan = ["gnuplot"]
 
 ####################
 #### BOARDS ########
@@ -304,11 +300,11 @@ nucleo64-l476rg = [
 nucleo64-f410rb = [
     "with-defmt",
     #"debug-position",
-    #"debug-motion",
+    "debug-motion",
     #"debug-motion-broadcast",
-    #"verbose-timings",
+    "verbose-timings",
     #"assert-motion",
-    #"trace-commands",
+    "trace-commands",
 
     "cornering",
 
@@ -330,8 +326,8 @@ nucleo64-f410rb = [
     #"with-hot-end", # CNC Hat does not have it
     #"with-hot-bed", # CNC Hat does not have it
     #"with-fan-layer", # TODO
-    "with-laser",
-    "with-ps-on",
+    #"with-laser",
+    #"with-ps-on",
 
     "float-point-f32-impl",
     #"float-point-f64-impl", # TAKES TOO MUCH SPACE
@@ -353,12 +349,13 @@ nucleo_64_arduino_cnc_hat = [
 skr_mini_e3_v3 = [
     #"nightly",
     "with-defmt",
-    #"trace-commands",
+    "trace-commands",
     #"debug-position",
-    #"debug-motion",
+    "debug-motion",
+    "with-motion-stepper",
     #"debug-motion-broadcast",
     #"debug-gcode",
-    #"verbose-timings",
+    "verbose-timings",
 
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis",
     "with-motion", "with-motion-cartessian-kinematics",
@@ -393,7 +390,7 @@ skr_mini_e3 = [
 ####        #####
 #################
 
-tst-rp2040 = [
+rp-2040 = [
     #"nightly",
     "with-defmt",
     #"with-motion", "printhor-hwi_rp_2040/with-motion",
@@ -416,11 +413,10 @@ tst-rp2040 = [
     #"fixed-point-128-impl",
 
     "rp_2040",
-    "printhor-hwi_rp_2040/tst-rp2040",
+    "printhor-hwi_rp_2040/rp-2040",
 ]
 
 rp_2040 = [
-    "printhor-hwi_rp_2040/without-uart-until_idle", "printhor-hwi_rp_2040/with-uart-buffered",
     "embassy-executor/executor-thread",
     "printhor-hwi_rp_2040",
     "cortex-m",
@@ -487,7 +483,6 @@ printhor-hwi_mks_robin_nano = { version = "0.0", default-features = false, optio
 printhor-hwi_nucleo_64_arduino_cnc_hat = { version = "0.0", default-features = false, optional = true }
 printhor-hwi_rp_2040 = { version = "0.0", default-features = false, optional = true }
 
-gnuplot = {version = "0.0.45", default-features = false, features=[], optional = true}
 # Display
 #lvgl = { version = "0.5.2", default-features = false, features =[], optional = true }
 #embedded-graphics-core = {version = "0.4.0", optional = true }

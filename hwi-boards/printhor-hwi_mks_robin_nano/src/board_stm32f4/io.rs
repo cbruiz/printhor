@@ -2,25 +2,25 @@
 pub mod serial_usb {
     use printhor_hwa_common as hwa;
     use hwa::HwiContract;
-    use crate::board::device::USBDrv;
+    use super::super::device::SerialUsbDriver;
 
-    pub type SerialUsbSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
-    pub type SerialUsbReceiver = embassy_usb::class::cdc_acm::Receiver<'static, USBDrv>;
+    pub type SerialUsbSender = embassy_usb::class::cdc_acm::Sender<'static, SerialUsbDriver>;
+    pub type SerialUsbReceiver = embassy_usb::class::cdc_acm::Receiver<'static, SerialUsbDriver>;
 
     pub struct SerialUsbDevice {
-        pub builder: Option<embassy_usb::Builder<'static, USBDrv>>,
+        pub builder: Option<embassy_usb::Builder<'static, SerialUsbDriver>>,
         pub sender: SerialUsbSender,
         pub receiver: SerialUsbReceiver,
     }
 
     #[embassy_executor::task(pool_size = 1)]
-    pub async fn serial_usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
+    pub async fn serial_usb_task(mut usb: embassy_usb::UsbDevice<'static, SerialUsbDriver>) -> ! {
         hwa::debug!("Running serial usb task...");
         usb.run().await;
     }
 
     impl SerialUsbDevice {
-        pub fn new(driver: USBDrv) -> Self {
+        pub fn new(driver: SerialUsbDriver) -> Self {
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
             config.manufacturer = Some("Printhor");
             config.product = Some("Printhor USBSerial");
@@ -87,7 +87,7 @@ pub mod serial_usb {
     }
 
     pub struct SerialUsbInputStream {
-        receiver: embassy_usb::class::cdc_acm::Receiver<'static, super::super::device::USBDrv>,
+        receiver: embassy_usb::class::cdc_acm::Receiver<'static, SerialUsbDriver>,
         buffer: [u8; <crate::Contract as HwiContract>::SERIAL_USB_PACKET_SIZE],
         bytes_read: u8,
         current_byte_index: u8,
