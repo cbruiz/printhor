@@ -23,6 +23,8 @@ jobs:
         run: cargo build --features native --package prinThor --bin printhor
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
+      - name: Install lcov
+        run: apt-get install -y lcov
       - name: Generate code coverage of full featured hwa-common with f32 precision (default)
         run: cargo llvm-cov -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f32.info
       - name: Generate code coverage of full featured hwa-common with f64 precision
@@ -47,7 +49,9 @@ jobs:
         run: cargo llvm-cov --workspace --features core-xy-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-core-xy-fdm.info
       - name: Generate code coverage for an [anthropomorphic-quadruped-robot] machine firmware (native simulator backend)
         run: cargo llvm-cov --workspace --features anthropomorphic-quad-robot --ignore-filename-regex libs --lcov --output-path lcov.fw-anthropomorphic-quad-robot.info
+      - name: Merge lcov files
+        run: lcov --add-tracefile lcov.hwa-f32.info -t hwa-f32 -a lcov.hwa-f64.info -t hwa-f64 -a lcov.hwa-fp128.info -t hwa-fp128 -a lcov.hwi-anthropomorphic.info -t t4 -a lcov.hwi-base.info -t t5 -a lcov.hwi-core-xy.info -t t6 -a lcov.fw-anthropomorphic-quad-robot.info -t t7 -a lcov.fw-cartessian-cnc.info -t t8 -a lcov.fw-cartessian-fdm.info -t t9 -a lcov.fw-core-xy-fdm.info -t t10 -o lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
-          files: lcov.hwa-f32.info lcov.hwa-f64.info lcov.hwa-fp128.info lcov.hwi-base.info lcov.hwi-core-xy.info lcov.hwi-anthropomorphic.info lcov.fw-cartessian-cnc.info lcov.fw-cartessian-fdm.info lcov.fw-core-xy-fdm.info lcov.fw-anthropomorphic-quad-robot.info
+          files: lcov.info
