@@ -14,7 +14,7 @@ fn main() {
             println!("cargo:rustc-link-arg-bins=--nmagic");
             println!("cargo:rustc-link-arg-bins=-Tlink.x");
         }
-        else if #[cfg(feature="rp_2040")] {
+        else if #[cfg(feature="rp-2040")] {
             let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
             let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
                 .join("..")

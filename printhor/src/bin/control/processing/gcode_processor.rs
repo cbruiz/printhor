@@ -623,6 +623,8 @@ impl GCodeProcessor {
                     .get_last_planned_position();
                 let _rpos: hwa::controllers::Position =
                     self.motion_planner.motion_status().get_current_position();
+                hwa::debug!("M114: p_pos: [ {:?}], [{:?}] ] r_pos: [ {:?}], [{:?}] ]", _pos.world_pos,
+                _pos.space_pos, _rpos.world_pos, _rpos.space_pos);
                 let _step_pos: hwa::math::TVector<i32> = (_rpos.world_pos
                     * self
                         .motion_planner

@@ -59,49 +59,7 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             cfg_if::cfg_if! {
-                if #[cfg(feature = "with-motion-cartessian-kinematics")] {
-                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
-                    };
-
-                    const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=105.0, y=105.0, z=105.0)
-                    };
-
-                    const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=600.0, y=600.0, z=100.0, e=300.0)
-                    };
-
-                    const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=2400.0, y=2400.0, z=2400.0, e=2400.0)
-                    };
-
-                    const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=4800.0, y=4800.0, z=4800.0, e=4800.0)
-                    };
-
-                    const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
-                        hwa::make_real!(600.0)
-                    };
-
-                    const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=50.0)
-                    };
-
-                    const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
-                        hwa::make_vector!(x=8, y=8, z=8, e=8)
-                    };
-
-                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
-                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
-
-                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
-                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
-
-                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
-                    const SEGMENT_QUEUE_SIZE: u8 = 40;
-                }
-                else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                if #[cfg(feature = "with-motion-core-xy-kinematics")] {
                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
                         hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
                     };
@@ -148,8 +106,51 @@ impl HwiContract for Contract {
                 else if #[cfg(feature = "with-motion-delta-kinematics")] {
                     compile_error!("Not yet implemented");
                 }
-                else {
+                else if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
                     compile_error!("You didn't specify any supported kinematics");
+                }
+                else {
+                    // Assuming #[cfg(feature = "with-motion-cartessian-kinematics")]
+                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
+                    };
+
+                    const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=105.0, y=105.0, z=105.0)
+                    };
+
+                    const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=600.0, y=600.0, z=100.0, e=300.0)
+                    };
+
+                    const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=2400.0, y=2400.0, z=2400.0, e=2400.0)
+                    };
+
+                    const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=4800.0, y=4800.0, z=4800.0, e=4800.0)
+                    };
+
+                    const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
+                        hwa::make_real!(600.0)
+                    };
+
+                    const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=50.0)
+                    };
+
+                    const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
+                        hwa::make_vector!(x=8, y=8, z=8, e=8)
+                    };
+
+                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
+
+                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+
+                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    const SEGMENT_QUEUE_SIZE: u8 = 40;
                 }
             }
         }
@@ -168,7 +169,7 @@ impl HwiContract for Contract {
             #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::from_env("HOT_END_THERM_BETA")]
             const HOT_END_THERM_BETA: f32 = todo!("fill me");
 
             #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
@@ -338,7 +339,7 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-laser")] {
             type LaserPwm = types::LaserPwmMutexStrategy;
-            type LaserPwmChannel = hwa::HwiResource<device::PwmLaserChannel>;
+            type LaserPwmChannel = hwa::HwiResource<device::PwmChannel>;
         }
     }
 

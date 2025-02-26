@@ -220,7 +220,7 @@ impl TrinamicController {
         match Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await {
             Ok(chop_conf) => {
                 if chop_conf.ntpol() == false && chop_conf.mres() == micro_steps_pow_of_2 {
-                    hwa::warn!(
+                    hwa::info!(
                         "[TrinamicController] Trinamic check for stepper {} is OK",
                         addr
                     );

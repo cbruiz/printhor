@@ -138,6 +138,12 @@ impl MotionStatus {
     /// Update last planned position. E is always ignored (So far, only relative E moves are implemented)
     pub fn update_last_planned_position(&self, _order_num: u32, updated_position: &Position) {
         self.cfg.apply_mut(|m| {
+            hwa::debug!(
+                "[MotionStatus] order_num:{:?} going to update current position: [{:?}] [{:?}]",
+                _order_num,
+                updated_position.world_pos,
+                updated_position.space_pos,
+            );
             m.last_planned_position.upsert(updated_position);
             #[cfg(feature = "debug-motion")]
             hwa::info!(
@@ -159,6 +165,12 @@ impl MotionStatus {
     /// Update current position. E is always ignored (So far, only relative E moves are implemented)
     pub fn update_current_position(&self, _order_num: u32, updated_position: &Position) {
         self.cfg.apply_mut(|m| {
+            hwa::debug!(
+                "[MotionStatus] order_num:{:?} going to update current position: [{:?}] [{:?}]",
+                _order_num,
+                updated_position.world_pos,
+                updated_position.space_pos,
+            );
             m.current_position.upsert(updated_position);
             #[cfg(feature = "debug-motion")]
             hwa::info!(

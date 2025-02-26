@@ -196,7 +196,7 @@ async fn main(spawner: embassy_executor::Spawner) {
     let sampling_time: Real = Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6);
 
     // First, prepare the underlying machinery
-    env_logger::init();
+    let _ = env_logger::try_init();
     hwa::info!(
         "Micro-segment sampling freq: {} hz ({} us), stepper clock freq: {} hz ({} us)",
         STEPPER_PLANNER_MICROSEGMENT_FREQUENCY,

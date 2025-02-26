@@ -59,8 +59,18 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             cfg_if::cfg_if! {
-                if #[cfg(feature = "with-motion-cartessian-kinematics")] {
-                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
+                if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                    compile_error!("Not implemented");
+                }
+                else if #[cfg(feature = "with-motion-delta-kinematics")] {
+                    compile_error!("Not implemented");
+                }
+                else if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
+                    compile_error!("Not implemented");
+                }
+                else {
+                    // Assuming #[cfg(feature = "with-motion-cartessian-kinematics")]
+                    const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
                         hwa::make_vector_real!(x=200.0, y=200.0, z=200.0)
                     };
 
@@ -101,9 +111,6 @@ impl HwiContract for Contract {
 
                     #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 10;
-                }
-                else {
-                    compile_error!("with-motion-XXX-kinematics not provided or not supported");
                 }
             }
         }

@@ -19,7 +19,8 @@ default = [
     "with-serial-usb", "with-serial-port-1", "with-serial-port-2",
     "with-motion", "with-x-axis", "with-y-axis",
     "with-motion-stepper", "with-motion-cartessian-kinematics",
-    "with-trinamic", "with-spi", "with-sd-card", "sd-card-uses-spi",
+    "with-trinamic",
+    "with-spi", "with-sd-card", "sd-card-uses-spi",
     "with-ps-on",
     "with-probe"
 ]

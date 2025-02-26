@@ -22,14 +22,14 @@ impl StepActuatorController {
 
     pub fn enable_steppers(&self, channels: hwa::CoordSel) {
         use hwa::traits::StepActuatorTrait;
-        hwa::trace!("enable_steppers {:?}", channels);
+        hwa::debug!("enable_steppers {:?}", channels);
         self.actuator
             .apply_mut(|pins| pins.set_enabled(channels, true))
     }
 
     pub fn set_forward_direction(&self, channels: hwa::CoordSel, mask: hwa::CoordSel) {
         use hwa::traits::StepActuatorTrait;
-        hwa::trace!("set_forward_direction {:?}", channels);
+        hwa::debug!("set_forward_direction {:?}", channels);
         self.actuator.apply_mut(|pins| {
             pins.set_forward_direction(channels, mask);
         })
@@ -37,7 +37,7 @@ impl StepActuatorController {
 
     pub fn disable_steppers(&self, channels: hwa::CoordSel) {
         use hwa::traits::StepActuatorTrait;
-        hwa::trace!("disable_steppers {:?}", channels);
+        hwa::debug!("disable_steppers {:?}", channels);
         self.actuator.apply_mut(|pins| pins.disable(channels))
     }
 

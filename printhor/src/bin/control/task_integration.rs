@@ -779,7 +779,7 @@ pub async fn task_integration(
     // Separator
     hwa::info!("##");
 
-    #[cfg(feature = "with-print-job")]
+    #[cfg(all(feature = "with-print-job", not(feature = "anthropomorphic-quad-robot")))]
     {
         let test_name = "T15 [Plotting 2)]";
 
@@ -861,9 +861,11 @@ pub async fn task_integration(
     // Separator
     hwa::info!("##");
 
-    #[cfg(feature = "with-print-job")]
+    #[cfg(all(feature = "with-print-job", not(feature = "anthropomorphic-quad-robot")))]
     {
         let test_name = "T16 [Benchy)]";
+
+        hwa::info!("## {} - BEGIN", test_name);
 
         // Set DRY_RUN Mode
         let resp = control::task_control::execute(
@@ -883,7 +885,6 @@ pub async fn task_integration(
         )
         .await;
         if resp.and_then(expect_immediate).is_ok() {
-            hwa::info!("## {} - END", test_name);
         } else {
             finish_task(Err(test_name));
             return;
@@ -894,7 +895,6 @@ pub async fn task_integration(
             Some(9),
             control::GCodeValue::M23(Some("BENCHY.G".to_string())),
         );
-        hwa::info!("## {} - BEGIN", test_name);
         let resp = control::task_control::execute(
             &mut processor,
             CommChannel::Internal,
@@ -906,7 +906,6 @@ pub async fn task_integration(
         )
         .await;
         if resp.and_then(expect_immediate).is_ok() {
-            hwa::info!("## {} - END", test_name);
         } else {
             finish_task(Err(test_name));
             return;
@@ -941,7 +940,6 @@ pub async fn task_integration(
                     .await
                     {
                         Ok(_r) => {
-                            hwa::info!("## {} - END", test_name);
                         }
                         Err(_) => {
                             finish_task(Err(test_name));

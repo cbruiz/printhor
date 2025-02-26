@@ -31,15 +31,11 @@ pub struct MockedSDCardBlockDevice {
 }
 
 impl MockedSDCardBlockDevice {
-    pub fn new<P>(device_name: P) -> Result<MockedSDCardBlockDevice, std::io::Error>
+    pub fn new<P>(image_path: P) -> Result<MockedSDCardBlockDevice, std::io::Error>
         where P: AsRef<Path>,
     {
-        hwa::debug!("Cwd: Opening {}/{:?}",
-            std::env::current_dir().as_ref().unwrap().to_str().unwrap(),
-            device_name.as_ref().to_str().unwrap());
-
         Ok(MockedSDCardBlockDevice {
-            file: RefCell::new(File::open(device_name)?),
+            file: RefCell::new(File::open(image_path)?),
         })
     }
 }

@@ -1489,7 +1489,8 @@ where
         }
     }
 
-    pub fn clamp_higher_than(&self, rhs: TVector<T>) -> TVector<T> {
+    pub fn clamp_higher_than(&self, rhs: TVector<T>) -> TVector<T>
+    {
         self.map_values(|coord, lv| {
             if let Some(rv) = rhs.get_coord(coord) {
                 if lv < rv { Some(rv) } else { Some(lv) }

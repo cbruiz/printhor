@@ -25,3 +25,5 @@ libs/*/target
 /design/*.drawio
 /hwi-boards/*/*.bin
 /design/*.jar
+/run*.sh
+/*.info

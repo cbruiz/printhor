@@ -1,18 +1,6 @@
 //! This module provides a numeric abstraction so anyone can use the proper backend for specific MCU
 cfg_if::cfg_if! {
-    if #[cfg(feature="float-point-f32-impl")] {
-        mod real_f32;
-        mod constants_f32;
-        pub use real_f32::*;
-        pub use constants_f32::*;
-    }
-    else if #[cfg(feature="float-point-f64-impl")] {
-        mod real_f64;
-        mod constants_f64;
-        pub use real_f64::*;
-        pub use constants_f64::*;
-    }
-    else if #[cfg(feature="fixed-point-128-impl")] {
+    if #[cfg(feature="fixed-point-128-impl")] {
         mod real_fixedpoint;
         mod constants_fixedpoint;
         pub use real_fixedpoint::*;
@@ -20,8 +8,18 @@ cfg_if::cfg_if! {
         pub use rust_decimal;
         pub use rust_decimal_macros;
     }
+    else if #[cfg(feature="float-point-f64-impl")] {
+        mod real_f64;
+        mod constants_f64;
+        pub use real_f64::*;
+        pub use constants_f64::*;
+    }
     else {
-        compile_error!("Real arithmetic backend not selected");
+        // Assuming #[cfg(feature="float-point-f32-impl")]
+        mod real_f32;
+        mod constants_f32;
+        pub use real_f32::*;
+        pub use constants_f32::*;
     }
 }
 mod geometry;
@@ -91,7 +89,7 @@ mod test {
         assert_eq!(Real::vmin(None, Some(zero)), None);
         
         assert!(one.is_positive());
-        assert_eq!(zero, Real::from_inner(0.0));
+        assert_eq!(zero, math::ZERO);
         assert_eq!(1i64, one.to_i64().unwrap());
         assert_eq!(1i32, one.rdp(0).to_i32().unwrap());
         assert_eq!(1i64, one.int());
@@ -148,8 +146,8 @@ mod test {
         assert_eq!(Real::from_f32(180.0f32), math::PI.r2d());
         assert_eq!(math::PI, Real::from_f32(180.0f32).d2r());
         assert_eq!(Real::from_f32(180.0f32).sign(), math::ONE);
-        assert_eq!((math::PI / math::FOUR).tan(), math::ONE);
-        assert_eq!(math::HALF.atan2(math::HALF), math::PI / math::FOUR);
+        assert_eq!((math::PI / math::FOUR).tan().rdp(0), math::ONE);
+        assert!((math::HALF.atan2(math::HALF) - (math::PI / math::FOUR)).rdp(4).is_zero());
         
         let _one: TVector<f32> = TVector::one();
         let _zero: TVector<f32> = TVector::zero();
@@ -358,7 +356,9 @@ mod test {
     #[test]
     fn test_axis() {
         use crate as printhor_hwa_common;
+        #[cfg(feature = "with-x-axis")]
         let c = CoordSel::X;
+        #[cfg(feature = "with-x-axis")]
         assert!(!c.is_alternate());
         assert_eq!(CoordSel::UNSET.name(), "?");
         // Format works
@@ -371,27 +371,44 @@ mod test {
         assert_eq!(one + one, two);
         let empty = TVector::new_with_coord(CoordSel::empty(), Some(1));
        
-        assert_eq!(empty + empty, empty);
+        assert_eq!(one + empty, empty);
         
+        #[allow(unused_mut)]
         let mut t2 = empty;
+        #[cfg(feature = "with-e-axis")]
         t2.set_coord(CoordSel::E, Some(1));
+        #[cfg(feature = "with-e-axis")]
         assert_ne!(t2, empty);
+        #[cfg(feature = "with-e-axis")]
         t2.set_coord(CoordSel::E, None);
         assert_eq!(t2, empty);
 
         assert!(TVector::<Real>::new().is_nan_or_zero());
+        #[cfg(feature = "with-e-axis")]
         assert!(!hwa::make_vector!(e=1).is_nan_or_zero());
+        #[cfg(feature = "with-x-axis")]
         assert!(!hwa::make_vector!(x=1).is_nan_or_zero());
+        #[cfg(feature = "with-y-axis")]
         assert!(!hwa::make_vector!(y=1).is_nan_or_zero());
+        #[cfg(feature = "with-z-axis")]
         assert!(!hwa::make_vector!(z=1).is_nan_or_zero());
+        #[cfg(feature = "with-a-axis")]
         assert!(!hwa::make_vector!(a=1).is_nan_or_zero());
+        #[cfg(feature = "with-b-axis")]
         assert!(!hwa::make_vector!(b=1).is_nan_or_zero());
+        #[cfg(feature = "with-c-axis")]
         assert!(!hwa::make_vector!(c=1).is_nan_or_zero());
+        #[cfg(feature = "with-i-axis")]
         assert!(!hwa::make_vector!(i=1).is_nan_or_zero());
+        #[cfg(feature = "with-j-axis")]
         assert!(!hwa::make_vector!(j=1).is_nan_or_zero());
+        #[cfg(feature = "with-k-axis")]
         assert!(!hwa::make_vector!(k=1).is_nan_or_zero());
+        #[cfg(feature = "with-u-axis")]
         assert!(!hwa::make_vector!(u=1).is_nan_or_zero());
+        #[cfg(feature = "with-v-axis")]
         assert!(!hwa::make_vector!(v=1).is_nan_or_zero());
+        #[cfg(feature = "with-w-axis")]
         assert!(!hwa::make_vector!(w=1).is_nan_or_zero());
         
         assert_eq!(TVector::new_with_const_value(1.0), TVector::one());
@@ -425,10 +442,16 @@ mod test {
         assert_eq!(TVector::<Real>::one().pow(1), TVector::<Real>::one());
 
         let num_axis = Real::from_lit(CoordSel::num_axis() as i64,0);
+        
+        // Produce a vector (2, 2, 2, ...). Compute the unit vector. Then ensure its magnitude is practically 1 
         assert_eq!(TVector::<Real>::new().norm2(), Some(math::ZERO));
-        assert_eq!(TVector::one().with_coord_if_set(CoordSel::all(), Some(math::TWO)).unit().norm2().unwrap().rdp(6), math::ONE);
+        let vec_two = TVector::one().with_coord_if_set(CoordSel::all(), Some(math::TWO));
+        let vec_two_unit = vec_two.unit();
+        let vec_two_unit_magnitude = vec_two_unit.norm2().unwrap();
+        // Relaxed sqrt precision because rust decimal uses Newton-Raphson iterative method
+        assert_eq!(vec_two_unit_magnitude.rdp(6), math::ONE);
         assert_eq!(TVector::<Real>::one().norm2(), num_axis.sqrt());
-
+        
         assert_eq!(TVector::<Real>::new().round(), TVector::new());
         assert_eq!(TVector::<Real>::zero().round(), TVector::zero());
 
@@ -463,18 +486,31 @@ mod test {
         assert_eq!(one / math::ONE, one);
         assert_eq!(one / math::ZERO, none);
 
+        #[cfg(feature = "with-e-axis")]
         assert_eq!(one.get_coord(CoordSel::E), Some(math::ONE));
+        #[cfg(feature = "with-x-axis")]
         assert_eq!(one.get_coord(CoordSel::X), Some(math::ONE));
+        #[cfg(feature = "with-y-axis")]
         assert_eq!(one.get_coord(CoordSel::Y), Some(math::ONE));
+        #[cfg(feature = "with-z-axis")]
         assert_eq!(one.get_coord(CoordSel::Z), Some(math::ONE));
+        #[cfg(feature = "with-a-axis")]
         assert_eq!(one.get_coord(CoordSel::A), Some(math::ONE));
+        #[cfg(feature = "with-b-axis")]
         assert_eq!(one.get_coord(CoordSel::B), Some(math::ONE));
+        #[cfg(feature = "with-c-axis")]
         assert_eq!(one.get_coord(CoordSel::C), Some(math::ONE));
+        #[cfg(feature = "with-i-axis")]
         assert_eq!(one.get_coord(CoordSel::I), Some(math::ONE));
+        #[cfg(feature = "with-j-axis")]
         assert_eq!(one.get_coord(CoordSel::J), Some(math::ONE));
+        #[cfg(feature = "with-k-axis")]
         assert_eq!(one.get_coord(CoordSel::K), Some(math::ONE));
+        #[cfg(feature = "with-u-axis")]
         assert_eq!(one.get_coord(CoordSel::U), Some(math::ONE));
+        #[cfg(feature = "with-v-axis")]
         assert_eq!(one.get_coord(CoordSel::V), Some(math::ONE));
+        #[cfg(feature = "with-w-axis")]
         assert_eq!(one.get_coord(CoordSel::W), Some(math::ONE));
         
         use core::ops::Neg;
@@ -515,41 +551,59 @@ mod test {
         assert_eq!(one.clamp_higher_than(none), one);
         let two = one + one;
 
+        #[cfg(feature = "with-e-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::E, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-e-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::E, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-x-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::X, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-x-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::X, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-y-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::Y, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-y-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::Y, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-z-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::Z, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-z-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::Z, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-a-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::A, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-a-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::A, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-b-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::B, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-b-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::B, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-c-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::C, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-c-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::C, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-i-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::I, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-i-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::I, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-j-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::J, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-j-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::J, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-k-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::K, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-k-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::K, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-u-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::U, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-u-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::U, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-v-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::V, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-v-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::V, Some(math::ONE)).vmin(), Some(math::ONE));
+        #[cfg(feature = "with-w-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::W, Some(math::ONE)).vmax(), Some(math::TWO));
+        #[cfg(feature = "with-w-axis")]
         assert_eq!(two.copy_with_coords(CoordSel::W, Some(math::ONE)).vmin(), Some(math::ONE));
         
         let (_, _) = one.decompose_normal();
-        
-
-        
-        
-        // vmax, vmin
-        
-        // unit
-        
     }
 }

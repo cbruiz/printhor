@@ -20,11 +20,15 @@ pub trait WorldToSpaceTransformer {
     }
 }
 
-#[cfg(feature = "with-motion-anthropomorphic-kinematics")]
-pub mod anthropomorphic_3dof;
-#[cfg(feature = "with-motion-cartessian-kinematics")]
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
+        pub mod anthropomorphic_3dof;
+    }
+    else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+        pub mod core_xy;
+    }
+    else if #[cfg(feature = "with-motion-delta-kinematics")] {
+        pub mod delta;
+    }
+}
 pub mod cartessian;
-#[cfg(feature = "with-motion-core-xy-kinematics")]
-pub mod core_xy;
-#[cfg(feature = "with-motion-delta-kinematics")]
-pub mod delta;

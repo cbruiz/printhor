@@ -557,6 +557,12 @@ impl MotionPlanner {
                         }
                         ScheduledMove::Homing(order_num) => {
                             is_defer = true;
+                            let pos = hwa::controllers::Position::new_from(
+                                Contract::DEFAULT_WORLD_HOMING_POINT_WU,
+                                Contract.project_to_space(&Contract::DEFAULT_WORLD_HOMING_POINT_WU).unwrap(),
+                            );
+                            self.motion_status
+                                .update_last_planned_position(order_num, &pos);
                             (
                                 PlanEntry::Homing(channel, is_defer, order_num),
                                 hwa::EventStatus::not_containing(hwa::EventFlags::HOMING),
@@ -983,24 +989,9 @@ impl MotionPlanner {
             .await
         {
             Ok(_pos) => {
-                self.motion_status().update_last_planned_position(
-                    order_num,
-                    &hwa::controllers::Position::new_with_world_projection(&_pos),
-                );
-                self.motion_status().update_current_position(
-                    order_num,
-                    &hwa::controllers::Position::new_with_world_projection(&_pos),
-                );
+                
             }
             Err(_pos) => {
-                self.motion_status().update_last_planned_position(
-                    order_num,
-                    &hwa::controllers::Position::new_with_world_projection(&_pos),
-                );
-                self.motion_status().update_current_position(
-                    order_num,
-                    &hwa::controllers::Position::new_with_world_projection(&_pos),
-                );
                 // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
                 // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;
                 // return Err(())

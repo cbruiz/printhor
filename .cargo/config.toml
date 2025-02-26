@@ -57,7 +57,7 @@ runner = "probe-rs run --chip STM32F407VETx --disable-progressbars --log-format 
 [target.'cfg(all(any(board="mks_robin_nano-no-bootloader"), target_arch="arm", target_os="none"))']
 runner = "probe-rs echo PLEASE DON'T run --chip STM32F407VETx --disable-progressbars --log-format {L}{s}"
 
-[target.'cfg(all(any(board="rp2040"), target_arch="arm", target_os="none"))']
+[target.'cfg(all(any(board="rp-2040"), target_arch="arm", target_os="none"))']
 #runner = "probe-rs run --chip RP2040"
 runner = "elf2uf2-rs --deploy --serial --verbose"
 

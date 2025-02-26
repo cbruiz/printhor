@@ -4,7 +4,6 @@
 //!
 //! https://os.mbed.com/platforms/ST-Nucleo-L476RG/
 
-use embassy_time::Duration;
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
 

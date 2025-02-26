@@ -310,6 +310,33 @@ impl<D> Copy for HwiResource<D> where D: Copy {}
 mod test {
     #[allow(unused)]
     use crate as hwa;
+    
+    #[test]
+    fn setup() {
+
+        let env = env_logger::Env::new().default_filter_or("info");
+        use std::io::Write;
+        let _ = env_logger::builder()
+            .parse_env(env)
+            .format(|buf, record| {
+                writeln!(buf, "{}: {}", record.level(), record.args())
+            }).try_init();
+        
+        cfg_if::cfg_if! {
+            if #[cfg(feature="fixed-point-128-impl")]  {
+                hwa::info!("Using fixed point 128bits precision");
+            }
+            else if #[cfg(feature = "float-point-f64-impl")] {
+                hwa::info!("Using floating point f64 precision");
+            }
+            else {
+                // Assuming #[cfg(feature = "float-point-f32-impl")]
+                hwa::info!("Using floating point f32 precision");
+            }
+            
+        }
+        
+    }
 
     #[cfg(all(
         feature = "with-serial-usb",

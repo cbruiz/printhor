@@ -312,15 +312,39 @@ fn inverse_kinematics(
         _actuator.l3
     );
 
-    let x = world_pos
-        .get_coord(_actuator.rel_x_coord)
-        .unwrap_or(math::ZERO);
-    let y = world_pos
-        .get_coord(_actuator.rel_y_coord)
-        .unwrap_or(math::ZERO);
-    let z = world_pos
-        .get_coord(_actuator.rel_z_coord)
-        .unwrap_or(math::ZERO);
+
+
+    hwa::debug!(
+        "[i_kine] | Actuator target pos: [X {:?} Y {:?} Z {:?}",
+        world_pos.get_coord(_actuator.rel_x_coord),
+        world_pos.get_coord(_actuator.rel_y_coord),
+        world_pos.get_coord(_actuator.rel_z_coord),
+    );
+
+    let e = TVector::zero()
+        .with_coord(CoordSel::X, world_pos.get_coord(_actuator.rel_x_coord))
+        .with_coord(CoordSel::Y, world_pos.get_coord(_actuator.rel_y_coord))
+        .with_coord(CoordSel::Z, world_pos.get_coord(_actuator.rel_z_coord));
+    // base position
+    let b = TVector::zero().with_coord(CoordSel::Z, Some(_actuator.h));
+    let e_delta = e - b;
+    let e_max = e_delta.abs() / e_delta.norm2().unwrap() * (_actuator.l2 + _actuator.l3);
+
+    // E_{capped}=(
+    // Minimo(x(B) + L_{1} + x(E_{max}), Máximo(x(E), x(B) - L_{1} - x(E_{max}))),
+    // Mínimo(y(B) + L_{1} + y(E_{max}), Máximo(y(E), y(B) - L_{1} - y(E_{max}))),
+    // Mínimo(z(B) + z(E_{max}), Máximo(z(E), z(B) - z(E_{max}))))
+
+    let radius = TVector::zero()
+        .with_coord(CoordSel::X, Some(_actuator.l1))
+        .with_coord(CoordSel::Y, Some(_actuator.l1))
+        .with_coord(CoordSel::X, Some(math::ZERO));
+
+    let e_capped = e.clamp_higher_than(b - radius - e_max).clamp_lower_than(b + radius + e_max);
+
+    let x = e_capped.get_coord(CoordSel::X).unwrap();
+    let y = e_capped.get_coord(CoordSel::Y).unwrap();
+    let z = e_capped.get_coord(CoordSel::Z).unwrap();
 
     let theta1_r = y.atan2(x);
 

@@ -4,10 +4,10 @@ version = "0.0.4"
 edition = "2024"
 
 [features]
+default = ["std"]
 float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl"]
-default = ["std", "float-point-f32-impl"]
 std = []
 
 [dependencies]

@@ -431,12 +431,12 @@ impl hwa::HwiContract for Contract {
             if #[cfg(feature = "with-log")] {
                 use std::io::Write;
                 let env = env_logger::Env::new().default_filter_or("info");
-                env_logger::builder()
+                let _ = env_logger::builder()
                     .parse_env(env)
                     .format(|buf, record| {
                         writeln!(buf, "{}: {}", record.level(), record.args())
                     })
-                    .init();
+                    .try_init();
             }
         }
     }
@@ -634,7 +634,9 @@ impl hwa::HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
                 let sd_card_block_device = {
-                     device::SDCardBlockDevice::new("data/sdcard.img").unwrap()
+                    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/sdcard.img");
+                    hwa::info!("Loading sdcard.img from {}", path);
+                    device::SDCardBlockDevice::new(path).unwrap()
                 };
             }
         }
@@ -980,6 +982,7 @@ mod integration_test {
     use std::sync::{Condvar, Mutex};
     use printhor_hwa_common::CoordSel;
     use printhor_hwa_common::traits::StepActuatorTrait;
+    use crate::Contract;
 
     pub static TEST_SIGNAL: hwa::PersistentState<hwa::SyncCsMutexType, bool> =
         hwa::PersistentState::new();
@@ -1044,28 +1047,41 @@ mod integration_test {
     }
 
     async fn do_machine_test(spawner: embassy_executor::Spawner) {
+        Contract::init_logger();
         let mut context = crate::Contract::init(spawner).await;
         
         context.motion_pins.set_enabled(CoordSel::all_axis(), true);
         context.motion_pins.step_high(CoordSel::all_axis());
 
+        #[cfg(feature = "with-e-axis")]
         assert!(context.motion_pins.e_step_pin.is_high());
+        #[cfg(feature = "with-x-axis")]
         assert!(context.motion_pins.x_step_pin.is_high());
+        #[cfg(feature = "with-y-axis")]
         assert!(context.motion_pins.y_step_pin.is_high());
+        #[cfg(feature = "with-z-axis")]
         assert!(context.motion_pins.z_step_pin.is_high());
         
         context.motion_pins.step_low(CoordSel::all_axis());
-        
+
+        #[cfg(feature = "with-e-axis")]
         assert!(context.motion_pins.e_step_pin.is_low());
+        #[cfg(feature = "with-x-axis")]
         assert!(context.motion_pins.x_step_pin.is_low());
+        #[cfg(feature = "with-y-axis")]
         assert!(context.motion_pins.y_step_pin.is_low());
+        #[cfg(feature = "with-z-axis")]
         assert!(context.motion_pins.z_step_pin.is_low());
 
         context.motion_pins.step_high(CoordSel::all_axis());
-        
+
+        #[cfg(feature = "with-e-axis")]
         assert!(context.motion_pins.e_step_pin.is_high());
+        #[cfg(feature = "with-x-axis")]
         assert!(context.motion_pins.x_step_pin.is_high());
+        #[cfg(feature = "with-y-axis")]
         assert!(context.motion_pins.y_step_pin.is_high());
+        #[cfg(feature = "with-z-axis")]
         assert!(context.motion_pins.z_step_pin.is_high());
         
         TEST_SIGNAL.signal(true);

@@ -15,15 +15,10 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-std = ["futures-test/std", "embassy-executor/arch-std", "embassy-executor/executor-thread", "embassy-time/std"]
-default = ["std", "with-motion", "with-log", "float-point-f32-impl",
-    "with-e-axis",
-    "with-x-axis", "with-y-axis", "with-z-axis",
-    "with-a-axis", "with-b-axis", "with-c-axis",
-    "with-i-axis", "with-j-axis", "with-k-axis",
-    "with-u-axis", "with-v-axis", "with-w-axis",
-
-]
+std = ["futures-test/std", "embassy-executor/arch-std",
+    "embassy-executor/executor-thread",
+    "embassy-time/std"]
+default = ["std", "with-log"]
 nightly = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
 with-defmt = ["defmt", "printhor-hwa-utils/with-defmt", "embedded-sdmmc/defmt-log"]
@@ -55,6 +50,13 @@ float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl"]
 float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl"]
 fixed-point-128-impl = ["printhor-hwa-common-macros/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
+with-all-axis = [
+    "with-e-axis",
+    "with-x-axis", "with-y-axis", "with-z-axis",
+    "with-a-axis", "with-b-axis", "with-c-axis",
+    "with-i-axis", "with-j-axis", "with-k-axis",
+    "with-u-axis", "with-v-axis", "with-w-axis",
+]
 with-x-axis = []
 with-y-axis = []
 with-z-axis = []
@@ -75,7 +77,7 @@ printhor-hwa-utils = { version = "0",  default-features = false, path = "../prin
 const_env = { version = "0.1.2"}
 
 embassy-sync = { version = "0.6.2", features = [] }
-embassy-executor = { version = "0.7.0", features = [] }
+embassy-executor = { version = "0.7.0", default-features = false, features = [] }
 embassy-time = { version = "0.4.0", features = [] }
 embassy-embedded-hal = { version = "0.3.0", optional = true, default-features = false, features = [] }
 
@@ -97,8 +99,9 @@ num-traits = { version = "0.2.19", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = [] }
 rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { optional = true, version = "1.36.0" }
-ryu = {version = "1.0.19", default-features = false}
+ryu = {version = "1.0.19", default-features = false }
 
 [dev-dependencies]
-futures-test = { version = "0.3.31", default-features = false}
+futures-test = { version = "0.3.31", default-features = false }
 tmc2209 = { version = "0.2.2"}
+env_logger = { version = "0.11.6" }

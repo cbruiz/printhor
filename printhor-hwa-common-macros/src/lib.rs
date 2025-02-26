@@ -530,41 +530,24 @@ pub fn make_vector_real(input: TokenStream) -> TokenStream {
 fn do_make_real(input: TokenStream) -> TokenStream {
     let number: syn::LitFloat = syn::parse(input).unwrap();
     cfg_if::cfg_if! {
-        if #[cfg(feature="float-point-f32-impl")] {
-            cfg_if::cfg_if! {
-                if #[cfg(any(feature="float-point-f64-impl", feature="fixed-point-128-impl"))] {
-                    compile_error!("Inconsistency detected")
-                }
-            }
-            let expanded = quote! {
-                hwa::math::Real::from_f32(#number)
-            };
-            expanded.into()
-        }
-        else if #[cfg(feature="float-point-f64-impl")] {
-            cfg_if::cfg_if! {
-                if #[cfg(any(feature="float-point-f32-impl", feature="fixed-point-128-impl"))] {
-                    compile_error!("Inconsistency detected")
-                }
-            }
-            let expanded = quote! {
-                hwa::math::Real::from_f64(#number)
-            };
-            expanded.into()
-        }
-        else if #[cfg(feature="fixed-point-128-impl")] {
-            cfg_if::cfg_if! {
-                if #[cfg(any(feature="float-point-f32-impl", feature="float-point-f64-impl"))] {
-                    compile_error!("Inconsistency detected")
-                }
-            }
+        if #[cfg(feature="fixed-point-128-impl")] {
             let expanded = quote! {
                 hwa::math::Real::from_fixed(rust_decimal_macros::dec!(#number))
             };
             expanded.into()
         }
+        else if #[cfg(feature="float-point-f64-impl")] {
+            let expanded = quote! {
+                hwa::math::Real::from_f64(#number)
+            };
+            expanded.into()
+        }
         else {
-            panic!("No real precision specified");
+            // assuming #[cfg(feature="float-point-f32-impl")]
+            let expanded = quote! {
+                hwa::math::Real::from_f32(#number)
+            };
+            expanded.into()
         }
     }
 }

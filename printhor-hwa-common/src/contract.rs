@@ -128,18 +128,18 @@ pub trait HwiContract: Sized {
             /// - `world_pos`: The world position.
             fn project_to_space(&self, _world_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
                 cfg_if::cfg_if! {
-                    if #[cfg(feature = "with-motion-cartessian-kinematics")] {
-                        use hwa::kinematics::WorldToSpaceTransformer;
-                        const TRANSFORMER: hwa::kinematics::cartessian::DefaultTransformer = hwa::kinematics::cartessian::DefaultTransformer;
-                        TRANSFORMER.project_to_space(_world_pos)
-                    }
-                    else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                    if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                        hwa::trace!("Using core-xy transformer to project world {:?} to space", _world_pos);
                         use hwa::kinematics::WorldToSpaceTransformer;
                         const TRANSFORMER: hwa::kinematics::core_xy::DefaultTransformer = hwa::kinematics::core_xy::DefaultTransformer;
                         TRANSFORMER.project_to_space(_world_pos)
                     }
                     else {
-                        unreachable!("You must provide the transformer");
+                        hwa::trace!("Using cartessian transformer to project world {:?} to space", _world_pos);
+                        // Assuming #[cfg(feature = "with-motion-cartessian-kinematics")]
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        const TRANSFORMER: hwa::kinematics::cartessian::DefaultTransformer = hwa::kinematics::cartessian::DefaultTransformer;
+                        TRANSFORMER.project_to_space(_world_pos)
                     }
                 }
 
@@ -152,18 +152,18 @@ pub trait HwiContract: Sized {
             /// - `space_pos`: The world position.
             fn project_to_world(&self, _space_pos: &hwa::math::TVector<hwa::math::Real>) -> Result<hwa::math::TVector<hwa::math::Real>, ()> {
                 cfg_if::cfg_if! {
-                    if #[cfg(feature = "with-motion-cartessian-kinematics")] {
+                    if #[cfg(feature = "with-motion-core-xy-kinematics")] {
                         use hwa::kinematics::WorldToSpaceTransformer;
-                        const TRANSFORMER: hwa::kinematics::cartessian::DefaultTransformer = hwa::kinematics::cartessian::DefaultTransformer;
-                        TRANSFORMER.project_to_world(_space_pos)
-                    }
-                    else if #[cfg(feature = "with-motion-core-xy-kinematics")] {
-                        use hwa::kinematics::WorldToSpaceTransformer;
+                        hwa::trace!("Using core-xy transformer to project space {:?} to world", _space_pos);
                         const TRANSFORMER: hwa::kinematics::core_xy::DefaultTransformer = hwa::kinematics::core_xy::DefaultTransformer;
                         TRANSFORMER.project_to_world(_space_pos)
                     }
                     else {
-                        unreachable!("You must provide the transformer");
+                        // Assuming #[cfg(feature = "with-motion-cartessian-kinematics")]
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        hwa::trace!("Using cartessian transformer to project space {:?} to world", _space_pos);
+                        const TRANSFORMER: hwa::kinematics::cartessian::DefaultTransformer = hwa::kinematics::cartessian::DefaultTransformer;
+                        TRANSFORMER.project_to_world(_space_pos)
                     }
                 }
             }
