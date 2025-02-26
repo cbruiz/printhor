@@ -14,13 +14,20 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-default = []
+default = [
+    "float-point-f32-impl",
+    "with-serial-usb",
+    "with-serial-port-1",
+    "with-serial-port-2",
+    "with-motion", "with-motion-stepper", "with-motion-cartessian-kinematics",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis"
+]
 # Hardware device features
 with-log = ["env_logger", "printhor-hwa-common/with-log"]
-with-serial-usb = ["async-std"]
-with-serial-port-1 = ["async-std"]
-with-serial-port-2 = ["async-std"]
-with-print-job = []
+with-serial-usb = ["async-std", "printhor-hwa-common/with-serial-usb"]
+with-serial-port-1 = ["async-std", "printhor-hwa-common/with-serial-port-1"]
+with-serial-port-2 = ["async-std", "printhor-hwa-common/with-serial-port-2"]
+with-print-job = ["printhor-hwa-common/with-print-job"]
 with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end"]
 with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
@@ -30,18 +37,16 @@ with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematic
 with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
 with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
-with-probe = ["embedded-hal-0"]
-with-endstops = []
-with-sd-card = ["embedded-sdmmc"]
-with-fan-layer = ["embedded-hal-1"]
-with-fan-extra-1 = ["embedded-hal-1"]
-with-laser = ["embedded-hal-1"]
-with-trinamic = ["tmc2209"]
-with-ps-on = []
-with-spi = []
-with-i2c = ["pwm-pca9685"]
-
-with-display = []
+debug-motion-broadcast = []
+with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe"]
+with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card"]
+with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1"]
+with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser"]
+with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic"]
+with-ps-on = ["printhor-hwa-common/with-ps-on"]
+with-spi = ["printhor-hwa-common/with-spi"]
+with-i2c = ["pwm-pca9685", "printhor-hwa-common/with-i2c"]
 
 with-e-axis = ["printhor-hwa-common/with-e-axis"]
 with-x-axis = ["printhor-hwa-common/with-x-axis"]
@@ -57,10 +62,7 @@ with-u-axis = ["printhor-hwa-common/with-u-axis"]
 with-v-axis = ["printhor-hwa-common/with-v-axis"]
 with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
-debug-motion-broadcast = []
-
 nightly = ["embassy-executor/nightly"]
-executor-interrupt = []
 verbose-timings = []
 sd-card-uses-spi = []
 without-vref-int = []
@@ -83,7 +85,7 @@ sysinfo = { version = "0.33.1", default-features = false, features = ["default"]
 env_logger = { version = "0.11.6", optional = true }
 printhor-hwa-common = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
 printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
-async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
+async-gcode = {version = "0.3.0", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value", "std"] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ], optional = true }
 embedded-sdmmc = { version = "0.8.1", default-features = false, optional = true }

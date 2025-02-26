@@ -320,7 +320,3 @@ pub type TrinamicUart = board::comm::SingleWireSoftwareUart;
 
 #[cfg(feature = "with-trinamic")]
 pub use board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};
-
-
-#[cfg(feature = "with-display")]
-compile_error!("Pending to recover");
