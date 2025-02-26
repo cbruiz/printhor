@@ -24,7 +24,7 @@ jobs:
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Install lcov
-        run: apt-get install -y lcov
+        run: sudo apt-get -y install lcov
       - name: Generate code coverage of full featured hwa-common with f32 precision (default)
         run: cargo llvm-cov -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f32.info
       - name: Generate code coverage of full featured hwa-common with f64 precision
