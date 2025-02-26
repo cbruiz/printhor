@@ -25,27 +25,27 @@ jobs:
         run: cargo install cargo-llvm-cov
       - name: Generate code coverage of full featured hwa-common with f32 precision (default)
         run: cargo llvm-cov -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --lcov --output-path lcov.hwa-f32.info
-      - name: Generate code coverage of full featured hwa-common with f64 precision (default)
+      - name: Generate code coverage of full featured hwa-common with f64 precision
         run: cargo llvm-cov -p printhor-hwa-common --features float-point-f64-impl,with-motion,with-all-axis --lcov --output-path lcov.hwa-f64.info
-      - name: Generate code coverage of full featured hwa-common with f64 precision (default)
+      - name: Generate code coverage of full featured hwa-common with fixed point 128 precision
         run: cargo llvm-cov -p printhor-hwa-common --features fixed-point-128-impl,with-motion,with-all-axis --lcov --output-path lcov.hwa-fp128.info
 
-      - name: Generate code coverage of native simulator backend
+      - name: Generate code coverage of native simulator backend (default)
         working-directory: ./hwi-boards/printhor-hwi_native
         run: cargo llvm-cov -p printhor-hwi_native --lcov --output-path ../../lcov.hwi-base.info
-      - name: Generate code coverage of native simulator backend (core-xy)
+      - name: Generate code coverage of native simulator backend [core-xy]
         working-directory: ./hwi-boards/printhor-hwi_native
         run: cargo llvm-cov -p printhor-hwi_native --features with-motion-core-xy-kinematics --lcov --output-path ../../lcov.hwi-core-xy.info
-      - name: Generate code coverage of native simulator backend (anthropomorphic)
+      - name: Generate code coverage of native simulator backend [anthropomorphic]
         working-directory: ./hwi-boards/printhor-hwi_native
         run: cargo llvm-cov -p printhor-hwi_native --features with-motion-anthropomorphic-kinematics --lcov --output-path ../../lcov.hwi-anthropomorphic.info
-      - name: Generate code coverage for a (default) cartessian-cnc machine firmware (native simulator backend)
+      - name: Generate code coverage for a (default) [cartessian-cnc] machine firmware (native simulator backend)
         run: cargo llvm-cov --workspace --features cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-cnc.info
-      - name: Generate code coverage for a cartessian-fdm machine firmware (native simulator backend)
+      - name: Generate code coverage for a [cartessian-fdm] machine firmware (native simulator backend)
         run: cargo llvm-cov --workspace --features cartessian-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-fdm.info
-      - name: Generate code coverage for a core-xy machine firmware (native simulator backend)
+      - name: Generate code coverage for a [core-xy-fdm] machine firmware (native simulator backend)
         run: cargo llvm-cov --workspace --features core-xy-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-core-xy-fdm.info
-      - name: Generate code coverage for an anthropomorphic quadruped robot machine firmware (native simulator backend)
+      - name: Generate code coverage for an [anthropomorphic-quadruped-robot] machine firmware (native simulator backend)
         run: cargo llvm-cov --workspace --features anthropomorphic-quad-robot --ignore-filename-regex libs --lcov --output-path lcov.fw-anthropomorphic-quad-robot.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2

@@ -205,6 +205,17 @@ core-xy-fdm = [
     "with-x-axis", "with-y-axis", "with-z-axis",
     "with-hot-end",
     "with-hot-bed",
+    "with-fan-layer",
+]
+
+core-xy-fdm-wip = [
+    "with-motion",
+    "with-motion-core-xy-kinematics",
+    "with-motion-stepper",
+    "with-e-axis",
+    "with-x-axis", "with-y-axis", "with-z-axis",
+    "with-hot-end",
+    "with-hot-bed",
     #"with-fan-layer", # TODO: few boards still pending to have it
 ]
 
