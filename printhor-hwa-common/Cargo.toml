@@ -17,6 +17,8 @@ homepage = "https://github.com/cbruiz/printhor"
 [features]
 std = ["futures-test/std", "embassy-executor/arch-std",
     "embassy-executor/executor-thread",
+    "printhor-hwa-common-macros/std",
+    "printhor-hwa-utils/std",
     "embassy-time/std"]
 default = ["std", "with-log"]
 nightly = []

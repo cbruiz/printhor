@@ -7,7 +7,7 @@ use hwa::CoordSel;
 use crate::board;
 use crate::board::mocked_peripherals::TRINAMIC_SIMULATOR_PARK_SIGNAL;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Error {
     Uninit,
     Timeout,
@@ -26,7 +26,7 @@ impl soft_uart::IOPin for AnyPinWrapper
     }
     fn set_high(&mut self) { self.0.set_high() }
     fn set_low(&mut self) { self.0.set_low() }
-    fn set_open_drain(&mut self) { unimplemented!("Not implemented") }
+    fn set_open_drain(&mut self) {  }
 }
 
 pub struct SingleWireSoftwareUart {
@@ -206,3 +206,53 @@ fn resume_trinamic_simulator(channel: CoordSel) {
     TRINAMIC_SIMULATOR_PARK_SIGNAL.signal(channel);
 }
 
+#[cfg(test)]
+mod test {
+    use printhor_hwa_common::soft_uart::IOPin;
+    use printhor_hwa_common::traits::TrinamicUartTrait;
+    use crate::board::mocked_peripherals;
+    use mocked_peripherals::{MockedIOPin, PinState};
+    use crate::board::device::TrinamicUart;
+    use super::*;
+
+    #[futures_test::test]
+    async fn test_internals() {
+        let _pin_state = hwa::make_static_ref!(
+            "GlobalPinState",
+            mocked_peripherals::PinsCell<PinState>,
+            mocked_peripherals::PinsCell::new(PinState::new())
+        );
+        let mut wrapper = AnyPinWrapper(MockedIOPin::new(0, _pin_state));
+        wrapper.set_output();
+        wrapper.set_low();
+        assert!(wrapper.is_low());
+        wrapper.set_high();
+        assert!(wrapper.is_high());
+        wrapper.set_low();
+        assert!(wrapper.is_low());
+        
+        wrapper.set_input();
+        wrapper.set_open_drain();
+        
+        let mut trinamic_uart = TrinamicUart::new(
+            128,
+            #[cfg(feature = "with-x-axis")]
+            AnyPinWrapper(MockedIOPin::new(0, _pin_state)),
+            #[cfg(feature = "with-y-axis")]
+            AnyPinWrapper(MockedIOPin::new(1, _pin_state)),
+            #[cfg(feature = "with-z-axis")]
+            AnyPinWrapper(MockedIOPin::new(2, _pin_state)),
+            #[cfg(feature = "with-e-axis")]
+            AnyPinWrapper(MockedIOPin::new(3, _pin_state)),
+        );
+        
+        // Test what must happen with trinamic_uart in boundary cases
+        
+        assert_eq!(trinamic_uart.blocking_flush(), Ok(()));
+        assert_eq!(trinamic_uart.select_stepper_of_axis(CoordSel::empty()), Ok(()));
+        assert_eq!(trinamic_uart.select_stepper_of_axis(CoordSel::UNSET), Err(()));
+        assert_eq!(trinamic_uart.get_tmc_address(CoordSel::empty()), Err(()));
+        assert_eq!(trinamic_uart.read_until_idle(&mut [0u8;0]).await, Err(SerialError::Framing));
+        assert_eq!(trinamic_uart.write(&[0u8;0]).await, Err(SerialError::Framing));
+    }
+}

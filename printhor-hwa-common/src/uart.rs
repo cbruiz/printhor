@@ -14,7 +14,7 @@ Represents possible errors that can occur during serial communication.
 use crate as hwa;
 
 /// Serial communication error type
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub enum SerialError {
     /// Timeout

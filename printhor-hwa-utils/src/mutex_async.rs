@@ -249,10 +249,11 @@ mod test {
     use crate as hwa;
     use hwa::AsyncMutexStrategy;
     use std::clone::Clone;
+    use std::ops::Deref;
 
     struct DummyDevice {}
     impl DummyDevice {
-        pub fn new() -> Self {
+        pub const fn new() -> Self {
             Self {}
         }
 
@@ -274,14 +275,25 @@ mod test {
         ));
 
         assert!(
-            !controller.can_retain(),
-            "A AsyncStandardStrategy StaticAsyncController can NOT retain"
+            !controller.can_retain(), "A AsyncStandardStrategy StaticAsyncController can NOT retain"
         );
 
-        //let _r = controller.retain().await;
+        let _r = controller.retain().await;
+        assert_eq!(_r, Err(()), "NonHoldable cannot retain");
+        let _r = controller.release();
+        assert_eq!(_r, Err(()), "NonHoldable cannot release");
+
+        let _x = controller.apply_or_error(|_| Ok(()), ());
+        assert_eq!(_r, Err(()), "Not supported in not holdable");
 
         let mut mg = controller.lock().await;
         mg.do_nothing();
+
+        let other_controller = controller.clone();
+
+        let strategy = other_controller.deref();
+        let _other_strategy = strategy.clone();
+
     }
 
     #[futures_test::test]
@@ -297,25 +309,20 @@ mod test {
         ));
 
         assert!(
-            controller.can_retain(),
-            "A Holdable StaticAsyncController can retain"
+            controller.can_retain(), "A Holdable StaticAsyncController can retain"
         );
         assert!(
-            controller.retain().await.is_ok(),
-            "A Holdable StaticAsyncController retains"
+            controller.retain().await.is_ok(), "A Holdable StaticAsyncController retains"
         );
         assert!(
-            controller.try_lock().is_err(),
-            "A retained Holdable StaticAsyncController cannot be lock until released"
+            controller.try_lock().is_err(), "A retained Holdable cannot be lock until released"
         );
         assert!(
-            controller.release().is_ok(),
-            "A Holdable StaticAsyncController releases"
+            controller.release().is_ok(), "A Holdable StaticAsyncController releases"
         );
 
         assert!(
-            controller.retain().await.is_ok(),
-            "A released Holdable StaticAsyncController retains again"
+            controller.retain().await.is_ok(), "A released Holdable retains again"
         );
 
         let other_controller = controller.clone();
@@ -323,6 +330,10 @@ mod test {
         let _c = other_controller.apply_or_error(|_d| Ok(_d.do_nothing()), ());
 
         let _c2 = controller.apply_or_error(|_d| Ok(_d.do_nothing()), ());
+
+        let strategy = other_controller.deref();
+        let _other_strategy = strategy.clone();
+
     }
 }
 

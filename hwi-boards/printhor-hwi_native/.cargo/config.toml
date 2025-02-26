@@ -1,6 +1,5 @@
 
 [env]
-#EMBASSY_EXECUTOR_TASK_ARENA_SIZE=16384
 
 [profile.dev.package."*"]
 codegen-units = 1

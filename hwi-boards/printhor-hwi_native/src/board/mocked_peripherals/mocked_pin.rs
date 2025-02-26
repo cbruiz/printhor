@@ -37,22 +37,16 @@ impl MockedIOPin {
 
     pub fn set_high(&mut self) {
         loop {
-            match self.global_state.try_lock() {
-                Ok(mut g) => return g.set(self.id, true),
-                Err(_e) => {
-                    //panic!("Error setting high: {:?}", _e)
-                }
+            if let Ok(mut mg) = self.global_state.try_lock() {
+                return mg.set(self.id, true);
             }
         }
     }
 
     pub fn set_low(&mut self) {
         loop {
-            match self.global_state.try_lock() {
-                Ok(mut g) => return g.set(self.id, false),
-                Err(_e) => {
-                    //panic!("Error setting low: {:?}", _e)
-                }
+            if let Ok(mut mg) = self.global_state.try_lock() {
+                return mg.set(self.id, false);
             }
         }
     }
@@ -60,31 +54,17 @@ impl MockedIOPin {
     pub fn toggle(&mut self) {
         let state = self.is_high();
         loop {
-            match self.global_state.try_lock() {
-                Ok(mut g) => return g.set(self.id, !state),
-                Err(_e) => {
-                    //panic!("Error setting low: {:?}", _e)
-                }
+            if let Ok(mut mg) = self.global_state.try_lock() {
+                return mg.set(self.id, !state);
             }
         }
-    }
-
-    pub fn is_set_high(&mut self) -> bool {
-        self.is_high()
-    }
-
-    pub fn is_set_low(&mut self) -> bool {
-        self.is_low()
     }
 
     #[allow(unused)]
     pub fn is_low(&self) -> bool {
         loop {
-            match self.global_state.try_lock() {
-                Ok(g) => return g.get(self.id) == false,
-                Err(_e) => {
-                    //panic!("Error getting low: {:?}", _e)
-                }
+            if let Ok(mg) = self.global_state.try_lock() {
+                return mg.get(self.id) == false
             }
         }
     }
@@ -92,11 +72,8 @@ impl MockedIOPin {
     #[allow(unused)]
     pub fn is_high(&self) -> bool {
         loop {
-            match self.global_state.try_lock() {
-                Ok(g) => return g.get(self.id) == true,
-                Err(_e) => {
-                    //panic!("Error getting high: {:?}", _e)
-                }
+            if let Ok(mg) = self.global_state.try_lock() {
+                return mg.get(self.id) == true
             }
         }
     }

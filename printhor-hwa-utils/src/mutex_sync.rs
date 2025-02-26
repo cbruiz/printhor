@@ -125,6 +125,7 @@ where
 
 #[cfg(test)]
 mod test {
+    use std::ops::Deref;
     use crate as hwa;
     use hwa::SyncMutexStrategy;
     use printhor_hwa_common_macros::make_static_sync_controller;
@@ -165,6 +166,9 @@ mod test {
         assert_eq!(_v1, 0);
         assert_eq!(_v2, 1);
         assert_eq!(_v3, 1);
+        let strategy: &hwa::SyncStandardStrategy<SyncMutexType, DummyDevice> = controller.deref();
+        let inner_mutex = strategy.deref();
+        assert!(inner_mutex.lock(|_| true), "can defer");
     }
 
     #[test]

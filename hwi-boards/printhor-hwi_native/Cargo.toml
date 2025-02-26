@@ -19,6 +19,7 @@ default = [
     "with-serial-usb",
     "with-serial-port-1",
     "with-serial-port-2",
+    "with-trinamic",
     "with-motion", "with-motion-stepper", "with-motion-cartessian-kinematics",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis"
 ]
@@ -102,6 +103,9 @@ const_env = { version = "0.1.2" }
 
 rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
 rust_decimal_macros = { optional = true, version = "1.36.0" }
+
+[dev-dependencies]
+futures-test = { version = "0.3.31"}
 
 [patch.crates-io]
 async-gcode = { path = "../../libs/async-gcode" }
