@@ -495,6 +495,117 @@ mod tests {
         )
     }
 
+    const fn top_left_actuator() -> SingleActuator {
+        SingleActuator::new(
+            // Height
+            hwa::make_real!(70.0),
+            // L1 length
+            hwa::make_real!(24.0),
+            // L2 length
+            hwa::make_real!(55.0),
+            // L3 length
+            hwa::make_real!(70.0),
+            // theta1 initial angle
+            hwa::make_real!(45.0),
+            // theta2 initial angle
+            hwa::make_real!(0.0),
+            // theta3 initial angle
+            hwa::make_real!(90.0),
+            // Which world coordinates labels to get from input
+            hwa::CoordSel::X,
+            hwa::CoordSel::Y,
+            hwa::CoordSel::Z,
+            // Which space coordinates by label to use for output
+            hwa::CoordSel::A,
+            hwa::CoordSel::B,
+            hwa::CoordSel::C,
+        )
+    }
+
+    const fn bottom_right_actuator() -> SingleActuator {
+        SingleActuator::new(
+            // Height
+            hwa::make_real!(70.0),
+            // L1 length
+            hwa::make_real!(24.0),
+            // L2 length
+            hwa::make_real!(55.0),
+            // L3 length
+            hwa::make_real!(70.0),
+            // theta1 initial angle
+            hwa::make_real!(45.0),
+            // theta2 initial angle
+            hwa::make_real!(0.0),
+            // theta3 initial angle
+            hwa::make_real!(90.0),
+            // Which world coordinates labels to get from input
+            hwa::CoordSel::X,
+            hwa::CoordSel::Y,
+            hwa::CoordSel::Z,
+            // Which space coordinates by label to use for output
+            hwa::CoordSel::I,
+            hwa::CoordSel::J,
+            hwa::CoordSel::K,
+        )
+    }
+
+    const fn bottom_left_actuator() -> SingleActuator {
+        SingleActuator::new(
+            // Height
+            hwa::make_real!(70.0),
+            // L1 length
+            hwa::make_real!(24.0),
+            // L2 length
+            hwa::make_real!(55.0),
+            // L3 length
+            hwa::make_real!(70.0),
+            // theta1 initial angle
+            hwa::make_real!(45.0),
+            // theta2 initial angle
+            hwa::make_real!(0.0),
+            // theta3 initial angle
+            hwa::make_real!(90.0),
+            // Which world coordinates labels to get from input
+            hwa::CoordSel::X,
+            hwa::CoordSel::Y,
+            hwa::CoordSel::Z,
+            // Which space coordinates by label to use for output
+            hwa::CoordSel::U,
+            hwa::CoordSel::V,
+            hwa::CoordSel::W,
+        )
+    }
+
+    #[test]
+    fn test_construction() {
+        let _quadruped = crate::kinematics::anthropomorphic_3dof::Quadruped::new(
+            #[cfg(all(
+                feature = "with-x-axis",
+                feature = "with-y-axis",
+                feature = "with-z-axis"
+            ))]
+            top_right_actuator(),
+            #[cfg(all(
+                feature = "with-a-axis",
+                feature = "with-b-axis",
+                feature = "with-c-axis"
+            ))]
+            top_left_actuator(),
+            #[cfg(all(
+                feature = "with-i-axis",
+                feature = "with-j-axis",
+                feature = "with-k-axis"
+            ))]
+            bottom_right_actuator(),
+            #[cfg(all(
+                feature = "with-u-axis",
+                feature = "with-v-axis",
+                feature = "with-w-axis"
+            ))]
+            bottom_left_actuator(),
+        );
+    }
+
     #[test]
     fn test_kinematics() {
         let actuator = top_right_actuator();
@@ -524,7 +635,7 @@ mod tests {
 
         let space_absolute_pos =
             inverse_kinematics(&(world_normalized_pos + world_center), &actuator).unwrap();
-        let distance_2 = space_absolute_pos.norm2().unwrap();
+        let _distance_2 = space_absolute_pos.norm2().unwrap();
         /* TODO: Check
         assert!(
             distance_2.is_negligible(),
@@ -536,7 +647,7 @@ mod tests {
         // 1.3.1 10mm up
         let p1 = world_center + hwa::make_vector_real!(x = 0.0, y = 0.0, z = 10.0);
         let space_absolute_pos = inverse_kinematics(&p1, &actuator).unwrap();
-        let distance_3 = (space_absolute_pos
+        let _distance_3 = (space_absolute_pos
             - hwa::make_vector_real!(x = 0.0, y = -10.4693403, z = 9.71987152))
         .norm2()
         .unwrap();
@@ -551,7 +662,7 @@ mod tests {
         // 1.3.1 10mm down
         let p1 = world_center + hwa::make_vector_real!(x = 0.0, y = 0.0, z = -10.0);
         let space_absolute_pos = inverse_kinematics(&p1, &actuator).unwrap();
-        let distance_3 = (space_absolute_pos
+        let _distance_3 = (space_absolute_pos
             - hwa::make_vector_real!(x = 0.0, y = 10.4820585, z = -11.233345))
         .norm2()
         .unwrap();

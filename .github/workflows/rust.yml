@@ -24,21 +24,21 @@ jobs:
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Generate code coverage of full featured hwa-common with f32 precision (default)
-        run: cargo llvm-cov -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --lcov --output-path lcov.hwa-f32.info
+        run: cargo llvm-cov -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f32.info
       - name: Generate code coverage of full featured hwa-common with f64 precision
-        run: cargo llvm-cov -p printhor-hwa-common --features float-point-f64-impl,with-motion,with-all-axis --lcov --output-path lcov.hwa-f64.info
+        run: cargo llvm-cov -p printhor-hwa-common --features float-point-f64-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f64.info
       - name: Generate code coverage of full featured hwa-common with fixed point 128 precision
-        run: cargo llvm-cov -p printhor-hwa-common --features fixed-point-128-impl,with-motion,with-all-axis --lcov --output-path lcov.hwa-fp128.info
+        run: cargo llvm-cov -p printhor-hwa-common --features fixed-point-128-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-fp128.info
 
-      - name: Generate code coverage of native simulator backend (default)
+      - name: Generate code coverage of native simulator backend [cartessian] (default)
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov -p printhor-hwi_native --lcov --output-path ../../lcov.hwi-base.info
+        run: cargo llvm-cov -p printhor-hwi_native --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-base.info
       - name: Generate code coverage of native simulator backend [core-xy]
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov -p printhor-hwi_native --features with-motion-core-xy-kinematics --lcov --output-path ../../lcov.hwi-core-xy.info
+        run: cargo llvm-cov -p printhor-hwi_native --features with-motion-core-xy-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-core-xy.info
       - name: Generate code coverage of native simulator backend [anthropomorphic]
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov -p printhor-hwi_native --features with-motion-anthropomorphic-kinematics --lcov --output-path ../../lcov.hwi-anthropomorphic.info
+        run: cargo llvm-cov -p printhor-hwi_native --features with-motion-anthropomorphic-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-anthropomorphic.info
       - name: Generate code coverage for a (default) [cartessian-cnc] machine firmware (native simulator backend)
         run: cargo llvm-cov --workspace --features cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-cnc.info
       - name: Generate code coverage for a [cartessian-fdm] machine firmware (native simulator backend)
