@@ -835,18 +835,6 @@ impl SCurveMotionProfile {
     }
 
     pub fn params_dump(&self) {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "with-log")] {
-                use std::io::Write;
-                let env = env_logger::Env::new().default_filter_or("info");
-                let _ = env_logger::builder()
-                    .parse_env(env)
-                    .format(|buf, record| {
-                        writeln!(buf, "{}: {}", record.level(), record.args())
-                    })
-                    .try_init();
-            }
-        }
 
         hwa::debug!(
             "Params:\nq_{{1}} = {:?}\nv_{{0}} = {:?}\nv_{{1}} = {:?}\nv_{{max}} = {:?}\na_{{max}} = {:?}\nj_{{max}} = {:?}\nT_{{j1}} = {:?}\nT_{{a}} = {:?}\nT_{{v}} = {:?}\nT_{{j2}} = {:?}\nT_{{d}} = {:?}\na_{{lima}} = {:?}\na_{{limd}} = {:?}\nv_{{lim}} = {:?}",
