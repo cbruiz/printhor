@@ -20,8 +20,7 @@ pub struct GCodeMultiplexedInputStream {
 
 impl GCodeMultiplexedInputStream {
     pub fn new(
-        #[cfg(feature = "with-serial-usb")]
-        serial_usb_rx_stream: hwa::types::SerialUsbInputStream,
+        #[cfg(feature = "with-serial-usb")] serial_usb_rx_stream: hwa::types::SerialUsbInputStream,
         #[cfg(feature = "with-serial-port-1")]
         serial_port1_rx_stream: hwa::types::SerialPort1InputStream,
         #[cfg(feature = "with-serial-port-2")]

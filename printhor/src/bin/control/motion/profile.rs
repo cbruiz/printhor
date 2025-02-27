@@ -835,6 +835,19 @@ impl SCurveMotionProfile {
     }
 
     pub fn params_dump(&self) {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-log")] {
+                use std::io::Write;
+                let env = env_logger::Env::new().default_filter_or("info");
+                let _ = env_logger::builder()
+                    .parse_env(env)
+                    .format(|buf, record| {
+                        writeln!(buf, "{}: {}", record.level(), record.args())
+                    })
+                    .try_init();
+            }
+        }
+
         hwa::debug!(
             "Params:\nq_{{1}} = {:?}\nv_{{0}} = {:?}\nv_{{1}} = {:?}\nv_{{max}} = {:?}\na_{{max}} = {:?}\nj_{{max}} = {:?}\nT_{{j1}} = {:?}\nT_{{a}} = {:?}\nT_{{v}} = {:?}\nT_{{j2}} = {:?}\nT_{{d}} = {:?}\na_{{lima}} = {:?}\na_{{limd}} = {:?}\nv_{{lim}} = {:?}",
             self.q1,
@@ -1146,6 +1159,7 @@ impl MotionProfile for SCurveMotionProfile {
     fn end_time(&self) -> Real {
         self.i7_end()
     }
+    #[inline(always)]
     fn end_pos(&self) -> Real {
         self.q1
     }
@@ -1226,6 +1240,7 @@ pub mod test {
     use crate::hwa;
     use crate::hwa::math::Real;
     use num_traits::ToPrimitive;
+    use printhor_hwa_common::math;
 
     pub fn do_compute(
         q1: f32,
@@ -1254,6 +1269,21 @@ pub mod test {
         let ok = (v1 - expected).abs() < tolerance;
         assert!(ok, "{} = {} but should be = {}", what, v1, expected);
     }
+    
+    fn init_logger() {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-log")] {
+                use std::io::Write;
+                let env = env_logger::Env::new().default_filter_or("info");
+                let _ = env_logger::builder()
+                    .parse_env(env)
+                    .format(|buf, record| {
+                        writeln!(buf, "{}: {}", record.level(), record.args())
+                    })
+                    .try_init();
+            }
+        }
+    }
 
     #[test]
     fn ex_3_9() {
@@ -1275,7 +1305,7 @@ pub mod test {
         // Given: v_max = 10, a_max = 10, j_max = 30
         // Exp: Ta = 1.0747, T_v = 0.0, T_d = 1.1747, T_j1 = 0.3333, T_j2 = 0.3333, vlim = 8.4136
         let r = do_compute(10., 1., 0., 10., 10., 30.).unwrap();
-
+        
         approx_equal("T_a", r.t_a, 1.0747, 0.001);
         approx_equal("T_v", r.t_v, 0.0, 0.001);
         approx_equal("T_d", r.t_d, 1.1747, 0.001);
@@ -1319,6 +1349,8 @@ pub mod test {
 
     #[test]
     fn ex_3_13() {
+
+        init_logger();
         // With: q_1 = 10, v_0 = 0, v_1 = 0
         // Given: v_max = 10, a_max = 20, j_max = 30
         // Exp: Ta = 1.1006, T_v = 0.0, T_d = 1.1006, T_j1 = 0.5503, T_j2 = 0.5503, vlim = 9.0826
@@ -1334,5 +1366,14 @@ pub mod test {
         approx_equal("T_j1", r.t_j1, 0.5333, 0.01);
         approx_equal("T_j2", r.t_j2, 0.5333, 0.01);
         approx_equal("v_lim", r.v_lim, 9.0826, 0.01);
+    }
+
+    #[test]
+    fn test_limits() {
+        use crate::control::motion::profile::MotionProfile;
+        let r = do_compute(10., 1., 0., 10., 10., 30.).unwrap();
+
+        
+        assert_eq!(MotionProfile::eval_position(&r, math::ZERO - math::ONE), None);
     }
 }

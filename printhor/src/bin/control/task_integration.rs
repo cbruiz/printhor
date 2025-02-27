@@ -70,7 +70,8 @@ pub async fn task_integration(
     #[cfg(all(feature = "with-motion", feature = "native"))]
     {
         let dg = processor.motion_planner.motion_driver().lock().await;
-        dg.step_actuator.set_end_stop_high(CoordSel::X | CoordSel::Y | CoordSel::Z)
+        dg.step_actuator
+            .set_end_stop_high(CoordSel::X | CoordSel::Y | CoordSel::Z)
     }
 
     {
@@ -87,8 +88,7 @@ pub async fn task_integration(
             .and_then(expect_immediate)
             .ok()
         {
-            Some(_result) => {
-            }
+            Some(_result) => {}
             _ => {
                 finish_task(Err(test_name));
                 return;
@@ -104,9 +104,7 @@ pub async fn task_integration(
             .and_then(expect_immediate)
             .ok()
         {
-            Some(_result) => {
-                
-            }
+            Some(_result) => {}
             _ => {
                 finish_task(Err(test_name));
                 return;
@@ -123,9 +121,7 @@ pub async fn task_integration(
             .and_then(expect_immediate)
             .ok()
         {
-            Some(_result) => {
-
-            }
+            Some(_result) => {}
             _ => {
                 finish_task(Err(test_name));
                 return;
@@ -135,16 +131,18 @@ pub async fn task_integration(
         match processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M503(control::S{ s: Some(math::ONE) })),
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M503(control::S { s: Some(math::ONE) }),
+                ),
                 true,
             )
             .await
             .and_then(expect_immediate)
             .ok()
         {
-            Some(_result) => {
-
-            }
+            Some(_result) => {}
             _ => {
                 finish_task(Err(test_name));
                 return;
@@ -153,16 +151,20 @@ pub async fn task_integration(
         match processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M503(control::S{ s: Some(math::ZERO) })),
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M503(control::S {
+                        s: Some(math::ZERO),
+                    }),
+                ),
                 true,
             )
             .await
             .and_then(expect_immediate)
             .ok()
         {
-            Some(_result) => {
-
-            }
+            Some(_result) => {}
             _ => {
                 finish_task(Err(test_name));
                 return;
@@ -179,9 +181,7 @@ pub async fn task_integration(
             .and_then(expect_immediate)
             .ok()
         {
-            Some(_result) => {
-
-            }
+            Some(_result) => {}
             _ => {
                 finish_task(Err(test_name));
                 return;
@@ -779,7 +779,10 @@ pub async fn task_integration(
     // Separator
     hwa::info!("##");
 
-    #[cfg(all(feature = "with-print-job", not(feature = "anthropomorphic-quad-robot")))]
+    #[cfg(all(
+        feature = "with-print-job",
+        not(feature = "anthropomorphic-quad-robot")
+    ))]
     {
         let test_name = "T15 [Plotting 2)]";
 
@@ -861,7 +864,10 @@ pub async fn task_integration(
     // Separator
     hwa::info!("##");
 
-    #[cfg(all(feature = "with-print-job", not(feature = "anthropomorphic-quad-robot")))]
+    #[cfg(all(
+        feature = "with-print-job",
+        not(feature = "anthropomorphic-quad-robot")
+    ))]
     {
         let test_name = "T16 [Benchy)]";
 
@@ -939,8 +945,7 @@ pub async fn task_integration(
                     )
                     .await
                     {
-                        Ok(_r) => {
-                        }
+                        Ok(_r) => {}
                         Err(_) => {
                             finish_task(Err(test_name));
                             return;

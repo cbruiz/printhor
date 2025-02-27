@@ -1,6 +1,5 @@
-
-use core::f64;
 use crate::math::Real;
+use core::f64;
 
 pub const ZERO: Real = Real::from_f64(0.0);
 pub const HALF: Real = Real::from_f64(0.5);

@@ -312,8 +312,6 @@ fn inverse_kinematics(
         _actuator.l3
     );
 
-
-
     hwa::debug!(
         "[i_kine] | Actuator target pos: [X {:?} Y {:?} Z {:?}",
         world_pos.get_coord(_actuator.rel_x_coord),
@@ -340,7 +338,9 @@ fn inverse_kinematics(
         .with_coord(CoordSel::Y, Some(_actuator.l1))
         .with_coord(CoordSel::X, Some(math::ZERO));
 
-    let e_capped = e.clamp_higher_than(b - radius - e_max).clamp_lower_than(b + radius + e_max);
+    let e_capped = e
+        .clamp_higher_than(b - radius - e_max)
+        .clamp_lower_than(b + radius + e_max);
 
     let x = e_capped.get_coord(CoordSel::X).unwrap();
     let y = e_capped.get_coord(CoordSel::Y).unwrap();

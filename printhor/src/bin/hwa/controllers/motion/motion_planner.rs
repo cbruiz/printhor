@@ -329,7 +329,7 @@ impl MotionPlanner {
             }
         }
         rb.data[head as usize] = PlanEntry::Empty;
-        rb.head = match head + 1 < Contract::SEGMENT_QUEUE_SIZE.into() {
+        rb.head = match head + 1 < Contract::SEGMENT_QUEUE_SIZE as u8 {
             true => head + 1,
             false => 0u8,
         };
@@ -559,7 +559,9 @@ impl MotionPlanner {
                             is_defer = true;
                             let pos = hwa::controllers::Position::new_from(
                                 Contract::DEFAULT_WORLD_HOMING_POINT_WU,
-                                Contract.project_to_space(&Contract::DEFAULT_WORLD_HOMING_POINT_WU).unwrap(),
+                                Contract
+                                    .project_to_space(&Contract::DEFAULT_WORLD_HOMING_POINT_WU)
+                                    .unwrap(),
                             );
                             self.motion_status
                                 .update_last_planned_position(order_num, &pos);
@@ -977,7 +979,6 @@ impl MotionPlanner {
         order_num: u32,
         event_bus: &hwa::types::EventBus,
     ) -> Result<(), ()> {
-
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] Locking for homming");
 
@@ -988,9 +989,7 @@ impl MotionPlanner {
             .homing_action(&self.motion_config)
             .await
         {
-            Ok(_pos) => {
-                
-            }
+            Ok(_pos) => {}
             Err(_pos) => {
                 // hwa::error!("Unable to complete homming. [Not yet] Raising SYS_ALARM");
                 // self.event_bus.publish_event(EventStatus::containing(EventFlags::SYS_ALARM)).await;

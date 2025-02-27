@@ -527,3 +527,4 @@ cfg-if = "1.0"
 [dev-dependencies]
 futures-test = { version = "0.3.31"}
 tmc2209 = { version = "0.2.2"}
+env_logger = { version = "0.11.6"}

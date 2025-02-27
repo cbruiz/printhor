@@ -12,14 +12,14 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-port-1")] {
-        pub type SerialPort1Tx = embassy_rp::uart::UartTx<'static, embassy_rp::peripherals::UART0, embassy_rp::uart::Async>;
+        pub type SerialPort1Tx = hwa::SerialTxWrapper<super::io::serial_port_1::SerialPort1TxAdapter>;
         pub type SerialPort1Rx = super::io::serial_port_1::SerialPort1RxInputStream;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-serial-port-2")] {
-        pub type SerialPort2Tx = embassy_rp::uart::UartTx<'static, embassy_rp::peripherals::UART1, embassy_rp::uart::Async>;
+        pub type SerialPort2Tx = hwa::SerialTxWrapper<super::io::serial_port_2::SerialPort2TxAdapter>;
         pub type SerialPort2Rx = super::io::serial_port_2::SerialPort2RxInputStream;
     }
 }

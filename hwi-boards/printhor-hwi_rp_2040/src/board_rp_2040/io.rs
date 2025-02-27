@@ -141,20 +141,47 @@ pub mod serial_usb {
 }
 #[cfg(feature = "with-serial-port-1")]
 pub mod serial_port_1 {
+    use embedded_io_async::ErrorType;
     use printhor_hwa_common as hwa;
     #[allow(unused)]
     use hwa::HwiContract;
 
-    type UartDevice = embassy_rp::uart::UartRx<'static,
+    type UartRxDevice = embassy_rp::uart::UartRx<'static,
         embassy_rp::peripherals::UART0,
         embassy_rp::uart::Async>;
 
+    type UartTxDevice = embassy_rp::uart::UartTx<'static,
+        embassy_rp::peripherals::UART0,
+        embassy_rp::uart::Async>;
+
+    pub struct SerialPort1TxAdapter {
+        sender: UartTxDevice,
+    }
+
+    impl SerialPort1TxAdapter {
+        pub const fn new(sender: UartTxDevice) -> Self {
+            Self {
+                sender
+            }
+        }
+    }
+
+    impl ErrorType for SerialPort1TxAdapter { type Error = embassy_rp::uart::Error; }
+
+    impl embedded_io_async::Write for SerialPort1TxAdapter {
+        async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            let len = buf.len();
+            self.sender.write(buf).await?;
+            Ok(len)
+        }
+    }
+
     pub struct SerialPort1RxInputStream {
-        receiver: UartDevice,
+        receiver: UartRxDevice,
     }
 
     impl SerialPort1RxInputStream {
-        pub fn new(receiver: UartDevice) -> Self {
+        pub fn new(receiver: UartRxDevice) -> Self {
 
             Self {
                 receiver,
@@ -185,20 +212,47 @@ pub mod serial_port_1 {
 }
 #[cfg(feature = "with-serial-port-2")]
 pub mod serial_port_2 {
+    use embedded_io_async::ErrorType;
     use printhor_hwa_common as hwa;
     #[allow(unused)]
     use hwa::HwiContract;
 
-    type UartDevice = embassy_rp::uart::UartRx<'static,
+    type UartRxDevice = embassy_rp::uart::UartRx<'static,
         embassy_rp::peripherals::UART1,
         embassy_rp::uart::Async>;
 
+    type UartTxDevice = embassy_rp::uart::UartTx<'static,
+        embassy_rp::peripherals::UART1,
+        embassy_rp::uart::Async>;
+
+    pub struct SerialPort2TxAdapter {
+        sender: UartTxDevice,
+    }
+    
+    impl SerialPort2TxAdapter {
+        pub const fn new(sender: UartTxDevice) -> Self {
+            Self {
+                sender
+            }
+        }
+    }
+
+    impl ErrorType for SerialPort2TxAdapter { type Error = embassy_rp::uart::Error; }
+
+    impl embedded_io_async::Write for SerialPort2TxAdapter {
+        async fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+            let len = buf.len();
+            self.sender.write(buf).await?;
+            Ok(len)
+        }
+    }
+
     pub struct SerialPort2RxInputStream {
-        receiver: UartDevice,
+        receiver: UartRxDevice,
     }
 
     impl SerialPort2RxInputStream {
-        pub fn new(receiver: UartDevice) -> Self {
+        pub fn new(receiver: UartRxDevice) -> Self {
             Self {
                 receiver,
             }

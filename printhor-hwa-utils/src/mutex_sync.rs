@@ -125,10 +125,10 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::ops::Deref;
     use crate as hwa;
     use hwa::SyncMutexStrategy;
     use printhor_hwa_common_macros::make_static_sync_controller;
+    use std::ops::Deref;
 
     struct DummyDevice {
         value: u32,

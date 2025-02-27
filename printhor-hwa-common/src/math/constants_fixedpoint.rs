@@ -1,6 +1,5 @@
-
-use rust_decimal_macros::dec;
 use crate::math::Real;
+use rust_decimal_macros::dec;
 
 pub const ZERO: Real = Real::from_fixed(dec!(0.0));
 pub const HALF: Real = Real::from_fixed(dec!(0.5));

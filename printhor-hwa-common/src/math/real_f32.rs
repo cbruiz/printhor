@@ -1,11 +1,10 @@
 use crate::math;
 
-
 use crate as hwa;
-use num_traits::float::FloatCore;
-use num_traits::{Zero};
-use num_traits::ToPrimitive;
 use micromath::F32Ext;
+use num_traits::ToPrimitive;
+use num_traits::Zero;
+use num_traits::float::FloatCore;
 
 #[derive(Copy, Clone, Default)]
 pub struct Real(pub f32);
@@ -126,11 +125,9 @@ impl Real {
     pub fn sqrt(self) -> Option<Self> {
         if self < math::ZERO {
             None
-        }
-        else if self == math::ZERO {
+        } else if self == math::ZERO {
             Some(math::ZERO)
-        }
-        else {
+        } else {
             // The famous inverse square root approximation of 'ID Software'
             let r = math::ONE / Real::from_inner(Self::quake_isqrt(self.inner()));
             if self < math::EPSILON {
@@ -144,7 +141,8 @@ impl Real {
     /// Hard-coded with 3 iterations
     fn quake_isqrt(number: f32) -> f32 {
         let xhalf = number * 0.5f32;
-        let mut y = f32::from_bits(0x5F375A86_i32.wrapping_sub(number.to_bits() as i32 >> 1) as u32);
+        let mut y =
+            f32::from_bits(0x5F375A86_i32.wrapping_sub(number.to_bits() as i32 >> 1) as u32);
         y = y * (1.5f32 - xhalf * y * y);
         y = y * (1.5f32 - xhalf * y * y);
         y = y * (1.5f32 - xhalf * y * y);
@@ -164,7 +162,7 @@ impl Real {
     }
 
     /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
-    pub fn atan2(self, other:Real) -> Self {
+    pub fn atan2(self, other: Real) -> Self {
         Real(self.0.atan2(other.0))
     }
 
@@ -177,11 +175,13 @@ impl Real {
         Real(self.0.ln())
     }
 
-    pub fn exp(self) -> Self {Real(self.0.exp()) }
+    pub fn exp(self) -> Self {
+        Real(self.0.exp())
+    }
 
     pub fn sign(self) -> Self {
         let s = F32Ext::signum(self.0);
-        if s.is_zero() {Real::one()} else {Real(s)}
+        if s.is_zero() { Real::one() } else { Real(s) }
     }
 
     pub fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
@@ -224,7 +224,6 @@ impl core::ops::Add for Real {
 }
 
 impl core::ops::AddAssign for Real {
-
     fn add_assign(&mut self, rhs: Self) {
         self.0.add_assign(rhs.0)
     }
@@ -239,7 +238,6 @@ impl core::ops::Sub for Real {
 }
 
 impl core::ops::SubAssign for Real {
-
     fn sub_assign(&mut self, rhs: Self) {
         self.0.sub_assign(rhs.0)
     }
@@ -256,7 +254,6 @@ impl core::ops::Mul for Real {
 impl core::ops::MulAssign for Real {
     fn mul_assign(&mut self, rhs: Self) {
         self.0.mul_assign(rhs.0)
-
     }
 }
 
@@ -271,12 +268,10 @@ impl core::ops::Div for Real {
 impl core::ops::DivAssign for Real {
     fn div_assign(&mut self, rhs: Self) {
         self.0.div_assign(rhs.0)
-
     }
 }
 
 impl PartialOrd<Self> for Real {
-
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.0.partial_cmp(&other.0)
     }
@@ -304,23 +299,32 @@ impl PartialEq<Self> for Real {
     }
 }
 
-impl Eq for Real {
-}
+impl Eq for Real {}
 
 impl Ord for Real {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.0.total_cmp(&other.0)
     }
 
-    fn max(self, other: Self) -> Self where Self: Sized {
+    fn max(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
         Real(self.0.max(other.0))
     }
 
-    fn min(self, other: Self) -> Self where Self: Sized {
+    fn min(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
         Real(self.0.min(other.0))
     }
 
-    fn clamp(self, min: Self, max: Self) -> Self where Self: Sized, Self: PartialOrd {
+    fn clamp(self, min: Self, max: Self) -> Self
+    where
+        Self: Sized,
+        Self: PartialOrd,
+    {
         Real(self.0.clamp(min.0, max.0))
     }
 }

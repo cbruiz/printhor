@@ -404,10 +404,10 @@ async fn init_controllers_and_spawn_tasks(
                 #[cfg(feature = "with-motion-broadcast")]
                 _motion_broadcast_channel.clone(),
             );
-            
+
             step_actuator.disable_steppers(CoordSel::all_axis());
             step_actuator.set_forward_direction(CoordSel::all_axis(), CoordSel::all_axis());
-            
+
             let motion_config = hwa::controllers::MotionConfig::new(hwa::make_static_sync_controller!(
                 "MotionConfig",
                 hwa::types::MotionConfigMutexStrategy,

@@ -4,6 +4,7 @@
 
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
+use printhor_hwa_common::SerialTxWrapper;
 
 mod device;
 mod types;
@@ -421,7 +422,7 @@ impl HwiContract for Contract {
                 let serial_port_1_tx = hwa::make_static_async_controller!(
                     "SerialPort1Tx",
                     types::SerialPort1TxMutexStrategy,
-                    serial_port_1_tx_device,
+                    SerialTxWrapper::new(io::serial_port_1::SerialPort1TxAdapter::new(serial_port_1_tx_device), Self::SERIAL_PORT1_BAUD_RATE),
                 );
                 let serial_port_1_rx_stream = io::serial_port_1::SerialPort1RxInputStream::new(serial_port1_rx_device);
             }
@@ -457,7 +458,7 @@ impl HwiContract for Contract {
                 let serial_port_2_tx = hwa::make_static_async_controller!(
                     "SerialPort2Tx",
                     types::SerialPort2TxMutexStrategy,
-                    serial_port_2_tx_device,
+                    SerialTxWrapper::new(io::serial_port_2::SerialPort2TxAdapter::new(serial_port_2_tx_device), Self::SERIAL_PORT2_BAUD_RATE),
                 );
                 let serial_port_2_rx_stream = io::serial_port_2::SerialPort2RxInputStream::new(serial_port2_rx_device);
             }
@@ -631,15 +632,42 @@ impl HwiContract for Contract {
         if #[cfg(feature = "with-motion")] {
             
             fn setup_ticker() {
-                compile_error!("Provide me")
+                unsafe {
+                    let mut p = cortex_m::Peripherals::steal();
+                    let mut syst = p.SYST;
+                    syst.set_clock_source(cortex_m::peripheral::syst::SystClkSource::Core);
+                    let reload: u32 = ((Contract::PROCESSOR_SYS_CK_MHZ / Contract::STEP_PLANNER_CLOCK_FREQUENCY) - 1).max(1);
+                    hwa::info!(
+                        "SYST reload set to {} ({} Hz)",
+                        reload,
+                        Contract::STEP_PLANNER_CLOCK_FREQUENCY
+                    );
+                    syst.set_reload(reload);
+                    syst.clear_current();
+                    p.SCB.set_priority(cortex_m::peripheral::scb::SystemHandler::SysTick, 2);
+                }
             }
             
             fn pause_ticker() {
-                compile_error!("Provide me")
+                unsafe {
+                    let p = cortex_m::Peripherals::steal();
+                    let mut syst = p.SYST;
+                    syst.disable_counter();
+                    syst.disable_interrupt();
+                }
+                hwa::info!("Ticker Paused");
             }
 
             fn resume_ticker() {
-                compile_error!("Provide me")
+                hwa::debug!("Ticker Resumed");
+                unsafe {
+                    let p = cortex_m::Peripherals::steal();
+                    let mut syst = p.SYST;
+                    syst.clear_current();
+                    syst.enable_counter();
+                    syst.enable_interrupt();
+                }
+                hwa::info!("Ticker Resumed");
             }
         }
     }

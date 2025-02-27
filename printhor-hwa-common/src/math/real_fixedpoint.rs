@@ -1,10 +1,10 @@
 //! Real Fixed point module
 #[allow(unused)]
 use crate as hwa;
+use crate::math;
 use core::ops::*;
 use rust_decimal::prelude::*;
 use rust_decimal_macros::dec;
-use crate::math;
 
 #[derive(Copy, Clone, Default)]
 pub struct Real(pub Decimal);
@@ -101,8 +101,8 @@ impl Real {
 
     pub fn sqrt(self) -> Option<Self> {
         match self.0.sqrt() {
-            None => {None}
-            Some(v) => {Some(Real(v))}
+            None => None,
+            Some(v) => Some(Real(v)),
         }
     }
 
@@ -131,11 +131,13 @@ impl Real {
     pub fn ln(self) -> Self {
         Real(self.0.ln())
     }
-    pub fn exp(self) -> Self {Real(self.0.exp()) }
+    pub fn exp(self) -> Self {
+        Real(self.0.exp())
+    }
 
     pub fn sign(self) -> Self {
         let s = self.0.signum();
-        if s.is_zero() {Real::one()} else {Real(s)}
+        if s.is_zero() { Real::one() } else { Real(s) }
     }
 
     pub fn vmin(r1: Option<Real>, r2: Option<Real>) -> Option<Self> {
@@ -178,7 +180,6 @@ impl Add for Real {
 }
 
 impl AddAssign for Real {
-
     fn add_assign(&mut self, rhs: Self) {
         self.0.add_assign(rhs.0)
     }
@@ -193,7 +194,6 @@ impl Sub for Real {
 }
 
 impl SubAssign for Real {
-
     fn sub_assign(&mut self, rhs: Self) {
         self.0.sub_assign(rhs.0)
     }
@@ -228,7 +228,6 @@ impl DivAssign for Real {
 }
 
 impl core::cmp::PartialOrd<Self> for Real {
-
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.0.partial_cmp(&other.0)
     }
@@ -256,24 +255,32 @@ impl core::cmp::PartialEq<Self> for Real {
     }
 }
 
-impl core::cmp::Eq for Real {
-
-}
+impl core::cmp::Eq for Real {}
 
 impl core::cmp::Ord for Real {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.0.cmp(&other.0)
     }
 
-    fn max(self, other: Self) -> Self where Self: Sized {
+    fn max(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
         Real(self.0.max(other.0))
     }
 
-    fn min(self, other: Self) -> Self where Self: Sized {
+    fn min(self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
         Real(self.0.min(other.0))
     }
 
-    fn clamp(self, min: Self, max: Self) -> Self where Self: Sized, Self: core::cmp::PartialOrd {
+    fn clamp(self, min: Self, max: Self) -> Self
+    where
+        Self: Sized,
+        Self: core::cmp::PartialOrd,
+    {
         Real(self.0.clamp(min.0, max.0))
     }
 }

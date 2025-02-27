@@ -5,9 +5,9 @@ use crate as hwa;
 use bitflags::bitflags;
 use core::marker::PhantomData;
 use hwa::math::Real;
-use num_traits::float::FloatCore;
 #[allow(unused)]
 use num_traits::ToPrimitive;
+use num_traits::float::FloatCore;
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-c-axis", feature = "with-i-axis", feature = "with-j-axis", feature = "with-k-axis",
@@ -1489,8 +1489,7 @@ where
         }
     }
 
-    pub fn clamp_higher_than(&self, rhs: TVector<T>) -> TVector<T>
-    {
+    pub fn clamp_higher_than(&self, rhs: TVector<T>) -> TVector<T> {
         self.map_values(|coord, lv| {
             if let Some(rv) = rhs.get_coord(coord) {
                 if lv < rv { Some(rv) } else { Some(lv) }
@@ -3588,7 +3587,7 @@ impl RealOps for f32 {
     where
         Self: Sized,
     {
-        if !self.is_sign_negative()  {
+        if !self.is_sign_negative() {
             cfg_if::cfg_if! {
                 if #[cfg(feature = "fixed-point-128-impl")] {
                     Real::from_f32(*self).sqrt().map(|v| v.0.to_f32())?
@@ -3597,7 +3596,6 @@ impl RealOps for f32 {
                     Real((*self).into()).sqrt().map(|v| v.0 as f32)
                 }
             }
-            
         } else {
             None
         }

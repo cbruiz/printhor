@@ -56,9 +56,10 @@ impl MotionDriver {
     pub fn step_actuator(&self) -> &hwa::controllers::StepActuatorController {
         &self.step_actuator
     }
-    
+
     pub fn enable_and_set_dir(&mut self, vdir: &TVector<Real>) {
-        self.step_actuator().enable_steppers(hwa::CoordSel::all_axis());
+        self.step_actuator()
+            .enable_steppers(hwa::CoordSel::all_axis());
         let mut dir_fwd = hwa::CoordSel::empty();
 
         vdir.foreach_values(|coord, v| dir_fwd.set(coord, v.is_defined_positive()));
@@ -101,11 +102,12 @@ impl MotionDriver {
     /// range of motion.
     // TODO: Carefully review
     pub async fn homing_action(
-        &mut self, motion_config: &hwa::controllers::MotionConfig
+        &mut self,
+        motion_config: &hwa::controllers::MotionConfig,
     ) -> Result<TVector<Real>, TVector<Real>> {
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] [Homing]");
-        
+
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion-broadcast")] {
                 if self.step_actuator.broadcast_channel.try_send(hwa::MotionBroadcastEvent::Reset).is_err() {

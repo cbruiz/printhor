@@ -152,7 +152,14 @@ pub async fn task_stepper(
 
     motion_planner.start(&event_bus).await;
 
-    STEP_DRIVER.setup(motion_planner.motion_driver().lock().await.step_actuator().clone());
+    STEP_DRIVER.setup(
+        motion_planner
+            .motion_driver()
+            .lock()
+            .await
+            .step_actuator()
+            .clone(),
+    );
 
     #[allow(unused_mut)]
     let mut _s = event_bus.subscriber().await;
