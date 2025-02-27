@@ -1,0 +1,27 @@
+
+[env]
+#EMBASSY_EXECUTOR_TASK_ARENA_SIZE=16384
+
+[profile.dev.package."*"]
+codegen-units = 1
+incremental = false
+#opt-level = "s" # Set to "s" or even disable to play with GDB
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release-opt.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 0
+debug-assertions = false
+overflow-checks = false

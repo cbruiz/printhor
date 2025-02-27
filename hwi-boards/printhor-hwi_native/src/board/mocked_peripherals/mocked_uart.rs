@@ -1,18 +1,18 @@
+use printhor_hwa_common as hwa;
+
 use std::io::{stdout, Write};
 use embassy_executor::SendSpawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, with_timeout};
 use async_std::io::ReadExt;
-use log::{trace, info};
-use crate::TERMINATION;
+use printhor_hwa_common::HwiContract;
+use crate::board::TERMINATION;
 
-pub static SERIAL_PIPE: Pipe<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}> = Pipe::<CriticalSectionRawMutex, {crate::UART_PORT1_BUFFER_SIZE}>::new();
-
+pub static SERIAL_PIPE: Pipe<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}> = Pipe::<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}>::new();
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_mocked_uart() {
 
-    info!("[task_mocked_uart] starting");
+    hwa::info!("[task_mocked_uart] starting");
 
     // byte-to-byte reading is required for stdin for it to work unbuffered with simple I/O management.
     // Another solution could be leveraging a wrapper/crate on top of native select() with the proper ioctl on stdin, but is not worthy in this case.
@@ -29,7 +29,7 @@ pub async fn task_mocked_uart() {
         ).await {
             Err(_) => {
                 if TERMINATION.signaled() {
-                    info!("[task_mocked_uart] Ending gracefully");
+                    hwa::info!("[task_mocked_uart] Ending gracefully");
                     return ();
                 }
             }
@@ -39,10 +39,10 @@ pub async fn task_mocked_uart() {
             }
             Ok(Err(_e)) => { // Error reading from stdin: Closed or temporary unavailable
                 if !error_reading {
-                    trace!("[task_mocked_uart] Error reading from stdin {:?}", _e);
+                    hwa::trace!("[task_mocked_uart] Error reading from stdin {:?}", _e);
                     error_reading = true;
                     if TERMINATION.signaled() {
-                        info!("[task_mocked_uart] Ending gracefully");
+                        hwa::info!("[task_mocked_uart] Ending gracefully");
                         return ();
                     }
                 }
@@ -85,7 +85,7 @@ impl MockedUartRx {
         }
     }
     pub async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, ()> {
-        log::trace!("Reading from pipe");
+        hwa::trace!("Reading from pipe");
         Ok(SERIAL_PIPE.read(buffer).await)
     }
 }
@@ -97,6 +97,10 @@ impl MockedUartTx {
         Self {
         }
     }
+
+    pub async fn write_packet(&mut self, b: &[u8]) {
+        self.wrapped_write(b).await;
+    }
     pub async fn wrapped_flush(&mut self) {
     }
     pub async fn wrapped_write(&mut self, b: &[u8]) {
@@ -105,27 +109,26 @@ impl MockedUartTx {
     }
 }
 
-
-
-pub struct MockedUartRxInputStream {
+pub struct MockedUartRxInputStream<const BUF_SIZE: usize> {
     pub receiver: MockedUartRx,
-    buffer: [u8; crate::UART_PORT1_BUFFER_SIZE],
+    buffer: [u8; BUF_SIZE],
     bytes_read: u8,
     current_byte_index: u8,
 }
 
-impl MockedUartRxInputStream {
+impl<const BUFF_SIZE: usize> MockedUartRxInputStream<BUFF_SIZE>
+{
     pub fn new(receiver: MockedUartRx) -> Self {
         Self {
             receiver,
-            buffer: [0; crate::UART_PORT1_BUFFER_SIZE],
+            buffer: [0; BUFF_SIZE],
             bytes_read: 0,
             current_byte_index: 0,
         }
     }
 }
 
-impl async_gcode::ByteStream for MockedUartRxInputStream
+impl<const BUFF_SIZE: usize> async_gcode::ByteStream for MockedUartRxInputStream<BUFF_SIZE>
 {
     type Item = Result<u8, async_gcode::Error>;
 
@@ -149,16 +152,19 @@ impl async_gcode::ByteStream for MockedUartRxInputStream
                         Some(Ok(byte))
                     }
                     else {
-                        log::error!("0 bytes read. EOF?");
+                        hwa::error!("0 bytes read. EOF?");
                         None
                     }
                 }
                 Err(_e) => {
-                    log::error!("Error: {:?}", _e);
+                    hwa::error!("Error: {:?}", _e);
                     None
                 }
             }
         }
+    }
+
+    async fn recovery_check(&mut self) {
     }
 
 }

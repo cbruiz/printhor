@@ -1,63 +1,62 @@
 #[cfg(feature = "with-serial-usb")]
-pub mod usbserial {
-    use crate::board::device::USBDrv;
+pub mod serial_usb {
+    use printhor_hwa_common as hwa;
+    use hwa::HwiContract;
+    use super::super::device::SerialUsbDriver;
 
-    pub type USBSerialDeviceSender = embassy_usb::class::cdc_acm::Sender<'static, USBDrv>;
-    pub type USBSerialDeviceReceiver = embassy_usb::class::cdc_acm::Receiver<'static, USBDrv>;
-    pub type USBSerialTxControllerRef = printhor_hwa_common::InterruptControllerRef<USBSerialDeviceSender>;
+    pub type SerialUsbSender = embassy_usb::class::cdc_acm::Sender<'static, SerialUsbDriver>;
+    pub type SerialUsbReceiver = embassy_usb::class::cdc_acm::Receiver<'static, SerialUsbDriver>;
 
-    pub struct USBSerialDevice {
-        pub builder: Option<embassy_usb::Builder<'static, USBDrv>>,
-        pub sender: USBSerialDeviceSender,
-        pub receiver: USBSerialDeviceReceiver,
+    pub struct SerialUsbDevice {
+        pub builder: Option<embassy_usb::Builder<'static, SerialUsbDriver>>,
+        pub sender: SerialUsbSender,
+        pub receiver: SerialUsbReceiver,
     }
 
-    #[embassy_executor::task(pool_size=1)]
-    pub async fn usb_task(mut usb: embassy_usb::UsbDevice<'static, USBDrv>) -> ! {
-        defmt::debug!("Running usb task...");
+    #[embassy_executor::task(pool_size = 1)]
+    pub async fn serial_usb_task(mut usb: embassy_usb::UsbDevice<'static, SerialUsbDriver>) -> ! {
+        hwa::debug!("Running serial usb task...");
         usb.run().await;
-        unreachable!("usb task ended")
     }
 
-    impl USBSerialDevice {
-        pub fn new(driver: USBDrv) -> Self {
-
+    impl SerialUsbDevice {
+        pub fn new(driver: SerialUsbDriver) -> Self {
             let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
-            config.manufacturer = Some("Printor");
-            config.product = Some("Printor-USBSerial");
-            config.serial_number = Some("");
+            config.manufacturer = Some("Printhor");
+            config.product = Some("Printhor USBSerial");
+            config.serial_number = Some("printhor0");
 
             config.device_class = 0xEF;
             config.device_sub_class = 0x02;
             config.device_protocol = 0x01;
             config.composite_with_iads = true;
-            #[link_section = ".bss"]
-            static CONFIG_DESCRIPTOR_ST: printhor_hwa_common::TrackedStaticCell<[u8; 256]> = printhor_hwa_common::TrackedStaticCell::new();
-            let config_descriptor = CONFIG_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("UsbConfigDescriptor", [0; 256]);
-            #[link_section = ".bss"]
-            static BOS_DESCRIPTOR_ST: printhor_hwa_common::TrackedStaticCell<[u8; 256]> = printhor_hwa_common::TrackedStaticCell::new();
-            let bos_descriptor = BOS_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("UsbBOSDescriptor", [0; 256]);
-            #[link_section = ".bss"]
-            static MSOS_DESCRIPTOR_ST: printhor_hwa_common::TrackedStaticCell<[u8; 256]> = printhor_hwa_common::TrackedStaticCell::new();
-            let msos_descriptor = MSOS_DESCRIPTOR_ST.init::<{crate::MAX_STATIC_MEMORY}>("UsbMSOSDescriptor", [0; 256]);
+            type UsbConfigDescriptorType = [u8; 256];
+            let config_descriptor =
+                hwa::make_static_ref!("UsbConfigDescriptor", UsbConfigDescriptorType, [0; 256]);
+            type UsbBOSDescriptorType = [u8; 256];
+            let bos_descriptor =
+                hwa::make_static_ref!("UsbBOSDescriptor", UsbBOSDescriptorType, [0; 256]);
+            type UsbMSOSDescriptorType = [u8; 256];
+            let m_sos_descriptor =
+                hwa::make_static_ref!("UsbMSOSDescriptor", UsbMSOSDescriptorType, [0; 256]);
+            type UsbControlBuffType = [u8; 64];
+            let control_buf =
+                hwa::make_static_ref!("UsbMSOSDescriptor", UsbControlBuffType, [0; 64]);
 
-            #[link_section = ".bss"]
-            static CONTROL_BUF_ST: printhor_hwa_common::TrackedStaticCell<[u8; 64]> = printhor_hwa_common::TrackedStaticCell::new();
-            let control_buf = CONTROL_BUF_ST.init::<{crate::MAX_STATIC_MEMORY}>("UsbControlBuff", [0; 64]);
+            let state = hwa::make_static_ref!(
+                "UsbCDCACMState",
+                embassy_usb::class::cdc_acm::State,
+                embassy_usb::class::cdc_acm::State::new(),
+            );
 
-            #[link_section = ".bss"]
-            static STATE_ST: printhor_hwa_common::TrackedStaticCell<embassy_usb::class::cdc_acm::State> = printhor_hwa_common::TrackedStaticCell::new();
-            let state = STATE_ST.init::<{crate::MAX_STATIC_MEMORY}>("UsbCDCACMState", embassy_usb::class::cdc_acm::State::new());
             let mut builder = embassy_usb::Builder::new(
                 driver,
                 config,
                 config_descriptor,
                 bos_descriptor,
-                msos_descriptor,
+                m_sos_descriptor,
                 control_buf,
             );
-
-            //crate::info!("Creating USB CLASS");
 
             // Create classes on the builder.
             let class = embassy_usb::class::cdc_acm::CdcAcmClass::new(&mut builder, state, 64);
@@ -71,57 +70,49 @@ pub mod usbserial {
             }
         }
 
-        pub fn spawn(&mut self, spawner: crate::board::Spawner) {
-            self.builder.take().map(|builder| {
-                match spawner.spawn(usb_task(builder.build())) {
-                    Ok(_) => {
-                        ()
-                    }
+        pub fn spawn(&mut self, spawner: embassy_executor::Spawner) {
+            self.builder
+                .take()
+                .map(|builder| match spawner.spawn(serial_usb_task(builder.build())) {
+                    Ok(_) => (),
                     Err(_) => {
                         panic!("Unable to spawn USB task")
                     }
-                }
-            });
+                });
         }
 
-        pub fn split(self) -> (USBSerialDeviceReceiver, USBSerialDeviceSender) {
-            (
-                self.receiver,
-                self.sender,
-            )
+        pub fn split(self) -> (SerialUsbReceiver, SerialUsbSender) {
+            (self.receiver, self.sender)
         }
     }
 
-    pub struct USBSerialDeviceInputStream {
-        receiver: embassy_usb::class::cdc_acm::Receiver<'static, crate::board::device::USBDrv>,
-        buffer: [u8; crate::USBSERIAL_BUFFER_SIZE],
+    pub struct SerialUsbInputStream {
+        receiver: embassy_usb::class::cdc_acm::Receiver<'static, SerialUsbDriver>,
+        buffer: [u8; <crate::Contract as HwiContract>::SERIAL_USB_PACKET_SIZE],
         bytes_read: u8,
         current_byte_index: u8,
     }
 
-    impl USBSerialDeviceInputStream {
-        pub fn new(receiver: USBSerialDeviceReceiver) -> Self {
+    impl SerialUsbInputStream {
+        pub fn new(receiver: SerialUsbReceiver) -> Self {
             Self {
                 receiver,
-                buffer: [0; crate::USBSERIAL_BUFFER_SIZE],
+                buffer: [0; <crate::Contract as HwiContract>::SERIAL_USB_PACKET_SIZE],
                 bytes_read: 0,
                 current_byte_index: 0,
             }
         }
     }
 
-    impl async_gcode::ByteStream for USBSerialDeviceInputStream
-    {
+    impl async_gcode::ByteStream for SerialUsbInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
-
             if self.current_byte_index < self.bytes_read {
                 let byte = self.buffer[self.current_byte_index as usize];
                 self.current_byte_index += 1;
                 Some(Ok(byte))
-            }
-            else {
+            } else {
                 self.current_byte_index = 0;
                 self.bytes_read = 0;
                 self.receiver.wait_connection().await;
@@ -134,56 +125,105 @@ pub mod usbserial {
                             let byte = self.buffer[self.current_byte_index as usize];
                             self.current_byte_index += 1;
                             Some(Ok(byte))
-                        }
-                        else {
+                        } else {
                             None
                         }
                     }
-                    Err(_e) => {
-                        None
-                    }
+                    Err(_e) => None,
                 }
             }
+        }
+
+        async fn recovery_check(&mut self) {
+
         }
     }
 }
 
 #[cfg(feature = "with-serial-port-1")]
-pub mod uart_port1 {
-    use crate::board::device::UartPort1RxDevice;
-    use crate::board::device::UartPort1RingBufferedRxDevice;
-    use printhor_hwa_common::TrackedStaticCell;
+pub mod serial_port_1 {
+    use printhor_hwa_common as hwa;
+    use hwa::HwiContract;
 
-    pub struct UartPort1RxInputStream {
-        receiver: UartPort1RingBufferedRxDevice,
+    pub struct SerialPort1RxInputStream {
+        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
     }
 
-    impl UartPort1RxInputStream {
-        pub fn new(receiver: UartPort1RxDevice) -> Self {
-            #[link_section =".bss"]
-            static BUFF: TrackedStaticCell<[u8; crate::UART_PORT1_BUFFER_SIZE]> = TrackedStaticCell::new();
-            let buffer = BUFF.init::<{crate::board::MAX_STATIC_MEMORY}>("UartPort1RXRingBuff", [0; crate::UART_PORT1_BUFFER_SIZE]);
+    impl SerialPort1RxInputStream {
+        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
+            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE];
 
             Self {
-                receiver: receiver.into_ring_buffered(buffer),
+                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
+                    "SerialPort1RXRingBuff",
+                    BufferType,
+                    [0; <crate::Contract as HwiContract>::SERIAL_PORT1_RX_BUFFER_SIZE]
+                )),
             }
         }
     }
 
-    impl async_gcode::ByteStream for UartPort1RxInputStream
-    {
+    impl async_gcode::ByteStream for SerialPort1RxInputStream {
         type Item = Result<u8, async_gcode::Error>;
 
         async fn next(&mut self) -> Option<Self::Item> {
+            use embedded_io_async::Read;
 
             let mut buff: [u8; 1] = [0; 1];
-
-            match self.receiver.read(&mut buff).await {
-                Ok(_r) => Some(Ok(buff[0])),
+            match self.receiver.read_exact(&mut buff).await {
+                Ok(_r) => {
+                    hwa::trace!("read {}", buff[0] as char);
+                    Some(Ok(buff[0]))
+                },
                 Err(_e) => None,
             }
+        }
+
+        async fn recovery_check(&mut self) {
+            // Optional. Needed when io is susceptible to need reestablished or reset
         }
     }
 }
 #[cfg(feature = "with-serial-port-2")]
-compiler_error!("Not implemented");
+pub mod serial_port_2 {
+    use printhor_hwa_common as hwa;
+    use hwa::HwiContract;
+
+    pub struct SerialPort2RxInputStream {
+        receiver: embassy_stm32::usart::RingBufferedUartRx<'static>,
+    }
+
+    impl SerialPort2RxInputStream {
+        pub fn new(receiver: embassy_stm32::usart::UartRx<'static, embassy_stm32::mode::Async>) -> Self {
+            type BufferType = [u8; <crate::Contract as HwiContract>::SERIAL_PORT2_RX_BUFFER_SIZE];
+
+            Self {
+                receiver: receiver.into_ring_buffered(hwa::make_static_ref!(
+                    "UartPort2RXRingBuff",
+                    BufferType,
+                    [0; <crate::Contract as HwiContract>::SERIAL_PORT2_RX_BUFFER_SIZE]
+                )),
+            }
+        }
+    }
+
+    impl async_gcode::ByteStream for SerialPort2RxInputStream {
+        type Item = Result<u8, async_gcode::Error>;
+
+        async fn next(&mut self) -> Option<Self::Item> {
+            use embedded_io_async::Read;
+            let mut buff: [u8; 1] = [0; 1];
+            match self.receiver.read_exact(&mut buff).await {
+                Ok(_r) => {
+                    hwa::trace!("read {}", buff[0] as char);
+                    Some(Ok(buff[0]))
+                },
+                Err(_e) => None,
+            }
+        }
+
+        async fn recovery_check(&mut self) {
+            // Optional. Needed when io is susceptible to need reestablished or reset
+        }
+    }
+}

@@ -1,0 +1,220 @@
+@startuml
+'https://plantuml.com/class-diagram
+'!pragma layout smetana
+
+top to bottom direction
+
+skinparam monochrome true
+skinparam backgroundColor white # transparent
+skinparam monochrome reverse
+skinparam linetype ortho
+'skinparam nodesep 30
+'skinparam ranksep 30
+
+set namespaceSeparator ::
+
+
+package "printhor" as printhor <<frame>> {
+    package hwa {
+
+        package "printhor-hwa-utils" as p_hwu <<frame>> {
+
+            together {
+                abstract class StaticSyncController<SyncMutexStrategy>
+
+                abstract class SyncMutexStrategy<SyncMutexType,Device>
+                abstract class SyncStandardStrategy<SyncMutexType,Device>
+                diamond isSyncMutexStrategy
+                diamond isAnySyncMutexStrategy
+
+                together {
+                    abstract class SyncMutexType
+                    abstract class SyncNoopMutexType
+                    abstract class SyncCSMutexType
+                    diamond isSyncMutexType
+                    diamond isAnySyncMutexType
+                }
+            }
+
+            isSyncMutexStrategy -u-|> SyncMutexStrategy
+            SyncStandardStrategy -u- isSyncMutexStrategy
+            SyncStandardStrategy -d- isAnySyncMutexStrategy
+
+
+            isSyncMutexType -u-|> SyncMutexType
+
+            SyncNoopMutexType -u- isSyncMutexType
+            SyncCSMutexType -u- isSyncMutexType
+            SyncNoopMutexType <|-d- isAnySyncMutexType
+            SyncCSMutexType <|-d- isAnySyncMutexType
+
+            StaticSyncController -.r-> SyncMutexStrategy
+
+            SyncMutexStrategy -.r-> SyncMutexType
+
+            together {
+                abstract class StaticAsyncController<AsyncMutexStrategy>
+
+                abstract class AsyncMutexStrategy<AsyncMutexType,Device>
+                abstract class AsyncStandardStrategy<AsyncMutexType,Device>
+                abstract class AsyncHoldabledStrategy<AsyncMutexType,Device>
+                diamond isAsyncMutexStrategy
+                diamond isAnyAsyncMutexStrategy
+
+                together {
+                    abstract class AsyncMutexType
+                    abstract class AsyncNoopMutexType
+                    abstract class AsyncCSMutexType
+                    diamond isAsyncMutexType
+                    diamond isAnyAsyncMutexType
+                }
+            }
+
+            isAsyncMutexStrategy -u-|> AsyncMutexStrategy
+            AsyncStandardStrategy -u- isAsyncMutexStrategy
+            AsyncHoldabledStrategy -u- isAsyncMutexStrategy
+
+            AsyncStandardStrategy <|-d- isAnyAsyncMutexStrategy
+            AsyncHoldabledStrategy <|-d- isAnyAsyncMutexStrategy
+
+            isAsyncMutexType -u-|> AsyncMutexType
+
+            AsyncNoopMutexType -u- isAsyncMutexType
+            AsyncCSMutexType -u- isAsyncMutexType
+
+            AsyncNoopMutexType <|-d- isAnyAsyncMutexType
+            AsyncCSMutexType <|-d- isAnyAsyncMutexType
+
+            StaticAsyncController -.r-> AsyncMutexStrategy
+
+            AsyncMutexStrategy -.r-> AsyncMutexType
+
+
+
+        }
+        package "printhor-hwa-common" as p_hwa <<frame>> {
+            abstract class HWIContract
+            abstract class HWIContext<HWIContract>
+            HWIContract "1" -r-> "1" HWIContext
+
+            namespace traits {
+                interface GCodeByteStream
+                interface StepActuatorTrait
+            }
+
+        }
+
+        HWIContext "1" -.l-> "*" StaticAsyncController
+
+        namespace control {
+
+            namespace processing {
+                class GCodeProcessor
+                class GCodeLineParser<SerialUsbInputStream>
+                class GCodeMultiplexedInputStream<GCodeByteStream>
+
+                GCodeProcessor -[hidden]l-> GCodeLineParser
+                GCodeProcessor -[hidden]l-> GCodeMultiplexedInputStream
+            }
+            namespace controllers {
+                class MotionPlanner
+                class MotionConfig
+                class MotionRingBuffer
+                class MotionStatus
+                class MotionDriver
+
+                MotionPlanner -u-> MotionRingBuffer
+                MotionPlanner -u-> MotionConfig
+                MotionPlanner -u-> MotionStatus
+                MotionPlanner -u-> MotionDriver
+
+                MotionPlanner -u-|> StaticAsyncController
+                MotionRingBuffer -u-|> StaticAsyncController
+                MotionDriver -u-|> StaticAsyncController
+                MotionConfig -u-|> StaticSyncController
+                MotionStatus -u-|> StaticSyncController
+            }
+            GCodeProcessor *-r-> MotionPlanner
+        }
+    }
+
+    package hwi {
+        package "printhor-hwi-<BOARD>" as p_hwi <<frame>> #transparent  {
+            class Contract
+            class Context
+            Contract "1" -.l- "1" Context
+
+            Contract -u-|> HWIContract
+            Context -u-|> HWIContext
+
+            together {
+                class SerialUsbRxMutexStrategy<SerialUsbRxMutexType,SerialUsbRx>
+                class SerialUsbRxMutexType
+                class SerialUsbRx
+
+                SerialUsbRx -u.-|> GCodeByteStream
+
+                SerialUsbRxMutexStrategy -u- isAnyAsyncMutexStrategy : "IS A"
+                SerialUsbRxMutexStrategy -.r-> SerialUsbRxMutexType
+                SerialUsbRxMutexType -u- isAnyAsyncMutexType : "IS A"
+                SerialUsbRxMutexStrategy -.r-> SerialUsbRx
+            }
+
+            together {
+                class StepActuatorMutexStrategy<StepActuatorMutexType,StepActuator>
+                class StepActuatorMutexType
+                class StepActuator
+
+                StepActuatorMutexStrategy -u- isAnySyncMutexStrategy : "IS A"
+                StepActuatorMutexStrategy -.r-> StepActuatorMutexType
+                StepActuatorMutexType -u- isAnySyncMutexType : "IS A"
+                StepActuatorMutexStrategy -.r-> StepActuator
+                StepActuator -.u-|> StepActuatorTrait
+            }
+
+
+           SerialUsbRxMutexStrategy <-- Contract
+           StepActuatorMutexStrategy <-- Contract
+
+        }
+    }
+
+    hwi -[hidden]u-> hwa
+
+    metaclass "<<EntryPoint>>" as main
+    metaclass "<<task_control>>" as task_control
+    metaclass "<<task_stepper>>" as task_stepper
+    metaclass "<<task_defer>>" as task_defer
+
+    class SerialUsbRxController<AsyncMutexStrategy, SerialUsbRx>
+    class StepActuatorController<SyncMutexStrategy, StepActuator>
+
+    main -.u-> Contract: <<creates>>
+
+    main -.u-> SerialUsbRxController: <<creates>>
+    GCodeMultiplexedInputStream *-l-> GCodeLineParser
+    GCodeLineParser *-r-> SerialUsbRxController
+
+    main -.u-> StepActuatorController: <<creates>>
+
+    SerialUsbRxController -u-|> StaticAsyncController
+    SerialUsbRxController -u.-> SerialUsbRxMutexStrategy
+
+    StepActuatorController -u-|> StaticSyncController
+    StepActuatorController -u.-> StepActuatorMutexStrategy
+
+    MotionDriver *-d-> StepActuatorController
+
+    main -.r-> task_control: <<spawns>>
+    main -.r-> task_stepper: <<spawns>>
+    main -.r-> task_defer: <<spawns>>
+
+    task_control *-r-> GCodeMultiplexedInputStream
+    task_control *-r-> GCodeProcessor
+
+}
+
+
+
+
+@enduml

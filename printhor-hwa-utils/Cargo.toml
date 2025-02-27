@@ -1,0 +1,35 @@
+[package]
+name = "printhor-hwa-utils"
+version = "0.0.4"
+edition = "2024"
+authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
+description = "Printor utillery"
+readme = "README.md"
+repository = "https://github.com/cbruiz/printhor"
+keywords = ["hardware", "abstration", "library", "printhor"]
+categories = ["hardware-support"]
+license = "MIT"
+documentation = "https://docs.rs/printhor-static-cell"
+homepage = "https://github.com/cbruiz/printhor"
+
+[lib]
+
+[features]
+default = ["std", "with-log"]
+std = ["printhor-hwa-common-macros/std", "critical-section/std", "futures-test/std", "with-log"]
+with-log = ["log"]
+with-defmt = ["defmt"]
+
+[dependencies]
+printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
+portable-atomic = { version = "1.11.0",  default-features = false, features = ["critical-section"] }
+static_cell = { version = "2.1.0",  default-features = false, features = [] }
+const_env = { version = "0.1.2"}
+embassy-sync = { version = "0.6.2", features = [] }
+cfg-if = { version = "1.0.0" }
+defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
+log = { version = "0.4.26", default-features = false, optional = true }
+critical-section = { version = "1.2.0", default-features = false, features = []}
+
+[dev-dependencies]
+futures-test = { version = "0.3.31", default-features = false }

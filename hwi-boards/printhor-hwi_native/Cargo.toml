@@ -1,7 +1,7 @@
 [package]
 name = "printhor-hwi_native"
 version = "0.0.4"
-edition = "2021"
+edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction native std for debugging/playgrounding/analysis"
 readme = "README.md"
@@ -14,82 +14,102 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
+default = [
+    "float-point-f32-impl",
+    "with-serial-usb",
+    "with-serial-port-1",
+    "with-serial-port-2",
+    "with-trinamic",
+    "with-motion", "with-motion-stepper", "with-motion-cartessian-kinematics",
+    "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis"
+]
 # Hardware device features
-with-log = ["printhor-hwa-common/with-log"]
-with-serial-port-1 = ["async-std"]
-with-serial-port-2 = []
-with-serial-port-usb = []
-with-printjob = []
-with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
-with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
+with-log = ["env_logger", "printhor-hwa-common/with-log"]
+with-serial-usb = ["async-std", "printhor-hwa-common/with-serial-usb"]
+with-serial-port-1 = ["async-std", "printhor-hwa-common/with-serial-port-1"]
+with-serial-port-2 = ["async-std", "printhor-hwa-common/with-serial-port-2"]
+with-print-job = ["printhor-hwa-common/with-print-job"]
+with-hot-end = ["embedded-hal-1", "printhor-hwa-common/with-hot-end"]
+with-hot-bed = ["embedded-hal-1", "printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
-with-probe = ["embedded-hal"]
-with-endstops = []
-with-sdcard = ["embedded-sdmmc"]
-with-fan-layer = ["embedded-hal"]
-with-fan-extra-1 = ["embedded-hal"]
-with-laser = ["embedded-hal"]
-with-trinamic = ["tmc2209"]
-with-ps-on = []
-with-spi = []
+with-motion-stepper = []
+with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian-kinematics"]
+with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
+with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
+with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
+with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
+debug-motion-broadcast = []
+with-probe = ["embedded-hal-0", "printhor-hwa-common/with-probe"]
+with-sd-card = ["embedded-sdmmc", "printhor-hwa-common/with-sd-card"]
+with-fan-layer = ["embedded-hal-1", "printhor-hwa-common/with-fan-layer"]
+with-fan-extra-1 = ["embedded-hal-1", "printhor-hwa-common/with-fan-extra-1"]
+with-laser = ["embedded-hal-1", "printhor-hwa-common/with-laser"]
+with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic"]
+with-ps-on = ["printhor-hwa-common/with-ps-on"]
+with-spi = ["printhor-hwa-common/with-spi"]
+with-i2c = ["pwm-pca9685", "printhor-hwa-common/with-i2c"]
 
-with-display = []
-
-
-with-x-axis = []
-with-y-axis = []
-with-z-axis = []
-with-e-axis = []
+with-e-axis = ["printhor-hwa-common/with-e-axis"]
+with-x-axis = ["printhor-hwa-common/with-x-axis"]
+with-y-axis = ["printhor-hwa-common/with-y-axis"]
+with-z-axis = ["printhor-hwa-common/with-z-axis"]
+with-a-axis = ["printhor-hwa-common/with-a-axis"]
+with-b-axis = ["printhor-hwa-common/with-b-axis"]
+with-c-axis = ["printhor-hwa-common/with-c-axis"]
+with-i-axis = ["printhor-hwa-common/with-i-axis"]
+with-j-axis = ["printhor-hwa-common/with-j-axis"]
+with-k-axis = ["printhor-hwa-common/with-k-axis"]
+with-u-axis = ["printhor-hwa-common/with-u-axis"]
+with-v-axis = ["printhor-hwa-common/with-v-axis"]
+with-w-axis = ["printhor-hwa-common/with-w-axis"]
 
 nightly = ["embassy-executor/nightly"]
-executor-interrupt = []
 verbose-timings = []
-sdcard-uses-spi = []
+sd-card-uses-spi = []
 without-vref-int = []
 
-#with-display = [
-#    "embedded-graphics-simulator", "embedded-graphics-core", "embedded-graphics",
-#    "printhor-hwa-common/with-ui",
-#]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
+embassy-executor = { version = "0.7.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-65536"] }
+embassy-sync = { version = "0.6.2", features = ["std"] }
+embassy-time = { version = "0.4.0", features = ["std", "generic-queue-64"] }
+embassy-futures = { version = "0.1.1", features = [] }
 
-embassy-executor = { version = "0.6.0", default-features = false, features = ["arch-std", "executor-thread", "task-arena-size-16384"] }
-embassy-sync = { version = "*", features = ["std"] }
-embassy-time = { version = "*", features = ["std", "generic-queue-128"] }
-embassy-futures = { version = "*", features = [] }
-embassy-embedded-hal = { version = "*", features = [] }
+#embedded-io-async = { version = "0.6", optional = true }
+#embedded-io = { version = "0.6", optional = true }
 
-embedded-io-async = { version = "0.6.0", optional = true }
-embedded-io = { version = "0.6.1", optional = true }
+async-std = { version = "1.13.0", optional = true}
+sysinfo = { version = "0.33.1", default-features = false, features = ["default"]}
+env_logger = { version = "0.11.6", optional = true }
+printhor-hwa-common = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
+printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
+async-gcode = {version = "0.3.0", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value", "std"] }
+embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ], optional = true }
+embedded-sdmmc = { version = "0.8.1", default-features = false, optional = true }
 
-async-std = { version = "1.12.0", optional = true}
-gnuplot = {version = "0.0.38", default-features = false, features=[], optional = true}
-#embedded-graphics-simulator = { version = "0.4.1", optional = true }
-log = { version = "0.4.20" }
-env_logger = { version = "0.10.1" }
-printhor-hwa-common = { version = "0.0"}
-async-gcode = {version = "0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value", "std"] }
-embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ] }
-futures = { version = "0.3.30", default-features = false, features = [] }
-embedded-sdmmc = { version = "0.8.0", default-features = false, optional = true }
+pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
 
-lvgl = { version="0", default-features = false, features =[], optional = true }
-#embedded-graphics = { version = "0.8.1", optional = true}
-#embedded-graphics-core = {version = "0.4.0", optional = true }
-nb = {version = "1.1.0", default-features = false, features = []}
+#lvgl = { version="0", default-features = false, features =[], optional = true }
+#nb = {version = "1.1", default-features = false, features = []}
 tmc2209 = { version = "0.2.2", optional = true }
-thread-priority = { version = "0.15"}
+thread-priority = { version = "1.2.0"}
 
 cfg-if = {version = "1.0.0"}
-const_env = { version = "0.1" }
+const_env = { version = "0.1.2" }
+
+rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1.36.0" }
+
+[dev-dependencies]
+futures-test = { version = "0.3.31"}
 
 [patch.crates-io]
-#embassy-stm32 = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-#embassy-executor = { git = "https://github.com/cbruiz/embassy.git", branch="main"}
-#embassy-sync = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-time = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-futures = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
-#embassy-embedded-hal = { git = "https://github.com/cbruiz/embassy.git", branch="main" }
 async-gcode = { path = "../../libs/async-gcode" }
+embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+embassy-time = { path = "../../libs/embassy/embassy-time" }
+embassy-futures = { path = "../../libs/embassy/embassy-futures" }

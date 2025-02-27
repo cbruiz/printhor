@@ -1,7 +1,7 @@
 [package]
 name = "printhor-hwa-common"
 version = "0.0.4"
-edition = "2021"
+edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printor harware abstraction utillery"
 readme = "README.md"
@@ -15,38 +15,95 @@ homepage = "https://github.com/cbruiz/printhor"
 [lib]
 
 [features]
-#with-ui = ["embedded-graphics-core"]
+std = ["futures-test/std", "embassy-executor/arch-std",
+    "embassy-executor/executor-thread",
+    "printhor-hwa-common-macros/std",
+    "printhor-hwa-utils/std",
+    "embassy-time/std"]
+default = ["std", "with-log"]
 nightly = []
-executor-interrupt = []
-with-log = ["log"]
-with-defmt = ["defmt"]
-with-serial-usb = []
-with-serial-port-1 = []
-with-serial-port-2 = []
-with-motion = []
-with-hot-end = []
-with-hot-bed = []
-with-display = [] # Broken
+with-log = ["log", "printhor-hwa-utils/with-log"]
+with-defmt = ["defmt", "printhor-hwa-utils/with-defmt", "embedded-sdmmc/defmt-log"]
+with-serial-usb = ["async-gcode", "embedded-io-async"]
+with-serial-port-1 = ["async-gcode", "embedded-io-async"]
+with-serial-port-2 = ["async-gcode", "embedded-io-async"]
+with-spi = ["embedded-hal-0"]
+with-i2c = ["embedded-hal-0"]
+with-ps-on = ["embedded-hal-1"]
+with-probe = ["embedded-hal-0"]
+with-laser = ["embedded-hal-0"]
+with-fan-layer = ["embedded-hal-0"]
+with-fan-extra-1 = ["embedded-hal-0"]
+with-motion = ["embedded-hal-0"]
+with-motion-broadcast = []
+with-motion-cartessian-kinematics = []
+with-motion-delta-kinematics = []
+with-motion-core-xy-kinematics = []
+with-motion-anthropomorphic-kinematics = []
+with-hot-end = ["embedded-hal-0"]
+with-hot-bed = ["embedded-hal-0"]
+with-sd-card = ["async-gcode", "embedded-sdmmc", "heapless"]
+with-print-job = []
+with-trinamic = ["embassy-embedded-hal"]
 
+sd-card-spi = []
+
+float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common-macros/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
+
+with-all-axis = [
+    "with-e-axis",
+    "with-x-axis", "with-y-axis", "with-z-axis",
+    "with-a-axis", "with-b-axis", "with-c-axis",
+    "with-i-axis", "with-j-axis", "with-k-axis",
+    "with-u-axis", "with-v-axis", "with-w-axis",
+]
 with-x-axis = []
 with-y-axis = []
 with-z-axis = []
 with-e-axis = []
+with-a-axis = []
+with-b-axis = []
+with-c-axis = []
+with-i-axis = []
+with-j-axis = []
+with-k-axis = []
+with-u-axis = []
+with-v-axis = []
+with-w-axis = []
 
 [dependencies]
-portable-atomic = { version = "1.6.0",  default-features = false, features = ["critical-section"] }
-static_cell = { version = "2.1",  default-features = false, features = [] }
+printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
+printhor-hwa-utils = { version = "0",  default-features = false, path = "../printhor-hwa-utils", features = [] }
+const_env = { version = "0.1.2"}
 
-embassy-sync = { version = "*", features = [] }
-embassy-time = { version = "*", features = [] }
+embassy-sync = { version = "0.6.2", features = [] }
+embassy-executor = { version = "0.7.0", default-features = false, features = [] }
+embassy-time = { version = "0.4.0", features = [] }
+embassy-embedded-hal = { version = "0.3.0", optional = true, default-features = false, features = [] }
 
-embedded-hal = { version = "1.0.0", default-features = false }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"] }
-embedded-io-async = {version = "0.6.1", default-features = false, features = []}
+embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
+embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"], optional = true }
+embedded-sdmmc = { version = "0.8.1", default-features = false, features = [], optional = true }
+embedded-io-async = { version = "0.6.1", default-features = false, features = [], optional = true }
+async-gcode = { version = "0.3.0", default-features = false, features = [], optional = true}
 
-#embedded-graphics-core = {version = "0.4.0", optional = true }
-bitflags = { version = "2.6.0", default-features = false, features = ["bytemuck"] }
+heapless = { version = "0.8.0", default-features = false, features = [], optional = true }
+
+bitflags = { version = "2.8.0", default-features = false, features = ["bytemuck"] }
 cfg-if = { version = "1.0.0" }
-defmt = {version = "0.3", default-features = false, optional = true}
-log = { version = "0.4", default-features = false, optional = true }
-strum = { version = "0.26", default-features = false, features = ["derive"] }
+defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
+log = { version = "0.4.26", default-features = false, optional = true }
+strum = { version = "0.27.1", default-features = false, features = ["derive"] }
+
+num-traits = { version = "0.2.19", default-features = false, features = [] }
+micromath = { version = "2.1.0", default-features = false, features = [] }
+rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1.36.0" }
+ryu = {version = "1.0.19", default-features = false }
+
+[dev-dependencies]
+futures-test = { version = "0.3.31", default-features = false }
+tmc2209 = { version = "0.2.2"}
+env_logger = { version = "0.11.6" }

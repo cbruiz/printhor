@@ -1,16 +1,18 @@
-![Minimum Rust: 1.79](https://img.shields.io/badge/Minimum%20Rust%20Version-1.79-green.svg)
+![Minimum Rust: 1.85](https://img.shields.io/badge/Minimum%20Rust%20Version-1.85-green.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 ![CI](https://github.com/cbruiz/printhor/actions/workflows/rust.yml/badge.svg)
 [![Coverage Status](https://coveralls.io/repos/github/cbruiz/printhor/badge.svg?branch=main)](https://coveralls.io/github/cbruiz/printhor?branch=main)[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
 
-<h3>Printhor: The highly reliable but not necessarily functional 3D printer firmware</h3>
+<h3>Printhor: The highly reliable but not necessarily functional 3D printer and robotics firmware</h3>
 
 <h5><p align="center"><i>If you are using this product or like the project, please <a href="https://github.com/cbruiz/printhor/stargazers">★</a> this repository to show your support! 🤩</i></p></h5>
 
 # Overview
 
-Printhor is a generic a hardware-agnostic firmware framework focused on FDM printers, CNC and Engravers implemented in Rust.
+Printhor is a generic and hardware-agnostic (firmware) framework for FDM printers, CNC, Engravers and robots implemented in Rust.
+
+Basically, it's a GCode interpreter capable to process a stream of GCodes (position and control orders), schedule them, compute a motion profile on the fly and finally perform the hardware level instructions (step pulses, PWM signals, ... or even dataframes broadcast for a dedicated breakboard) in real time.
 
 There are many productive firmwares in the community like gbrl, marlin, reprap, etc. Each single one have a concrete approach and guidelines.
 This one aims to provide a research environment for not strictly productive purpose, but a reliable platform with the following goals:
@@ -37,6 +39,8 @@ Which means the principal short-term goal is not to develop a productive firmwar
 * Precise thermal control plan with PID. Briefly exlained at [Temperature Task](src/bin/printhor/control/task_temperature.rs).
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
+* High behavior customization.
+* Low level action distribution leveraging dedicated break-boards. 
 * Wide GCode standard coverage.
 * Native simulation for development and benchmarking.
   * Many others coming.
@@ -117,7 +121,7 @@ cargo install probe-run
 The framework with a set of mocked peripherals (most of them without any logic).
 Provides a commandline GCode prompt on standard input
 
-__Note__: A SDCard image in ./data/ is required to be open if sdcard feature is enabled in native :)
+__Note__: A SDCard image in ./data/ is required to be open if sd-card feature is enabled in native :)
 
 ```shell
 RUST_LOG=info cargo run --bin printhor
@@ -201,7 +205,7 @@ We are keeping it because it is clear and useful for a high level understanding.
 
 # Customization
 
-For a single board, the high-level features (hotend, hotbed, fan, sdcard, ... ) can be activated/deactivated by cargo feature selection or directly editing the main cargo.toml
+For a single board, the high-level features (hotend, hotbed, fan, SDCard, ... ) can be activated/deactivated by cargo feature selection or directly editing the main cargo.toml
 In order to change pins, writing/adapting some code is required, as of now. There is not expected to be, at least in the short term any kind of configuration file.
 
 Because of that limitation (Rust makes that hard to tackle because of the strict typing), a clean code organization it's crucial and pretty straightforward to assume slight customizations by editing code.  
@@ -216,13 +220,13 @@ printhor is composed by the following architectural blocks
   * printhor-hwi_native : The native simulator.
   * printhor-hwi_skr_mini_e3 : Two boards: V2 (See [Datasheets/SKR_MINI_E3-V2.0](datasheets/SKR_MINI_E3-V2.0)) and V3 (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0))
   * printhor-hwi_mks_robin_nano_v3_1 : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
-  * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG_CNC_SHIELD_V3))
+  * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG))
 
-Intentionally, traits are in general avoided when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
+Intentionally, traits are in general avoided in HWI layer when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
 * type aliases
 * module exports
 
-Diagram is Work in Progress
+[Advanced documentation](doc/README.md)
 
 # Similar, related software and shout-outs
 
@@ -434,8 +438,8 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     <tr>
         <td rowspan="1">M37</td>
         <td>*</td>
-        <td>Simulation mode</td>
-        <td>WIP</td>
+        <td>Simulation mode (Dry run mode)</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M73</td>
@@ -549,13 +553,13 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M117</td>
         <td>*</td>
         <td>Display message</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M118</td>
         <td>*</td>
         <td>Echo message on host</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">M119</td>
@@ -801,7 +805,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">M503</td>
         <td>*</td>
         <td>Report Current Settings</td>
-        <td>TODO</td>
+        <td>WIP</td>
     </tr>
     <tr>
         <td rowspan="1">M504</td>
@@ -1059,7 +1063,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
         <td rowspan="1">G92</td>
         <td>*</td>
         <td>Set Position</td>
-        <td>WIP</td>
+        <td>DONE</td>
     </tr>
     <tr>
         <td rowspan="1">G92.1</td>
@@ -1168,4 +1172,3 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     G1 X12.6508 Y109.9950 F3000
     M5
     G4
-

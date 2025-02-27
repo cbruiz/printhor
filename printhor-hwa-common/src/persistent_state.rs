@@ -1,15 +1,16 @@
 //! A synchronization primitive for polling values from a task.
 //! Basically, a copy of embassy_sync::Signal with a dirty hack to not lose the consumed value
+use crate as hwa;
 use core::cell::Cell;
-use core::future::{poll_fn, Future};
+use core::future::{Future, poll_fn};
 use core::task::{Context, Poll, Waker};
-use embassy_sync::blocking_mutex::raw::RawMutex;
 use embassy_sync::blocking_mutex::Mutex;
+use hwa::AsyncRawMutex;
 
 #[allow(unused)]
 pub struct PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     state: Mutex<M, Cell<State<T>>>,
@@ -29,7 +30,7 @@ where
 #[allow(unused)]
 impl<M, T> PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     /// Create a new `Signal`.
@@ -43,7 +44,7 @@ where
 #[allow(unused)]
 impl<M, T> Default for PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     fn default() -> Self {
@@ -54,7 +55,7 @@ where
 #[allow(unused)]
 impl<M, T> PersistentState<M, T>
 where
-    M: RawMutex,
+    M: AsyncRawMutex,
     T: Send + Copy,
 {
     /// Mark this Signal as signaled.
@@ -69,7 +70,9 @@ where
 
     /// Remove the queued value in this `Config`, if any.
     pub fn reset(&self) {
-        self.state.lock(|cell| cell.set(State::None));
+        self.state.lock(|cell| {
+            cell.set(State::None);
+        });
     }
 
     fn poll_wait(&self, cx: &mut Context<'_>) -> Poll<T> {
@@ -88,7 +91,7 @@ where
                     Poll::Pending
                 }
                 State::Waiting(w) => {
-                    //info!("Poll State::Waiting.2");
+                    hwa::error!("Poll State::Waiting.2");
                     cell.set(State::Waiting(cx.waker().clone()));
                     w.wake();
                     Poll::Pending
@@ -118,5 +121,44 @@ where
 
             res
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate as hwa;
+    use core::future;
+    use future::Future;
+    use std::task::Poll;
+
+    type MutexType = hwa::AsyncNoopMutexType;
+
+    #[futures_test::test]
+    async fn foundation_test() {
+        let persistent_state: hwa::PersistentState<MutexType, bool> = hwa::PersistentState::new();
+        assert_eq!(persistent_state.signaled(), false);
+        persistent_state.signal(true);
+        assert_eq!(persistent_state.signaled(), true);
+        // The value stored is `true`
+        assert_eq!(persistent_state.wait().await, true);
+        // The value stored is still `true`
+        assert_eq!(persistent_state.wait().await, true);
+        persistent_state.reset();
+
+        let persistent_state: hwa::PersistentState<MutexType, bool> = Default::default();
+
+        future::poll_fn(|cx| {
+            let mut pinned_fut = core::pin::pin!(persistent_state.wait());
+            let p = pinned_fut.as_mut().poll(cx);
+            assert!(p.is_pending());
+
+            persistent_state.signal(true);
+
+            let p = pinned_fut.as_mut().poll(cx);
+            assert!(!p.is_pending());
+
+            Poll::Ready(())
+        })
+        .await;
     }
 }

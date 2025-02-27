@@ -1,6 +1,6 @@
 //! # Defer Channel Module
 //!
-//! This module provides the necessary abstractions and implementations to handle deferrable events within a concurrent system. 
+//! This module provides the necessary abstractions and implementations to handle deferrable events within a concurrent system.
 //!
 //! The core components of this module include:
 //!
@@ -10,9 +10,9 @@
 //!
 //! ## Overview
 //!
-//! The purpose of this module is to manage actions that can be deferred and later executed, tracked, or monitored. 
-//! It is particularly useful in systems that require precise control over the execution flow, 
-//! such as motion control systems or environments where tasks need to be queued and executed in an orderly manner. 
+//! The purpose of this module is to manage actions that can be deferred and later executed, tracked, or monitored.
+//! It is particularly useful in systems that require precise control over the execution flow,
+//! such as motion control systems or environments where tasks need to be queued and executed in an orderly manner.
 //! Using this API, you can define different actions, wrap them in events, and handle these events in a concurrent setup.
 //!
 //! ## Key Components
@@ -24,84 +24,144 @@
 //! ## Example Usage
 //!
 //! ```rust
-//! use printhor_hwa_common::{DeferEvent, DeferAction, CommChannel};
 //!
 //! // Example usage of DeferEvent
-//! let event1 = DeferEvent::AwaitRequested(DeferAction::Homing, CommChannel::default());
-//! let event2 = DeferEvent::Completed(DeferAction::RapidMove, CommChannel::default());
+//! #[cfg(feature = "with-motion")]
+//! {
+//!     use printhor_hwa_common as hwa;
+//!     use hwa::{GenericDeferChannel, DeferAction, DeferEvent, CommChannel};
+//!     use hwa::make_static_ref;
+//!     // Define the mutex type
+//!     type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 //!
-//! use printhor_hwa_common as hwa;
-//! const MAX_STATIC_MEMORY: usize = 1024;
+//!     let event1 = DeferEvent::AwaitRequested(
+//!         DeferAction::Homing, CommChannel::default()
+//!     );
+//!     let event2 = DeferEvent::Completed(
+//!         DeferAction::RapidMove, CommChannel::default()
+//!     );
 //!
-//! let defer_channel: hwa::DeferChannelRef = {
-//!     static MDC: hwa::TrackedStaticCell<hwa::DeferChannelChannelType> = hwa::TrackedStaticCell::new();
-//!     hwa::DeferChannelRef::new( 
-//!         MDC.init::<{ MAX_STATIC_MEMORY }>("defer_channel", hwa::DeferChannelChannelType::new()) 
-//!     ) 
-//! };
+//!     let defer_channel: hwa::GenericDeferChannel<MutexType> = GenericDeferChannel::new(
+//!         make_static_ref!(
+//!             "DeferChannel",
+//!             hwa::DeferChannelChannelType<MutexType>,
+//!             hwa::DeferChannelChannelType::new()
+//!         )
+//!     );
+//!
+//!     let sender = defer_channel.sender();
+//!
+//!     // [...]
+//!     async fn do_send(sender: hwa::DeferChannelChannelType<MutexType>, event: DeferEvent) {
+//!         let _  = sender.send(event).await;
+//!     }
+//
+//! }
 //! ```
 //!
 //! ## Purpose
 //!
-//! This module is designed for applications that require efficient task management and concurrency control. 
-//! It is aimed at developers who need to defer actions and handle these deferred actions reliably. 
-//! By using static references and safe concurrency practices, this module ensures that deferred actions are managed 
+//! This module is designed for applications that require efficient task management and concurrency control.
+//! It is aimed at developers who need to defer actions and handle these deferred actions reliably.
+//! By using static references and safe concurrency practices, this module ensures that deferred actions are managed
 //! in a predictable and efficient manner.
+
+use crate as hwa;
 use embassy_sync::channel::Channel;
-use crate::{CommChannel, TrackedStaticCell};
+use hwa::CommChannel;
+
+//#region "Defer Action"
 
 ///
-/// `DeferEvent` represents the possible events that can be deferred in the system.
+/// `DeferAction` represents the possible actions that can be deferred in the system.
 ///
 /// # Variants
 ///
-/// * `AwaitRequested(DeferAction, CommChannel)` - Indicates that a defer action has been requested and is awaiting execution.
-/// * `Completed(DeferAction, CommChannel)` - Indicates that a defer action has been completed.
+/// * `Homing` - Homing action for the motion feature.
+/// * `RapidMove` - Rapid movement action for the motion feature.
+/// * `LinearMove` - Linear movement action for the motion feature.
+/// * `Dwell` - Dwell action, for pausing or waiting, within the motion feature.
+/// * `HotEndTemperature` - Action to set or monitor hot-end temperature.
+/// * `HotBedTemperature` - Action to set or monitor hot-bed temperature.
+///
+/// # Examples
+///
+/// See [DeferEvent]
+#[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+pub enum DeferAction {
+    /// Homing action for the motion feature.
+    #[cfg(feature = "with-motion")]
+    Homing,
+
+    /// Rapid movement action for the motion feature.
+    #[cfg(feature = "with-motion")]
+    RapidMove,
+
+    /// Linear movement action for the motion feature.
+    #[cfg(feature = "with-motion")]
+    LinearMove,
+
+    /// Dwell action, for pausing or waiting, within the motion feature.
+    #[cfg(feature = "with-motion")]
+    Dwell,
+
+    /// SetPosition action for the motion feature.
+    #[cfg(feature = "with-motion")]
+    SetPosition,
+
+    /// Action to set or monitor hot-end temperature.
+    #[cfg(feature = "with-hot-end")]
+    HotEndTemperature,
+
+    /// Action to set or monitor hotbed temperature.
+    #[cfg(feature = "with-hot-bed")]
+    HotBedTemperature,
+}
+
+//#endregion
+
+//#region "Defer Event"
+
+///! These are the Events that can be deferred
+///
+/// # Variants
+///
+/// * `AwaitRequested` - For requesting a Deferred action notification.
+/// * `Completed` - Indication that the Deferred action has been performed.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use printhor_hwa_common::{DeferEvent, DeferAction, CommChannel};
-///
+/// use printhor_hwa_common as hwa;
+/// use hwa::{DeferEvent, DeferAction, CommChannel};
 /// // Example usage of DeferEvent
-/// let event1 = DeferEvent::AwaitRequested(DeferAction::Homing, CommChannel::default());
-/// let event2 = DeferEvent::Completed(DeferAction::RapidMove, CommChannel::default());
+/// #[cfg(feature = "with-motion")]
+/// let _event1 = DeferEvent::AwaitRequested(DeferAction::Homing, CommChannel::default());
+/// #[cfg(feature = "with-motion")]
+/// let _event2 = DeferEvent::Completed(DeferAction::RapidMove, CommChannel::default());
 /// ```
-#[derive(Copy, Clone, Debug)]
-#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
-pub enum DeferAction {
-    #[cfg(feature = "with-motion")]
-    /// Homing action for the motion feature.
-    Homing,
-    #[cfg(feature = "with-motion")]
-    /// Rapid movement action for the motion feature.
-    RapidMove,
-    #[cfg(feature = "with-motion")]
-    /// Linear movement action for the motion feature.
-    LinearMove,
-    #[cfg(feature = "with-motion")]
-    /// Dwell action, possibly for pausing or waiting, within the motion feature.
-    Dwell,
-    #[cfg(feature = "with-hot-end")]
-    /// Action to set or monitor hot-end temperature.
-    HotEndTemperature,
-    #[cfg(feature = "with-hot-bed")]
-    /// Action to set or monitor hotbed temperature.
-    HotbedTemperature,
-}
-
-///! These are the Events that can be deferred
-#[allow(unused)]
 pub enum DeferEvent {
-    AwaitRequested(DeferAction, CommChannel),
-    Completed(DeferAction, CommChannel),
+    /// A request for defer action
+    AwaitRequested(DeferAction, CommChannel, u32),
+
+    /// The acknowledgment of a defer action
+    Completed(DeferAction, CommChannel, u32),
 }
 
-pub type DeferChannelChannelType = Channel<crate::ControllerMutexType, DeferEvent, 40>;
+//#endregion
+
+//#region "Defer Channel"
+
+/// The queue size of the defer channel
+#[const_env::from_env("DEFER_CHANNEL_SIZE")]
+pub const DEFER_CHANNEL_SIZE: usize = 4;
+
+pub type DeferChannelChannelType<M> = Channel<M, DeferEvent, DEFER_CHANNEL_SIZE>;
 
 /// This struct provides a reference to a `DeferChannelChannelType`.
 ///
-/// `DeferChannelRef` allows for safe access to a static `DeferChannelChannelType` instance,
+/// `DeferChannel` allows for safe access to a static `DeferChannelChannelType` instance,
 /// promoting the use of channels in a concurrent environment.
 ///
 /// # Fields
@@ -110,25 +170,33 @@ pub type DeferChannelChannelType = Channel<crate::ControllerMutexType, DeferEven
 ///
 /// # Examples
 ///
-/// Creating a new `DeferChannelRef`:
+/// Creating a new `DeferChannel`:
 ///
-/// ```
+/// ```rust
 /// use printhor_hwa_common as hwa;
-/// const MAX_STATIC_MEMORY: usize = 1024;
 ///
-/// let defer_channel: hwa::DeferChannelRef = {
-///     static MDC: hwa::TrackedStaticCell<hwa::DeferChannelChannelType> = hwa::TrackedStaticCell::new();
-///     hwa::DeferChannelRef::new( 
-///         MDC.init::<{ MAX_STATIC_MEMORY }>("defer_channel", hwa::DeferChannelChannelType::new()) 
-///     ) 
-/// };
+/// type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+///
+/// let defer_channel: hwa::GenericDeferChannel<MutexType> = hwa::GenericDeferChannel::new(
+///     hwa::make_static_ref!(
+///         "DeferChannel",
+///         hwa::DeferChannelChannelType<MutexType>,
+///         hwa::DeferChannelChannelType::new()
+///     )
+/// );
+///
 /// ```
-#[derive(Clone)]
-pub struct DeferChannelRef {
-    inner: &'static DeferChannelChannelType,
+pub struct GenericDeferChannel<M>
+where
+    M: hwa::AsyncRawMutex + 'static,
+{
+    channel: &'static DeferChannelChannelType<M>,
 }
 
-impl DeferChannelRef {
+impl<M> GenericDeferChannel<M>
+where
+    M: hwa::AsyncRawMutex + 'static,
+{
     /// Creates a new `DeferChannelRef`.
     ///
     /// # Arguments
@@ -141,27 +209,73 @@ impl DeferChannelRef {
     ///
     /// # Example
     ///
-    /// See [DeferChannelRef]
-    pub const fn new(channel: &'static DeferChannelChannelType) -> Self {
-        DeferChannelRef { inner: channel }
+    /// See [GenericDeferChannel]
+    pub const fn new(channel: &'static DeferChannelChannelType<M>) -> Self {
+        GenericDeferChannel { channel }
     }
 }
-
-//#[cfg(feature = "native")]
-//unsafe impl Send for DeferChannelRef {}
-
-impl core::ops::Deref for DeferChannelRef {
-    type Target = DeferChannelChannelType;
+impl<M> core::ops::Deref for GenericDeferChannel<M>
+where
+    M: hwa::AsyncRawMutex + 'static,
+{
+    type Target = DeferChannelChannelType<M>;
 
     fn deref(&self) -> &Self::Target {
-        self.inner
+        self.channel
     }
 }
 
-pub fn init_defer_channel<const MAX_SIZE: usize>() -> DeferChannelRef {
-    static CHANNEL: TrackedStaticCell<DeferChannelChannelType> = TrackedStaticCell::new();
+impl<M> Clone for GenericDeferChannel<M>
+where
+    M: hwa::AsyncRawMutex + 'static,
+{
+    fn clone(&self) -> Self {
+        GenericDeferChannel::new(self.channel)
+    }
+}
 
-    DeferChannelRef {
-        inner: CHANNEL.init::<MAX_SIZE>("defer_channel", DeferChannelChannelType::new()),
+//#endregion
+
+#[cfg(test)]
+#[cfg(feature = "with-motion")]
+pub mod tests {
+
+    use crate as hwa;
+    use std::sync::RwLock;
+
+    type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+
+    static DEFER_CHANNEL: RwLock<Option<hwa::GenericDeferChannel<MutexType>>> = RwLock::new(None);
+
+    fn initialize() {
+        let mut global = DEFER_CHANNEL.write().unwrap();
+
+        if global.is_none() {
+            global.replace(hwa::GenericDeferChannel::new(hwa::make_static_ref!(
+                "DeferChannel",
+                hwa::DeferChannelChannelType<MutexType>,
+                hwa::DeferChannelChannelType::new()
+            )));
+        }
+    }
+
+    #[cfg(feature = "with-motion")]
+    #[futures_test::test]
+    async fn test_event_bus() {
+        initialize();
+        let mg = DEFER_CHANNEL.read().unwrap();
+        let defer_channel = mg.as_ref().unwrap();
+
+        // Can clone
+        let _cloned_defer_channel = defer_channel.clone();
+
+        let sender = defer_channel.sender();
+        let _ = sender
+            .send(hwa::DeferEvent::AwaitRequested(
+                hwa::DeferAction::Homing,
+                hwa::CommChannel::default(),
+                1,
+            ))
+            .await;
     }
 }

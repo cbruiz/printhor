@@ -1,136 +1,164 @@
 #![allow(stable_features)]
-pub use printhor_hwa_common as hwa;
 mod board;
+pub use board::Contract;
 
-pub use log::{trace, debug, info, warn, error};
+#[cfg(test)]
+mod integration_test {
+    use printhor_hwa_common as hwa;
+    use hwa::HwiContract;
+    use std::marker::PhantomData;
+    use std::sync::{Condvar, Mutex};
+    use printhor_hwa_common::CoordSel;
+    use printhor_hwa_common::traits::StepActuatorTrait;
+    use crate::Contract;
 
-pub use board::device;
-pub use board::SysDevices;
-pub use board::IODevices;
-pub use board::Controllers;
-pub use board::MotionDevices;
-pub use board::PwmDevices;
-pub use board::init;
-pub use board::setup;
-pub use board::heap_current_size;
-pub use board::stack_reservation_current_size;
-pub use board::MACHINE_BOARD;
-pub use board::MACHINE_TYPE;
-pub use board::MACHINE_PROCESSOR;
-pub use board::HEAP_SIZE_BYTES;
-pub use board::MAX_STATIC_MEMORY;
-pub use board::VREF_SAMPLE;
-pub use board::STEPPER_PLANNER_MICROSEGMENT_FREQUENCY;
-pub use board::STEPPER_PLANNER_CLOCK_FREQUENCY;
-#[cfg(feature = "with-sdcard")]
-pub use board::SDCARD_PARTITION;
-#[cfg(feature = "with-serial-port-1")]
-const UART_PORT1_BUFFER_SIZE: usize = 32;
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-motion")] {
-        /// The maximum number of movements that can be queued. Warning! each one takes too memory as of now
-        pub const SEGMENT_QUEUE_SIZE: u8 = 10;
+    pub static TEST_SIGNAL: hwa::PersistentState<hwa::SyncCsMutexType, bool> =
+        hwa::PersistentState::new();
+
+    struct Signaler {
+        mutex: Mutex<bool>,
+        condvar: Condvar,
     }
-}
-pub use board::ADC_START_TIME_US;
-pub use board::ADC_VREF_DEFAULT_MV;
-use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::{CriticalSectionRawMutex};
-use embassy_time::Duration;
-cfg_if::cfg_if!{
-    if #[cfg(feature="without-vref-int")] {
-        pub use board::ADC_VREF_DEFAULT_SAMPLE;
-    }
-}
 
-#[inline]
-pub fn is_log_debug_enabled() -> bool {
-    log::log_enabled!(log::Level::Debug)
-}
-
-#[inline]
-pub fn launch_high_priotity<S: 'static + Send>(_core: printhor_hwa_common::NoDevice, _spawner: Spawner, token: embassy_executor::SpawnToken<S>) -> Result<(),()>
-{
-    cfg_if::cfg_if! {
-        if #[cfg(feature="executor-interrupt")] {
-            static EXECUTOR_HIGH: printhor_hwa_common::TrackedStaticCell<embassy_executor::Executor> = printhor_hwa_common::TrackedStaticCell::new();
-
-            let executor: &'static mut embassy_executor::Executor = EXECUTOR_HIGH.init("StepperExecutor", embassy_executor::Executor::new());
-            executor.run(|s| {
-                let x = s.make_send();
-                thread_priority::ThreadPriority::Max.set_for_current().unwrap();
-                x.spawn(task_stepper_isr()).unwrap();
-            });
-        }
-        else {
-            Ok(_spawner.spawn(token).map_err(|_| ())?)
-        }
-    }
-}
-
-#[inline]
-pub fn init_logger() {
-    use std::io::Write;
-    env_logger::builder()
-        .format(|buf, record| {
-            writeln!(buf, "{}: {}", record.level(), record.args())
-        })
-        .init();
-}
-
-
-
-#[inline]
-// Execute closure f in an interrupt-free context.
-// In native this is not required, so does nothing
-pub fn interrupt_free<F, R>(f: F) -> R
-    where
-        F: FnOnce() -> R,
-{
-    f()
-}
-
-extern "Rust" {fn do_tick();}
-
-static TICKER_SIGNAL: hwa::PersistentState<CriticalSectionRawMutex, bool> = hwa::PersistentState::new();
-
-static TERMINATION: hwa::PersistentState<CriticalSectionRawMutex, bool> = hwa::PersistentState::new();
-
-#[embassy_executor::task]
-pub async fn task_stepper_ticker()
-{
-    info!("[task_stepper_ticker] starting");
-    let mut t = embassy_time::Ticker::every(Duration::from_micros((1_000_000 / board::STEPPER_PLANNER_CLOCK_FREQUENCY) as u64));
-    loop {
-        if embassy_time::with_timeout(Duration::from_secs(5), TICKER_SIGNAL.wait()).await.is_err() {
-            if TERMINATION.signaled() {
-                info!("[task_stepper_ticker] Ending gracefully");
-                return ();
+    impl Signaler {
+        fn new() -> Self {
+            Self {
+                mutex: Mutex::new(false),
+                condvar: Condvar::new(),
             }
-            continue;
         }
-        unsafe {
-            do_tick();
+
+        fn wait(&self) {
+            let mut signaled = self.mutex.lock().unwrap();
+            while !*signaled {
+                signaled = self.condvar.wait(signaled).unwrap();
+            }
+            *signaled = false;
         }
-        t.next().await;
     }
-}
 
-pub fn sys_reset() {
-    std::process::exit(0);
-}
+    pub struct MockedExecutor {
+        inner: embassy_executor::raw::Executor,
+        not_send: PhantomData<*mut ()>,
+        signaler: &'static Signaler,
+    }
 
-pub fn sys_stop() {
-    info!("Sending terminate signal");
-    TERMINATION.signal(true);
-}
+    impl MockedExecutor {
+        /// Create a new Executor.
+        pub fn new() -> Self {
+            let signaler = Box::leak(Box::new(Signaler::new()));
+            Self {
+                inner: embassy_executor::raw::Executor::new(signaler as *mut Signaler as *mut ()),
+                not_send: PhantomData,
+                signaler,
+            }
+        }
 
-pub fn pause_ticker() {
-    info!("Ticker Paused");
-    TICKER_SIGNAL.reset();
-}
+        pub fn run(&'static mut self, init: impl FnOnce(embassy_executor::Spawner)) {
+            init(self.inner.spawner());
 
-pub fn resume_ticker() {
-    debug!("Ticker Resumed");
-    TICKER_SIGNAL.signal(true);
+            loop {
+                unsafe { self.inner.poll() };
+                if TEST_SIGNAL.signaled() {
+                    break;
+                }
+                self.signaler.wait()
+            }
+        }
+    }
+
+    async fn do_machine_test(spawner: embassy_executor::Spawner) {
+        Contract::init_logger();
+        let mut context = crate::Contract::init(spawner).await;
+
+        context.motion_pins.set_enabled(CoordSel::all_axis(), true);
+        context.motion_pins.step_high(CoordSel::all_axis());
+
+        #[cfg(feature = "with-e-axis")]
+        assert!(context.motion_pins.e_step_pin.is_high());
+        #[cfg(feature = "with-x-axis")]
+        assert!(context.motion_pins.x_step_pin.is_high());
+        #[cfg(feature = "with-y-axis")]
+        assert!(context.motion_pins.y_step_pin.is_high());
+        #[cfg(feature = "with-z-axis")]
+        assert!(context.motion_pins.z_step_pin.is_high());
+
+        context.motion_pins.step_low(CoordSel::all_axis());
+
+        #[cfg(feature = "with-e-axis")]
+        assert!(context.motion_pins.e_step_pin.is_low());
+        #[cfg(feature = "with-x-axis")]
+        assert!(context.motion_pins.x_step_pin.is_low());
+        #[cfg(feature = "with-y-axis")]
+        assert!(context.motion_pins.y_step_pin.is_low());
+        #[cfg(feature = "with-z-axis")]
+        assert!(context.motion_pins.z_step_pin.is_low());
+
+        context.motion_pins.step_high(CoordSel::all_axis());
+
+        #[cfg(feature = "with-e-axis")]
+        assert!(context.motion_pins.e_step_pin.is_high());
+        #[cfg(feature = "with-x-axis")]
+        assert!(context.motion_pins.x_step_pin.is_high());
+        #[cfg(feature = "with-y-axis")]
+        assert!(context.motion_pins.y_step_pin.is_high());
+        #[cfg(feature = "with-z-axis")]
+        assert!(context.motion_pins.z_step_pin.is_high());
+        
+        TEST_SIGNAL.signal(true);
+    }
+    
+    #[test]
+    fn machine_test() {
+        std::env::set_current_dir(std::env::current_dir().unwrap().parent().unwrap()).unwrap();
+        // 1. Init embassy runtime
+        let executor = hwa::make_static_ref!("Executor", MockedExecutor, MockedExecutor::new());
+
+        /// The test entry-point
+        #[embassy_executor::task(pool_size = 1)]
+        async fn mocked_main(spawner: embassy_executor::Spawner) {
+            do_machine_test(spawner).await;
+            if TEST_SIGNAL.wait().await {
+                hwa::info!("Integration task Succeeded");
+            } else {
+                panic!("Integration task Failed");
+            }
+        }
+
+        // 2. Spawn the [mocked_main] task
+        executor.run(|spawner| {
+            let _tk = spawner.must_spawn(mocked_main(spawner));
+        });
+        hwa::info!("executor gone...");
+    }
+
+    #[cfg(test)]
+    mod test {
+        use printhor_hwa_common as hwa;
+        use crate::board::mocked_peripherals;
+        use mocked_peripherals::{MockedIOPin, PinState};
+
+        #[test]
+        fn test_internals() {
+            let _pin_state = hwa::make_static_ref!(
+            "GlobalPinState",
+            mocked_peripherals::PinsCell<PinState>,
+            mocked_peripherals::PinsCell::new(PinState::new())
+        );
+            let mut pin = MockedIOPin::new(0, _pin_state);
+            // Test it does not fail when _pin_state is locked
+            pin.set_high();
+            assert_eq!(pin.is_high(), true);
+            assert_eq!(pin.is_low(), false);
+            pin.set_low();
+            assert_eq!(pin.is_high(), false);
+            assert_eq!(pin.is_low(), true);
+            pin.toggle();
+            assert_eq!(pin.is_high(), true);
+            assert_eq!(pin.is_low(), false);
+            pin.toggle();
+            assert_eq!(pin.is_high(), false);
+            assert_eq!(pin.is_low(), true);
+        }
+    }
 }

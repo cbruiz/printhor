@@ -1,0 +1,24 @@
+[package]
+name = "printhor-hwa-common-macros"
+version = "0.0.4"
+edition = "2024"
+
+[features]
+default = ["std"]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl"]
+std = []
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"
+proc-macro2 = "1.0"
+cfg-if = "1"
+
+[dev-dependencies]
+printhor-hwa-common = {version = "0", default-features = false, path = "../printhor-hwa-common"}
+printhor-hwa-utils = {version = "0", default-features = false, path = "../printhor-hwa-utils"}
+
+[lib]
+proc-macro = true

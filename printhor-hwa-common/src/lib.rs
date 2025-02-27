@@ -1,49 +1,35 @@
 //! Common Hardware Abstraction types and traits
-#![no_std]
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-log")] {
-        pub use log::*;
-    }
-    else if #[cfg(feature = "with-defmt")] {
-        pub use defmt::{info, debug, trace, warn, error};
-    }
-}
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+extern crate core;
 
-pub type InterruptControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+#[cfg(feature = "with-motion")]
+pub mod kinematics;
+pub mod math;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "executor-interrupt")] {
-        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+pub use printhor_hwa_common_macros::*;
+pub use printhor_hwa_utils::*;
+use strum::EnumCount;
 
-    }
-    else {
-        pub type ControllerMutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-    }
-}
-
-mod tracked_static_cell;
-
-pub use tracked_static_cell::TrackedStaticCell;
 mod event_bus;
 pub use event_bus::*;
 
 mod defer_channel;
 pub use defer_channel::*;
 
-mod shared_controller;
-pub use shared_controller::*;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-motion-broadcast")] {
+        mod motion_broadcast;
+        pub use motion_broadcast::*;
+    }
+}
 
-mod context;
-pub use context::*;
-
-pub use tracked_static_cell::COUNTER;
-
-mod asynch;
-pub use asynch::*;
-use bitflags::bitflags;
-
-
-use strum::EnumCount;
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-serial-usb", feature = "with-serial-port-1", feature = "with-serial-port-2"))] {
+        mod async_utils;
+        pub use async_utils::*;
+    }
+}
 
 mod persistent_state;
 pub use persistent_state::PersistentState;
@@ -55,15 +41,28 @@ cfg_if::cfg_if! {
     }
 }
 
+mod contract;
+mod event_bus_channel;
+pub mod soft_uart;
+pub mod traits;
+pub mod uart;
+
+pub use contract::{HwiContext, HwiContract};
+
 cfg_if::cfg_if! {
-    if #[cfg(feature = "with-display")] {
-        mod display;
-        pub use display::DisplayScreenUI;
+    if #[cfg(feature = "with-sd-card")] {
+        pub mod sd_card;
     }
 }
 
-pub mod soft_uart;
-pub mod traits;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "sd-card-spi")] {
+        pub mod sd_card_spi;
+    }
+}
+
+pub use crate::math::CoordSel;
+pub use event_bus_channel::*;
 
 /// Represents a logical channel where the request(s) come from
 #[derive(strum::EnumCount, Clone, Copy, PartialEq, Debug)]
@@ -78,9 +77,11 @@ pub enum CommChannel {
     /// Communication through Serial Port 2
     #[cfg(feature = "with-serial-port-2")]
     SerialPort2,
-    /// This variant is mandatory. Used by SD prints, integration tests or macro/automation.
+    /// This variant is mandatory. Used by integration tests or macro/automation.
     /// It means the source communication channel comes from programmatic and/or internal routines.
     Internal,
+    /// This variant is mandatory. Used by SD prints. Output is discarded.
+    Sink,
 }
 
 impl Default for CommChannel {
@@ -92,22 +93,36 @@ impl Default for CommChannel {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-usb")] {
         #[allow(unused)]
-        const SERIAL_USB_OFFSET: usize = 1;
+        pub const SERIAL_USB_OFFSET: usize = 1;
     }
     else {
         #[allow(unused)]
-        const SERIAL_USB_OFFSET: usize = 0;
+        pub const SERIAL_USB_OFFSET: usize = 0;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-serial-port-1")] {
         #[allow(unused)]
-        const SERIAL_PORT1_OFFSET: usize = SERIAL_USB_OFFSET + 1;
+        pub const SERIAL_PORT1_OFFSET: usize = SERIAL_USB_OFFSET + 1;
     }
     else {
         #[allow(unused)]
-        const SERIAL_PORT1_OFFSET: usize = SERIAL_USB_OFFSET;
+        pub const SERIAL_PORT1_OFFSET: usize = SERIAL_USB_OFFSET;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-serial-port-2")] {
+        #[allow(unused)]
+        pub const SERIAL_PORT2_OFFSET: usize = SERIAL_PORT1_OFFSET + 1;
+        #[allow(unused)]
+        pub const INTERNAL_PORT_OFFSET: usize = SERIAL_PORT2_OFFSET + 1;
+    }
+    else {
+        #[allow(unused)]
+        pub const SERIAL_PORT2_OFFSET: usize = SERIAL_PORT1_OFFSET;
+        #[allow(unused)]
+        pub const INTERNAL_PORT_OFFSET: usize = SERIAL_PORT2_OFFSET;
     }
 }
 impl CommChannel {
@@ -121,7 +136,7 @@ impl CommChannel {
     /// # Returns
     ///
     /// Returns a `CommChannel` variant that matches the specified index.
-    /// If the index does not correspond to any known communication channel, 
+    /// If the index does not correspond to any known communication channel,
     /// `CommChannel::Internal` is returned as a default.
     ///
     /// # Example
@@ -134,10 +149,14 @@ impl CommChannel {
     /// let comm_channel = CommChannel::index(idx);
     ///
     /// match comm_channel {
+    ///     #[cfg(feature = "with-serial-usb")]
     ///     CommChannel::SerialUsb => println!("Index corresponds to SerialUsb"),
+    ///     #[cfg(feature = "with-serial-port-1")]
     ///     CommChannel::SerialPort1 => println!("Index corresponds to SerialPort1"),
+    ///     #[cfg(feature = "with-serial-port-2")]
     ///     CommChannel::SerialPort2 => println!("Index corresponds to SerialPort2"),
     ///     CommChannel::Internal => println!("Index does not match any external channel, defaulting to Internal"),
+    ///     CommChannel::Sink => println!("Index does not match any external channel, defaulting to Internal"),
     /// }
     /// ```
     ///
@@ -148,21 +167,28 @@ impl CommChannel {
                     return CommChannel::SerialUsb
                 }
             }
-            else if #[cfg(feature = "with-serial-port-1")] {
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-serial-port-1")] {
                 if _idx == SERIAL_USB_OFFSET {
                     return CommChannel::SerialPort1
                 }
             }
-            else if #[cfg(feature = "with-serial-port-2")] {
+        }
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-serial-port-2")] {
                 if _idx == SERIAL_PORT1_OFFSET {
                     return CommChannel::SerialPort2
                 }
             }
         }
-        CommChannel::Internal
+        if _idx == Self::COUNT - 2 {
+            CommChannel::Internal
+        } else {
+            CommChannel::Sink
+        }
     }
 
-    
     /// Retrieves the communication channel based on an index value.
     ///
     /// This method is used to obtain a `CommChannel` variant based on the provided
@@ -186,33 +212,27 @@ impl CommChannel {
     /// use hwa::CommChannel;
     ///
     /// // Assuming the appropriate feature flags are set:
+    /// #[cfg(feature = "with-serial-usb")]
     /// let channel = CommChannel::index(0);
+    /// #[cfg(feature = "with-serial-usb")]
     /// assert_eq!(channel, CommChannel::SerialUsb); // Example assuming `with-serial-usb` feature is enabled
     ///
-    /// let internal_channel = CommChannel::index(10);
+    /// let internal_channel = CommChannel::index(hwa::SERIAL_PORT2_OFFSET + 1);
     /// assert_eq!(internal_channel, CommChannel::Internal);
     /// ```
     pub const fn index_of(channel: CommChannel) -> usize {
         match channel {
             #[cfg(feature = "with-serial-usb")]
-            CommChannel::SerialUsb => {
-                SERIAL_USB_OFFSET - 1
-            }
+            CommChannel::SerialUsb => SERIAL_USB_OFFSET - 1,
             #[cfg(feature = "with-serial-port-1")]
-            CommChannel::SerialPort1 => {
-                SERIAL_PORT1_OFFSET - 1
-            }
+            CommChannel::SerialPort1 => SERIAL_PORT1_OFFSET - 1,
             #[cfg(feature = "with-serial-port-2")]
-            CommChannel::SerialPort2 => {
-                SERIAL_PORT1_OFFSET
-            }
-            CommChannel::Internal => {
-                Self::COUNT - 1
-            }
+            CommChannel::SerialPort2 => SERIAL_PORT1_OFFSET,
+            CommChannel::Internal => Self::COUNT - 2,
+            CommChannel::Sink => Self::COUNT - 1,
         }
     }
 
-    
     /// Provides the number of communication channels available.
     ///
     /// The `count` method is useful to retrieve the total number of
@@ -241,65 +261,113 @@ impl CommChannel {
 
 // A dummy empty structure to model whether a device is not necessary.
 // This is zero-cost in memory but useful to maintain a common method signature across boards
-#[allow(unused)]
 pub struct NoDevice;
 impl NoDevice {
     #[allow(unused)]
-    pub const fn new() -> Self { Self {} }
+    pub const fn new() -> Self {
+        Self {}
+    }
 }
 
-bitflags! {
-    /// A bitmask structure representing different stepper channels.
-    ///
-    /// This structure uses bitflags to define constant values for each
-    /// stepper channel. Each flag represents a specific axis or state.
-    ///
-    /// Flags:
-    /// - `X`: Represents the X-axis stepper channel. This flag is only available if the `with-x-axis` feature is enabled.
-    /// - `Y`: Represents the Y-axis stepper channel. This flag is only available if the `with-y-axis` feature is enabled.
-    /// - `Z`: Represents the Z-axis stepper channel. This flag is only available if the `with-z-axis` feature is enabled.
-    /// - `E`: Represents the E-axis stepper channel. This flag is only available if the `with-e-axis` feature is enabled.
-    /// - `UNSET`: Represents an unset or undefined channel. This flag is always available.
-    ///
-    /// Example usage:
-    ///
-    /// ```rust
-    /// use printhor_hwa_common as hwa;
-    /// use hwa::StepperChannel;
-    /// // Assuming the appropriate feature flags are set:
-    /// let mut channels = StepperChannel::X | StepperChannel::Y;
-    ///
-    /// // Check if a specific channel is set:
-    /// if channels.contains(StepperChannel::X) {
-    ///     // Do something with the X channel
-    /// }
-    ///
-    /// // Set another channel:
-    /// channels.insert(StepperChannel::Z);
-    ///
-    /// // Remove a channel:
-    /// channels.remove(StepperChannel::Y);
-    ///
-    /// // Check if a channel is unset:
-    /// if channels.contains(StepperChannel::UNSET) {
-    ///     // Handle unset channel
-    /// }
-    /// ```
-    #[derive(Clone, Copy, PartialEq, Debug)]
-    pub struct StepperChannel: u8 {
-        /// Represents the X-axis stepper channel. This flag is only available if the `with-x-axis` feature is enabled.
-        #[cfg(feature = "with-x-axis")]
-        const X    = 0b00000001;
-        /// Represents the Y-axis stepper channel. This flag is only available if the `with-y-axis` feature is enabled.
-        #[cfg(feature = "with-y-axis")]
-        const Y    = 0b00000010;
-        /// Represents the Z-axis stepper channel. This flag is only available if the `with-z-axis` feature is enabled.
-        #[cfg(feature = "with-z-axis")]
-        const Z    = 0b00000100;
-        /// Represents the E-axis stepper channel. This flag is only available if the `with-e-axis` feature is enabled.
-        #[cfg(feature = "with-e-axis")]
-        const E    = 0b00001000;
-        /// Represents an unset or undefined channel. This flag is always available.
-        const UNSET  = 0b10000000;
+/// Covers a device directly imported from HWI
+pub struct HwiResource<D> {
+    inner: D,
+}
+
+impl<D> HwiResource<D> {
+    pub const fn new(inner: D) -> Self {
+        Self { inner }
+    }
+}
+
+impl<D> RawHwiResource for HwiResource<D> {
+    type Resource = D;
+
+    fn take(self) -> D {
+        self.inner
+    }
+}
+
+impl<D> core::ops::Deref for HwiResource<D> {
+    type Target = D;
+    fn deref(&self) -> &<Self as core::ops::Deref>::Target {
+        &self.inner
+    }
+}
+
+impl<D> Clone for HwiResource<D>
+where
+    D: Clone,
+{
+    fn clone(&self) -> Self {
+        HwiResource::new(self.inner.clone())
+    }
+}
+
+impl<D> Copy for HwiResource<D> where D: Copy {}
+
+#[cfg(test)]
+mod test {
+    #[allow(unused)]
+    use crate as hwa;
+
+    #[test]
+    fn setup() {
+        let env = env_logger::Env::new().default_filter_or("info");
+        use std::io::Write;
+        let _ = env_logger::builder()
+            .parse_env(env)
+            .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+            .try_init();
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature="fixed-point-128-impl")]  {
+                hwa::info!("Using fixed point 128bits precision");
+            }
+            else if #[cfg(feature = "float-point-f64-impl")] {
+                hwa::info!("Using floating point f64 precision");
+            }
+            else {
+                // Assuming #[cfg(feature = "float-point-f32-impl")]
+                hwa::info!("Using floating point f32 precision");
+            }
+
+        }
+    }
+
+    #[cfg(all(
+        feature = "with-serial-usb",
+        feature = "with-serial-port-1",
+        feature = "with-serial-port-2"
+    ))]
+    #[test]
+    fn test_some_objects() {
+        let _nd = hwa::NoDevice::new();
+        let ch1 = hwa::CoordSel::X;
+        hwa::info!("{:?}", ch1);
+        let mut ch2 = ch1.clone();
+        assert_eq!(ch1, ch2);
+        let ch3 = ch2;
+        assert_eq!(ch2, ch3);
+        ch2.set(hwa::CoordSel::Y, true);
+        hwa::info!("{:?}", ch2);
+        assert_ne!(ch2, ch3);
+
+        assert_eq!(hwa::CommChannel::count(), 5);
+
+        let c0 = hwa::CommChannel::SerialUsb;
+        let c1 = hwa::CommChannel::SerialPort1;
+        let c2 = hwa::CommChannel::SerialPort2;
+        let c3 = hwa::CommChannel::Internal;
+
+        assert_eq!(c0, hwa::CommChannel::index(0));
+        assert_eq!(c1, hwa::CommChannel::index(1));
+        assert_eq!(c2, hwa::CommChannel::index(2));
+        assert_eq!(c3, hwa::CommChannel::index(3));
+
+        assert_eq!(0, hwa::CommChannel::index_of(c0));
+        assert_eq!(1, hwa::CommChannel::index_of(c1));
+        assert_eq!(2, hwa::CommChannel::index_of(c2));
+        assert_eq!(3, hwa::CommChannel::index_of(c3));
     }
 }

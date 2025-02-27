@@ -1,0 +1,90 @@
+[env]
+
+###########################
+## Configuration - BEGIN ##
+###########################
+
+## Heater and bed configuration (thermistor based) ##
+
+# [Depends on the board] the pull-up resistance of hot-end sensor circuit in ohms
+HOT_END_THERM_PULL_UP_RESISTANCE = "4685.0"
+# Nominal resistance of hot-end NTC thermistor at 25ºC
+HOT_END_THERM_NOMINAL_RESISTANCE = "100000.0"
+# BETA value of hot-end NTC thermistor
+HOT_END_THERM_BETA = "3950.0"
+
+# [Depends on the board] the pull-up resistance of hot-bed sensor circuit in ohms
+HOT_BED_THERM_PULL_UP_RESISTANCE = "4685.0"
+# Nominal resistance of hot-bed NTC thermistor at 25ºC
+HOT_BED_THERM_NOMINAL_RESISTANCE = "100000.0"
+# BETA value of hot-bed NTC thermistor
+HOT_BED_THERM_BETA = "3950.0"
+
+## Pure technical stuff ##
+
+DEFMT_LOG = "info"
+RUST_LOG = "warn"
+ASYNC_STD_THREAD_COUNT = "1"
+EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
+
+###########################
+## Configuration -  END  ##
+###########################
+
+[target.'cfg(all(any(board="nucleo64-f410rb"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32F410RBTx --disable-progressbars --connect-under-reset --log-format {L}{s}"
+#rustflags = [ "-C", "linker=flip-link" ]
+#linker = "flip-link"
+
+[target.'cfg(all(any(board="nucleo64-l476rg"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32L476RGTx --disable-progressbars"
+#rustflags = [ "-C", "linker=flip-link" ]
+#linker = "flip-link"
+
+[target.'cfg(all(any(board="skr_mini_e3_v2"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s} --base-address 08007000 --connect-under-reset"
+
+[target.'cfg(all(any(board="skr_mini_e3_v2-no-bootloader"), target_arch="arm", target_os="none"))']
+runner = "echo echo PLEASE DON'T probe-rs run --chip STM32F103RC --disable-progressbars --log-format {L}{s}"
+
+[target.'cfg(all(any(board="skr_mini_e3_v3"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s} --base-address 08002000"
+
+[target.'cfg(all(any(board="skr_mini_e3_v3-no-bootloader"), target_arch="arm", target_os="none"))']
+runner = "echo PLEASE DON'T probe-rs run --chip STM32G0B1RETx --disable-progressbars --log-format {L}{s}"
+
+[target.'cfg(all(any(board="mks_robin_nano"), target_arch="arm", target_os="none"))']
+runner = "probe-rs run --chip STM32F407VETx --disable-progressbars --log-format {L}{s} --base-address 08007000 --connect-under-reset"
+
+[target.'cfg(all(any(board="mks_robin_nano-no-bootloader"), target_arch="arm", target_os="none"))']
+runner = "echo PLEASE DON'T probe-rs run --chip STM32F407VETx --disable-progressbars --log-format {L}{s}"
+
+[target.'cfg(all(any(board="rp2040"), target_arch="arm", target_os="none"))']
+#runner = "probe-rs run --chip RP2040"
+runner = "elf2uf2-rs --deploy --serial --verbose"
+
+[build]
+
+[profile.dev.package."*"]
+codegen-units = 1
+incremental = false
+#opt-level = "s" # Set to "s" or even disable to play with GDB
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 2
+debug-assertions = true
+overflow-checks = true
+
+[profile.release-opt.package."*"]
+codegen-units = 1
+incremental = false
+opt-level = "z"
+debug = 0
+debug-assertions = false
+overflow-checks = false

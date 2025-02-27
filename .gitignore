@@ -24,3 +24,6 @@ libs/*/target
 /s-plot/plot.pdf
 /design/*.drawio
 /hwi-boards/*/*.bin
+/design/*.jar
+/run*.sh
+/*.info
