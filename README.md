@@ -53,9 +53,9 @@ Which means the principal short-term goal is not to develop a productive firmwar
     </thead>
     <tbody>
         <tr><td>Simulation</td><td>Functional</td></tr>
-        <tr><td>I/O</td><td>Testing</td></tr>
-        <tr><td>State and logic</td><td>Incubation</td></tr>
-        <tr><td>Motion Planner</td><td>Testing</td></tr>
+        <tr><td>I/O</td><td>Functional</td></tr>
+        <tr><td>State and logic</td><td>Testing</td></tr>
+        <tr><td>Motion Planner</td><td>Functional</td></tr>
         <tr><td>Kinematics</td><td>Testing</td></tr>
         <tr><td>Thermal Control</td><td>Incubation</td></tr>
         <tr><td>Display</td><td>TODO</td></tr>
