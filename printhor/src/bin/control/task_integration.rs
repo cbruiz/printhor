@@ -1,7 +1,7 @@
 #[allow(unused)]
 use crate::control;
 use crate::hwa;
-use crate::hwa::{make_vector_real, GCodeProcessor};
+use crate::hwa::{GCodeProcessor, make_vector_real};
 use alloc::string::ToString;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use hwa::CoordSel;
@@ -102,7 +102,7 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .expect("M105 OK");
+            .expect("115 OK");
 
         processor
             .execute(
@@ -167,12 +167,30 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M),
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M117(Some(String::from("hello"))),
+                ),
                 true,
             )
             .await
             .and_then(expect_immediate)
-            .expect("M (list M commands) OK");
+            .expect("M117 OK");
+
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M118(Some(String::from("hello"))),
+                ),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect("M118 OK");
 
         hwa::info!("## {} - END", test_name);
     }
@@ -182,7 +200,6 @@ pub async fn task_integration(
 
     #[cfg(feature = "with-ps-on")]
     {
-
         processor
             .execute(
                 CommChannel::Internal,
@@ -196,15 +213,81 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::G0(
-                    control::FXYZ::from(make_vector_real!(x=1.0, y=1.0))
-                )),
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::G0(control::FXYZ::from(make_vector_real!(
+                        x = 1.0,
+                        y = 1.0
+                    ))),
+                ),
                 false,
             )
             .await
             .and_then(expect_immediate)
             .expect_err("must not allow moving when Power is off");
 
+        #[cfg(feature = "with-hot-bed")]
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M140(control::S {
+                        s: hwa::make_optional_real!(1.0),
+                    }),
+                ),
+                false,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect_err("must not allow when Power is off");
+
+        #[cfg(feature = "with-hot-end")]
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M104(control::S {
+                        s: hwa::make_optional_real!(1.0),
+                    }),
+                ),
+                false,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect_err("must not allow when Power is off");
+
+        #[cfg(feature = "with-fan-layer")]
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M106),
+                false,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect_err("must not allow when Power is off");
+
+        #[cfg(feature = "with-hot-end")]
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(
+                    0,
+                    None,
+                    control::GCodeValue::M109(control::S {
+                        s: hwa::make_optional_real!(1.0),
+                    }),
+                ),
+                false,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect_err("must not allow when Power is off");
 
         let test_name = "T2 [M80 (Power On)]";
 

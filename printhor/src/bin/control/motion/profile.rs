@@ -1018,36 +1018,6 @@ impl SCurveMotionProfile {
         Ok(())
     }
 
-    /// Computes the position (steps) in given timestamp (uS)
-    /// * p_{1}(t) = if( 0 <= t < T_{j1} , s_{i1}(t) ) | \[0, T_{j1} \]
-    /// * p_{2}(t) = if( T_{j1} <= t < T_{a} - T_{j1}, s_{i2}(t) ) | \[ T_{j1}, T_{a} - T_{j1} \]
-    /// * p_{3}(t) = if( T_{a} - T_{j1} <= t < T_{a}, s_{i3}(t) ) | \[ T_{a} - T_{j1}, T_{a} \]
-    /// * p_{4}(t) = if( T_{a} <= t < T_{a} + T_{v}, s_{i4}(t) ) | \[ T_{a}, T_{a} + T_{v} \]
-    /// * p_{5}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
-    /// * p_{6}(t) = if( T_{a} + T_{v} + T_{j2} <= t < T_{a} + T_{v} + T_{d} - T_{j2}, s_{i6}(t) ) | \[ T_{a} + T_{v} + T_{j2}, T_{a} + T_{v} + T_{d} - T_{j2} \]
-    /// * p_{7}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
-    pub fn eval_position(&self, t: Real) -> (u8, Option<Real>) {
-        if t < math::ZERO {
-            (0, Some(math::ZERO))
-        } else if t >= self.i1_start() && t < self.i1_end() {
-            (1, Some(self.s_i1(&t)))
-        } else if t >= self.i2_start() && t < self.i2_end() {
-            (2, Some(self.s_i2(&t)))
-        } else if t >= self.i3_start() && t < self.i3_end() {
-            (3, Some(self.s_i3(&t)))
-        } else if t >= self.i4_start() && t < self.i4_end() {
-            (4, Some(self.s_i4(&t)))
-        } else if t >= self.i5_start() && t < self.i5_end() {
-            (5, Some(self.s_i5(&t)))
-        } else if t >= self.i6_start() && t < self.i6_end() {
-            (6, Some(self.s_i6(&t)))
-        } else if t >= self.i7_start() && t <= self.i7_end() {
-            (7, Some(self.s_i7(&t)))
-        } else {
-            (8, Some(self.s_i8(&t)))
-        }
-    }
-
     /// Acceleration phase, jerk limited acceleration
     ///
     /// v_{i1}(t) = \frac{j_{max}t^2}{2}+v_{0} \\
@@ -1151,6 +1121,14 @@ impl MotionProfile for SCurveMotionProfile {
         self.q1
     }
 
+    /// Computes the position (steps) in given timestamp (uS)
+    /// * p_{1}(t) = if( 0 <= t < T_{j1} , s_{i1}(t) ) | \[0, T_{j1} \]
+    /// * p_{2}(t) = if( T_{j1} <= t < T_{a} - T_{j1}, s_{i2}(t) ) | \[ T_{j1}, T_{a} - T_{j1} \]
+    /// * p_{3}(t) = if( T_{a} - T_{j1} <= t < T_{a}, s_{i3}(t) ) | \[ T_{a} - T_{j1}, T_{a} \]
+    /// * p_{4}(t) = if( T_{a} <= t < T_{a} + T_{v}, s_{i4}(t) ) | \[ T_{a}, T_{a} + T_{v} \]
+    /// * p_{5}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
+    /// * p_{6}(t) = if( T_{a} + T_{v} + T_{j2} <= t < T_{a} + T_{v} + T_{d} - T_{j2}, s_{i6}(t) ) | \[ T_{a} + T_{v} + T_{j2}, T_{a} + T_{v} + T_{d} - T_{j2} \]
+    /// * p_{7}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
     fn eval_position(&self, t: Real) -> Option<Real> {
         if t < math::ZERO {
             None
@@ -1236,6 +1214,7 @@ pub mod test {
         v_max: f32,
         a_max: f32,
         j_max: f32,
+        error_correction: bool,
     ) -> Result<SCurveMotionProfile, CodeExecutionFailure> {
         let constraints = Constraints {
             v_max: Real::from_f32(v_max),
@@ -1247,7 +1226,7 @@ pub mod test {
             Real::from_f32(v_0),
             Real::from_f32(v_1),
             &constraints,
-            false,
+            error_correction,
         )
     }
 
@@ -1277,7 +1256,15 @@ pub mod test {
         // With: q_1 = 10, v_0 = 1, v_1 = 0
         // Given: v_max = 5, a_max = 10, j_max = 30
         // Exp: T_a = 0.7333, T_v = 1.1433, T_d = 0.8333, T_j1 = 0.3333, T_j2 = 0.3333
-        let r = do_compute(10., 1., 0., 5., 10., 30.).unwrap();
+        let r = do_compute(10., 1., 0., 5., 10., 30., false).unwrap();
+
+        approx_equal("T_a", r.t_a, 0.7333, 0.001);
+        approx_equal("T_d", r.t_d, 0.8333, 0.001);
+        approx_equal("T_j1", r.t_j1, 0.3333, 0.001);
+        approx_equal("T_j2", r.t_j2, 0.3333, 0.001);
+        approx_equal("T_v", r.t_v, 1.1433, 0.001);
+
+        let r = do_compute(10., 1., 0., 5., 10., 30., true).unwrap();
 
         approx_equal("T_a", r.t_a, 0.7333, 0.001);
         approx_equal("T_d", r.t_d, 0.8333, 0.001);
@@ -1291,7 +1278,7 @@ pub mod test {
         // With: q_1 = 10, v_0 = 1, v_1 = 0
         // Given: v_max = 10, a_max = 10, j_max = 30
         // Exp: Ta = 1.0747, T_v = 0.0, T_d = 1.1747, T_j1 = 0.3333, T_j2 = 0.3333, vlim = 8.4136
-        let r = do_compute(10., 1., 0., 10., 10., 30.).unwrap();
+        let r = do_compute(10., 1., 0., 10., 10., 30., false).unwrap();
 
         approx_equal("T_a", r.t_a, 1.0747, 0.001);
         approx_equal("T_v", r.t_v, 0.0, 0.001);
@@ -1309,7 +1296,7 @@ pub mod test {
         // Exp: Ta = 0.4666, T_v = 0.0, T_d = 1.4718, T_j1 = 0.2321, T_j2 = 0.2321, vlim = 8.6329
         // But with the less costly descend:
         // Exp: Ta = 0.4526, T_v = 0.0, T_d = 1.5195, T_j1 = 0.2186, T_j2 = 0.2186, vlim = 8.5347
-        let r = do_compute(10., 7., 0., 10., 10., 30.).unwrap();
+        let r = do_compute(10., 7., 0., 10., 10., 30., false).unwrap();
 
         approx_equal("T_a", r.t_a, 0.4526, 0.001);
         approx_equal("T_v", r.t_v, 0.0, 0.001);
@@ -1324,7 +1311,7 @@ pub mod test {
         // With: q_1 = 10, v_0 = 7.5, v_1 = 0
         // Given: v_max = 10, a_max = 10, j_max = 30
         // Exp: Ta = 0.0, T_v = 0.0, T_d = 2.6667, T_j1 = 0.0, T_j2 = 0.0973, vlim = 7.5
-        let r = do_compute(10., 7.5, 0., 10., 10., 30.).unwrap();
+        let r = do_compute(10., 7.5, 0., 10., 10., 30., false).unwrap();
 
         approx_equal("T_a", r.t_a, 0.0, 0.01);
         approx_equal("T_v", r.t_v, 0.0, 0.001);
@@ -1340,7 +1327,7 @@ pub mod test {
         // With: q_1 = 10, v_0 = 0, v_1 = 0
         // Given: v_max = 10, a_max = 20, j_max = 30
         // Exp: Ta = 1.1006, T_v = 0.0, T_d = 1.1006, T_j1 = 0.5503, T_j2 = 0.5503, vlim = 9.0826
-        let r = do_compute(10., 0.0, 0., 10., 20., 30.).unwrap();
+        let r = do_compute(10., 0.0, 0., 10., 20., 30., false).unwrap();
 
         r.params_dump();
         hwa::info!("profile: {}", r);
@@ -1357,11 +1344,29 @@ pub mod test {
     #[test]
     fn test_limits() {
         use crate::control::motion::profile::MotionProfile;
-        let r = do_compute(10., 1., 0., 10., 10., 30.).unwrap();
+        let r = do_compute(10., 1., 0., 10., 10., 30., false).unwrap();
 
         assert_eq!(
             MotionProfile::eval_position(&r, math::ZERO - math::ONE),
             None
         );
+        
+        let pos = MotionProfile::eval_position(&r, math::ONE_HUNDRED);
+        approx_equal("pos", pos.unwrap(), 10.0, 0.0001);
+
+    }
+
+    #[test]
+    fn test_bad_args() {
+        //TODO if constraints.v_max.is_negligible()
+        //             || constraints.a_max.is_negligible()
+        //             || constraints.j_max.is_negligible()
+
+        // TODO: s_i8()
+
+        // fn compute_cache(&mut self) -> Result<(), CodeExecutionFailure> {
+        //         if self.v_lim.is_negligible() {
+        //             return Err(CodeExecutionFailure::NumericalError);
+        //         }
     }
 }
