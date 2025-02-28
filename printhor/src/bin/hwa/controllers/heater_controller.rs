@@ -357,12 +357,11 @@ where
         let measured_resistance: f32 =
             (sample_v * self.r_pull_up) / ((4095.0f32 * self.v_ratio) - sample_v);
 
-        hwa::debug!(
-            "sample: {:?} : v: {:?} Volt measured_resistance: {:?} Ohm",
-            sample,
-            Real::from_f32(sample_v),
-            Real::from_f32(measured_resistance),
+        /*
+        hwa::trace!("sample: {:?} : v: {:?} Volt measured_resistance: {:?} Ohm",
+            sample, Real::from_f32(sample_v), Real::from_f32(measured_resistance),
         );
+        */
 
         let log_mr_by_r_nominal: f32 = micromath::F32::from(measured_resistance / self.r_nominal)
             .ln()
@@ -441,7 +440,7 @@ where
             }
         }
         let new_state = {
-            hwa::debug!(
+            hwa::trace!(
                 "MEASURED_TEMP[{:?}] {:?}",
                 self.defer_action,
                 Real::from_f32(self.state_machine.current_temperature)
@@ -466,14 +465,15 @@ where
                 } else {
                     0.0f32
                 };
-                hwa::debug!(
+
+                /*
+                hwa::trace!(
                     "TEMP {:?} -> {:?}, {:?} P={:?} [{:?}]",
                     Real::from_f32(self.state_machine.last_temperature),
                     Real::from_f32(self.state_machine.current_temperature),
-                    Real::from_f32(delta),
-                    Real::from_f32(power),
-                    Real::from_f32(target_temp),
+                    Real::from_f32(delta), Real::from_f32(power), Real::from_f32(target_temp),
                 );
+                */
 
                 self.set_power((power * 100.0f32).to_u8().unwrap_or(0));
 

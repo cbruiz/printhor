@@ -702,7 +702,7 @@ impl MotionPlanner {
                     "G0",
                     channel,
                     hwa::DeferAction::RapidMove,
-                    t.as_vector(),
+                    t.into(),
                     t.f,
                     blocking,
                     event_bus,

@@ -1,7 +1,7 @@
 #[allow(unused)]
 use crate::control;
 use crate::hwa;
-use crate::hwa::GCodeProcessor;
+use crate::hwa::{make_vector_real, GCodeProcessor};
 use alloc::string::ToString;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use hwa::CoordSel;
@@ -47,14 +47,10 @@ pub async fn task_integration(
     let mut subscriber = event_bus.subscriber().await;
 
     hwa::info!("[task_integration] Waiting for SYS_READY");
-    if subscriber
+    subscriber
         .ft_wait_until(EventFlags::SYS_READY)
         .await
-        .is_err()
-    {
-        finish_task(Err("T0 [Task integration startup]"));
-        return;
-    }
+        .expect("Must be ready");
 
     hwa::info!("[task_integration] Got SYS_READY. Continuing");
     hwa::info!(
@@ -78,7 +74,7 @@ pub async fn task_integration(
         let test_name = "T1 [status: M100 (Machine info), M105, M115, M503, M119, M]";
 
         hwa::info!("## {} - BEGIN", test_name);
-        match processor
+        processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M100),
@@ -86,15 +82,9 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .ok()
-        {
-            Some(_result) => {}
-            _ => {
-                finish_task(Err(test_name));
-                return;
-            }
-        }
-        match processor
+            .expect("M100 OK");
+
+        processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M105),
@@ -102,16 +92,9 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .ok()
-        {
-            Some(_result) => {}
-            _ => {
-                finish_task(Err(test_name));
-                return;
-            }
-        }
+            .expect("M105 OK");
 
-        match processor
+        processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M115),
@@ -119,16 +102,9 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .ok()
-        {
-            Some(_result) => {}
-            _ => {
-                finish_task(Err(test_name));
-                return;
-            }
-        }
+            .expect("M105 OK");
 
-        match processor
+        processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(
@@ -140,15 +116,9 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .ok()
-        {
-            Some(_result) => {}
-            _ => {
-                finish_task(Err(test_name));
-                return;
-            }
-        }
-        match processor
+            .expect("M503 S1 OK");
+
+        processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(
@@ -162,16 +132,19 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .ok()
-        {
-            Some(_result) => {}
-            _ => {
-                finish_task(Err(test_name));
-                return;
-            }
-        }
+            .expect("M503 S0 OK");
 
-        match processor
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M114),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect("M114 OK");
+
+        processor
             .execute(
                 CommChannel::Internal,
                 &control::GCodeCmd::new(0, None, control::GCodeValue::M119),
@@ -179,14 +152,27 @@ pub async fn task_integration(
             )
             .await
             .and_then(expect_immediate)
-            .ok()
-        {
-            Some(_result) => {}
-            _ => {
-                finish_task(Err(test_name));
-                return;
-            }
-        }
+            .expect("M119 OK");
+
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::G),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect("G (list G commands) OK");
+
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M),
+                true,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect("M (list M commands) OK");
 
         hwa::info!("## {} - END", test_name);
     }
@@ -196,6 +182,30 @@ pub async fn task_integration(
 
     #[cfg(feature = "with-ps-on")]
     {
+
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::M81),
+                false,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect("M81 OK");
+
+        processor
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::G0(
+                    control::FXYZ::from(make_vector_real!(x=1.0, y=1.0))
+                )),
+                false,
+            )
+            .await
+            .and_then(expect_immediate)
+            .expect_err("must not allow moving when Power is off");
+
+
         let test_name = "T2 [M80 (Power On)]";
 
         hwa::info!("## {} - BEGIN", test_name);
@@ -295,48 +305,20 @@ pub async fn task_integration(
         let set_pos_gcode = control::GCodeCmd::new(
             5,
             Some(5),
-            control::GCodeValue::G92(control::EXYZ {
-                #[cfg(feature = "with-e-axis")]
-                e: Some(math::ZERO),
-                #[cfg(feature = "with-x-axis")]
-                x: Some(math::ZERO),
-                #[cfg(feature = "with-y-axis")]
-                y: Some(math::ZERO),
-                #[cfg(feature = "with-z-axis")]
-                z: Some(math::ZERO),
-                #[cfg(feature = "with-a-axis")]
-                a: None,
-                #[cfg(feature = "with-b-axis")]
-                b: None,
-                #[cfg(feature = "with-c-axis")]
-                c: None,
-                #[cfg(feature = "with-i-axis")]
-                i: None,
-                #[cfg(feature = "with-j-axis")]
-                j: None,
-                #[cfg(feature = "with-k-axis")]
-                k: None,
-                #[cfg(feature = "with-u-axis")]
-                u: None,
-                #[cfg(feature = "with-v-axis")]
-                v: None,
-                #[cfg(feature = "with-w-axis")]
-                w: None,
-            }),
+            control::GCodeValue::G92(control::EXYZ::from_vector(hwa::make_vector_real!(
+                e = 0.0,
+                x = 0.0,
+                y = 0.0,
+                z = 0.0
+            ))),
         );
 
         hwa::info!("## {} - BEGIN", test_name);
-        if processor
+        processor
             .execute(CommChannel::Internal, &set_pos_gcode, false)
             .await
             .and_then(expect_immediate)
-            .is_ok()
-        {
-            hwa::info!("## {} - END", test_name);
-        } else {
-            finish_task(Err(test_name));
-            return;
-        }
+            .expect("Must be immediate");
     }
 
     // Separator
@@ -857,9 +839,6 @@ pub async fn task_integration(
             }
         }
     }
-
-    // Separator
-    hwa::info!("##");
 
     // Separator
     hwa::info!("##");

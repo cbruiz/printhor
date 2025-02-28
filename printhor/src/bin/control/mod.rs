@@ -126,6 +126,40 @@ impl EXYZ {
             w: None,
         }
     }
+    #[cfg(test)]
+    pub const fn from_vector(v: TVector<Real>) -> Self {
+        Self {
+            #[cfg(feature = "with-e-axis")]
+            e: v.get_coord(CoordSel::E),
+            #[cfg(feature = "with-x-axis")]
+            x: v.get_coord(CoordSel::X),
+            #[cfg(feature = "with-y-axis")]
+            y: v.get_coord(CoordSel::Y),
+            #[cfg(feature = "with-z-axis")]
+            z: v.get_coord(CoordSel::Z),
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: v.get_coord(CoordSel::A),
+            #[cfg(feature = "with-b-axis")]
+            b: v.get_coord(CoordSel::B),
+            #[cfg(feature = "with-c-axis")]
+            c: v.get_coord(CoordSel::C),
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: v.get_coord(CoordSel::I),
+            #[cfg(feature = "with-j-axis")]
+            j: v.get_coord(CoordSel::J),
+            #[cfg(feature = "with-k-axis")]
+            k: v.get_coord(CoordSel::K),
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: v.get_coord(CoordSel::U),
+            #[cfg(feature = "with-v-axis")]
+            v: v.get_coord(CoordSel::V),
+            #[cfg(feature = "with-w-axis")]
+            w: v.get_coord(CoordSel::W),
+        }
+    }
 
     pub fn as_vector(&self) -> TVector<Real> {
         TVector::from_coords(
@@ -237,8 +271,16 @@ impl FXYZ {
             w: None,
         }
     }
+}
 
-    pub fn as_vector(&self) -> TVector<Real> {
+impl Into<TVector<Real>> for &FXYZ {
+    fn into(self) -> TVector<Real> {
+        self.clone().into()
+    }
+}
+
+impl Into<TVector<Real>> for FXYZ {
+    fn into(self) -> TVector<Real> {
         TVector::from_coords(
             #[cfg(feature = "with-e-axis")]
             None,
@@ -271,6 +313,41 @@ impl FXYZ {
             #[cfg(feature = "with-w-axis")]
             self.w,
         )
+    }
+}
+
+impl From<TVector<Real>> for FXYZ {
+    fn from(_v: TVector<Real>) -> Self {
+        Self {
+            f: None,
+            #[cfg(feature = "with-x-axis")]
+            x: _v.get_coord(CoordSel::X),
+            #[cfg(feature = "with-y-axis")]
+            y: _v.get_coord(CoordSel::Y),
+            #[cfg(feature = "with-z-axis")]
+            z: _v.get_coord(CoordSel::Z),
+            //
+            #[cfg(feature = "with-a-axis")]
+            a: _v.get_coord(CoordSel::A),
+            #[cfg(feature = "with-b-axis")]
+            b: _v.get_coord(CoordSel::B),
+            #[cfg(feature = "with-c-axis")]
+            c: _v.get_coord(CoordSel::C),
+            //
+            #[cfg(feature = "with-i-axis")]
+            i: _v.get_coord(CoordSel::I),
+            #[cfg(feature = "with-j-axis")]
+            j: _v.get_coord(CoordSel::J),
+            #[cfg(feature = "with-k-axis")]
+            k: _v.get_coord(CoordSel::K),
+            //
+            #[cfg(feature = "with-u-axis")]
+            u: _v.get_coord(CoordSel::U),
+            #[cfg(feature = "with-v-axis")]
+            v: _v.get_coord(CoordSel::V),
+            #[cfg(feature = "with-w-axis")]
+            w: _v.get_coord(CoordSel::W),
+        }
     }
 }
 
@@ -885,3 +962,4 @@ impl defmt::Format for GCodeCmd {
 }
 
 pub use base::*;
+use printhor_hwa_common::CoordSel;
