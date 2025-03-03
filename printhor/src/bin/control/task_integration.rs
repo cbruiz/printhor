@@ -333,23 +333,34 @@ pub async fn task_integration(
             .await
             .and_then(expect_deferred)
             .expect("G28 OK");
-        
-        subscriber.ft_wait_for(evt).await.expect("G28 completed");
 
+        subscriber.ft_wait_for(evt).await.expect("G28 completed");
 
         hwa::info!("## {} - BEGIN", test_name);
         processor
-            .execute(CommChannel::Internal, &control::GCodeCmd::new(0, None, control::GCodeValue::G29), true)
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::G29),
+                true,
+            )
             .await
             .and_then(expect_immediate)
             .expect("G29 OK");
         processor
-            .execute(CommChannel::Internal, &control::GCodeCmd::new(0, None, control::GCodeValue::G29_1), true)
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::G29_1),
+                true,
+            )
             .await
             .and_then(expect_immediate)
             .expect("G29.1 OK");
         processor
-            .execute(CommChannel::Internal, &control::GCodeCmd::new(0, None, control::GCodeValue::G29_2), true)
+            .execute(
+                CommChannel::Internal,
+                &control::GCodeCmd::new(0, None, control::GCodeValue::G29_2),
+                true,
+            )
             .await
             .and_then(expect_immediate)
             .expect("G29.2 OK");
@@ -363,12 +374,9 @@ pub async fn task_integration(
         let set_pos_gcode = control::GCodeCmd::new(
             5,
             Some(5),
-            control::GCodeValue::G92(hwa::make_vector_real!(
-                e = 0.0,
-                x = 0.0,
-                y = 0.0,
-                z = 0.0
-            ).into()),
+            control::GCodeValue::G92(
+                hwa::make_vector_real!(e = 0.0, x = 0.0, y = 0.0, z = 0.0).into(),
+            ),
         );
 
         hwa::info!("## {} - BEGIN", test_name);
@@ -413,7 +421,9 @@ pub async fn task_integration(
             #[cfg(feature = "with-print-job")]
             &mut printer_controller,
         )
-        .await.and_then(expect_immediate).expect("M20 OK");
+        .await
+        .and_then(expect_immediate)
+        .expect("M20 OK");
     }
 
     // Separator
@@ -438,7 +448,9 @@ pub async fn task_integration(
             #[cfg(feature = "with-print-job")]
             &mut printer_controller,
         )
-        .await.and_then(expect_immediate).expect("M20 (ListDir) OK");
+        .await
+        .and_then(expect_immediate)
+        .expect("M20 (ListDir) OK");
 
         let gcode = control::GCodeCmd::new(
             8,
@@ -455,7 +467,9 @@ pub async fn task_integration(
             #[cfg(feature = "with-print-job")]
             &mut printer_controller,
         )
-        .await.and_then(expect_immediate).expect_err("M20 (ListDir missing dir) Err");
+        .await
+        .and_then(expect_immediate)
+        .expect_err("M20 (ListDir missing dir) Err");
     }
     /*
     #[cfg(feature = "integration-test-move-ortho")]
@@ -1052,6 +1066,7 @@ fn finish_task(success: Result<(), &'static str>) {
     // In native simulator, we need to exit
 }
 
+#[cfg(feature = "printhor-bin")]
 #[cfg(test)]
 mod integration_test {
     use crate::control::task_integration::INTEGRATION_STATUS;
@@ -1078,13 +1093,6 @@ mod integration_test {
                 signaled = self.condvar.wait(signaled).unwrap();
             }
             *signaled = false;
-        }
-
-        #[allow(unused)]
-        fn signal(&self) {
-            let mut signaled = self.mutex.lock().unwrap();
-            *signaled = true;
-            self.condvar.notify_one();
         }
     }
 

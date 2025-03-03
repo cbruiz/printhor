@@ -111,6 +111,8 @@ bypass-hotbed = []
 ili9341_parallel = []
 ili9341_spi = []
 
+s-plot-bin = []
+printhor-bin = ["printhor-hwi_native?/printhor-bin"]
 integration-test = [
     "cornering",
     "integration-test-m100",
@@ -528,3 +530,11 @@ cfg-if = "1.0"
 futures-test = { version = "0.3.31"}
 tmc2209 = { version = "0.2.2"}
 env_logger = { version = "0.11.6"}
+
+[[bin]]
+name = "s_plot"
+required-features = ["s-plot-bin"]
+
+[[bin]]
+name = "printhor"
+required-features = ["printhor-bin"]

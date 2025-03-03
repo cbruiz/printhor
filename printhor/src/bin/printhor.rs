@@ -15,7 +15,6 @@ use hwa::{Contract, HwiContract, RawHwiResource};
 use hwa::math;
 #[allow(unused)]
 use math::{Real, TVector};
-use printhor_hwa_common::CoordSel;
 
 //noinspection RsUnresolvedReference
 #[cfg_attr(doc, aquamarine::aquamarine)]
@@ -101,7 +100,7 @@ async fn sys_start(
     cfg_if::cfg_if! {
         if #[cfg(any(feature = "with-motion", feature = "with-hot-end", feature = "with-hot-bed"))] {
             type DeferChannelMutexType = <hwa::Contract as HwiContract>::DeferChannelMutexType;
-            let defer_channel: hwa::GenericDeferChannel<DeferChannelMutexType> = {
+            let _defer_channel: hwa::GenericDeferChannel<DeferChannelMutexType> = {
                 hwa::GenericDeferChannel::new(hwa::make_static_ref!(
                     "DeferChannel",
                     hwa::DeferChannelChannelType<DeferChannelMutexType>,
@@ -118,7 +117,7 @@ async fn sys_start(
     cfg_if::cfg_if! {
         if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
             type MotionBroadcastChannelMutexType = <hwa::Contract as HwiContract>::MotionBroadcastChannelMutexType;
-            let motion_broadcast_channel: hwa::GenericMotionBroadcastChannel<MotionBroadcastChannelMutexType> = {
+            let _motion_broadcast_channel: hwa::GenericMotionBroadcastChannel<MotionBroadcastChannelMutexType> = {
                 hwa::GenericMotionBroadcastChannel::new(hwa::make_static_ref!(
                     "MotionBroadcastChannel",
                     hwa::MotionBroadcastChannelType<MotionBroadcastChannelMutexType>,
@@ -155,9 +154,9 @@ async fn sys_start(
             feature = "with-hot-end",
             feature = "with-hot-bed"
         ))]
-        defer_channel,
+        _defer_channel,
         #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
-        motion_broadcast_channel,
+        _motion_broadcast_channel,
         context,
         sys_watch_dog.clone(),
     )
@@ -405,8 +404,8 @@ async fn init_controllers_and_spawn_tasks(
                 _motion_broadcast_channel.clone(),
             );
 
-            step_actuator.disable_steppers(CoordSel::all_axis());
-            step_actuator.set_forward_direction(CoordSel::all_axis(), CoordSel::all_axis());
+            step_actuator.disable_steppers(hwa::CoordSel::all_axis());
+            step_actuator.set_forward_direction(hwa::CoordSel::all_axis(), hwa::CoordSel::all_axis());
 
             let motion_config = hwa::controllers::MotionConfig::new(hwa::make_static_sync_controller!(
                 "MotionConfig",

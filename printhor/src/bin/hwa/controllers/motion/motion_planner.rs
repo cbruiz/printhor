@@ -958,7 +958,7 @@ impl MotionPlanner {
                 module_target_speed,
                 speed_vector
             );
-            Ok(control::CodeExecutionSuccess::OK)
+            Err(control::CodeExecutionFailure::ERR)
         };
         match move_result {
             Ok(resp) => Ok(resp),
@@ -967,7 +967,7 @@ impl MotionPlanner {
                     todo!("Delegate to deferrals!!!")
                 }
                 _r => {
-                    todo!("bad response: {:?}", _r);
+                    unreachable!("bad response: {:?}", _r);
                     //Err(err)
                 }
             },

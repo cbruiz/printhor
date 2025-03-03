@@ -341,7 +341,7 @@ pub struct SoftTimer(pub CsMutex<RefCell<StepPlanExecutor>>);
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "assert-motion", test))] {
-        pub type FlushResult = crate::math::TVector<u32>;
+        pub type FlushResult = hwa::math::TVector<u32>;
     }
     else {
         pub type FlushResult = ();

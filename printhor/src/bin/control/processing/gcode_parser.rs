@@ -176,7 +176,6 @@ pub struct RawGCodeSpec {
 }
 
 impl RawGCodeSpec {
-    #[allow(unused)]
     pub fn from(code: char, spec: Option<(i32, u8)>) -> Self {
         match spec {
             None => Self {
@@ -913,6 +912,7 @@ fn update_current(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_gcode::{AsyncParserState, ByteStream};
     use std::collections::VecDeque;
 
     struct BufferStream {
@@ -1016,57 +1016,149 @@ mod tests {
     #[futures_test::test]
     async fn test_gs() {
         // TODO: Check EOF condition
-        let stream = BufferStream::new("G0 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n".as_bytes().to_vec().into());
+        let stream = BufferStream::new(
+            "G0 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n"
+                .as_bytes()
+                .to_vec()
+                .into(),
+        );
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G0 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G0 OK");
 
-        let stream = BufferStream::new("G1 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n".as_bytes().to_vec().into());
+        let stream = BufferStream::new(
+            "G1 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n"
+                .as_bytes()
+                .to_vec()
+                .into(),
+        );
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G1 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G1 OK");
 
-        let stream = BufferStream::new("G92 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n".as_bytes().to_vec().into());
+        let stream = BufferStream::new(
+            "G92 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n"
+                .as_bytes()
+                .to_vec()
+                .into(),
+        );
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G1 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G1 OK");
 
         let stream = BufferStream::new("G4\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G4 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G4 OK");
 
         let stream = BufferStream::new("G4 S10\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G4 S10 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G4 S10 OK");
 
         let stream = BufferStream::new("N10 G28 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G28 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G28 OK");
 
         parser.reset_current_line();
 
         let stream = BufferStream::new("N10 G29 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G29 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G29 OK");
 
         let stream = BufferStream::new("N11 G29.1 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G29.1 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G29.1 OK");
 
         let stream = BufferStream::new("G29.2 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G29.2 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G29.2 OK");
 
         let stream = BufferStream::new("G31\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("G31 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("G31 OK");
+    }
+
+    #[futures_test::test]
+    async fn test_machinery() {
+        let mut stream = BufferStream::new("".as_bytes().to_vec().into());
+        assert_eq!(stream.next().await, None);
+        stream.recovery_check().await;
+        assert_eq!(stream.next().await, None);
+
+        let spec = RawGCodeSpec::from('Z', None);
+
+        let _str = format!("{:?}", spec);
+
+        let stream = BufferStream::new("".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect_err("None");
+        assert_eq!(parser.get_state(), AsyncParserState::Start(true));
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect_err("EOF");
+        assert_eq!(parser.get_state(), AsyncParserState::Start(true));
+        let _ = parser.close().await;
+
+        let stream = BufferStream::new("/X0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect_err("None");
+
+        let stream = BufferStream::new("&0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect_err("None");
+
+        let stream = BufferStream::new("V0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect_err("None");
     }
 
     #[futures_test::test]
@@ -1074,19 +1166,36 @@ mod tests {
         let stream = BufferStream::new("M20 F\"X.g\"\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M20 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M20 OK");
+
+        let stream = BufferStream::new("M37\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M37 OK");
 
         let stream = BufferStream::new("M37 S1\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M37 S1 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M37 S1 OK");
 
         #[cfg(feature = "with-hot-bed")]
         {
             let stream = BufferStream::new("M140\n".as_bytes().to_vec().into());
             let mut parser = GCodeLineParser::new(stream);
             let _ = parser.gcode_line();
-            parser.next_gcode(CommChannel::Internal).await.expect("M140 OK");
+            parser
+                .next_gcode(CommChannel::Internal)
+                .await
+                .expect("M140 OK");
         }
 
         #[cfg(feature = "with-hot-end")]
@@ -1094,43 +1203,101 @@ mod tests {
             let stream = BufferStream::new("M104\n".as_bytes().to_vec().into());
             let mut parser = GCodeLineParser::new(stream);
             let _ = parser.gcode_line();
-            parser.next_gcode(CommChannel::Internal).await.expect("M104 OK");
+            parser
+                .next_gcode(CommChannel::Internal)
+                .await
+                .expect("M104 OK");
 
             let stream = BufferStream::new("M109\n".as_bytes().to_vec().into());
             let mut parser = GCodeLineParser::new(stream);
             let _ = parser.gcode_line();
-            parser.next_gcode(CommChannel::Internal).await.expect("M109 OK");
+            parser
+                .next_gcode(CommChannel::Internal)
+                .await
+                .expect("M109 OK");
         }
 
         let stream = BufferStream::new("M220\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M220 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M220 OK");
 
         let stream = BufferStream::new("M220 S1\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M220 S1 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M220 S1 OK");
 
         let stream = BufferStream::new("M110\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M110 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M110 OK");
+
+        parser.reset_current_line();
+        parser.reset().await;
 
         let stream = BufferStream::new("M110 N1\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M110 N1 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M110 N1 OK");
 
         let stream = BufferStream::new("M204\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M204 OK");
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M204 OK");
 
         let stream = BufferStream::new("M205\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         let _ = parser.gcode_line();
-        parser.next_gcode(CommChannel::Internal).await.expect("M205 OK");
-        
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M205 OK");
+
+        let stream = BufferStream::new("M862.1\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M862.1 OK");
+
+        let stream = BufferStream::new("M862.3\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M862.3 OK");
+
+        let stream = BufferStream::new("M900\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M900 OK");
+
+        let stream = BufferStream::new("M907\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser
+            .next_gcode(CommChannel::Internal)
+            .await
+            .expect("M907 OK");
     }
 }

@@ -1350,10 +1350,9 @@ pub mod test {
             MotionProfile::eval_position(&r, math::ZERO - math::ONE),
             None
         );
-        
+
         let pos = MotionProfile::eval_position(&r, math::ONE_HUNDRED);
         approx_equal("pos", pos.unwrap(), 10.0, 0.0001);
-
     }
 
     #[test]
