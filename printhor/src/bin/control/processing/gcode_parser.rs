@@ -4,7 +4,7 @@ use crate::helpers;
 use crate::hwa;
 use hwa::CommChannel;
 
-#[cfg_attr(not(feature = "with-defmt"), derive(Debug))]
+#[derive(Debug)]
 pub enum GCodeLineParserError {
     /// There was an error parsing
     ParseError(u32),
@@ -1011,5 +1011,43 @@ mod tests {
         let stream = BufferStream::new("M118 Hello World!".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         check_display_m118_result(&mut parser).await;
+    }
+
+    #[futures_test::test]
+    async fn test_gs() {
+        let stream = BufferStream::new("G0 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G0 OK");
+
+        let stream = BufferStream::new("G1 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G1 OK");
+
+        let stream = BufferStream::new("G92 F0 E0 X0 Y0 Z0 A0 B0 C0 I0 J0 K0 U0 V0 W0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G1 OK");
+
+        let stream = BufferStream::new("G29 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G1 OK");
+
+        let stream = BufferStream::new("G29.1 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G29.1 OK");
+
+        let stream = BufferStream::new("G29.2 F0 E0 X0 Y0 Z0\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G29.2 OK");
+
+        let stream = BufferStream::new("G31\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let _ = parser.gcode_line();
+        parser.next_gcode(CommChannel::Internal).await.expect("G31 OK");
     }
 }
