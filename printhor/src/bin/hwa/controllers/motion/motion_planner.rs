@@ -755,7 +755,7 @@ impl MotionPlanner {
             }
             control::GCodeValue::G92(t) => {
                 let mut position = self.motion_status.get_last_planned_position();
-                position.update_from_world_coordinates(&t.as_vector());
+                position.update_from_world_coordinates(&hwa::math::TVector::from(t.into()));
                 Ok(self
                     .schedule_raw_move(
                         "G92",

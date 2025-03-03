@@ -488,6 +488,10 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('g', Some((28, 0))) => Some(GCodeValue::G28(EXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((29, 0))) => Some(GCodeValue::G29),
+        #[cfg(feature = "with-motion")]
+        ('g', Some((291, 1))) => Some(GCodeValue::G29_1),
+        #[cfg(feature = "with-motion")]
+        ('g', Some((292, 1))) => Some(GCodeValue::G29_2),
         #[cfg(feature = "with-probe")]
         ('g', Some((31, 0))) => Some(GCodeValue::G31),
         #[cfg(feature = "with-probe")]
@@ -501,10 +505,6 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('g', Some((92, 0))) => Some(GCodeValue::G92(EXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((94, 0))) => Some(GCodeValue::G94),
-        #[cfg(feature = "with-motion")]
-        ('g', Some((291, 1))) => Some(GCodeValue::G29_1),
-        #[cfg(feature = "with-motion")]
-        ('g', Some((292, 1))) => Some(GCodeValue::G29_2),
         ('m', None) => Some(GCodeValue::M),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((2, 0))) => Some(GCodeValue::M2),
