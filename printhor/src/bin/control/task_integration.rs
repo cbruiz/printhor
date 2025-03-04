@@ -1066,7 +1066,7 @@ fn finish_task(success: Result<(), &'static str>) {
     // In native simulator, we need to exit
 }
 
-#[cfg(feature = "printhor-bin")]
+#[cfg(not(feature = "s-plot-bin"))]
 #[cfg(test)]
 mod integration_test {
     use crate::control::task_integration::INTEGRATION_STATUS;

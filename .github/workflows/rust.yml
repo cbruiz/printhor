@@ -34,21 +34,21 @@ jobs:
 
       - name: Generate code coverage of native simulator backend [cartessian] (default)
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov --profile release -p printhor-hwi_native --features printhor-bin --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-base.info
+        run: cargo llvm-cov --profile release -p printhor-hwi_native --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-base.info
       - name: Generate code coverage of native simulator backend [core-xy]
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov --profile release  -p printhor-hwi_native --features printhor-bin,with-motion-core-xy-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-core-xy.info
+        run: cargo llvm-cov --profile release  -p printhor-hwi_native --features with-motion-core-xy-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-core-xy.info
       - name: Generate code coverage of native simulator backend [anthropomorphic]
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov --profile release -p printhor-hwi_native --features printhor-bin,with-motion-anthropomorphic-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-anthropomorphic.info
+        run: cargo llvm-cov --profile release -p printhor-hwi_native --features with-motion-anthropomorphic-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-anthropomorphic.info
       - name: Generate code coverage for a (default) [cartessian-cnc] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features printhor-bin,cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-cnc.info
+        run: cargo llvm-cov --profile release --workspace --features cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-cnc.info
       - name: Generate code coverage for a [cartessian-fdm] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features printhor-bin,cartessian-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-fdm.info
+        run: cargo llvm-cov --profile release --workspace --features cartessian-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-fdm.info
       - name: Generate code coverage for a [core-xy-fdm] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features printhor-bin,core-xy-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-core-xy-fdm.info
+        run: cargo llvm-cov --profile release --workspace --features core-xy-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-core-xy-fdm.info
       - name: Generate code coverage for an [anthropomorphic-quadruped-robot] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features printhor-bin,anthropomorphic-quad-robot --ignore-filename-regex libs --lcov --output-path lcov.fw-anthropomorphic-quad-robot.info
+        run: cargo llvm-cov --profile release --workspace --features anthropomorphic-quad-robot --ignore-filename-regex libs --lcov --output-path lcov.fw-anthropomorphic-quad-robot.info
       - name: Generate code coverage for a (default) [cartessian-cnc] machine firmware (s-plot)
         run: cargo llvm-cov --profile release --features s-plot-bin,cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.s-plot.info
       - name: Merge lcov files

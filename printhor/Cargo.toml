@@ -111,8 +111,7 @@ bypass-hotbed = []
 ili9341_parallel = []
 ili9341_spi = []
 
-s-plot-bin = []
-printhor-bin = ["printhor-hwi_native?/printhor-bin"]
+s-plot-bin = ["printhor-hwi_native?/s-plot-bin"]
 integration-test = [
     "cornering",
     "integration-test-m100",
@@ -537,4 +536,3 @@ required-features = ["s-plot-bin"]
 
 [[bin]]
 name = "printhor"
-required-features = ["printhor-bin"]

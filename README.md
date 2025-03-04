@@ -160,8 +160,7 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 A simple stand-alone std binary to experiment with motion plan and see what it does (kind of playground):
 
 ```shell
-cd s-plot
-cargo run
+cargo run --profile release --bin s_plot --features s-plot-bin
 ```
 
 ### Example output with the current plotting style approach:

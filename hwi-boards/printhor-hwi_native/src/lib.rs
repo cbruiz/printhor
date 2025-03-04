@@ -2,7 +2,7 @@
 mod board;
 pub use board::Contract;
 
-#[cfg(feature = "printhor-bin")]
+#[cfg(not(feature = "s-plot-bin"))]
 #[cfg(test)]
 mod integration_test {
     use printhor_hwa_common as hwa;
