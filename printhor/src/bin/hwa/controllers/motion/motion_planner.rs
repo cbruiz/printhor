@@ -702,7 +702,7 @@ impl MotionPlanner {
                     "G0",
                     channel,
                     hwa::DeferAction::RapidMove,
-                    t.as_vector(),
+                    t.into(),
                     t.f,
                     blocking,
                     event_bus,
@@ -755,7 +755,7 @@ impl MotionPlanner {
             }
             control::GCodeValue::G92(t) => {
                 let mut position = self.motion_status.get_last_planned_position();
-                position.update_from_world_coordinates(&t.as_vector());
+                position.update_from_world_coordinates(&hwa::math::TVector::from(t.into()));
                 Ok(self
                     .schedule_raw_move(
                         "G92",
@@ -958,7 +958,7 @@ impl MotionPlanner {
                 module_target_speed,
                 speed_vector
             );
-            Ok(control::CodeExecutionSuccess::OK)
+            Err(control::CodeExecutionFailure::ERR)
         };
         match move_result {
             Ok(resp) => Ok(resp),
@@ -967,7 +967,7 @@ impl MotionPlanner {
                     todo!("Delegate to deferrals!!!")
                 }
                 _r => {
-                    todo!("bad response: {:?}", _r);
+                    unreachable!("bad response: {:?}", _r);
                     //Err(err)
                 }
             },

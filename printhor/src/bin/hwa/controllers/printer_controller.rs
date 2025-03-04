@@ -2,7 +2,6 @@
 use crate::hwa;
 use hwa::{CommChannel, PersistentState};
 
-#[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
 /// Enumeration representing various events that the Printer Controller can handle.
 pub enum PrinterControllerEvent {
@@ -20,7 +19,6 @@ pub enum PrinterControllerEvent {
     Abort(CommChannel),
 }
 
-#[allow(unused)]
 #[cfg_attr(feature = "native", derive(Debug))]
 #[derive(Copy, Clone)]
 /// Enumeration representing the status of the Printer Controller.
@@ -113,15 +111,6 @@ impl PrinterController {
             channel,
             event_bus,
             status: hwa::make_static_ref!("PrinterControllerStatus", StatusType, status_cfg),
-        }
-    }
-
-    #[allow(unused)]
-    pub async fn something_running(&self) -> bool {
-        match self.status.wait().await {
-            PrinterControllerStatus::Ready(_) => false,
-            PrinterControllerStatus::Printing(_) => true,
-            PrinterControllerStatus::Paused(_) => true,
         }
     }
 

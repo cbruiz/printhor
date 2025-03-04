@@ -330,6 +330,12 @@ impl GCodeProcessor {
                     result
                 }
             },
+            #[cfg(feature = "with-motion")]
+            GCodeValue::G29 => Ok(CodeExecutionSuccess::OK),
+            #[cfg(feature = "with-motion")]
+            GCodeValue::G29_1 => Ok(CodeExecutionSuccess::OK),
+            #[cfg(feature = "with-motion")]
+            GCodeValue::G29_2 => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-probe")]
             GCodeValue::G31 => {
                 if self.event_bus.has_flags(EventFlags::HOMING).await {

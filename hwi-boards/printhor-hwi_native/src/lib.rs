@@ -2,6 +2,7 @@
 mod board;
 pub use board::Contract;
 
+#[cfg(not(feature = "s-plot-bin"))]
 #[cfg(test)]
 mod integration_test {
     use printhor_hwa_common as hwa;
@@ -107,7 +108,7 @@ mod integration_test {
         
         TEST_SIGNAL.signal(true);
     }
-    
+
     #[test]
     fn machine_test() {
         std::env::set_current_dir(std::env::current_dir().unwrap().parent().unwrap()).unwrap();

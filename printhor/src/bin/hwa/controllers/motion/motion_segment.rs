@@ -193,9 +193,9 @@ where
 mod tests {
     use super::*;
     use crate::control::motion::SCurveMotionProfile;
-    use crate::math;
-    use crate::math::Real;
-    use crate::math::TVector;
+    use crate::hwa::math;
+    use crate::hwa::math::Real;
+    use crate::hwa::math::TVector;
 
     fn dummy_segment() -> Segment {
         Segment {

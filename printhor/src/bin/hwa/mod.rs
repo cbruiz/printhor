@@ -14,21 +14,4 @@ pub mod types;
 
 //#endregion
 
-#[cfg(feature = "with-sd-card")]
-pub struct DummyTimeSource {}
-
-#[cfg(feature = "with-sd-card")]
-impl embedded_sdmmc::TimeSource for DummyTimeSource {
-    fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
-        embedded_sdmmc::Timestamp {
-            year_since_1970: 0,
-            zero_indexed_month: 0,
-            zero_indexed_day: 0,
-            hours: 0,
-            minutes: 0,
-            seconds: 0,
-        }
-    }
-}
-
 pub use hwi::Contract;

@@ -160,8 +160,7 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 A simple stand-alone std binary to experiment with motion plan and see what it does (kind of playground):
 
 ```shell
-cd s-plot
-cargo run
+cargo run --profile release --bin s_plot --features s-plot-bin
 ```
 
 ### Example output with the current plotting style approach:
@@ -1172,3 +1171,8 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     G1 X12.6508 Y109.9950 F3000
     M5
     G4
+
+## Controlling the code size
+
+brew install bloaty
+bloaty ./bloaty -d sections,symbols -n 0  --csv | bloaty-metafile > meta.json

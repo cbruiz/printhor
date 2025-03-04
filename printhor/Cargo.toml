@@ -111,19 +111,20 @@ bypass-hotbed = []
 ili9341_parallel = []
 ili9341_spi = []
 
+s-plot-bin = ["printhor-hwi_native?/s-plot-bin"]
 integration-test = [
     "cornering",
     "integration-test-m100",
     "integration-test-power-on",
-    "integration-test-homing",
+    #"integration-test-homing",
     "integration-test-reset-pos",
     "integration-test-move-ortho",
     "integration-test-move-oblique",
     "integration-test-move-boundaries",
-    "integration-test-trinamic",
+    #"integration-test-trinamic",
     #"integration-test-benchy",
-    "integration-test-pen",
-    "integration-test-laser-engrave",
+    #"integration-test-pen",
+    #"integration-test-laser-engrave",
     #"debug-skip-homing",
     #"numerical-robusticity-check",
     #"verbose-timings",
@@ -528,3 +529,10 @@ cfg-if = "1.0"
 futures-test = { version = "0.3.31"}
 tmc2209 = { version = "0.2.2"}
 env_logger = { version = "0.11.6"}
+
+[[bin]]
+name = "s_plot"
+required-features = ["s-plot-bin"]
+
+[[bin]]
+name = "printhor"

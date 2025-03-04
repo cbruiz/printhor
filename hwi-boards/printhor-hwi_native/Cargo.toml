@@ -23,6 +23,7 @@ default = [
     "with-motion", "with-motion-stepper", "with-motion-cartessian-kinematics",
     "with-x-axis", "with-y-axis", "with-z-axis", "with-e-axis"
 ]
+s-plot-bin=[]
 # Hardware device features
 with-log = ["env_logger", "printhor-hwa-common/with-log"]
 with-serial-usb = ["async-std", "printhor-hwa-common/with-serial-usb"]
