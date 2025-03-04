@@ -111,7 +111,7 @@ bypass-hotbed = []
 ili9341_parallel = []
 ili9341_spi = []
 
-s-plot-bin = ["printhor-hwi_native?/s-plot-bin"]
+s-plot-bin = ["printhor-hwi_native?/s-plot-bin", "gnuplot"]
 integration-test = [
     "cornering",
     "integration-test-m100",
@@ -520,6 +520,9 @@ printhor-hwi_rp_2040 = { version = "0.0", default-features = false, optional = t
 
 cfg-if = { version = "1.0.0", features = [] }
 const_env = { version = "0.1.2" }
+
+### s-plot
+gnuplot = { version = "0.0.45", optional = true }
 
 [build-dependencies]
 #proc-macro2 = "1.0."

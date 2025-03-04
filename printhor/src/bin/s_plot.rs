@@ -5,20 +5,18 @@ pub mod control;
 pub mod helpers;
 pub mod hwa;
 
-use crate::hwa::controllers;
+use hwa::controllers;
 use hwa::HwiContract;
 #[allow(unused)]
 use hwa::RawHwiResource;
+use control::motion;
+use motion::SCurveMotionProfile;
+use control::task_stepper::{STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US};
+use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
 
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
     printhor_main(spawner, false).await;
-}
-
-pub fn initialization_error() {
-    let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
-    hwa::error!("{}", msg);
-    panic!("{}", msg);
 }
 
 /// A minimal context for s-plot
@@ -41,7 +39,6 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
-
             // Max speed
             motion_planner.motion_config().set_max_speed(hwa::Contract::DEFAULT_MAX_SPEED_PS);
 
@@ -78,7 +75,6 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
             // Compute min speed. Really useful because of discretion effects
             motion_planner.motion_config().compute_min_speed();
-
 
             // Make homing unneeded
             hwa::info!("Virtually homing");
@@ -172,13 +168,154 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         )
         .await;
 
-    //let mut total_disp = hwa::math::Real::zero();
-    //let mut total_disp_discrete = hwa::math::Real::zero();
-    //let mut s_id = 0;
+    let micro_segment_period_secs: hwa::math::Real =
+        hwa::math::Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6).rdp(6);
+
+    let _sampling_time: hwa::math::Real = hwa::math::Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6).rdp(6);
+    
+    let mut data_points = DataPoints::new();
     loop {
         match motion_planner.next_plan(&event_bus).await {
-            controllers::motion::ExecPlan::Segment(_segment, _channel, _order_num) => {
-                hwa::info!("Segment {:?}", _order_num);
+            controllers::motion::ExecPlan::Segment(mut segment, _channel, _order_num) => {
+                
+                let current_real_pos = motion_planner.motion_status().get_current_position();
+                let position_offset = segment.src_pos - current_real_pos.space_pos;
+                hwa::info!(
+                    "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
+                    _order_num,
+                    position_offset,
+                    hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                );
+                segment.fix_deviation(
+                    &position_offset,
+                    motion_planner.motion_config().get_flow_rate_as_real(),
+                );
+                match SCurveMotionProfile::compute(
+                    segment.displacement_su,
+                    segment.speed_enter_su_s,
+                    segment.speed_exit_su_s,
+                    &segment.constraints,
+                    false,
+                ) {
+                    Ok(trajectory) => {
+                        // The relevant coords (those that will move)
+                        let mut relevant_coords = hwa::math::CoordSel::empty();
+                        // The relevant coords that will move forward
+                        let mut relevant_coords_dir_fwd = hwa::math::CoordSel::empty();
+                        segment.unit_vector_dir.foreach_values(|coord, val| {
+                            relevant_coords.set(coord, !val.is_negligible());
+                            relevant_coords_dir_fwd.set(coord, val.is_defined_positive());
+                        });
+                        hwa::debug!("Relevant coords: [{:?}]", relevant_coords);
+                        hwa::debug!("Relevant coords_dir_fwd: [{:?}]", relevant_coords_dir_fwd);
+
+                        let steps_per_su = motion_planner
+                            .motion_config()
+                            .get_units_per_space_magnitude()
+                            * motion_planner.motion_config().get_micro_steps_as_vector();
+
+                        let mut segment_iterator =
+                            SegmentIterator::new(&trajectory, micro_segment_period_secs);
+
+                        let mut micro_segment_interpolator =
+                            LinearMicrosegmentStepInterpolator::new(
+                                segment
+                                    .unit_vector_dir
+                                    .with_coord(relevant_coords.complement(), None)
+                                    .abs(),
+                                segment.displacement_su,
+                                steps_per_su.with_coord(relevant_coords.complement(), None),
+                            );
+                        hwa::debug!(
+                            "[task_stepper] order_num:{:?} Trajectory interpolation START",
+                            _order_num
+                        );
+                        
+                        // Micro-segments interpolation along segment
+                        data_points.segment_starts(&trajectory);
+                        loop {
+                            // Micro-segment start
+                            
+                            if let Some(estimated_position) = segment_iterator.next() {
+                                data_points.interpolation_tick(&segment_iterator);
+                                
+                                let w = (segment_iterator.dt() * hwa::math::ONE_MILLION).round();
+                                if w.is_negligible() {
+                                    hwa::info!("giving up for any reason");
+                                    break;
+                                }
+                                let _has_more =
+                                    micro_segment_interpolator.advance_to(estimated_position, w);
+
+                                hwa::info!(
+                                    "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} {} {:?} steps",
+                                    data_points.current_segment_id(),
+                                    data_points.current_micro_segment_id(),
+                                    micro_segment_interpolator
+                                        .advanced_units()
+                                        .map_nan_coords(relevant_coords, &hwa::math::ZERO),
+                                    hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                                    micro_segment_interpolator
+                                        .advanced_steps()
+                                        .map_nan_coords(relevant_coords, &0),
+                                );
+                                
+                                //total_disp += micro_segment_interpolator.advanced_units().norm2().unwrap();
+                                //total_disp_discrete += micro_segment_interpolator.advanced_steps().norm2().unwrap();
+                                
+                                #[cfg(feature = "verbose-timings")]
+                                let t1 = embassy_time::Instant::now();
+
+                                let _ = micro_segment_interpolator.state().clone();
+                                let _ = relevant_coords;
+                                data_points.micro_segment_ends();
+                                if !_has_more {
+                                    break;
+                                }
+                            } else {
+                                // No advance
+                                break;
+                            }
+                        }
+                        data_points.segment_ends();
+                        ////
+                        //// TRAJECTORY INTERPOLATION END
+                        ////
+                        #[cfg(feature = "debug-motion")]
+                        hwa::debug!(
+                            "[task_stepper] order_num:{:?} Trajectory interpolation END",
+                            _order_num
+                        );
+
+                        let _adv_steps = micro_segment_interpolator.advanced_steps();
+                        let adv_pos = micro_segment_interpolator.advanced_units();
+                        hwa::info!(
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {}, vlim: {:?} {}/s",
+                            _order_num,
+                            adv_pos,
+                            hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.v_lim,
+                            hwa::Contract::SPACE_UNIT_MAGNITUDE
+                        );
+                        
+                        hwa::info!(
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] steps",
+                            _order_num,
+                            _adv_steps.excluding_negligible()
+                        );
+                        
+                        let adv_delta = segment.unit_vector_dir.sign() * adv_pos;
+                        let next_real_pos = (
+                            current_real_pos.space_pos + adv_delta.map_nan(&hwa::math::ZERO)
+                        ).rdp(6);
+                        
+                        let mut pos = current_real_pos.clone();
+                        pos.update_from_space_coordinates(&next_real_pos);
+                    }
+                    _ => {
+                        hwa::error!("Unable to compute motion plan. Discarding...");
+                    }
+                }
             }
             _ => {}
         }
@@ -188,9 +325,183 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         }
     }
 
+    {
+        use gnuplot::{AxesCommon, Figure};
+        #[allow(unused)]
+        use gnuplot::{AutoOption, Tick, MultiplotFillOrder::RowsFirst, MultiplotFillDirection::{Downwards}};
+        #[allow(unused)]
+        use gnuplot::{DashType, PlotOption};
+
+        let mut fg = Figure::new();
+
+        cfg_if::cfg_if! {
+            if #[cfg(feature="float-point-f64-impl")] {
+                const MATH_PRECISION: &str = "[float point 64bits]";
+            }
+            else if #[cfg(feature="fixed-point-128-impl")] {
+                const MATH_PRECISION: &str = "[fixed point 128bits]";
+            }
+            else {
+                const MATH_PRECISION: &str = "[float point 32bits]";
+            }
+        }
+
+        fg.set_multiplot_layout(2, 1)
+            .set_title(
+                format!(
+                    "{} Double S-Curve velocity profile\n[{:?} segments, {:?} {} displacement, {:?} hz interp, {:?} hz sampling]",
+                    MATH_PRECISION,
+                    data_points.num_segments(),
+                    data_points.total_displacement(),
+                    hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                    hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY, 
+                    hwa::Contract::STEP_PLANNER_CLOCK_FREQUENCY,
+                ).as_str()
+            )
+            .set_scale(1.0, 1.0)
+            .set_offset(0.0, 0.0)
+            .set_multiplot_fill_order(RowsFirst, Downwards);
+
+        fg.axes2d()
+            .set_y_label(format!("Position ({})", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
+            .points(data_points.segment_position_marks.times, data_points.segment_position_marks.points, &[PlotOption::Color("black")])
+            .lines(data_points.interpolated_positions.times, data_points.interpolated_positions.points, &[PlotOption::Color("blue")])
+            //.lines(data_points.time_discrete, data_points.pos_discrete, &[PlotOption::Color("gray")])
+        ;
+        fg.axes2d()
+            .set_y_label(format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
+            .points(data_points.segment_velocity_marks.times, data_points.segment_velocity_marks.points, &[PlotOption::Color("black")])
+            //.lines(data_points.time_discrete_acc, data_points.acc_discrete, &[PlotOption::Color("red")])
+            //.lines(data_points.time, data_points.spd, &[PlotOption::Color("green")])
+            //.lines(data_points.time_discrete_deriv, data_points.spd_discrete, &[PlotOption::Color("gray")])
+        ;
+        #[cfg(not(test))]
+        fg.show_and_keep_running().unwrap();
+        _ = fg.save_to_pdf("plot.pdf", 10.0f32, 10.0f32);
+
+    }
+
     #[cfg(not(test))]
     std::process::exit(0);
 }
+
+struct DataPointsDimension {
+    time_offset: f64,
+    last_time: f64,
+    point_offset: f64,
+    last_point: f64,
+    /// Position datapoint time in secs
+    pub times: Vec<f64>,
+    /// Position datapoint displacement in units
+    pub points: Vec<f64>,
+}
+
+impl DataPointsDimension {
+    pub fn new() -> Self {
+        Self {
+            time_offset: 0.0,
+            last_time: 0.0,
+            point_offset: 0.0,
+            last_point: 0.0,
+            times: vec![0.0],
+            points: vec![0.0],
+        }
+    }
+
+    pub fn displace(&mut self) {
+        self.displace_time();
+        self.point_offset += self.last_point;
+    }
+
+    pub fn displace_time(&mut self) {
+        self.time_offset += self.last_time;
+    }
+    
+    pub fn push_relative(&mut self, time: f64, point: f64) {
+        self.last_time = time;
+        self.last_point = point;
+        self.times.push(self.time_offset + self.last_time );
+        self.points.push(self.point_offset + self.last_point );
+    }
+
+    pub fn push_time_relative(&mut self, time: f64, point: f64) {
+        self.last_time = time;
+        self.last_point = point;
+        self.times.push(self.time_offset + self.last_time );
+        self.points.push(self.last_point );
+    }
+}
+
+struct DataPoints {
+    
+    pub current_segment_id: usize,
+    pub current_micro_segment_id: usize,
+    pub total_displacement: hwa::math::Real,
+    
+    pub segment_position_marks: DataPointsDimension,
+    pub interpolated_positions: DataPointsDimension,
+    
+    pub segment_velocity_marks: DataPointsDimension,
+}
+
+
+impl DataPoints {
+    pub fn new() -> Self {
+        Self {
+            current_segment_id: 0,
+            current_micro_segment_id: 0,
+            total_displacement: hwa::math::ZERO,
+
+            segment_position_marks: DataPointsDimension::new(),
+            interpolated_positions: DataPointsDimension::new(),
+            
+            segment_velocity_marks: DataPointsDimension::new(),
+        }
+    }
+    
+    pub fn segment_starts(&mut self, trajectory: &SCurveMotionProfile) {
+        self.current_segment_id += 1;
+        self.current_micro_segment_id = 0;
+        self.segment_position_marks.push_relative(self.interpolated_positions.last_time, self.interpolated_positions.last_point);
+        self.segment_velocity_marks.push_time_relative(self.interpolated_positions.last_time, trajectory.v_0.to_f64())
+    }
+    pub fn segment_ends(&mut self) {
+        self.segment_position_marks.displace();
+        self.interpolated_positions.displace();
+        self.segment_velocity_marks.displace_time();
+    }
+    
+    pub fn num_segments(&self) -> usize {
+        self.current_segment_id
+    }
+    
+    pub fn current_segment_id(&self) -> usize {
+        self.current_segment_id
+    }
+    
+    pub fn micro_segment_ends(&mut self) {
+        
+    }
+
+    pub fn current_micro_segment_id(&self) -> usize {
+        self.current_micro_segment_id
+    }
+    
+    pub fn total_displacement(&self) -> hwa::math::Real {
+        self.total_displacement
+    }
+
+    pub fn interpolation_tick(&mut self, interp: &SegmentIterator<SCurveMotionProfile>) {
+        self.interpolated_positions.push_relative(interp.current_time().to_f64(), interp.current_position().to_f64());
+    }
+}
+
+//#region "InMemory Datapoints"
+
+//#endregion
+
+
+//#region "Machinery initialization"
 
 async fn init_splot(spawner: embassy_executor::Spawner) -> SplotContext {
     type EventBusMutexStrategyType = <hwa::Contract as HwiContract>::EventBusMutexStrategy;
@@ -443,6 +754,16 @@ async fn init_splot(spawner: embassy_executor::Spawner) -> SplotContext {
     }
 }
 
+pub fn initialization_error() {
+    let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
+    hwa::error!("{}", msg);
+    panic!("{}", msg);
+}
+
+//#endregion
+
+//#region "Tests"
+
 #[cfg(feature = "s-plot-bin")]
 #[cfg(test)]
 mod test {
@@ -522,3 +843,5 @@ mod test {
         });
     }
 }
+
+//#endregion
