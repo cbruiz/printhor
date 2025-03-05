@@ -56,6 +56,7 @@ pub(crate) struct DataPoints {
     pub interpolated_positions: DataPointsDimension,
 
     pub segment_velocity_marks: DataPointsDimension,
+    pub interpolated_velocities: DataPointsDimension,
 }
 
 impl DataPoints {
@@ -69,6 +70,7 @@ impl DataPoints {
             interpolated_positions: DataPointsDimension::new(),
 
             segment_velocity_marks: DataPointsDimension::new(),
+            interpolated_velocities: DataPointsDimension::new(),
         }
     }
 
@@ -88,6 +90,7 @@ impl DataPoints {
         self.segment_position_marks.displace();
         self.interpolated_positions.displace();
         self.segment_velocity_marks.displace_time();
+        self.interpolated_velocities.displace_time();
     }
 
     pub fn num_segments(&self) -> usize {
@@ -113,5 +116,9 @@ impl DataPoints {
             interp.current_time().to_f64(),
             interp.current_position().to_f64(),
         );
+        self.interpolated_velocities.push_relative(
+            interp.current_time().to_f64(),
+            (interp.ds() / interp.dt()).to_f64()
+        )
     }
 }

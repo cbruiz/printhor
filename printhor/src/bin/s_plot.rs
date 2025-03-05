@@ -104,9 +104,10 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
     {
         let mut gcode_buff = instrumentation::gcode::GCodeBuffer::new();
-        gcode_buff.append("G0 Z2.2000 F3000; pen up\n");
-        gcode_buff.append("G0 X100.18164 Y105\n");
-        gcode_buff.append("G0 Z1.2000 F3000; pen down\n");
+        //gcode_buff.append("G0 Z2.2000 F3000; pen up\n");
+        //gcode_buff.append("G0 X100.18164 Y105\n");
+        //gcode_buff.append("G0 Z1.2000 F3000; pen down\n");
+        gcode_buff.append("G92 X100.18164 Y105\n");
         gcode_buff.append("G1 X99.63526 Y104.99686 F7000 S0\n");
         gcode_buff.append("G1 X99.09117 Y104.98748 F7000 S0\n");
         gcode_buff.append("G1 X98.54937 Y104.97192 F7000 S0\n");
@@ -131,6 +132,8 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         gcode_buff.append("G1 X88.62661 Y103.55409 F7000 S0\n");
         gcode_buff.append("G1 X88.12357 Y103.42248 F7000 S0\n");
         gcode_buff.append("G1 X87.62321 Y103.28552 F7000 S0\n");
+
+        
 
         let mut parser = control::GCodeLineParser::new(
             instrumentation::gcode::BufferStream::new(gcode_buff)
@@ -230,9 +233,10 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                     micro_segment_interpolator.advance_to(estimated_position, w);
 
                                 hwa::debug!(
-                                    "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} {} {:?} steps",
+                                    "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} [{:?}] {} [{:?}] steps",
                                     data_points.current_segment_id(),
                                     data_points.current_micro_segment_id(),
+                                    segment_iterator.ds(),
                                     micro_segment_interpolator
                                         .advanced_units()
                                         .map_nan_coords(relevant_coords, &hwa::math::ZERO),
@@ -241,9 +245,6 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                         .advanced_steps()
                                         .map_nan_coords(relevant_coords, &0),
                                 );
-
-                                //total_disp += micro_segment_interpolator.advanced_units().norm2().unwrap();
-                                //total_disp_discrete += micro_segment_interpolator.advanced_steps().norm2().unwrap();
 
                                 #[cfg(feature = "verbose-timings")]
                                 let t1 = embassy_time::Instant::now();
@@ -272,8 +273,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                         let _adv_steps = micro_segment_interpolator.advanced_steps();
                         let adv_pos = micro_segment_interpolator.advanced_units();
                         hwa::info!(
-                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] {}, vlim: {:?} {}/s",
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, vlim: {:?} {}/s",
                             _order_num,
+                            segment_iterator.current_position(),
                             adv_pos,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE,
                             trajectory.v_lim,
@@ -299,6 +301,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                         hwa::error!("Unable to compute motion plan. Discarding...");
                     }
                 }
+            }
+            controllers::motion::ExecPlan::SetPosition(position, _channel, _order_num) => {
+                motion_planner.motion_status().update_current_position(_order_num, &position);
             }
             _ => {}
         }
@@ -356,7 +361,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         fg.axes2d()
             .set_y_label(format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
             .points(data_points.segment_velocity_marks.times, data_points.segment_velocity_marks.points, &[PlotOption::Color("black")])
-            //.lines(data_points.time_discrete_acc, data_points.acc_discrete, &[PlotOption::Color("red")])
+            .lines(data_points.interpolated_velocities.times, data_points.interpolated_velocities.points, &[PlotOption::Color("red")])
             //.lines(data_points.time, data_points.spd, &[PlotOption::Color("green")])
             //.lines(data_points.time_discrete_deriv, data_points.spd_discrete, &[PlotOption::Color("gray")])
         ;
