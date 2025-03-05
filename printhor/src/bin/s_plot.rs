@@ -5,34 +5,34 @@ pub mod control;
 pub mod helpers;
 pub mod hwa;
 
+mod instrumentation;
+
+use hwa::HwiContract;
+
+#[allow(unused)]
+use hwa::RawHwiResource;
+
 use control::motion;
+use motion::SCurveMotionProfile;
 use control::task_stepper::{
     STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
 };
-use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
-use hwa::HwiContract;
-#[allow(unused)]
-use hwa::RawHwiResource;
 use hwa::controllers;
-use motion::SCurveMotionProfile;
+use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
+use printhor_hwa_common::CommChannel;
 
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
     printhor_main(spawner, false).await;
 }
 
-/// A minimal context for s-plot
-struct SplotContext {
-    #[allow(unused)]
-    pub event_bus: hwa::types::EventBus,
-    pub motion_planner: hwa::controllers::MotionPlanner,
-}
+
 
 async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) {
     hwa::Contract::init_logger();
     hwa::Contract::init_heap();
 
-    let c = init_splot(spawner).await;
+    let c = instrumentation::machinery::init_splot(spawner).await;
 
     let event_bus = c.event_bus;
     let motion_planner = c.motion_planner;
@@ -53,7 +53,8 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
             motion_planner.motion_config().set_space_units_per_world_unit(hwa::Contract::DEFAULT_UNITS_PER_WU);
 
             motion_planner.motion_config().set_micro_steps_per_axis(
-                hwa::Contract::DEFAULT_MICRO_STEPS_PER_AXIS
+                hwa::make_vector!(x=16, y=16, z=16)
+                //hwa::Contract::DEFAULT_MICRO_STEPS_PER_AXIS
             );
 
             motion_planner.motion_config().set_world_center(
@@ -101,74 +102,53 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
     // Starting motion logic
 
-    //hwa::info!("Segment from [0, 0, 0] to [1, 0, 0] at max mm/s");
-    let _r = motion_planner
-        .plan(
-            hwa::CommChannel::Internal,
-            &control::GCodeCmd::new(
-                1,
-                Some(1),
-                control::GCodeValue::G0(hwa::make_vector_real!(x = 1.0).into()),
-            ),
-            false,
-            &event_bus,
-        )
-        .await;
+    {
+        let mut gcode_buff = instrumentation::gcode::GCodeBuffer::new();
+        gcode_buff.append("G0 Z2.2000 F3000; pen up\n");
+        gcode_buff.append("G0 X100.18164 Y105\n");
+        gcode_buff.append("G0 Z1.2000 F3000; pen down\n");
+        gcode_buff.append("G1 X99.63526 Y104.99686 F7000 S0\n");
+        gcode_buff.append("G1 X99.09117 Y104.98748 F7000 S0\n");
+        gcode_buff.append("G1 X98.54937 Y104.97192 F7000 S0\n");
+        gcode_buff.append("G1 X98.00986 Y104.95024 F7000 S0\n");
+        gcode_buff.append("G1 X97.47261 Y104.92249 F7000 S0\n");
+        gcode_buff.append("G1 X96.93764 Y104.88873 F7000 S0\n");
+        gcode_buff.append("G1 X96.40494 Y104.84902 F7000 S0\n");
+        gcode_buff.append("G1 X95.87449 Y104.80339 F7000 S0\n");
+        gcode_buff.append("G1 X95.34630 Y104.75190 F7000 S0\n");
+        gcode_buff.append("G1 X94.82036 Y104.69461 F7000 S0\n");
+        gcode_buff.append("G1 X94.29131 Y104.63086 F7000 S0\n");
+        gcode_buff.append("G1 X93.76473 Y104.56131 F7000 S0\n");
+        gcode_buff.append("G1 X93.24062 Y104.48598 F7000 S0\n");
+        gcode_buff.append("G1 X92.71898 Y104.40494 F7000 S0\n");
+        gcode_buff.append("G1 X92.19980 Y104.31823 F7000 S0\n");
+        gcode_buff.append("G1 X91.68308 Y104.22590 F7000 S0\n");
+        gcode_buff.append("G1 X91.16881 Y104.12798 F7000 S0\n");
+        gcode_buff.append("G1 X90.65699 Y104.02452 F7000 S0\n");
+        gcode_buff.append("G1 X90.14763 Y103.91555 F7000 S0\n");
+        gcode_buff.append("G1 X89.64071 Y103.80113 F7000 S0\n");
+        gcode_buff.append("G1 X89.13232 Y103.68032 F7000 S0\n");
+        gcode_buff.append("G1 X88.62661 Y103.55409 F7000 S0\n");
+        gcode_buff.append("G1 X88.12357 Y103.42248 F7000 S0\n");
+        gcode_buff.append("G1 X87.62321 Y103.28552 F7000 S0\n");
 
-    //hwa::info!("Segment from [1, 0, 0] to [2, 0, 0] at max mm/s");
-    let _r = motion_planner
-        .plan(
-            hwa::CommChannel::Internal,
-            &control::GCodeCmd::new(
-                2,
-                Some(2),
-                control::GCodeValue::G0(hwa::make_vector_real!(x = 2.0).into()),
-            ),
-            false,
-            &event_bus,
-        )
-        .await;
+        let mut parser = control::GCodeLineParser::new(
+            instrumentation::gcode::BufferStream::new(gcode_buff)
+        );
 
-    //hwa::info!("Segment from [2, 0, 0] to [3, 0, 0] at max mm/s");
-    let _r = motion_planner
-        .plan(
-            hwa::CommChannel::Internal,
-            &control::GCodeCmd::new(
-                3,
-                Some(3),
-                control::GCodeValue::G0(hwa::make_vector_real!(x = 3.0).into()),
-            ),
-            false,
-            &event_bus,
-        )
-        .await;
-
-    let _r = motion_planner
-        .plan(
-            hwa::CommChannel::Internal,
-            &control::GCodeCmd::new(
-                4,
-                Some(4),
-                control::GCodeValue::G0(hwa::make_vector_real!(x = 4.0).into()),
-            ),
-            false,
-            &event_bus,
-        )
-        .await;
-
-    //hwa::info!("Segment from [4, 0, 0] to [5.0, 0.0, 0] at max mm/s");
-    let _r = motion_planner
-        .plan(
-            hwa::CommChannel::Internal,
-            &control::GCodeCmd::new(
-                5,
-                Some(5),
-                control::GCodeValue::G0(hwa::make_vector_real!(x = 5.0).into()),
-            ),
-            false,
-            &event_bus,
-        )
-        .await;
+        loop {
+            match parser.next_gcode(CommChannel::Internal).await {
+                Ok(gcode) => {
+                    if motion_planner.plan(CommChannel::Internal, &gcode, false, &event_bus).await.is_err() {
+                        break
+                    }
+                }
+                Err(_error) => {
+                    break;
+                }
+            }
+        }
+    }
 
     let micro_segment_period_secs: hwa::math::Real =
         hwa::math::Real::from_lit(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US as i64, 6).rdp(6);
@@ -176,7 +156,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
     let _sampling_time: hwa::math::Real =
         hwa::math::Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6).rdp(6);
 
-    let mut data_points = DataPoints::new();
+    let mut data_points = instrumentation::datapoints::DataPoints::new();
     loop {
         match motion_planner.next_plan(&event_bus).await {
             controllers::motion::ExecPlan::Segment(mut segment, _channel, _order_num) => {
@@ -228,7 +208,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                 segment.displacement_su,
                                 steps_per_su.with_coord(relevant_coords.complement(), None),
                             );
-                        hwa::debug!(
+                        hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory interpolation START",
                             _order_num
                         );
@@ -249,7 +229,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                 let _has_more =
                                     micro_segment_interpolator.advance_to(estimated_position, w);
 
-                                hwa::info!(
+                                hwa::debug!(
                                     "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} {} {:?} steps",
                                     data_points.current_segment_id(),
                                     data_points.current_micro_segment_id(),
@@ -313,6 +293,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
                         let mut pos = current_real_pos.clone();
                         pos.update_from_space_coordinates(&next_real_pos);
+                        motion_planner.motion_status().update_current_position(_order_num, &pos);
                     }
                     _ => {
                         hwa::error!("Unable to compute motion plan. Discarding...");
@@ -388,378 +369,11 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
     std::process::exit(0);
 }
 
-struct DataPointsDimension {
-    time_offset: f64,
-    last_time: f64,
-    point_offset: f64,
-    last_point: f64,
-    /// Position datapoint time in secs
-    pub times: Vec<f64>,
-    /// Position datapoint displacement in units
-    pub points: Vec<f64>,
-}
 
-impl DataPointsDimension {
-    pub fn new() -> Self {
-        Self {
-            time_offset: 0.0,
-            last_time: 0.0,
-            point_offset: 0.0,
-            last_point: 0.0,
-            times: vec![0.0],
-            points: vec![0.0],
-        }
-    }
 
-    pub fn displace(&mut self) {
-        self.displace_time();
-        self.point_offset += self.last_point;
-    }
-
-    pub fn displace_time(&mut self) {
-        self.time_offset += self.last_time;
-    }
-
-    pub fn push_relative(&mut self, time: f64, point: f64) {
-        self.last_time = time;
-        self.last_point = point;
-        self.times.push(self.time_offset + self.last_time);
-        self.points.push(self.point_offset + self.last_point);
-    }
-
-    pub fn push_time_relative(&mut self, time: f64, point: f64) {
-        self.last_time = time;
-        self.last_point = point;
-        self.times.push(self.time_offset + self.last_time);
-        self.points.push(self.last_point);
-    }
-}
-
-struct DataPoints {
-    pub current_segment_id: usize,
-    pub current_micro_segment_id: usize,
-    pub total_displacement: hwa::math::Real,
-
-    pub segment_position_marks: DataPointsDimension,
-    pub interpolated_positions: DataPointsDimension,
-
-    pub segment_velocity_marks: DataPointsDimension,
-}
-
-impl DataPoints {
-    pub fn new() -> Self {
-        Self {
-            current_segment_id: 0,
-            current_micro_segment_id: 0,
-            total_displacement: hwa::math::ZERO,
-
-            segment_position_marks: DataPointsDimension::new(),
-            interpolated_positions: DataPointsDimension::new(),
-
-            segment_velocity_marks: DataPointsDimension::new(),
-        }
-    }
-
-    pub fn segment_starts(&mut self, trajectory: &SCurveMotionProfile) {
-        self.current_segment_id += 1;
-        self.current_micro_segment_id = 0;
-        self.segment_position_marks.push_relative(
-            self.interpolated_positions.last_time,
-            self.interpolated_positions.last_point,
-        );
-        self.segment_velocity_marks.push_time_relative(
-            self.interpolated_positions.last_time,
-            trajectory.v_0.to_f64(),
-        )
-    }
-    pub fn segment_ends(&mut self) {
-        self.segment_position_marks.displace();
-        self.interpolated_positions.displace();
-        self.segment_velocity_marks.displace_time();
-    }
-
-    pub fn num_segments(&self) -> usize {
-        self.current_segment_id
-    }
-
-    pub fn current_segment_id(&self) -> usize {
-        self.current_segment_id
-    }
-
-    pub fn micro_segment_ends(&mut self) {}
-
-    pub fn current_micro_segment_id(&self) -> usize {
-        self.current_micro_segment_id
-    }
-
-    pub fn total_displacement(&self) -> hwa::math::Real {
-        self.total_displacement
-    }
-
-    pub fn interpolation_tick(&mut self, interp: &SegmentIterator<SCurveMotionProfile>) {
-        self.interpolated_positions.push_relative(
-            interp.current_time().to_f64(),
-            interp.current_position().to_f64(),
-        );
-    }
-}
-
-//#region "InMemory Datapoints"
-
-//#endregion
 
 //#region "Machinery initialization"
 
-async fn init_splot(spawner: embassy_executor::Spawner) -> SplotContext {
-    type EventBusMutexStrategyType = <hwa::Contract as HwiContract>::EventBusMutexStrategy;
-    type EventBusPubSubMutexType = <hwa::Contract as HwiContract>::EventBusPubSubMutexType;
-
-    let event_bus: hwa::GenericEventBus<EventBusMutexStrategyType, EventBusPubSubMutexType> =
-        hwa::GenericEventBus::new(hwa::make_static_async_controller!(
-            "EventBus",
-            EventBusMutexStrategyType,
-            hwa::EventBusChannelController::new(hwa::make_static_ref!(
-                "EventBusChannel",
-                hwa::EventBusPubSubType<EventBusPubSubMutexType>,
-                hwa::EventBusPubSubType::new(),
-            )),
-        ));
-
-    event_bus
-        .publish_event(hwa::EventStatus::containing(hwa::EventFlags::SYS_BOOTING))
-        .await;
-
-    let _context = hwa::Contract::init(spawner).await;
-
-    //#region "Setup defer channel (if hotends or motion are enabled)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(any(feature = "with-motion", feature = "with-hot-end", feature = "with-hot-bed"))] {
-            type DeferChannelMutexType = <hwa::Contract as HwiContract>::DeferChannelMutexType;
-            let _defer_channel: hwa::GenericDeferChannel<DeferChannelMutexType> = {
-                hwa::GenericDeferChannel::new(hwa::make_static_ref!(
-                    "DeferChannel",
-                    hwa::DeferChannelChannelType<DeferChannelMutexType>,
-                    hwa::DeferChannelChannelType::new()
-                ))
-            };
-        }
-    }
-
-    //#endregion
-
-    cfg_if::cfg_if! {
-        if #[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))] {
-            type MotionBroadcastChannelMutexType = <hwa::Contract as HwiContract>::MotionBroadcastChannelMutexType;
-            let _motion_broadcast_channel: hwa::GenericMotionBroadcastChannel<MotionBroadcastChannelMutexType> = {
-                hwa::GenericMotionBroadcastChannel::new(hwa::make_static_ref!(
-                    "MotionBroadcastChannel",
-                    hwa::MotionBroadcastChannelType<MotionBroadcastChannelMutexType>,
-                    hwa::MotionBroadcastChannelType::new()
-                ))
-            };
-        }
-    }
-
-    //#region "Init Probe controller (if with-probe is set)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-probe")] {
-
-            let probe_controller = hwa::make_static_async_controller!(
-                "ProbeController",
-                hwa::types::ProbeControllerMutexStrategy,
-                hwa::types::InnerProbeController::new(
-                    _context.probe_pwm,
-                    _context.probe_pwm_channel.take(),
-                )
-            );
-        }
-    }
-
-    //#endregion
-
-    //#region "Init HotEnd controller (if with-hot-end is set)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-hot-end")] {
-            let hot_end_controller: hwa::types::HotEndController = hwa::make_static_async_controller!(
-                "HotEndController",
-                hwa::types::HotEndControllerMutexStrategy,
-                hwa::controllers::HeaterController::new(
-                    hwa::types::HotEndAdcController::new(
-                        _context.hot_end_adc,
-                        _context.hot_end_adc_pin.take(),
-                        <hwa::Contract as HwiContract>::HOT_END_ADC_V_REF_DEFAULT_SAMPLE,
-                    ),
-                    hwa::types::HotEndPwmController::new(
-                        _context.hot_end_pwm,
-                        _context.hot_end_pwm_channel.take(),
-                    ),
-                    <hwa::Contract as HwiContract>::HOT_END_THERM_BETA,
-                    <hwa::Contract as HwiContract>::HOT_END_THERM_NOMINAL_RESISTANCE,
-                    <hwa::Contract as HwiContract>::HOT_END_THERM_PULL_UP_RESISTANCE,
-                    _defer_channel.clone(),
-                    hwa::DeferAction::HotEndTemperature,
-                    hwa::EventFlags::HOT_END_TEMP_OK,
-                )
-            );
-            hot_end_controller.lock().await
-                .init(<hwa::Contract as HwiContract>::HOT_END_ADC_V_REF_DEFAULT_MV).await;
-        }
-    }
-
-    //#endregion
-
-    //#region "Init HotBed controller (if with-hot-bed is set)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-hot-bed")] {
-            let hot_bed_controller: hwa::types::HotBedController = hwa::make_static_async_controller!(
-                "HotBedController",
-                hwa::types::HotBedControllerMutexStrategy,
-                hwa::controllers::HeaterController::new(
-                    hwa::types::HotBedAdcController::new(
-                        _context.hot_bed_adc,
-                        _context.hot_bed_adc_pin.take(),
-                        <hwa::Contract as HwiContract>::HOT_BED_ADC_V_REF_DEFAULT_SAMPLE,
-                    ),
-                    hwa::types::HotBedPwmController::new(
-                        _context.hot_bed_pwm,
-                        _context.hot_bed_pwm_channel.take(),
-                    ),
-                    <hwa::Contract as HwiContract>::HOT_BED_THERM_BETA,
-                    <hwa::Contract as HwiContract>::HOT_BED_THERM_NOMINAL_RESISTANCE,
-                    <hwa::Contract as HwiContract>::HOT_BED_THERM_PULL_UP_RESISTANCE,
-                    _defer_channel.clone(),
-                    hwa::DeferAction::HotBedTemperature,
-                    hwa::EventFlags::HOT_BED_TEMP_OK,
-                )
-            );
-            hot_bed_controller.lock().await
-                .init(<hwa::Contract as HwiContract>::HOT_BED_ADC_V_REF_DEFAULT_MV).await;
-        }
-    }
-
-    //#endregion
-
-    //#region "Init Laser controller (if with-laser is set)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-laser")] {
-
-            let laser_controller = hwa::make_static_async_controller!(
-                "LaserController",
-                hwa::types::LaserControllerMutexStrategy,
-                hwa::types::InnerLaserController::new(
-                    _context.laser_pwm,
-                    _context.laser_pwm_channel.take(),
-                )
-            );
-        }
-    }
-
-    //#endregion
-
-    //#region "Init FanLayer controller (if with-fan-layer is set)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-fan-layer")] {
-
-            let fan_layer_controller = hwa::make_static_async_controller!(
-                "FanLayerController",
-                hwa::types::FanLayerControllerMutexStrategy,
-                hwa::types::InnerFanLayerController::new(
-                    _context.fan_layer_pwm,
-                    _context.fan_layer_pwm_channel.take(),
-                )
-            );
-        }
-    }
-
-    //#endregion
-
-    //#region "Init FanExtra controller (if with-fan-extra-1 is set)"
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-fan-extra-1")] {
-
-            let fan_extra1_controller = hwa::make_static_async_controller!(
-                "FanExtra1Controller",
-                hwa::types::FanExtra1ControllerMutexStrategy,
-                hwa::types::InnerFanExtra1Controller::new(
-                    _context.fan_extra1_pwm,
-                    _context.fan_extra1_pwm_channel.take(),
-                )
-            );
-        }
-    }
-
-    //#endregion
-
-    cfg_if::cfg_if! {
-        if #[cfg(feature = "with-motion")] {
-            let step_actuator = hwa::controllers::StepActuatorController::new(
-                hwa::make_static_sync_controller!(
-                    "StepActuator",
-                    hwa::types::StepActuatorMutexStrategy,
-                    _context.motion_pins,
-                ),
-                #[cfg(feature = "with-motion-broadcast")]
-                _motion_broadcast_channel.clone(),
-            );
-
-            step_actuator.disable_steppers(hwa::CoordSel::all_axis());
-            step_actuator.set_forward_direction(hwa::CoordSel::all_axis(), hwa::CoordSel::all_axis());
-
-            let motion_config = hwa::controllers::MotionConfig::new(hwa::make_static_sync_controller!(
-                "MotionConfig",
-                hwa::types::MotionConfigMutexStrategy,
-                hwa::controllers::MotionConfigContent::new()
-            ));
-            #[cfg(feature = "with-trinamic")]
-            let trinamic_controller = hwa::controllers::TrinamicController::new(
-                _context.trinamic_uart, motion_config.clone()
-            );
-            let motion_status = hwa::controllers::MotionStatus::new(hwa::make_static_sync_controller!(
-                "MotionStatus",
-                hwa::types::MotionStatusMutexStrategy,
-                hwa::controllers::MotionStatusContent::new()
-            ));
-            let motion_planner = {
-                let motion_driver = hwa::make_static_async_controller!(
-                    "MotionDriver",
-                    hwa::types::MotionDriverMutexStrategy,
-                    hwa::drivers::MotionDriver::new(
-                        step_actuator,
-                        #[cfg(feature = "with-trinamic")]
-                        trinamic_controller,
-                        #[cfg(feature = "with-probe")]
-                        probe_controller.clone(),
-                        #[cfg(feature = "with-fan-layer")]
-                        fan_layer_controller.clone(),
-                        #[cfg(feature = "with-fan-extra-1")]
-                        fan_extra1_controller.clone(),
-                        #[cfg(feature = "with-laser")]
-                        laser_controller.clone(),
-                    )
-                );
-
-                hwa::controllers::MotionPlanner::new(
-                    _defer_channel.clone(),
-                    motion_config.clone(),
-                    motion_status.clone(),
-                    motion_driver,
-                )
-            };
-        }
-    }
-
-    SplotContext {
-        event_bus,
-        motion_planner,
-    }
-}
 
 pub fn initialization_error() {
     let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
