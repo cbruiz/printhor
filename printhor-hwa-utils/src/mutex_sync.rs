@@ -23,7 +23,7 @@ pub type SyncNoopMutex<D> =
 pub use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex as SyncCsMutexType;
 
 /// A NOT [core::marker::Sync] but [core::marker::Send] mutex type. Safe in single thread async runtime only.
-/// A shortcut for [embassy_sync::blocking_mutex::raw::NoopRawMutexType]
+/// A shortcut for [embassy_sync::blocking_mutex::raw::NoopRawMutex]
 pub use embassy_sync::blocking_mutex::raw::NoopRawMutex as SyncNoopMutexType;
 
 use core::cell::RefCell;

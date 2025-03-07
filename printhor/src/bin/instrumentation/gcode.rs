@@ -1,18 +1,19 @@
 use std::collections::VecDeque;
 
 pub(crate) struct GCodeBuffer {
-    buffer: VecDeque<u8>
+    buffer: VecDeque<u8>,
 }
 
 impl GCodeBuffer {
-    
     pub const fn new() -> Self {
-        Self { buffer: VecDeque::new() }
+        Self {
+            buffer: VecDeque::new(),
+        }
     }
     pub fn pop_front(&mut self) -> Option<u8> {
         self.buffer.pop_front()
     }
-    
+
     pub fn append(&mut self, data: &str) {
         self.buffer.extend(data.as_bytes());
     }

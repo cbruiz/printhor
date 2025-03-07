@@ -5,7 +5,7 @@
 //! * A simple monitor to track the amount of memory used for controllers and machinery
 //! using static cells [stack_allocation_increment], [stack_allocation_get].
 //! The memory usage is tracked by incrementing a global counter.
-//! Max memory is set by constant [MAX_STATIC_ALLOC_BYTES] that can be overridden with the proper
+//! Max memory is set by constant MAX_STATIC_ALLOC_BYTES that can be overridden with the proper
 //! environment variable.
 //!
 //! * The [StaticSyncController] interface, with the proper alternatives based on expected behavior

@@ -125,7 +125,7 @@ impl Parse for StaticSyncControllerParserInput {
     }
 }
 
-/// Declares an instance of [StaticSyncController], which holds
+/// Declares an instance of printhor_hwa_common::StaticSyncController, which holds
 /// a static reference of given resource wrapped into a `MutexStrategy` implementation.
 /// The resource is allocated in .bss section.
 ///
@@ -136,7 +136,7 @@ impl Parse for StaticSyncControllerParserInput {
 /// # Params
 ///
 /// * `instance_name` - A `&str` literal for tracking purposes
-/// * `strategy_type` - A concrete type implementing [SyncMutexStrategy] trait.
+/// * `strategy_type` - A concrete type implementing printhor_hwa_common::SyncMutexStrategy trait.
 /// * `owned_instance` - The instance of the resource content.
 ///
 /// # Usage
@@ -233,8 +233,8 @@ impl Parse for StaticAsyncControllerParserInput {
     }
 }
 
-/// Declares an instance of [StaticAsyncController], which holds
-/// a static reference of given resource wrapped into a [AsyncMutexStrategy] implementation.
+/// Declares an instance of printhor_hwa_common::StaticAsyncController, which holds
+/// a static reference of given resource wrapped into a printhor_hwa_common::AsyncMutexStrategy implementation.
 /// The resource is allocated in .bss section.
 ///
 /// This macro uses a wrapped implementation over the `static-cell` crate.
@@ -244,7 +244,7 @@ impl Parse for StaticAsyncControllerParserInput {
 /// # Params
 ///
 /// * `instance_name` - A `&str` literal for tracking purposes
-/// * `strategy_type` - A concrete type implementing [AsyncMutexStrategy] trait.
+/// * `strategy_type` - A concrete type implementing printhor_hwa_utils::AsyncMutexStrategy trait.
 /// * `owned_instance` - The instance of the resource content.
 ///
 /// # Usage

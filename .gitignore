@@ -28,3 +28,4 @@ libs/*/target
 /design/*.jar
 /run*.sh
 /*.info
+/printhor/test-data

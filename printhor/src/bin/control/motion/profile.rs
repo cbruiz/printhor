@@ -35,17 +35,17 @@ pub trait MotionProfile {
 ///
 /// * `constraints` - The motion profile constraints.
 /// * `times` - The time parameters for different phases of the motion profile.
-/// * `initial_velocity` - Initial velocity for the motion profile (in mm/s).
-/// * `final_velocity` - Final velocity for the motion profile (in mm/s).
+/// * `initial_velocity` - Initial velocity for the motion profile (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
+/// * `final_velocity` - Final velocity for the motion profile (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
 /// * `error_correction` - An optional error correction factor.
 pub struct ProfileConfig {
     /// The motion profile constraints.
     ///
     /// # Units
     ///
-    /// - `v_max`: mm/s
-    /// - `a_max`: mm/s²
-    /// - `j_max`: mm/s³
+    /// - `v_max`: [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s
+    /// - `a_max`: [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s²
+    /// - `j_max`: [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s³
     pub constraints: Constraints,
 
     /// The time parameters of the motion profile.
@@ -63,14 +63,14 @@ pub struct ProfileConfig {
     ///
     /// # Units
     ///
-    /// - Initial velocity: mm/s
+    /// - Initial velocity: [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s
     pub initial_velocity: Real,
 
     /// Final velocity for the motion profile.
     ///
     /// # Units
     ///
-    /// - Final velocity: mm/s
+    /// - Final velocity: [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s
     pub final_velocity: Real,
 
     /// An optional error correction factor.
@@ -85,20 +85,20 @@ pub struct ProfileConfig {
 ///
 /// # Fields
 ///
-/// * `v_max` - The maximum velocity (in mm/s). This defines the upper limit of speed that can be achieved.
-/// * `a_max` - The maximum acceleration (in mm/s²). This represents the highest rate of change of velocity that is permissible.
-/// * `j_max` - The maximum jerk (in mm/s³). This is the maximum rate of change of acceleration.
+/// * `v_max` - The maximum velocity (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s). This defines the upper limit of speed that can be achieved.
+/// * `a_max` - The maximum acceleration (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s²). This represents the highest rate of change of velocity that is permissible.
+/// * `j_max` - The maximum jerk (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s³). This is the maximum rate of change of acceleration.
 #[derive(Clone, Copy)]
 pub struct Constraints {
-    /// The maximum velocity (v_max) (in mm/s).
+    /// The maximum velocity (v_max) (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
     /// This defines the upper limit of speed that can be achieved.
     pub v_max: Real,
 
-    /// The maximum acceleration (a_max) (in mm/s²).
+    /// The maximum acceleration (a_max) (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s²).
     /// This represents the highest rate of change of velocity that is permissible.
     pub a_max: Real,
 
-    /// The maximum jerk (j_max) (in mm/s³).
+    /// The maximum jerk (j_max) (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s³).
     /// This is the maximum rate of change of acceleration.
     pub j_max: Real,
 }
@@ -159,13 +159,13 @@ pub struct Times {
 /// * `t_v` - Time spent at constant velocity (in seconds).
 /// * `t_d` - Time spent in the deceleration phase (in seconds).
 /// * `t_j2` - Time spent in the second jerk phase (in seconds).
-/// * `v_0` - Initial velocity (in mm/s).
-/// * `v_1` - Final velocity (in mm/s).
-/// * `j_max` - Maximum jerk (in mm/s³).
-/// * `a_lim_a` - Acceleration limit during the acceleration phase (in mm/s²).
-/// * `a_lim_d` - Deceleration limit during the deceleration phase (in mm/s²).
-/// * `v_lim` - Velocity limit (in mm/s).
-/// * `q1` - Displacement or position to be achieved (in mm).
+/// * `v_0` - Initial velocity (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
+/// * `v_1` - Final velocity (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
+/// * `j_max` - Maximum jerk (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s³).
+/// * `a_lim_a` - Acceleration limit during the acceleration phase (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s²).
+/// * `a_lim_d` - Deceleration limit during the deceleration phase (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s²).
+/// * `v_lim` - Velocity limit (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
+/// * `q1` - Displacement or position to be achieved (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
 /// * `constraints` - Constraints applied to the motion profile.
 /// * `cache` - Cached values for optimization and repeated calculations.
 pub struct SCurveMotionProfile {
@@ -218,9 +218,9 @@ impl SCurveMotionProfile {
     ///
     /// # Arguments
     ///
-    /// * `q_1` - Displacement or position to be achieved (in mm).
-    /// * `v_0` - Initial velocity (in mm/s).
-    /// * `v_1` - Final velocity (in mm/s).
+    /// * `q_1` - Displacement or position to be achieved (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
+    /// * `v_0` - Initial velocity (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
+    /// * `v_1` - Final velocity (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
     /// * `constraints` - [Constraints] applied to the motion profile.
     /// * `error_correction` - Flag to enable error correction.
     ///
@@ -258,12 +258,24 @@ impl SCurveMotionProfile {
             || constraints.a_max.is_negligible()
             || constraints.j_max.is_negligible()
         {
-            hwa::warn!("Unable to perform movement: constraints are unset");
+            hwa::warn!("[SCurveMotionProfile] Unable to perform movement: constraints are unset");
             return Err(CodeExecutionFailure::NumericalError);
         }
-        // Clamp v_ma to be equal or higher than v_0 and v_1
-        let v_min = v_0.max(v_1);
-        let mut v_max = v_min.max(constraints.v_max);
+        // Set v_max to arg_max { v_0, v_1, v_max}
+        let mut v_max = v_0.max(v_1).max(constraints.v_max);
+
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] v_{{0}} = {:?}", v_0);
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] v_{{1}} = {:?}", v_1);
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] q_{{1}} = {:?}", q_1);
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] v_{{max}} = {:?}", constraints.v_max);
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] a_{{max}} = {:?}", constraints.a_max);
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] j_{{max}} = {:?}", constraints.j_max);
 
         // First, compute the displacement
 
@@ -271,30 +283,41 @@ impl SCurveMotionProfile {
         // As a matter of fact, there are several cases in which a trajectory cannot be computed
         // with the given constraints. For example, if the desired displacement h is small with
         // respect to the difference between the initial and final velocities v0 and v1, it might be not possible
-        // to change the velocity (with the given limits on jerk and acceleration), while accomplishing the displacement h.
+        // to change the velocity (with the given limits on jerk and acceleration), while accomplishing the displacement h := q_1 - q_0
+        // In printhor, always h = q_1
 
         let j_max_inv = constraints.j_max.recip();
         let t_jmax = constraints.a_max * j_max_inv;
-        // [eq 3.17]
+
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!("[SCurveMotionProfile] T_{{jmax}} = {:?}", t_jmax);
+
+        // [eq 3.17] T_{j}^{*} = min\Bigg\{\sqrt{\frac{|v_{1} - v_{0}|}{j_{max}}}, \frac{a_{max}}{j_{max}}\Bigg\}
         let t_jstar =
             Real::vmin((((v_1 - v_0).abs()) * j_max_inv).sqrt(), Some(t_jmax)).unwrap_or(ZERO);
 
         // [[1]] If t_jstar = amax/jmax, the acceleration reaches its maximum value and a segment with zero jerk may exist.
-
-        if (t_jstar - t_jmax).is_negligible() {
+        let q_lim = if (t_jstar - t_jmax).is_negligible() {
+            let lim = (HALF * (v_0 + v_1)) * (t_jstar + ((v_1 - v_0).abs() * j_max_inv));
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!(
+                "[SCurveMotionProfile] T_{{j}}^{{*}} = \\sqrt{{\\frac{{|v_{{1}} - v_{{0}}|}}{{j_{{max}}}}}} = {:?}",
+                lim
+            );
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!("[SCurveMotionProfile] The acceleration does not reach its maximum value");
+            lim
+        } else {
+            let lim = t_jstar * (v_0 + v_1);
             // the acceleration reaches its maximum value and a segment with zero jerk may exist
-            hwa::debug!("The acceleration reaches its maximum value");
-        } else {
-            hwa::debug!("The acceleration does not reach its maximum value");
-        }
-
-        hwa::debug!("t_jstar = {:?} t_jmax = {:?}", t_jstar, t_jmax);
-
-        // [[1]] (3.18)
-        let q_lim = if t_jstar < t_jmax {
-            t_jstar * (v_0 + v_1) // H
-        } else {
-            (HALF * (v_0 + v_1)) * (t_jstar + ((v_1 - v_0).abs() * j_max_inv))
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!(
+                "[SCurveMotionProfile] T_{{j}}^{{*}} = \\frac{{a_{{max}}}}{{j_{{max}}}} = {:?}",
+                lim
+            );
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!("[SCurveMotionProfile] The acceleration reaches its maximum value");
+            lim
         };
 
         let not_feasible = q_1 <= q_lim;
@@ -413,16 +436,12 @@ impl SCurveMotionProfile {
 
              */
         } else {
-            //Procedure:
-            // Assuming that vmax and amax are reached (*case_1*) compute the time intervals:
-            // if (vmax − v0) * jmax < a_max^2 =⇒ a_max is not reached (3.19) and hence:
-            //      T_j1 = sqrt( (v_max - v_0) / j_max ) , Ta = 2 * T_j1,
-            // else
-            //      T_j1 = a_max / j_max, T_a = T_j1 + (v_max - v_0) / a_max
-            // if (vmax − v1) * jmax < a_max^2 =⇒ a_max is not reached (3.20) and hence:
-            //      T_j2 = sqrt( (v_max - v_1) / j_max ) , Td = 2 * T_j2,
-            // else
-            //      T_j1 = a_max / j_max, T_a = T_j2 + (v_max - v_1) / a_max
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!(
+                "[SCurveMotionProfile] q_{{1}} > q_{{lim}} [ {:?} > {:?} ] ",
+                q_1,
+                q_lim
+            );
 
             let mut a_max = constraints.a_max;
             let mut a_max_inv = a_max.recip();
@@ -433,7 +452,7 @@ impl SCurveMotionProfile {
             let mut prev_vmax = v_max;
             let gamma = Real::from_f32(0.9);
             loop {
-                match Self::compute_case1(
+                match Self::compute_case_1(
                     q_1,
                     v_0,
                     v_1,
@@ -771,7 +790,30 @@ impl SCurveMotionProfile {
         }
     }
 
-    fn compute_case1(
+    /// Procedure:
+    ///
+    /// Assuming that `v_vmax` and `a_max` are reached (*case_1*) compute the time intervals:
+    ///
+    /// For T_j1, T_a:
+    /// $$
+    ///   (v_{max} - v_{0}) j_{max} < a_{max}^2 \implies a_{max} \text{ is not reached} \implies
+    /// T_{j1} = \sqrt{ \frac{v_{max} - v_{0}}{j_{max}} }, T_{a} = 2 T_{j1}
+    /// $$
+    ///
+    /// $$
+    /// \text{ otherwise} \implies a_{max} \text{ is reached} \implies T_{j1} = \frac{a_{max}}{j_{max}}, T_{a} = T_{j1} + \frac{v_{max} - v_{0}}{a_{max}}
+    /// $$
+    ///
+    /// For T_j2, T_d:
+    ///
+    /// $$
+    ///   (v_{max} - v_{1}) j_{max} < a_{max}^2 \implies a_{min} \text{ is not reached} \implies T_{j2} = \sqrt{ \frac{v_{max} - v_{1}}{j_{max}} }, T_{d} = 2 T_{j2}
+    /// $$
+    ///
+    /// $$
+    ///   \text{ otherwise} \implies a_{min} \text{ is reached} \implies T_{j2} = \frac{a_{max}}{j_{max}}, T_{d} = T_{j2} + \frac{v_{max} - v_{1}}{a_{max}}
+    /// $$
+    fn compute_case_1(
         q_1: Real,
         v_0: Real,
         v_1: Real,
@@ -781,8 +823,31 @@ impl SCurveMotionProfile {
         aj_ratio: Real,
         amax_squared: Real,
     ) -> Result<Times, CodeExecutionFailure> {
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[SCurveMotionProfile] [compute_case_1] with aj_ratio {:?}",
+            aj_ratio
+        );
         let a_max_not_reached = (v_max - v_0) * j_max < amax_squared;
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[SCurveMotionProfile] [compute_case_1] a_max is {}",
+            if a_max_not_reached {
+                "not reached"
+            } else {
+                "reached"
+            }
+        );
         let a_min_not_reached = (v_max - v_1) * j_max < amax_squared;
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[SCurveMotionProfile] [compute_case_1] a_min is {}",
+            if a_min_not_reached {
+                "not reached"
+            } else {
+                "reached"
+            }
+        );
 
         let j_max_inv = if a_max_not_reached || a_min_not_reached {
             j_max.recip()
@@ -815,7 +880,7 @@ impl SCurveMotionProfile {
             (t_j, t_j + (v_max - v_1).max(math::ZERO) * a_max_inv)
         };
 
-        // Efficently compute: (q_1 / v_max) - (t_a / 2) * (1 + (v_0 / v_max)) - (t_d / 2) * (1 + (v_1 / v_max))
+        // Efficiently compute: (q_1 / v_max) - (t_a / 2) * (1 + (v_0 / v_max)) - (t_d / 2) * (1 + (v_1 / v_max))
         // ... with maximum possible numerical precision
 
         let v_max_inv = v_max.recip();

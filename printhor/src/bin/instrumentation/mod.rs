@@ -1,3 +1,3 @@
 pub(crate) mod datapoints;
-pub(crate) mod machinery;
 pub(crate) mod gcode;
+pub(crate) mod machinery;

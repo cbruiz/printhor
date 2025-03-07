@@ -94,6 +94,7 @@ debug-position = []
 debug-position-deviation = []
 debug-motion = []
 debug-motion-displacement = []
+debug-motion-planning = []
 debug-motion-broadcast = []
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
@@ -241,18 +242,19 @@ anthropomorphic-quad-robot = [
 
 native = [
     "with-log",
+
     #"debug-position",
     #"debug-position-deviation",
     #"debug-motion-displacement",
+    #"debug-motion-planning",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"debug-gcode",
     #"verbose-timings",
-    "assert-motion",
+    #"assert-motion",
     #"trace-commands",
 
     "cornering",
-    #"trace-commands",
 
     "cartessian-cnc",
     #"cartessian-fdm",
@@ -539,3 +541,6 @@ required-features = ["s-plot-bin"]
 
 [[bin]]
 name = "printhor"
+
+[package.metadata.docs.rs]
+rustdoc-args = [ "--html-in-header", "doc/doc.header.html" ]

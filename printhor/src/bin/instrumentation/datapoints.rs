@@ -111,14 +111,17 @@ impl DataPoints {
         self.total_displacement
     }
 
-    pub fn interpolation_tick(&mut self, interp: &hwa::controllers::motion::SegmentIterator<control::motion::SCurveMotionProfile>) {
+    pub fn interpolation_tick(
+        &mut self,
+        interp: &hwa::controllers::motion::SegmentIterator<control::motion::SCurveMotionProfile>,
+    ) {
         self.interpolated_positions.push_relative(
             interp.current_time().to_f64(),
             interp.current_position().to_f64(),
         );
         self.interpolated_velocities.push_relative(
             interp.current_time().to_f64(),
-            (interp.ds() / interp.dt()).to_f64()
+            (interp.ds() / interp.dt()).to_f64(),
         )
     }
 }

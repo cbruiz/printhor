@@ -17,7 +17,6 @@ use hwa::math;
 use math::{Real, TVector};
 
 //noinspection RsUnresolvedReference
-#[cfg_attr(doc, aquamarine::aquamarine)]
 ///! Program entry point
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {

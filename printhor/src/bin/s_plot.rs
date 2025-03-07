@@ -13,20 +13,18 @@ use hwa::HwiContract;
 use hwa::RawHwiResource;
 
 use control::motion;
-use motion::SCurveMotionProfile;
 use control::task_stepper::{
     STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
 };
-use hwa::controllers;
 use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
+use hwa::controllers;
+use motion::SCurveMotionProfile;
 use printhor_hwa_common::CommChannel;
 
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
     printhor_main(spawner, false).await;
 }
-
-
 
 async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) {
     hwa::Contract::init_logger();
@@ -133,17 +131,18 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         gcode_buff.append("G1 X88.12357 Y103.42248 F7000 S0\n");
         gcode_buff.append("G1 X87.62321 Y103.28552 F7000 S0\n");
 
-        
-
-        let mut parser = control::GCodeLineParser::new(
-            instrumentation::gcode::BufferStream::new(gcode_buff)
-        );
+        let mut parser =
+            control::GCodeLineParser::new(instrumentation::gcode::BufferStream::new(gcode_buff));
 
         loop {
             match parser.next_gcode(CommChannel::Internal).await {
                 Ok(gcode) => {
-                    if motion_planner.plan(CommChannel::Internal, &gcode, false, &event_bus).await.is_err() {
-                        break
+                    if motion_planner
+                        .plan(CommChannel::Internal, &gcode, false, &event_bus)
+                        .await
+                        .is_err()
+                    {
+                        break;
                     }
                 }
                 Err(_error) => {
@@ -295,7 +294,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
                         let mut pos = current_real_pos.clone();
                         pos.update_from_space_coordinates(&next_real_pos);
-                        motion_planner.motion_status().update_current_position(_order_num, &pos);
+                        motion_planner
+                            .motion_status()
+                            .update_current_position(_order_num, &pos);
                     }
                     _ => {
                         hwa::error!("Unable to compute motion plan. Discarding...");
@@ -303,7 +304,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                 }
             }
             controllers::motion::ExecPlan::SetPosition(position, _channel, _order_num) => {
-                motion_planner.motion_status().update_current_position(_order_num, &position);
+                motion_planner
+                    .motion_status()
+                    .update_current_position(_order_num, &position);
             }
             _ => {}
         }
@@ -374,11 +377,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
     std::process::exit(0);
 }
 
-
-
-
 //#region "Machinery initialization"
-
 
 pub fn initialization_error() {
     let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
