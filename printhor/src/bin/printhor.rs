@@ -1,7 +1,8 @@
+//! Main program (entry point)
 #![allow(stable_features)]
 #![cfg_attr(not(feature = "native"), no_std)]
 #![cfg_attr(not(feature = "native"), no_main)]
-#![doc = include_str!("../../../design/architecture.md")]
+#![doc = include_str!("../../design/architecture.md")]
 
 extern crate alloc;
 extern crate core;

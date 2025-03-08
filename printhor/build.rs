@@ -2,6 +2,18 @@
 use std::io::Write;
 
 fn main() {
+    let doc_in = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+        .join("img")
+        .join("contract-class-diagram.png");
+    let out = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+        .join("..")
+        .join("target")
+        .join("doc")
+        .join("img");
+    std::fs::create_dir_all(&out).unwrap();
+    //panic!("{:?} -> {:?}", doc_in.as_path().to_str().unwrap(), out.as_path().to_str().unwrap());
+    std::fs::copy(doc_in, out.join("contract-class-diagram.png")).unwrap();
+
     cfg_if::cfg_if! {
         if #[cfg(feature="native")] {
 

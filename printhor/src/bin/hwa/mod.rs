@@ -1,3 +1,4 @@
+//! The Hardware Abstraction Module
 pub use crate::control::GCodeProcessor;
 pub use printhor_hwa_common::*;
 

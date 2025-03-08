@@ -1,3 +1,4 @@
+//! Auxiliary commandline program to investigate, evaluate and verify and visualize motion planing
 extern crate alloc;
 extern crate core;
 

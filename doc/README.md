@@ -41,12 +41,15 @@ The Work-in-Progress architecture design
 
 ![alt text](../design/printhor_motion_high_level_architecture.png "High Level Architecture (motion only as of now)")
 
+# The features core
+
+TBD
+
 ## Event bus
 
 ## Deferred commands
 
 ## State machine
-
 
 
 ## Physics and mathematics
@@ -71,6 +74,8 @@ computed by multiplying unitary director vector by the Delta(t)
 ## Movement queue
 
 TBD
+
+## Developers guide
 
 # Troubleshooting
 TBD

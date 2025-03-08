@@ -1,7 +1,7 @@
-use crate::hwa::math::Real;
+//! Miscellaneous utilery
+use crate::hwa;
 
-#[allow(unused)]
 #[inline]
-pub fn to_fixed(val: (i32, u8)) -> Real {
-    Real::new(val.0.into(), val.1 as u32)
+pub fn to_fixed(val: (i32, u8)) -> hwa::math::Real {
+    hwa::math::Real::new(val.0.into(), val.1 as u32)
 }

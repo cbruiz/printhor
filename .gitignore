@@ -23,9 +23,9 @@ data/*.puml
 libs/*/target
 /plot.pdf
 /printhor/plot.pdf
-/design/*.drawio
 /hwi-boards/*/*.bin
-/design/*.jar
+/printhor/design/*.jar
+/printhor/design/*.drawio
 /run*.sh
 /*.info
 /printhor/test-data
