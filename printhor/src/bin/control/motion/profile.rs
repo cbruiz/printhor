@@ -1085,11 +1085,12 @@ impl SCurveMotionProfile {
 
     /// Acceleration phase, jerk limited acceleration
     ///
-    /// v_{i1}(t) = \frac{j_{max}t^2}{2}+v_{0} \\
+    /// $$ v_{i1}(t) = \frac{j_{max}t^2}{2}+v_{0} $$
     ///
-    /// s_{i1}(t) = \int{v_{i1}(t)dt} \\
+    /// $$ s_{i1}(t) = \int{v_{i1}(t)dt} $$
     ///
-    /// s_{i1}(t)_{|t>\delta} = \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) \\
+    /// $$ s_{i1}(t)_{|t>\delta} = \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) $$
+    ///
     pub fn s_i1(&self, t: &Real) -> Real {
         let dt = (*t) - self.i1_start();
         (self.j_max * SIXTH * dt * dt * dt) + (self.v_0 * dt)
@@ -1097,11 +1098,11 @@ impl SCurveMotionProfile {
 
     /// Acceleration phase, constant acceleration
     ///
-    /// v_{i2}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i1}(\delta)\\
+    /// $$ v_{i2}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i1}(\delta) $$
     ///
-    /// s_{i2}(t) = \int{v_{i2}(t)dt}\\
+    /// $$ s_{i2}(t) = \int{v_{i2}(t)dt} $$
     ///
-    /// s_{i2}(t)_{|t>\delta} = \frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i1}(\delta)(t-\delta) + s_{i1}(\delta)\\
+    /// $$ s_{i2}(t)_{|t>\delta} = \frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i1}(\delta)(t-\delta) + s_{i1}(\delta) $$
     ///
     pub fn s_i2(&self, t: &Real) -> Real {
         let dt = (*t) - self.i2_start();
@@ -1110,9 +1111,9 @@ impl SCurveMotionProfile {
 
     /// Acceleration phase, jerk limited deceleration
     ///
-    /// v_{i3}(t)(t)_{|t>\delta} = v_{i2}(t) + v_{0} - j_{max} T_{j1} (t-\delta)\\
+    /// $$ v_{i3}(t)(t)_{|t>\delta} = v_{i2}(t) + v_{0} - j_{max} T_{j1} (t-\delta) $$
     ///
-    /// s_{i3}(t) = \int{v_{i2}(t) + v_0 dt} - \int{v_{i3}(t)dt}\\
+    /// $$ s_{i3}(t) = \int{v_{i2}(t) + v_0 dt} - \int{v_{i3}(t)dt} $$
     pub fn s_i3(&self, t: &Real) -> Real {
         let dt = (*t) - self.i3_start();
         self.s_i2(t) - ((self.j_max * SIXTH * dt) * (dt * dt))
@@ -1120,9 +1121,9 @@ impl SCurveMotionProfile {
 
     /// Constant velocity
     ///
-    /// v_{i4}(t)(t)_{|t>\delta} = v_{lim} \\
+    /// $$ v_{i4}(t)(t)_{|t>\delta} = v_{lim} $$
     ///
-    /// s_{i4}(t) = s_{i3}(\delta) + \int{v_{i3}(t)dt}\\
+    /// $$ s_{i4}(t) = s_{i3}(\delta) + \int{v_{i3}(t)dt} $$
     pub fn s_i4(&self, t: &Real) -> Real {
         let dt = (*t) - self.i4_start();
         self.cache.s3_pt + (self.v_lim * dt)
@@ -1132,11 +1133,11 @@ impl SCurveMotionProfile {
     ///
     /// Same as s_{í1}(t)
     ///
-    /// v_{i5}(t) = \frac{j_{max}t^2}{2}+v_{0} \\
+    /// $$ v_{i5}(t) = \frac{j_{max}t^2}{2}+v_{0} $$
     ///
-    /// s_{i5}(t) = s_i4(t) - \int{v_{i5}(t)dt} \\
+    /// $$ s_{i5}(t) = s_i4(t) - \int{v_{i5}(t)dt} $$
     ///
-    /// s_{i5}(t)_{|t>\delta} = s_{i4}(t) - \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) \\
+    /// $$ s_{i5}(t)_{|t>\delta} = s_{i4}(t) - \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) $$
     pub fn s_i5(&self, t: &Real) -> Real {
         let dt = (*t) - self.i5_start();
         let r = (self.j_max * SIXTH * dt * dt * dt);
@@ -1147,11 +1148,11 @@ impl SCurveMotionProfile {
     ///
     /// Same as s_{í2}(t)
     ///
-    /// v_{i6}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i5}(\delta)\\
+    /// $$ v_{i6}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i5}(\delta) $$
     ///
-    /// s_{i2}(t) = \int{v_{i2}(t)dt} + s_{i5}(\delta)\\
+    /// $$ s_{i2}(t) = \int{v_{i2}(t)dt} + s_{i5}(\delta) $$
     ///
-    /// s_{i5}(t)_{|t>\delta} = -\frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i5}(\delta)(t-\delta) + s_{i5}(\delta)\\
+    /// $$ s_{i5}(t)_{|t>\delta} = -\frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i5}(\delta)(t-\delta) + s_{i5}(\delta) $$
     ///
     pub fn s_i6(&self, t: &Real) -> Real {
         let dt = (*t) - self.i6_start();
@@ -1161,9 +1162,9 @@ impl SCurveMotionProfile {
 
     /// Deceleration phase, jerk limited acceleration
     ///
-    /// v_{i3}(t)(t)_{|t>\delta} = v_{i2}(t) + v_{0} - j_{max} T_{j1} (t-\delta)\\
+    /// $$ v_{i3}(t)(t)_{|t>\delta} = v_{i2}(t) + v_{0} - j_{max} T_{j1} (t-\delta) $$
     ///
-    /// s_{i3}(t) = \int{v_{i2}(t) + v_0 dt} - \int{v_{i3}(t)dt}\\
+    /// $$ s_{i3}(t) = \int{v_{i2}(t) + v_0 dt} - \int{v_{i3}(t)dt} $$
     pub fn s_i7(&self, t: &Real) -> Real {
         let dt = (*t) - self.i7_start();
         self.s_i6(t) + ((self.j_max * SIXTH * dt) * dt * dt)
@@ -1186,7 +1187,7 @@ impl MotionProfile for SCurveMotionProfile {
         self.q1
     }
 
-    /// Computes the position (steps) in given timestamp (uS)
+    /// Computes the position in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE] at given relative instant (uSecs)
     /// * p_{1}(t) = if( 0 <= t < T_{j1} , s_{i1}(t) ) | \[0, T_{j1} \]
     /// * p_{2}(t) = if( T_{j1} <= t < T_{a} - T_{j1}, s_{i2}(t) ) | \[ T_{j1}, T_{a} - T_{j1} \]
     /// * p_{3}(t) = if( T_{a} - T_{j1} <= t < T_{a}, s_{i3}(t) ) | \[ T_{a} - T_{j1}, T_{a} \]

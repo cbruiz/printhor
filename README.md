@@ -90,7 +90,7 @@ The minimal toolset required to build and run is:
 
 ## Prerequisites: Rust and toolchain
 
-This crate requires **Rust >= 1.79**.
+This crate requires **Rust >= 1.85**.
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
@@ -165,13 +165,13 @@ cargo run --profile release --bin s_plot --features s-plot-bin
 
 ### Example output with the current plotting style approach:
 As Image:
-![alt text](design/motion_plan.png "Motion Plan")
+![alt text](printhor/img/motion_plan.png "Motion Plan")
 
 As Vector:
 
-<object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
-  <embed src="./design/motion_plan.pdf">
-    <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
+<object data="printhor/img/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
+  <embed src="printhor/img/motion_plan.pdf">
+    <p style="text-align: center;">This browser does not support PDFs. Please <a href="printhor/img/motion_plan.pdf">Download the PDF</a> to view it</p>
 </object>
 
 There are (currently) two plots:
@@ -183,7 +183,7 @@ There are (currently) two plots:
   * A slopped gray polyline for the online derivation of __real__ (discrete) position datapoints in the sampling interval.
 
 ### Example output with the deprecated plotting style:
-![alt text](design/motion_plan_old.png "Motion Plan")
+![alt text](printhor/img/motion_plan_old.png "Motion Plan")
 
 This plot were self-explanatory, but deprecated in flavor of the previous one.
 We are keeping it because it is clear and useful for a high level understanding.
