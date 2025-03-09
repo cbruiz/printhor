@@ -1,9 +1,9 @@
 [package]
-name = "printhor-hwi_boilerplate"
+name = "printhor-hwi_esp32"
 version = "0.0.4"
 edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
-description = "Printhor Hardware Abstraction starter project"
+description = "Printhor Hardware Abstraction for Expressif ESP32"
 repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
 license = "MIT"
@@ -37,7 +37,7 @@ with-sd-card = ["printhor-hwa-common/with-sd-card"]
 with-fan-layer = ["embedded-hal", "printhor-hwa-common/with-fan-layer"]
 with-fan-extra-1 = ["embedded-hal", "printhor-hwa-common/with-fan-extra-1"]
 with-laser = ["embedded-hal", "printhor-hwa-common/with-laser"]
-with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-executor/defmt"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "esp-alloc/defmt", "embassy-executor/defmt"]
 with-trinamic = ["printhor-hwa-common/with-trinamic"]
 with-ps-on = ["printhor-hwa-common/with-ps-on"]
 
@@ -66,13 +66,16 @@ float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
-#defmt = { version = "0.3.10", optional = true, default-features = false, features=["alloc"] }
-#cortex-m = { version = "0.7.7", default-features = false, features = ["inline-asm", "critical-section-single-core"] }
-#cortex-m-rt = { version = "0.7.5", default-features = false }
-#alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
-critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
+defmt = { version = "0.3.10", optional = true, default-features = false, features=["alloc"] }
+esp-alloc = { version = "0.7.0" }
+esp-hal = { version = "1.0.0-beta.0", features = ["esp32s3", "unstable"]}
+panic-rtt-target = { version = "0.2.0", features = ["defmt"] }
+rtt-target = { version = "0.6.1", features = ["defmt"] }
+esp-hal-embassy = { version = "0.7.0", features = ["esp32s3"] }
+critical-section = { version = "1.2.0", default-features = false, features = []}
 
-embassy-executor = { version = "0.7.0", default-features = false, features = ["executor-thread", "task-arena-size-16384"] }
+#embassy-stm32 = { version = "0.2.0", default-features = false, features = ["[...]", "defmt", "rt", "memory-x", "exti", "unstable-pac", "time-driver-..."] }
+embassy-executor = { version = "0.7.0", default-features = false, features = ["task-arena-size-20480"] }
 embassy-sync = { version = "0.6.2", default-features = false, features = [] }
 embassy-time = { version = "0.4.0", default-features = false, features = ["tick-hz-1_000_000", "generic-queue-128"] }
 embassy-futures = { version = "0.1.1", default-features = false, features = [] }
@@ -93,9 +96,9 @@ rust_decimal = { optional = true, version = "1.36.0", default-features = false, 
 rust_decimal_macros = { optional = true, default-features = false, version = "1.36.0" }
 
 [patch.crates-io]
-async-gcode = { path = "../../libs/async-gcode" }
-embassy-executor = { path = "../../libs/embassy/embassy-executor" }
-embassy-sync = { path = "../../libs/embassy/embassy-sync" }
-embassy-time = { path = "../../libs/embassy/embassy-time" }
-embassy-futures = { path = "../../libs/embassy/embassy-futures" }
-embassy-usb = { path = "../../libs/embassy/embassy-usb" }
+#async-gcode = { path = "../../libs/async-gcode" }
+#embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+#embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+#embassy-time = { path = "../../libs/embassy/embassy-time" }
+#embassy-futures = { path = "../../libs/embassy/embassy-futures" }
+#embassy-usb = { path = "../../libs/embassy/embassy-usb" }

@@ -11,7 +11,6 @@ fn main() {
         .join("doc")
         .join("img");
     std::fs::create_dir_all(&out).unwrap();
-    //panic!("{:?} -> {:?}", doc_in.as_path().to_str().unwrap(), out.as_path().to_str().unwrap());
     std::fs::copy(doc_in, out.join("contract-class-diagram.png")).unwrap();
 
     cfg_if::cfg_if! {

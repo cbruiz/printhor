@@ -795,14 +795,17 @@ impl SCurveMotionProfile {
     /// Assuming that `v_vmax` and `a_max` are reached (*case_1*) compute the time intervals:
     ///
     /// For T_j1, T_a:
-    /// $$
-    ///   (v_{max} - v_{0}) j_{max} < a_{max}^2 \implies a_{max} \text{ is not reached} \implies
-    /// T_{j1} = \sqrt{ \frac{v_{max} - v_{0}}{j_{max}} }, T_{a} = 2 T_{j1}
-    /// $$
-    ///
-    /// $$
-    /// \text{ otherwise} \implies a_{max} \text{ is reached} \implies T_{j1} = \frac{a_{max}}{j_{max}}, T_{a} = T_{j1} + \frac{v_{max} - v_{0}}{a_{max}}
-    /// $$
+    /// <p>
+    /// \[
+    /// \begin{align}
+    ///   (v_{max} - v_{0}) j_{max} < a_{max}^2 & \implies a_{max} \text{ is not reached} \implies
+    /// T_{j1} & = \sqrt{ \frac{v_{max} - v_{0}}{j_{max}} }\\
+    /// & & T_{a} & = 2 T_{j1} \\
+    /// \text{ otherwise} & \implies a_{max} \text{ is reached} \implies T_{j1} & = \frac{a_{max}}{j_{max}} \\
+    /// & & T_{a} = T_{j1} + \frac{v_{max} - v_{0}}{a_{max}}
+    /// \end{align}
+    /// \]
+    /// </p>
     ///
     /// For T_j2, T_d:
     ///
@@ -1084,12 +1087,15 @@ impl SCurveMotionProfile {
     }
 
     /// Acceleration phase, jerk limited acceleration
-    ///
-    /// $$ v_{i1}(t) = \frac{j_{max}t^2}{2}+v_{0} $$
-    ///
-    /// $$ s_{i1}(t) = \int{v_{i1}(t)dt} $$
-    ///
-    /// $$ s_{i1}(t)_{|t>\delta} = \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) $$
+    /// <p>
+    /// \[
+    /// \begin{align}{l}
+    /// v_{i1}(t) &= \frac{j_{max}t^2}{2}+v_{0} \\
+    /// s_{i1}(t) &= \int{v_{i1}(t)dt} \\
+    /// s_{i1}(t)_{|t>\delta} &= \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta)
+    /// \end{align}
+    /// \]
+    /// </p>
     ///
     pub fn s_i1(&self, t: &Real) -> Real {
         let dt = (*t) - self.i1_start();
