@@ -16,18 +16,17 @@
 //!
 //! This approach ensures robust handling of print job execution, making sure that the 3D printer can efficiently
 //! and reliably process and execute the G-code commands.
-use crate::control;
-use crate::hwa;
-use embassy_time::Duration;
-use embassy_time::Instant;
 
-use crate::control::GCodeValue;
-use control::{CodeExecutionFailure, CodeExecutionSuccess};
-use control::{GCodeCmd, GCodeLineParser, GCodeLineParserError};
+use crate::{hwa, processing};
+
 use hwa::controllers::PrinterController;
 use hwa::controllers::PrinterControllerEvent;
 use hwa::sd_card::SDCardError;
 use hwa::{CommChannel, EventFlags, EventStatus};
+use processing::{CodeExecutionFailure, CodeExecutionSuccess, GCodeCmd, GCodeValue};
+
+use embassy_time::Duration;
+use embassy_time::Instant;
 
 /// The `task_print_job` function manages the execution of a 3D printer's print job.
 ///
@@ -49,7 +48,7 @@ use hwa::{CommChannel, EventFlags, EventStatus};
 #[allow(unused_mut)]
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_print_job(
-    mut processor: hwa::GCodeProcessor,
+    mut processor: processing::GCodeProcessor,
     mut printer_controller: PrinterController,
     mut card_controller: hwa::types::SDCardController,
 ) {
@@ -81,7 +80,7 @@ pub async fn task_print_job(
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [task_print_job] Timeout");
                 #[cfg(test)]
-                if control::task_integration::INTEGRATION_STATUS.signaled() {
+                if crate::tasks::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_print_job] Ending gracefully");
                     return ();
                 }
@@ -95,7 +94,7 @@ pub async fn task_print_job(
                 job_time = Duration::from_ticks(0);
                 print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
                     Ok(stream) => {
-                        let parser = GCodeLineParser::new(stream);
+                        let parser = processing::GCodeLineParser::new(stream);
                         processor.write(channel, "File opened: ").await;
                         processor.write(channel, file_path.as_str()).await;
                         processor.write(channel, "\nFile selected\n").await;
@@ -244,11 +243,11 @@ pub async fn task_print_job(
                                 .as_ref()
                                 .map_or(0, |parser| parser.get_line());
                             match error {
-                                GCodeLineParserError::EOF => {
+                                processing::GCodeLineParserError::EOF => {
                                     // EOF
                                     break;
                                 }
-                                GCodeLineParserError::FatalError => {
+                                processing::GCodeLineParserError::FatalError => {
                                     // Fatal
                                     fatal_error = true;
                                     hwa::error!(
@@ -257,7 +256,10 @@ pub async fn task_print_job(
                                     );
                                     break;
                                 }
-                                GCodeLineParserError::GCodeNotImplemented(_ln, _gcode) => {
+                                processing::GCodeLineParserError::GCodeNotImplemented(
+                                    _ln,
+                                    _gcode,
+                                ) => {
                                     processor
                                         .write(
                                             channel,
@@ -275,7 +277,7 @@ pub async fn task_print_job(
                                         current_line
                                     );
                                 }
-                                GCodeLineParserError::ParseError(_ln) => {
+                                processing::GCodeLineParserError::ParseError(_ln) => {
                                     hwa::warn!(
                                         "[task-print-job] Parse error at line {}",
                                         current_line
@@ -340,7 +342,7 @@ pub async fn task_print_job(
 
 async fn gcode_pull(
     print_job_parser: &mut Option<hwa::types::SDCardLineParser>,
-) -> Result<GCodeCmd, GCodeLineParserError> {
+) -> Result<GCodeCmd, processing::GCodeLineParserError> {
     match print_job_parser.as_mut() {
         Some(parser) => parser
             .next_gcode(CommChannel::Internal)
@@ -349,6 +351,6 @@ async fn gcode_pull(
                 gc.order_num = parser.get_line();
                 gc
             }),
-        None => Err(GCodeLineParserError::FatalError),
+        None => Err(processing::GCodeLineParserError::FatalError),
     }
 }

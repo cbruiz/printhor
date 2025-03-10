@@ -1,11 +1,13 @@
-use crate::control;
-use crate::hwa;
+//! Task control
+use crate::{hwa, processing};
+
 #[cfg(feature = "with-sd-card")]
 use crate::hwa::controllers::sd_card_controller::SDEntryType;
 use async_gcode::AsyncParserState;
 use embassy_time::{Duration, TimeoutError};
+
 #[allow(unused)]
-use printhor_hwa_common::{EventFlags, EventStatus};
+use hwa::{EventFlags, EventStatus};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-print-job")] {
@@ -27,8 +29,8 @@ pub async fn do_with_timeout<F: core::future::Future>(
 
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_control(
-    mut processor: hwa::GCodeProcessor,
-    mut gcode_input_stream: control::GCodeMultiplexedInputStream,
+    mut processor: processing::GCodeProcessor,
+    mut gcode_input_stream: processing::GCodeMultiplexedInputStream,
     #[cfg(feature = "with-print-job")] mut printer_controller: hwa::controllers::PrinterController,
     #[cfg(feature = "with-sd-card")] mut card_controller: hwa::types::SDCardController,
 ) {
@@ -71,29 +73,29 @@ pub async fn task_control(
                     }
                 }
                 #[cfg(test)]
-                if control::task_integration::INTEGRATION_STATUS.signaled() {
+                if crate::tasks::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_control] Ending gracefully");
                     return ();
                 }
             }
-            Ok((Err(control::GCodeLineParserError::ParseError(_x)), channel)) => {
+            Ok((Err(processing::GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
                 processor.write(channel, "error; (ParserError)\n").await;
             }
             Ok((
-                Err(control::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)),
+                Err(processing::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)),
                 channel,
             )) => {
                 hwa::error!("GCode {} (NotImplemented)", _gcode_name.as_str());
                 let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                 processor.write(channel, &s).await;
             }
-            Ok((Err(control::GCodeLineParserError::FatalError), channel)) => {
+            Ok((Err(processing::GCodeLineParserError::FatalError), channel)) => {
                 hwa::error!("[{:?}] GCode N/A (Internal error)", channel);
                 let s = "error; Internal error\n";
                 processor.write(channel, s).await;
             }
-            Ok((Err(control::GCodeLineParserError::EOF), _channel)) => {
+            Ok((Err(processing::GCodeLineParserError::EOF), _channel)) => {
                 hwa::warn!("{:?} Got EOF", _channel);
                 //embassy_time::Timer::after_secs(1).await; // Avoid respawn too fast
             }
@@ -117,9 +119,9 @@ pub async fn task_control(
 
 #[allow(unused)]
 async fn manage_timeout<M>(
-    processor: &mut hwa::GCodeProcessor,
+    processor: &mut processing::GCodeProcessor,
     subscriber: &mut hwa::EventBusSubscriber<'static, M>,
-    gcode_input_stream: &mut control::GCodeMultiplexedInputStream,
+    gcode_input_stream: &mut processing::GCodeMultiplexedInputStream,
     comm_channel: hwa::CommChannel,
 ) where
     M: hwa::AsyncRawMutex,
@@ -178,21 +180,21 @@ A set of commands will be directly executed
 Remaining will be delegated to the processor.
  */
 pub async fn execute(
-    processor: &mut hwa::GCodeProcessor,
+    processor: &mut processing::GCodeProcessor,
     channel: hwa::CommChannel,
-    gc: &control::GCodeCmd,
+    gc: &processing::GCodeCmd,
     #[cfg(feature = "with-sd-card")] _card_controller: &mut hwa::types::SDCardController,
     #[cfg(feature = "with-print-job")]
     _printer_controller: &mut hwa::controllers::PrinterController,
-) -> control::CodeExecutionResult {
+) -> processing::CodeExecutionResult {
     match &gc.value {
-        control::GCodeValue::Nop => {
+        processing::GCodeValue::Nop => {
             hwa::error!("Go Nop");
             // Should not happen
-            Err(control::CodeExecutionFailure::ERR)
+            Err(processing::CodeExecutionFailure::ERR)
         }
         #[cfg(feature = "grbl-compat")]
-        control::GCodeValue::Status => {
+        processing::GCodeValue::Status => {
             // TODO provide GRBL compatibility status
             processor
                 .write(
@@ -200,10 +202,10 @@ pub async fn execute(
                     "<Idle|MPos:0.000,0.000,0.000|Pn:XP|FS:0,0|WCO:0.000,0.000,0.000>\n",
                 )
                 .await;
-            Ok(control::CodeExecutionSuccess::CONSUMED)
+            Ok(processing::CodeExecutionSuccess::CONSUMED)
         }
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
-        control::GCodeValue::M2 => {
+        processing::GCodeValue::M2 => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::Abort(channel))
                 .await
@@ -212,17 +214,17 @@ pub async fn execute(
                     processor
                         .write(channel, "echo: Print job terminated\n")
                         .await;
-                    Ok(control::CodeExecutionSuccess::OK)
+                    Ok(processing::CodeExecutionSuccess::OK)
                 }
                 Err(_e) => {
                     let s = alloc::format!("echo: M2: Unable to terminate: {:?}\n", _e);
                     processor.write(channel, s.as_str()).await;
-                    Err(control::CodeExecutionFailure::ERR)
+                    Err(processing::CodeExecutionFailure::ERR)
                 }
             }
         }
         #[cfg(feature = "with-sd-card")]
-        control::GCodeValue::M20(_path) => {
+        processing::GCodeValue::M20(_path) => {
             {
                 let path = _path.clone().unwrap_or(alloc::string::String::from("/"));
                 let mut sent_first = false;
@@ -259,20 +261,20 @@ pub async fn execute(
                         }
                         it.close().await;
                         processor.write(channel, "ok\n").await;
-                        Ok(control::CodeExecutionSuccess::CONSUMED)
+                        Ok(processing::CodeExecutionSuccess::CONSUMED)
                     }
                     Err(_e) => {
                         let s = alloc::format!("echo: M20: Unable to list: {:?}\n", _e);
                         processor.write(channel, s.as_str()).await;
-                        Err(control::CodeExecutionFailure::ERR)
+                        Err(processing::CodeExecutionFailure::ERR)
                     }
                 }
             }
         }
         #[cfg(feature = "with-sd-card")]
-        control::GCodeValue::M21 => Ok(control::CodeExecutionSuccess::OK),
+        processing::GCodeValue::M21 => Ok(processing::CodeExecutionSuccess::OK),
         #[cfg(feature = "with-print-job")]
-        control::GCodeValue::M23(file) => {
+        processing::GCodeValue::M23(file) => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::SetFile(
                     channel,
@@ -294,17 +296,17 @@ pub async fn execute(
                         .publish_event(EventStatus::not_containing(EventFlags::JOB_COMPLETED))
                         .await;
                     // TODO
-                    Ok(control::CodeExecutionSuccess::CONSUMED)
+                    Ok(processing::CodeExecutionSuccess::CONSUMED)
                 }
                 Err(_e) => {
                     let s = alloc::format!("echo: M23: Unable to set: {:?}\n", _e);
                     processor.write(channel, s.as_str()).await;
-                    Err(control::CodeExecutionFailure::ERR)
+                    Err(processing::CodeExecutionFailure::ERR)
                 }
             }
         }
         #[cfg(feature = "with-print-job")]
-        control::GCodeValue::M24 => {
+        processing::GCodeValue::M24 => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::Resume(channel))
                 .await
@@ -312,17 +314,17 @@ pub async fn execute(
                 Ok(_f) => {
                     processor.write(channel, "ok\n").await;
                     processor.write(channel, "echo: Print job resumed\n").await;
-                    Ok(control::CodeExecutionSuccess::CONSUMED)
+                    Ok(processing::CodeExecutionSuccess::CONSUMED)
                 }
                 Err(_e) => {
                     let s = alloc::format!("echo: M24: Unable to start/resume: {:?}\n", _e);
                     processor.write(channel, s.as_str()).await;
-                    Err(control::CodeExecutionFailure::ERR)
+                    Err(processing::CodeExecutionFailure::ERR)
                 }
             }
         }
         #[cfg(feature = "with-print-job")]
-        control::GCodeValue::M25 => {
+        processing::GCodeValue::M25 => {
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::Pause(channel))
                 .await
@@ -330,12 +332,12 @@ pub async fn execute(
                 Ok(_f) => {
                     processor.write(channel, "ok\n").await;
                     processor.write(channel, "echo: Print job paused\n").await;
-                    Ok(control::CodeExecutionSuccess::CONSUMED)
+                    Ok(processing::CodeExecutionSuccess::CONSUMED)
                 }
                 Err(_e) => {
                     let s = alloc::format!("echo: M25: Unable to pause print job: {:?}\n", _e);
                     processor.write(channel, s.as_str()).await;
-                    Err(control::CodeExecutionFailure::ERR)
+                    Err(processing::CodeExecutionFailure::ERR)
                 }
             }
         }
@@ -345,13 +347,13 @@ pub async fn execute(
 }
 
 async fn report(
-    result: control::CodeExecutionResult,
-    gc: &control::GCodeCmd,
+    result: processing::CodeExecutionResult,
+    gc: &processing::GCodeCmd,
     channel: hwa::CommChannel,
-    processor: &mut hwa::GCodeProcessor,
+    processor: &mut processing::GCodeProcessor,
 ) {
     match result {
-        Ok(control::CodeExecutionSuccess::OK) => {
+        Ok(processing::CodeExecutionSuccess::OK) => {
             cfg_if::cfg_if! {
                 if #[cfg(feature="trace-commands")] {
                     let s = alloc::format!("ok; [trace-commands] {}\n", gc);
@@ -362,7 +364,7 @@ async fn report(
                 }
             }
         }
-        Ok(control::CodeExecutionSuccess::QUEUED) => {
+        Ok(processing::CodeExecutionSuccess::QUEUED) => {
             cfg_if::cfg_if! {
                 if #[cfg(feature="trace-commands")] {
                     let s = alloc::format!("ok; [trace-commands] promised {}\n", gc);
@@ -373,7 +375,7 @@ async fn report(
                 }
             }
         }
-        Ok(control::CodeExecutionSuccess::DEFERRED(_)) => {
+        Ok(processing::CodeExecutionSuccess::DEFERRED(_)) => {
             #[cfg(feature = "trace-commands")]
             {
                 hwa::debug!("Control not sending (deferred)");
@@ -381,7 +383,7 @@ async fn report(
                 processor.write(channel, s.as_str()).await;
             }
         }
-        Ok(control::CodeExecutionSuccess::CONSUMED) => {
+        Ok(processing::CodeExecutionSuccess::CONSUMED) => {
             #[cfg(feature = "trace-commands")]
             {
                 let s = alloc::format!("echo; already confirmed {}\n", gc);

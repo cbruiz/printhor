@@ -1,3 +1,4 @@
+//! Motion Real Time status persistence
 use crate::hwa;
 use hwa::SyncMutexStrategy;
 use hwa::math::{CoordSel, Real, TVector};

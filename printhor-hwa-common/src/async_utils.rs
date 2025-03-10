@@ -1,3 +1,4 @@
+//! Asynchronous utils/adapters
 //#region "Async wrapper"
 #[allow(unused)]
 use crate as hwa;

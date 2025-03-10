@@ -1,3 +1,5 @@
+//! SD-Card management
+
 use crate as hwa;
 use embedded_sdmmc::{
     Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager,

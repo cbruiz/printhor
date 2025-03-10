@@ -1,7 +1,8 @@
-#[allow(unused)]
-use crate::control;
-///! This module contains the peripheral and devices export required for ALL HWI boards
+//! This module contains the peripheral and devices export required for ALL HWI boards
 use crate::hwa;
+use crate::processing;
+#[allow(unused)]
+use crate::tasks;
 use hwa::HwiContract;
 //#region "The core and mandatory devices/peripherals"
 
@@ -49,7 +50,7 @@ cfg_if::cfg_if! {
 
         pub type MotionRingBufferMutexStrategy = hwa::AsyncStandardStrategy<
             <hwa::Contract as HwiContract>::MotionRingBufferMutexType,
-            hwa::controllers::motion::RingBuffer
+            hwa::controllers::motion_control::RingBuffer
         >;
 
         pub type MotionRingBuffer = hwa::StaticAsyncController<MotionRingBufferMutexStrategy>;
@@ -260,7 +261,7 @@ cfg_if::cfg_if! {
 
         pub type PrinterControllerSignalMutexType = <hwa::Contract as HwiContract>::PrinterControllerSignalMutexType;
 
-        pub type SDCardLineParser = control::GCodeLineParser<
+        pub type SDCardLineParser = processing::GCodeLineParser<
             hwa::controllers::sd_card_controller::SDCardStream<
                 <hwa::Contract as HwiContract>::SDCardBlockDevice,
                 {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},

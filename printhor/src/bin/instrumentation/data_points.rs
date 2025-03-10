@@ -1,4 +1,5 @@
-use crate::{control, hwa};
+//! A module to hold and plot discrete signal changes
+use crate::{hwa, motion};
 
 pub(crate) struct DataPointsDimension {
     time_offset: f64,
@@ -74,7 +75,7 @@ impl DataPoints {
         }
     }
 
-    pub fn segment_starts(&mut self, trajectory: &control::motion::SCurveMotionProfile) {
+    pub fn segment_starts(&mut self, trajectory: &motion::SCurveMotionProfile) {
         self.current_segment_id += 1;
         self.current_micro_segment_id = 0;
         self.segment_position_marks.push_relative(
@@ -113,15 +114,17 @@ impl DataPoints {
 
     pub fn interpolation_tick(
         &mut self,
-        interp: &hwa::controllers::motion::SegmentIterator<control::motion::SCurveMotionProfile>,
+        interpolation_iterator: &hwa::controllers::motion_control::SegmentIterator<
+            motion::SCurveMotionProfile,
+        >,
     ) {
         self.interpolated_positions.push_relative(
-            interp.current_time().to_f64(),
-            interp.current_position().to_f64(),
+            interpolation_iterator.current_time().to_f64(),
+            interpolation_iterator.current_position().to_f64(),
         );
         self.interpolated_velocities.push_relative(
-            interp.current_time().to_f64(),
-            (interp.ds() / interp.dt()).to_f64(),
+            interpolation_iterator.current_time().to_f64(),
+            (interpolation_iterator.ds() / interpolation_iterator.dt()).to_f64(),
         )
     }
 }

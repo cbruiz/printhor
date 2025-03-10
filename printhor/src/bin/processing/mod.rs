@@ -1,40 +1,50 @@
-//! System control module providing I/O control, kinematics and concurrent tasks
-use crate::hwa;
-use hwa::math::Real;
+//! GCode input parsing and processing
+mod gcode_multiplexed_io;
+mod gcode_parser;
+mod gcode_processor;
 
-use printhor_hwa_common::math::TVector;
-#[cfg(feature = "native")]
-use strum::Display;
+pub use gcode_parser::{GCodeLineParser, GCodeLineParserError};
+pub use gcode_processor::GCodeProcessor;
+
+pub use gcode_multiplexed_io::GCodeMultiplexedInputStream;
+use printhor_hwa_common::math::{Real, TVector};
+use printhor_hwa_common::{CoordSel, EventStatus};
 use strum::{AsRefStr, VariantNames};
 
-#[cfg(feature = "with-motion")]
-pub mod motion;
+#[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(feature = "native", derive(Debug))]
+#[allow(unused)]
+pub enum CodeExecutionSuccess {
+    /// Immediately executed
+    OK,
+    /// Immediately executed and reported
+    CONSUMED,
+    /// Queued but assumed it will be executed not too long, so practically same as OK
+    QUEUED,
+    /// Executed but it will take time to get a final response. EventStatus contains the needed flags to wait for
+    DEFERRED(EventStatus),
+}
 
-mod processing;
-pub use processing::*;
+#[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
+#[derive(Debug)]
+#[allow(unused)]
+pub enum CodeExecutionFailure {
+    /// Cannot perform because there is the same or something else running
+    BUSY,
+    /// Generic internal error
+    ERR,
+    /// Cannot perform because requires homing before
+    HomingRequired,
+    /// Cannot perform because requires homing before
+    PowerRequired,
+    /// Specific internal error: Numerical computation issue (division by 0, sqrt(x<0) or any other kind of ambiguity)
+    NumericalError,
+    /// The GCode is considered, but not yet implemented
+    NotYetImplemented,
+}
 
-mod base;
-pub mod task_control;
-#[cfg(any(
-    feature = "with-motion",
-    feature = "with-hot-end",
-    feature = "with-hot-bed"
-))]
-pub mod task_defer;
+pub type CodeExecutionResult = Result<CodeExecutionSuccess, CodeExecutionFailure>;
 
-#[cfg(all(feature = "with-motion", feature = "with-motion-broadcast"))]
-pub mod task_motion_broadcast;
-
-#[cfg(any(test, feature = "integration-test"))]
-pub mod task_integration;
-#[cfg(feature = "with-print-job")]
-pub mod task_print_job;
-#[cfg(feature = "with-motion")]
-pub mod task_stepper;
-#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
-pub mod task_temperature;
-
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct S {
     pub s: Option<Real>,
@@ -56,6 +66,7 @@ impl N {
         Self { n: None }
     }
 }
+
 #[derive(Clone, Debug)]
 pub struct EXYZ {
     #[cfg(feature = "with-e-axis")]
@@ -522,10 +533,10 @@ impl core::fmt::Display for GCodeCmd {
         }
     }
 }
+
 /// The GCode Variants
 //noinspection SpellCheckingInspection
 #[derive(Clone, VariantNames, AsRefStr, Default, Debug)]
-#[cfg_attr(feature = "native", derive(Display))]
 pub enum GCodeValue {
     /// No Operation
     #[default]
@@ -968,6 +979,3 @@ impl defmt::Format for GCodeCmd {
         defmt::write!(fmt, "{}", gcode_name)
     }
 }
-
-pub use base::*;
-use printhor_hwa_common::CoordSel;

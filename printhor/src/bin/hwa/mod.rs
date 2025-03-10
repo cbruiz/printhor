@@ -1,5 +1,4 @@
 //! The Hardware Abstraction Module
-pub use crate::control::GCodeProcessor;
 pub use printhor_hwa_common::*;
 
 /// HWI contains the exports of the lower layer (Hardware Interface)

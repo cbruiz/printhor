@@ -43,17 +43,17 @@
 //!
 //! Actually, 5.1KiB only using Debug format trait and/or defmt fmt trait with lexical_core/ryu.
 
-use crate::control;
 use crate::hwa;
-use control::{CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess};
-use control::{GCodeCmd, GCodeValue};
+
+use crate::processing::{
+    CodeExecutionFailure, CodeExecutionResult, CodeExecutionSuccess, GCodeCmd, GCodeValue,
+};
 use hwa::Contract;
+#[cfg(feature = "with-probe")]
+use hwa::controllers::ProbeTrait;
 use hwa::math;
 #[allow(unused)]
 use hwa::{AsyncMutexStrategy, HwiContract, SyncMutexStrategy};
-
-#[cfg(feature = "with-probe")]
-use hwa::controllers::ProbeTrait;
 #[allow(unused)]
 use hwa::{CommChannel, DeferAction, DeferEvent, EventFlags, EventStatus};
 use strum::VariantNames;

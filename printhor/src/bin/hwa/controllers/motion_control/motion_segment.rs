@@ -1,7 +1,7 @@
 //! Motion segment module
 //! TODO: This feature is still in incubation
-use crate::control::motion::{Constraints, MotionProfile};
 use crate::hwa;
+use crate::motion;
 use hwa::math::Real;
 use hwa::math::TVector;
 
@@ -57,7 +57,7 @@ pub struct Segment {
     /// Tool power utilized in the segment.
     pub tool_power: Real,
     /// Motion constraints applicable to the segment.
-    pub constraints: Constraints, // Should remove this?
+    pub constraints: crate::motion::Constraints, // Should remove this?
 }
 
 impl Segment {
@@ -83,10 +83,10 @@ impl Segment {
 ///
 /// # Type Parameters
 /// - `'a`: Lifetime of the motion profile reference.
-/// - `P`: Type of the motion profile, which must implement the [MotionProfile] trait.
+/// - `P`: Type of the motion profile, which must implement the [motion::MotionProfile] trait.
 pub struct SegmentIterator<'a, P>
 where
-    P: MotionProfile,
+    P: motion::MotionProfile,
 {
     /// Reference to the motion profile.
     profile: &'a P,
@@ -104,7 +104,7 @@ where
 
 impl<'a, P> SegmentIterator<'a, P>
 where
-    P: MotionProfile,
+    P: motion::MotionProfile,
 {
     /// Creates a new SegmentIterator.
     ///
@@ -192,10 +192,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::control::motion::SCurveMotionProfile;
     use crate::hwa::math;
     use crate::hwa::math::Real;
     use crate::hwa::math::TVector;
+    use crate::motion::{Constraints, SCurveMotionProfile};
 
     fn dummy_segment() -> Segment {
         Segment {
@@ -230,6 +230,7 @@ mod tests {
 
     #[test]
     fn test_segment_iterator() {
+        use crate::motion::MotionProfile;
         let constraints = Constraints {
             v_max: Real::from_f32(10.0),
             a_max: Real::from_f32(2.0),
@@ -264,6 +265,7 @@ mod tests {
     /// reaches maximum time
     #[test]
     fn test_segment_iterator_exhaustion() {
+        use crate::motion::MotionProfile;
         let constraints = Constraints {
             v_max: Real::from_f32(10.0),
             a_max: Real::from_f32(2.0),

@@ -40,7 +40,7 @@ pub async fn task_temperature(
         ticker.next().await;
 
         #[cfg(test)]
-        if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+        if crate::tasks::task_integration::INTEGRATION_STATUS.signaled() {
             hwa::info!("[task_temperature] Ending gracefully");
             return ();
         }

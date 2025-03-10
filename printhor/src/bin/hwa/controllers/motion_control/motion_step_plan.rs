@@ -1,3 +1,4 @@
+//! Motion Step Plan utils
 use crate::hwa;
 use hwa::math::{CoordSel, TVector};
 

@@ -1,5 +1,4 @@
-//! A Blank boilerplate template for board support
-//!
+//! HWI Abstraction support for ESP32-S3-WROOM
 //!
 
 use printhor_hwa_common as hwa;

@@ -1,5 +1,7 @@
+//! Motion Kinematics strategies
 use crate as hwa;
 use hwa::math::{Real, TVector};
+
 pub trait WorldToSpaceTransformer {
     /// Transforms a World position to (Work)space position. By default, identity transform applied
     ///

@@ -1,11 +1,12 @@
-use crate::{control, hwa};
+//! Motion Planner
+use crate::{hwa, motion, processing};
 use hwa::Contract;
 use hwa::HwiContract;
 use hwa::controllers::ExecPlan::Homing;
 use hwa::math;
 
-use hwa::controllers::motion::motion_ring_buffer::RingBuffer;
-use hwa::controllers::{MovType, PlanEntry, ScheduledMove, motion};
+use hwa::controllers::motion_control::motion_ring_buffer::RingBuffer;
+use hwa::controllers::{MovType, PlanEntry, ScheduledMove, motion_control};
 use hwa::{EventFlags, EventStatus, PersistentState};
 use math::Real;
 
@@ -13,9 +14,9 @@ use math::TVector;
 
 /// The execution plan action dequeued from the buffer
 pub enum ExecPlan {
-    Segment(motion::Segment, hwa::CommChannel, u32),
+    Segment(motion_control::Segment, hwa::CommChannel, u32),
     Dwell(Option<u32>, hwa::CommChannel, u32),
-    SetPosition(motion::Position, hwa::CommChannel, u32),
+    SetPosition(motion_control::Position, hwa::CommChannel, u32),
     Homing(hwa::CommChannel, u32),
 }
 
@@ -404,7 +405,7 @@ impl MotionPlanner {
         event_bus: &hwa::types::EventBus,
         num_order: u32,
         line_tag: Option<u32>,
-    ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
+    ) -> Result<processing::CodeExecutionSuccess, processing::CodeExecutionFailure> {
         hwa::debug!("schedule_raw_move() BEGIN");
         loop {
             self.available.wait().await;
@@ -621,7 +622,7 @@ impl MotionPlanner {
                         self.defer_channel
                             .send(hwa::DeferEvent::AwaitRequested(action, channel, num_order))
                             .await;
-                        Ok(control::CodeExecutionSuccess::DEFERRED(event))
+                        Ok(processing::CodeExecutionSuccess::DEFERRED(event))
                     } else {
                         #[cfg(feature = "trace-commands")]
                         hwa::info!(
@@ -630,7 +631,7 @@ impl MotionPlanner {
                             line_tag
                         );
                         hwa::debug!("schedule_raw_move() END - Finally queued");
-                        Ok(control::CodeExecutionSuccess::QUEUED)
+                        Ok(processing::CodeExecutionSuccess::QUEUED)
                     };
                 } else {
                     self.available.reset();
@@ -644,7 +645,7 @@ impl MotionPlanner {
                             Contract::SEGMENT_QUEUE_SIZE,
                             rb.head
                         );
-                        return Err(control::CodeExecutionFailure::BUSY);
+                        return Err(processing::CodeExecutionFailure::BUSY);
                     } else {
                         hwa::trace!("schedule_raw_move() Looping again");
                     }
@@ -692,12 +693,12 @@ impl MotionPlanner {
     pub async fn plan(
         &self,
         channel: hwa::CommChannel,
-        gc: &control::GCodeCmd,
+        gc: &processing::GCodeCmd,
         blocking: bool,
         event_bus: &hwa::types::EventBus,
-    ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
+    ) -> Result<processing::CodeExecutionSuccess, processing::CodeExecutionFailure> {
         match &gc.value {
-            control::GCodeValue::G0(t) => Ok(self
+            processing::GCodeValue::G0(t) => Ok(self
                 .schedule_move(
                     "G0",
                     channel,
@@ -710,7 +711,7 @@ impl MotionPlanner {
                     gc.line_tag,
                 )
                 .await?),
-            control::GCodeValue::G1(t) => Ok(self
+            processing::GCodeValue::G1(t) => Ok(self
                 .schedule_move(
                     "G1",
                     channel,
@@ -723,7 +724,7 @@ impl MotionPlanner {
                     gc.line_tag,
                 )
                 .await?),
-            control::GCodeValue::G4(t) => Ok(self
+            processing::GCodeValue::G4(t) => Ok(self
                 .schedule_raw_move(
                     "G4",
                     channel,
@@ -736,7 +737,7 @@ impl MotionPlanner {
                 )
                 .await?),
             #[cfg(feature = "with-motion")]
-            control::GCodeValue::G28(_x) => {
+            processing::GCodeValue::G28(_x) => {
                 event_bus
                     .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                     .await;
@@ -753,7 +754,7 @@ impl MotionPlanner {
                     )
                     .await?)
             }
-            control::GCodeValue::G92(t) => {
+            processing::GCodeValue::G92(t) => {
                 let mut position = self.motion_status.get_last_planned_position();
                 position.update_from_world_coordinates(&hwa::math::TVector::from(t.into()));
                 Ok(self
@@ -769,10 +770,10 @@ impl MotionPlanner {
                     )
                     .await?)
             }
-            control::GCodeValue::G29 => Ok(control::CodeExecutionSuccess::OK),
-            control::GCodeValue::G29_1 => Ok(control::CodeExecutionSuccess::OK),
-            control::GCodeValue::G29_2 => Ok(control::CodeExecutionSuccess::OK),
-            _ => Err(control::CodeExecutionFailure::NotYetImplemented),
+            processing::GCodeValue::G29 => Ok(processing::CodeExecutionSuccess::OK),
+            processing::GCodeValue::G29_1 => Ok(processing::CodeExecutionSuccess::OK),
+            processing::GCodeValue::G29_2 => Ok(processing::CodeExecutionSuccess::OK),
+            _ => Err(processing::CodeExecutionFailure::NotYetImplemented),
         }
     }
 
@@ -787,12 +788,12 @@ impl MotionPlanner {
         event_bus: &hwa::types::EventBus,
         _order_num: u32,
         line: Option<u32>,
-    ) -> Result<control::CodeExecutionSuccess, control::CodeExecutionFailure> {
+    ) -> Result<processing::CodeExecutionSuccess, processing::CodeExecutionFailure> {
         let p0_pos = self.motion_status.get_last_planned_position();
         let relevant_world_coords = p1_wu.not_nan_coords();
 
         if !p0_pos.is_set {
-            return Err(control::CodeExecutionFailure::HomingRequired);
+            return Err(processing::CodeExecutionFailure::HomingRequired);
         }
 
         #[cfg(feature = "debug-motion")]
@@ -900,12 +901,12 @@ impl MotionPlanner {
                 module_target_speed.rdp(3),
                 speed_vector
             );
-            Ok(control::CodeExecutionSuccess::OK)
+            Ok(processing::CodeExecutionSuccess::OK)
         } else if !module_target_speed.is_zero()
             && !module_target_accel.is_zero()
             && !module_target_jerk.is_zero()
         {
-            let segment_data = motion::Segment {
+            let segment_data = motion_control::Segment {
                 speed_enter_su_s: min_speed_module,
                 speed_exit_su_s: min_speed_module,
                 speed_target_su_s: module_target_speed,
@@ -918,7 +919,7 @@ impl MotionPlanner {
                 dest_pos: p1_pos.space_pos.selecting(relevant_space_coords),
                 dest_world_pos: p1_pos.world_pos.selecting(relevant_world_coords),
                 tool_power: Real::zero(),
-                constraints: control::motion::Constraints {
+                constraints: motion::Constraints {
                     v_max: module_target_speed,
                     a_max: module_target_accel,
                     j_max: module_target_jerk,
@@ -958,12 +959,12 @@ impl MotionPlanner {
                 module_target_speed,
                 speed_vector
             );
-            Err(control::CodeExecutionFailure::ERR)
+            Err(processing::CodeExecutionFailure::ERR)
         };
         match move_result {
             Ok(resp) => Ok(resp),
             Err(err) => match err {
-                control::CodeExecutionFailure::BUSY => {
+                processing::CodeExecutionFailure::BUSY => {
                     todo!("Delegate to deferrals!!!")
                 }
                 _r => {
@@ -1170,8 +1171,8 @@ pub mod planner_test {
         use hwa::controllers::{LinearMicrosegmentStepInterpolator, StepPlanner};
         use printhor_hwa_common::{CommChannel, CoordSel, DeferAction, DeferEvent};
 
-        use crate::control::motion::{Constraints, SCurveMotionProfile};
-        use crate::hwa::controllers::motion::{Segment, SegmentIterator};
+        use crate::tasks::motion_control::{Constraints, SCurveMotionProfile};
+        use crate::hwa::controllers::motion_control::{Segment, SegmentIterator};
         use crate::math;
         use crate::math::Real;
         use crate::math::TVector;
@@ -1325,8 +1326,8 @@ pub mod planner_test {
         use crate::hwa;
         use hwa::controllers::{LinearMicrosegmentStepInterpolator, StepPlanner};
         use printhor_hwa_common::{CommChannel, CoordSel, DeferAction, DeferEvent};
-        use crate::control::motion::{Constraints, SCurveMotionProfile};
-        use crate::hwa::controllers::motion::motion_segment::{
+        use crate::tasks::motion_control::{Constraints, SCurveMotionProfile};
+        use crate::hwa::controllers::motion_control::motion_segment::{
             Segment, SegmentIterator,
         };
         use crate::math;
@@ -1487,8 +1488,8 @@ pub mod planner_test {
         use crate::hwa;
         use hwa::controllers::{LinearMicrosegmentStepInterpolator, StepPlanner};
         use printhor_hwa_common::{CommChannel, CoordSel, DeferAction, DeferEvent};
-        use crate::control::motion::{Constraints, SCurveMotionProfile};
-        use crate::hwa::controllers::motion::{Segment, SegmentData, SegmentIterator};
+        use crate::tasks::motion_control::{Constraints, SCurveMotionProfile};
+        use crate::hwa::controllers::motion_control::{Segment, SegmentData, SegmentIterator};
         use crate::math;
         use crate::math::Real;
         use crate::math::TVector;

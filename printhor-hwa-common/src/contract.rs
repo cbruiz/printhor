@@ -1,10 +1,8 @@
+//! This module contains the interface contract of HWI boards
 use crate as hwa;
+use core::future;
 #[allow(unused)]
 use hwa::traits;
-
-use core::future;
-
-///! This module contains the interface contract of HWI boards
 
 /// All boards must export a struct Called `Contract` at crate level implementing this trait
 pub trait HwiContract: Sized {
@@ -34,7 +32,7 @@ pub trait HwiContract: Sized {
     const MACHINE_BOARD: &'static str;
     /// The machine processor model
     const MACHINE_PROCESSOR: &'static str;
-    /// The frequency at which MCU runs. Needed for computing motion ISR
+    /// The frequency at which MCU runs. Needed for computing motion_control ISR
     ///
     /// In native (std), embassy-executor is hard-coded to 1GHz
     const PROCESSOR_SYS_CK_MHZ: u32;
@@ -188,14 +186,14 @@ pub trait HwiContract: Sized {
             /// Default micro-steps per axis
             const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16>;
 
-            /// The frequency at which a segment is sampled for the motion planner.
+            /// The frequency at which a segment is sampled for the motion_control planner.
             /// For instance:
             ///
             /// Let's suppose segment `A` traveling from (0,0,0) to (1,0,0) at average velocity of 1mm/s
             ///
             /// It will take approximately 1 second
             ///
-            /// With this parameter set to 100 (100Hz), the motion planner algorithm will compute finer
+            /// With this parameter set to 100 (100Hz), the motion_control planner algorithm will compute finer
             /// micro-segments taking samples. In previous example, 100 micro segments will be planned
             /// for the whole trajectory of `A`
             const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32;

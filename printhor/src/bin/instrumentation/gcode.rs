@@ -1,3 +1,4 @@
+//! A module to inject gcode similar way [crate::processing] machinery does
 use std::collections::VecDeque;
 
 pub(crate) struct GCodeBuffer {

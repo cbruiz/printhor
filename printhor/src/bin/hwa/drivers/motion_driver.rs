@@ -1,3 +1,4 @@
+//! A composition of controllers to 'drive' motion logic
 use crate::hwa;
 #[allow(unused)]
 use core::ops::Neg;
@@ -9,8 +10,7 @@ use hwa::HwiContract;
 #[cfg(feature = "with-probe")]
 use hwa::controllers::ProbeTrait;
 use hwa::math;
-use math::Real;
-use math::{ArithmeticOps, CoordSel, TVector};
+use math::{ArithmeticOps, CoordSel, Real, TVector};
 
 pub struct MotionDriver {
     #[cfg(feature = "with-motion")]
@@ -76,7 +76,7 @@ impl MotionDriver {
     ///
     /// # Arguments
     ///
-    /// * `motion_config_ref` - A reference to the motion configuration which contains
+    /// * `motion_config` - A reference to the motion configuration which contains
     ///                         parameters such as units per millimeter, micro-steps
     ///                         per axis, and machine bounds.
     ///
@@ -406,7 +406,7 @@ impl MotionDriver {
                     compile_error!("Not yet implemented");
                     self.ping().step_high(channel);
                     // TODO
-                    //crate::control::motion_timing::s_block_for(Duration::from_micros(1));
+                    //crate::tasks::motion_timing::s_block_for(Duration::from_micros(1));
                     self.step_actuator().step_low(channel);
 
                 }

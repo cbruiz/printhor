@@ -1,3 +1,4 @@
+//! Motion Step plan execution
 use crate::hwa;
 use crate::hwa::controllers::{MultiTimer, StepPlan};
 use core::cell::RefCell;
@@ -207,12 +208,12 @@ impl StepPlanExecutor {
                 return;
             }
         }
-        self.tick_count += crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US;
+        self.tick_count += crate::tasks::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US;
 
         // In this point, state is either Duty or something were dequeued
         match self
             .current
-            .next(crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US)
+            .next(crate::tasks::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US)
         {
             None => {
                 panic!("Unexpected state");
@@ -298,8 +299,10 @@ impl StepPlanExecutor {
                                 }
                             });
                         }
+                        else {
+                            true
+                        }
                     }
-                    true
                 }
             }
         }
