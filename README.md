@@ -156,6 +156,7 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 | [Nucleo-f410rb + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
 | [Nucleo-l476rg + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
 | [Raspberry PI 2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                    | Draft             |
+| [ESP32-S3-WROOM](hwi-boards/printhor-hwi_esp32/README.md)                                         | Naïve Skeleton    |
 
 
 ## Extra utilery
