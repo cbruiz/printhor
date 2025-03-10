@@ -378,7 +378,7 @@ impl MotionConfigContent {
     pub const fn new() -> Self {
         Self {
             min_speed_su: TVector::new_with_const_value(hwa::math::ZERO),
-            max_feed_rate_su: TVector::new_with_const_value(hwa::math::ONE),
+            max_feed_rate_su: TVector::new(),
 
             max_speed_su: TVector::new(),
             max_accel_su: TVector::new(),

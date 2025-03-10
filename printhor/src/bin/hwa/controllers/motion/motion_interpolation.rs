@@ -36,8 +36,8 @@ impl LinearMicrosegmentStepInterpolator {
     /// # Arguments
     ///
     /// * `v_dir_abs` - The direction (unitary) vector in positive coordinates.
-    /// * `distance` - The distance to move in [hwa::Contract::SPACE_UNIT_MAGNITUDE].
-    /// * `u_steps_per_space_magnitude` - Micro-steps per [hwa::Contract::SPACE_UNIT_MAGNITUDE].
+    /// * `distance` - The distance to move in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE].
+    /// * `u_steps_per_space_magnitude` - Micro-steps per [hwa::HwiContract::SPACE_UNIT_MAGNITUDE].
     ///
     /// # Returns
     ///
@@ -161,11 +161,11 @@ impl LinearMicrosegmentStepInterpolator {
         self.u_steps_advanced
     }
 
-    /// Returns the number of advanced [hwa::Contract::SPACE_UNIT_MAGNITUDE] units.
+    /// Returns the number of advanced [hwa::HwiContract::SPACE_UNIT_MAGNITUDE] units.
     ///
     /// # Returns
     ///
-    /// A `TVector` containing the number of advanced [hwa::Contract::SPACE_UNIT_MAGNITUDE] units.
+    /// A `TVector` containing the number of advanced [hwa::HwiContract::SPACE_UNIT_MAGNITUDE] units.
     pub fn advanced_units(&self) -> TVector<Real> {
         self.advanced_steps().map_values(|_, c| {
             if c > 0 {

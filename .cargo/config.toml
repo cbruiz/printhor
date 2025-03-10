@@ -62,6 +62,7 @@ runner = "probe-rs echo PLEASE DON'T run --chip STM32F407VETx --disable-progress
 runner = "elf2uf2-rs --deploy --serial --verbose"
 
 [build]
+rustdocflags = [ "--html-in-header", "doc/doc.header.html" ]
 
 [profile.dev.package."*"]
 codegen-units = 1

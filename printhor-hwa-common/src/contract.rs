@@ -104,17 +104,17 @@ pub trait HwiContract: Sized {
             #[const_env::from_env("PHYSICAL_UNIT_MAGNITUDE")]
             const PHYSICAL_UNIT_MAGNITUDE: &'static str = "mm";
 
-            /// World size to apply bounds restriction in World Units ([WORLD_UNIT_MAGNITUDE])
+            /// World size to apply bounds restriction in World Units ([hwa::HwiContract::WORLD_UNIT_MAGNITUDE])
             ///
-            /// See [DEFAULT_WORLD_CENTER_WU] for constraints clarification
+            /// See [hwa::HwiContract::DEFAULT_WORLD_CENTER_WU] for constraints clarification
             const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real>;
 
-            /// World center in World Units ([WORLD_UNIT_MAGNITUDE])
+            /// World center in World Units ([hwa::HwiContract::WORLD_UNIT_MAGNITUDE])
             ///
-            /// Makes world coordinates bounded to: [- [DEFAULT_WORLD_SIZE] /2, [DEFAULT_WORLD_SIZE] /2]
+            /// Makes world coordinates bounded to: [- [hwa::HwiContract::DEFAULT_WORLD_SIZE_WU] /2, [hwa::HwiContract::DEFAULT_WORLD_SIZE_WU] /2]
             const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real>;
 
-            /// Homing offset in World Units ([WORLD_UNIT_MAGNITUDE])
+            /// Homing offset in World Units ([hwa::HwiContract::WORLD_UNIT_MAGNITUDE])
             ///
             /// Represent the world point reached when Homing performs
             const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {

@@ -21,6 +21,8 @@ jobs:
           submodules: recursive
       - name: Build
         run: cargo build --features native --package prinThor --bin printhor
+      - name: Generate doc
+        run: cargo doc --no-deps
       - name: Install cargo-llvm-cov
         run: cargo install cargo-llvm-cov
       - name: Install lcov

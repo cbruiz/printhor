@@ -36,12 +36,12 @@
 //! Do not **format** on f32 directly and use [math::Real] instead to avoid large code generation.
 //!
 //! Reasoning: core::fmt::float::impl_general_format macro expansion will take around:
-//! - 7.6KiB by [core::fmt::float::float_to_decimal_common_shortest]
-//! - 6.3KiB by [core::fmt::float::float_to_decimal_common_exact]
+//! - 7.6KiB by core::fmt::float::float_to_decimal_common_shortest
+//! - 6.3KiB by core::fmt::float::float_to_decimal_common_exact
 //!
 //! Around 14KB in total
 //!
-//! Actually, 5.1KiB only using [math::Real::format] and/or [math::Real::fmt] with lexical_core/ryu.
+//! Actually, 5.1KiB only using Debug format trait and/or defmt fmt trait with lexical_core/ryu.
 
 use crate::control;
 use crate::hwa;

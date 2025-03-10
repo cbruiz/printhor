@@ -8,33 +8,33 @@ use hwa::math::TVector;
 /// Represents the data for a motion segment.
 ///
 /// # Fields
-/// - `speed_enter_sus`: Initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
-/// - `speed_exit_sus`: Speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
-/// - `speed_target_sus`: Target speed for the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
-/// - `displacement_su`: Total displacement to complete the movement in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
-/// - `speed_enter_constrained_sus`: Constrained initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
-/// - `speed_exit_constrained_sus`: Constrained speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_enter_sus`: Initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_exit_sus`: Speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_target_sus`: Target speed for the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `displacement_su`: Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
+/// - `speed_enter_constrained_sus`: Constrained initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `speed_exit_constrained_sus`: Constrained speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
 /// - `proj_prev`: Projection of the previous segment.
 /// - `proj_next`: Projection of the next segment.
 /// - `unit_vector_dir`: Unit vector for the direction of movement in space coordinates.
-/// - `dest_pos`: Destination position vector in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
-/// - `dest_world_pos`: Destination position vector in world units ([hwa::Contract::WORLD_UNIT_MAGNITUDE]).
+/// - `dest_pos`: Destination position vector in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
+/// - `dest_world_pos`: Destination position vector in world units ([hwa::HwiContract::WORLD_UNIT_MAGNITUDE]).
 /// - `tool_power`: Tool power utilized in the segment.
 /// - `constraints`: Motion constraints applicable to the segment.
 #[derive(Clone, Copy)]
 pub struct Segment {
-    /// Initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    /// Initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_enter_su_s: Real,
-    /// Speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    /// Speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_exit_su_s: Real,
-    /// Target speed for the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    /// Target speed for the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_target_su_s: Real,
-    /// Total displacement to complete the movement in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
+    /// Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
     pub displacement_su: Real,
 
-    /// Constrained initial speed at the entry of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    /// Constrained initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_enter_constrained_su_s: Real,
-    /// Constrained speed at the exit of the segment in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]/sec).
+    /// Constrained speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_exit_constrained_su_s: Real,
     /// Projection of the previous segment.
     pub proj_prev: Real,
@@ -44,13 +44,13 @@ pub struct Segment {
     /// Unit vector for the direction of movement.
     pub unit_vector_dir: TVector<Real>,
 
-    /// Source position vector in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
+    /// Source position vector in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
     pub src_pos: TVector<Real>,
 
-    /// Destination position vector in space units ([hwa::Contract::SPACE_UNIT_MAGNITUDE]).
+    /// Destination position vector in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
     pub dest_pos: TVector<Real>,
 
-    /// Destination position vector in world units ([hwa::Contract::WORLD_UNIT_MAGNITUDE]).
+    /// Destination position vector in world units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
     pub dest_world_pos: TVector<Real>,
 
     #[allow(unused)]

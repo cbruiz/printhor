@@ -12,7 +12,7 @@
 
 Printhor is a generic and hardware-agnostic (firmware) framework for FDM printers, CNC, Engravers and robots implemented in Rust.
 
-Basically, it's a GCode interpreter capable to process a stream of GCodes (position and control orders), schedule them, compute a motion profile on the fly and finally perform the hardware level instructions (step pulses, PWM signals, ... or even dataframes broadcast for a dedicated breakboard) in real time.
+Basically, it's a GCode interpreter capable to process a stream of GCodes (position and control orders), schedule them, compute a motion profile on the fly and finally perform the hardware level instructions (step pulses, PWM signals, ... or even dataframes broadcast for a dedicated break-board) in real time.
 
 There are many productive firmwares in the community like gbrl, marlin, reprap, etc. Each single one have a concrete approach and guidelines.
 This one aims to provide a research environment for not strictly productive purpose, but a reliable platform with the following goals:
@@ -28,15 +28,19 @@ This one aims to provide a research environment for not strictly productive purp
 
 Which means the principal short-term goal is not to develop a productive firmware for final user rather than providing an environment in which anyone can test and experiment any concrete approach to feed the community with good quality, state-of-the-art or innovative feature increments.
 
+## Documentation (work in progress)
+
+[Documentation and guides](doc/README.md)
+
 ## Features
 * "Clean" hardware abstraction.
 * Vector geometry / linear algebra calculus for kinematics
-  * Smooth acceleration and jerk limited motion plan leveraging "Trajectory with Double S Velocity Profile" [1]. Briefly explained at [Plan implementation](src/bin/printhor/control/motion/profile.rs) and visualy explained in [Printhor motion plan. A simplified overview of the velocity integration](https://www.geogebra.org/m/hwpnmhcu) (GeoGebra).
+  * Smooth acceleration and jerk limited motion plan leveraging "Trajectory with Double S Velocity Profile" [1]. Briefly explained at [Plan implementation](printhor/src/bin/control/motion/profile.rs) and visualy explained in [Printhor motion plan. A simplified overview of the velocity integration](https://www.geogebra.org/m/hwpnmhcu) (GeoGebra).
     
     "[1] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)"
-  * High precision and deterministic kinematics and computations with configurable resolution. Briefly explained at [Stepper Task](src/bin/printhor/control/task_stepper.rs).
+  * High precision and deterministic kinematics and computations with configurable resolution. Briefly explained at [Stepper Task](printhor/src/bin/control/task_stepper.rs).
   * Simple and efficient cornering algorithm based on pure linear algebra. Foundation implicitly explained at [Printhor naïve cornering algorithm](https://www.geogebra.org/m/ft8svrwd) (GeoGebra).
-* Precise thermal control plan with PID. Briefly exlained at [Temperature Task](src/bin/printhor/control/task_temperature.rs).
+* Precise thermal control plan with PID. Briefly explained at [Temperature Task](printhor/src/bin/control/task_temperature.rs).
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
 * High behavior customization.
@@ -90,7 +94,7 @@ The minimal toolset required to build and run is:
 
 ## Prerequisites: Rust and toolchain
 
-This crate requires **Rust >= 1.79**.
+This crate requires **Rust >= 1.85**.
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
@@ -147,12 +151,12 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 
 | Board                                                                                             | Status            |
 |---------------------------------------------------------------------------------------------------|-------------------|
-| [SKR Mini E3 V2.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Initial           |
 | [SKR Mini E3 V3.0](hwi-boards/printhor-hwi_skr_mini_e3/README.md)                                 | Almost Functional |
 | [MKS Robin Nano v3.1](hwi-boards/printhor-hwi_mks_robin_nano/README.md)                           | Almost Functional |
 | [Nucleo-f410rb + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
 | [Nucleo-l476rg + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
 | [Raspberry PI 2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                    | Draft             |
+| [ESP32-S3-WROOM](hwi-boards/printhor-hwi_esp32/README.md)                                         | Naïve Skeleton    |
 
 
 ## Extra utilery
@@ -165,13 +169,13 @@ cargo run --profile release --bin s_plot --features s-plot-bin
 
 ### Example output with the current plotting style approach:
 As Image:
-![alt text](design/motion_plan.png "Motion Plan")
+![alt text](printhor/img/motion_plan.png "Motion Plan")
 
 As Vector:
 
-<object data="./design/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
-  <embed src="./design/motion_plan.pdf">
-    <p style="text-align: center;">This browser does not support PDFs. Please <a href="./design/motion_plan.pdf">Download the PDF</a> to view it</p>
+<object data="printhor/img/motion_plan.pdf" type="application/pdf" width="700px" height="700px">
+  <embed src="printhor/img/motion_plan.pdf">
+    <p style="text-align: center;">This browser does not support PDFs. Please <a href="printhor/img/motion_plan.pdf">Download the PDF</a> to view it</p>
 </object>
 
 There are (currently) two plots:
@@ -183,7 +187,7 @@ There are (currently) two plots:
   * A slopped gray polyline for the online derivation of __real__ (discrete) position datapoints in the sampling interval.
 
 ### Example output with the deprecated plotting style:
-![alt text](design/motion_plan_old.png "Motion Plan")
+![alt text](printhor/img/motion_plan_old.png "Motion Plan")
 
 This plot were self-explanatory, but deprecated in flavor of the previous one.
 We are keeping it because it is clear and useful for a high level understanding.
@@ -194,13 +198,10 @@ We are keeping it because it is clear and useful for a high level understanding.
   * Remove unwrap/panic calls.
   * Remove unsafe code (a little bit, but there it is)
   * Remove trivial/redundant computation __but not compromising readability__.
-* Unit test 
-* CoreXY support
 * Display
 * I/O control
   * xonxoff
-* Adaptative planing cost measurement to take a decision on chaining or not and how much (AKA Cornering).
-* exfat support could be great.
+* exFAT support would be great.
 
 # Customization
 
@@ -217,15 +218,13 @@ printhor is composed by the following architectural blocks
 * printhor-hwa-common (within the project), as the hardware abstraction layer contract and common machinery
 * A set of crates (withn the project) for each harware/board. Currently:
   * printhor-hwi_native : The native simulator.
-  * printhor-hwi_skr_mini_e3 : Two boards: V2 (See [Datasheets/SKR_MINI_E3-V2.0](datasheets/SKR_MINI_E3-V2.0)) and V3 (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0))
+  * printhor-hwi_skr_mini_e3 : A BigTreeTech SKR Mini E3 V3 (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0)).
   * printhor-hwi_mks_robin_nano_v3_1 : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
   * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG))
 
 Intentionally, traits are in general avoided in HWI layer when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
 * type aliases
 * module exports
-
-[Advanced documentation](doc/README.md)
 
 # Similar, related software and shout-outs
 

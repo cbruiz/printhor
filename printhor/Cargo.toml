@@ -94,12 +94,12 @@ debug-position = []
 debug-position-deviation = []
 debug-motion = []
 debug-motion-displacement = []
+debug-motion-planning = []
 debug-motion-broadcast = []
 # A specific hack to verify motion distances match the expectations
 assert-motion = []
 # Timmins instrumentation
 verbose-timings = ["printhor-hwi_native?/verbose-timings", "printhor-hwi_skr_mini_e3?/verbose-timings", "printhor-hwi_mks_robin_nano?/verbose-timings", "printhor-hwi_nucleo_64_arduino_cnc_hat?/verbose-timings", "printhor-hwi_rp_2040?/verbose-timings"]
-
 
 sd-card-uses-spi = ["printhor-hwa-common/sd-card-spi", "printhor-hwi_skr_mini_e3?/sd-card-uses-spi", "printhor-hwi_mks_robin_nano?/sd-card-uses-spi"]
 adc-is-async = []
@@ -111,7 +111,7 @@ bypass-hotbed = []
 ili9341_parallel = []
 ili9341_spi = []
 
-s-plot-bin = ["printhor-hwi_native?/s-plot-bin"]
+s-plot-bin = ["printhor-hwi_native?/s-plot-bin", "gnuplot"]
 integration-test = [
     "cornering",
     "integration-test-m100",
@@ -241,18 +241,19 @@ anthropomorphic-quad-robot = [
 
 native = [
     "with-log",
+
     #"debug-position",
     #"debug-position-deviation",
     #"debug-motion-displacement",
+    #"debug-motion-planning",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"debug-gcode",
     #"verbose-timings",
-    "assert-motion",
+    #"assert-motion",
     #"trace-commands",
 
     "cornering",
-    #"trace-commands",
 
     "cartessian-cnc",
     #"cartessian-fdm",
@@ -521,6 +522,9 @@ printhor-hwi_rp_2040 = { version = "0.0", default-features = false, optional = t
 cfg-if = { version = "1.0.0", features = [] }
 const_env = { version = "0.1.2" }
 
+### s-plot
+gnuplot = { version = "0.0.45", optional = true }
+
 [build-dependencies]
 #proc-macro2 = "1.0."
 cfg-if = "1.0"
@@ -536,3 +540,6 @@ required-features = ["s-plot-bin"]
 
 [[bin]]
 name = "printhor"
+
+[package.metadata.docs.rs]
+rustdoc-args = [ "--html-in-header", "doc/doc.header.html" ]

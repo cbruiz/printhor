@@ -14,7 +14,8 @@ exclude = [
 	"hwi-boards/printhor-hwi_mks_robin_nano",
 	"hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat",
 	"hwi-boards/printhor-hwi_rp_2040",
-	"hwi-boards/printhor-hwi_skr_mini_e3"
+	"hwi-boards/printhor-hwi_skr_mini_e3",
+	"hwi-boards/printhor-hwi_esp32",
 ]
 
 [workspace.package]

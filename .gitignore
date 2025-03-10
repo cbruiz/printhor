@@ -21,9 +21,11 @@ data/*.puml
 .idea
 .vscode
 libs/*/target
-/s-plot/plot.pdf
-/design/*.drawio
+/plot.pdf
+/printhor/plot.pdf
 /hwi-boards/*/*.bin
-/design/*.jar
+/printhor/design/*.jar
+/printhor/design/*.drawio
 /run*.sh
 /*.info
+/printhor/test-data
