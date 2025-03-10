@@ -1,21 +1,19 @@
-use crate::control;
 ///! Input Multiplexer
 ///!
 ///! This feature is a bit inefficient and could be improved leveraging macros
 ///! because currently useless polls are performed in disabled channels
-use crate::hwa;
-use control::{GCodeCmd, GCodeLineParserError};
+use crate::{hwa, processing};
+
 use embassy_futures::select::Either3;
-use printhor_hwa_common::CommChannel;
 
 // Utility to accept a common gcode stream from multiple sources
 pub struct GCodeMultiplexedInputStream {
     #[cfg(feature = "with-serial-usb")]
-    serial_usb_line_parser: control::GCodeLineParser<hwa::types::SerialUsbInputStream>,
+    serial_usb_line_parser: processing::GCodeLineParser<hwa::types::SerialUsbInputStream>,
     #[cfg(feature = "with-serial-port-1")]
-    serial_port1_line_parser: control::GCodeLineParser<hwa::types::SerialPort1InputStream>,
+    serial_port1_line_parser: processing::GCodeLineParser<hwa::types::SerialPort1InputStream>,
     #[cfg(feature = "with-serial-port-2")]
-    serial_port2_line_parser: control::GCodeLineParser<hwa::types::SerialPort2InputStream>,
+    serial_port2_line_parser: processing::GCodeLineParser<hwa::types::SerialPort2InputStream>,
 }
 
 impl GCodeMultiplexedInputStream {
@@ -28,20 +26,23 @@ impl GCodeMultiplexedInputStream {
     ) -> Self {
         Self {
             #[cfg(feature = "with-serial-usb")]
-            serial_usb_line_parser: control::GCodeLineParser::new(serial_usb_rx_stream),
+            serial_usb_line_parser: processing::GCodeLineParser::new(serial_usb_rx_stream),
             #[cfg(feature = "with-serial-port-1")]
-            serial_port1_line_parser: control::GCodeLineParser::new(serial_port1_rx_stream),
+            serial_port1_line_parser: processing::GCodeLineParser::new(serial_port1_rx_stream),
             #[cfg(feature = "with-serial-port-2")]
-            serial_port2_line_parser: control::GCodeLineParser::new(serial_port2_rx_stream),
+            serial_port2_line_parser: processing::GCodeLineParser::new(serial_port2_rx_stream),
         }
     }
 
     pub async fn next_gcode(
         &mut self,
-    ) -> (Result<GCodeCmd, GCodeLineParserError>, hwa::CommChannel) {
+    ) -> (
+        Result<processing::GCodeCmd, processing::GCodeLineParserError>,
+        hwa::CommChannel,
+    ) {
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-usb")] {
-                let f1 = self.serial_usb_line_parser.next_gcode(CommChannel::SerialUsb);
+                let f1 = self.serial_usb_line_parser.next_gcode(hwa::CommChannel::SerialUsb);
             }
             else {
                 let f1 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
@@ -49,18 +50,18 @@ impl GCodeMultiplexedInputStream {
         }
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-port-1")] {
-                let f2 = self.serial_port1_line_parser.next_gcode(CommChannel::SerialPort1);
+                let f2 = self.serial_port1_line_parser.next_gcode(hwa::CommChannel::SerialPort1);
             }
             else {
-                let f2 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
+                let f2 = core::future::pending::<Result<Option<processing::GCodeCmd>, processing::GCodeLineParserError>>();
             }
         }
         cfg_if::cfg_if! {
             if #[cfg(feature="with-serial-port-2")] {
-                let f3 = self.serial_port2_line_parser.next_gcode(CommChannel::SerialPort2);
+                let f3 = self.serial_port2_line_parser.next_gcode(hwa::CommChannel::SerialPort2);
             }
             else {
-                let f3 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
+                let f3 = core::future::pending::<Result<Option<processing::GCodeCmd>, GCodeLineParserError>>();
             }
         }
 
@@ -83,7 +84,7 @@ impl GCodeMultiplexedInputStream {
                     }
                     else {
                         hwa::error!("Unexpectedly got nothing");
-                        (Err(GCodeLineParserError::EOF), hwa::CommChannel::Internal)
+                        (Err(processing::GCodeLineParserError::EOF), hwa::CommChannel::Internal)
                     }
                 }
             }
@@ -94,7 +95,7 @@ impl GCodeMultiplexedInputStream {
                     }
                     else {
                         hwa::error!("Unexpectedly got nothing");
-                        (Err(GCodeLineParserError::EOF), hwa::CommChannel::Internal)
+                        (Err(processing::GCodeLineParserError::EOF), hwa::CommChannel::Internal)
                     }
                 }
             }

@@ -1,4 +1,4 @@
-/// The module for motion configuration (parameters and constraints)
+//! The module for motion management (configuration, state, parameters, constraints, software elements, devices and drivers)
 mod motion_config;
 
 /// The module to model a motion segment instance.

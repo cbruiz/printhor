@@ -1,3 +1,4 @@
+//! Motion Configuration
 use crate::hwa;
 #[allow(unused)]
 use hwa::Contract;
@@ -264,12 +265,12 @@ impl MotionConfig {
         hwa::info!(
             "[MotionConfig:MCUConf] `SegmentSampling`: {} Hz ({} us period)",
             Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY,
-            crate::control::task_stepper::STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
+            crate::tasks::task_stepper::STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
         );
         hwa::info!(
             "[MotionConfig:MCUConf] `MicroSegmentInterpolation`: {} Hz ({} us period)",
             Contract::STEP_PLANNER_CLOCK_FREQUENCY,
-            crate::control::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US,
+            crate::tasks::task_stepper::STEPPER_PLANNER_CLOCK_PERIOD_US,
         );
         hwa::info!(
             "[MotionConfig:ComputedConf] Precision (1 step space width) is space: {:?} {}",

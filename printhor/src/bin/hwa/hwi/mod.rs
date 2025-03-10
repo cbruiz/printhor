@@ -1,4 +1,4 @@
-//! The hardware/baremetal *abstraction* interface
+//! The hardware/bare-metal *abstraction* interface
 //! this is a simple strict-typing abstraction with adapters/proxies
 
 //#region "Boards exports as HWI"

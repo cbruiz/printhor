@@ -1,7 +1,19 @@
-#[allow(unused)]
-use crate::control::{EFSXYZ, EXYZ, FXYZ, GCodeCmd, GCodeValue, N, S};
 use crate::helpers;
 use crate::hwa;
+#[allow(unused)]
+use crate::processing::EFSXYZ;
+#[allow(unused)]
+use crate::processing::EXYZ;
+#[allow(unused)]
+use crate::processing::FXYZ;
+#[allow(unused)]
+use crate::processing::GCodeCmd;
+#[allow(unused)]
+use crate::processing::GCodeValue;
+#[allow(unused)]
+use crate::processing::N;
+#[allow(unused)]
+use crate::processing::S;
 use hwa::CommChannel;
 
 #[derive(Debug)]
@@ -391,7 +403,7 @@ where
                                 _ => {
                                     return Err(GCodeLineParserError::GCodeNotImplemented(
                                         self.raw_parser.get_current_line(),
-                                        alloc::string::String::from("N/A"),
+                                        alloc::format!("N/A"),
                                     ));
                                 }
                             }

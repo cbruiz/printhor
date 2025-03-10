@@ -1,3 +1,4 @@
+//! The printhor controllers. A set of abstractions over the [hwa::hwi] and HAL
 #[allow(unused)]
 use crate::hwa;
 
@@ -13,7 +14,7 @@ mod printer_controller;
 pub use printer_controller::*;
 
 #[cfg(feature = "with-motion")]
-pub mod motion;
+pub mod motion_control;
 
 #[cfg(feature = "with-probe")]
 mod servo_controller;
@@ -41,7 +42,7 @@ cfg_if::cfg_if! {
 pub use trinamic_controller::TrinamicController;
 
 #[cfg(feature = "with-motion")]
-pub use motion::*;
+pub use motion_control::*;
 
 #[cfg(feature = "with-probe")]
 pub use servo_controller::GenericServoController;

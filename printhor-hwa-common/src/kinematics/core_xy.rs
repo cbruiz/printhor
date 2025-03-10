@@ -1,3 +1,4 @@
+//! Core-XY Kinematics transformation
 use crate as hwa;
 use hwa::CoordSel;
 use hwa::kinematics::WorldToSpaceTransformer;

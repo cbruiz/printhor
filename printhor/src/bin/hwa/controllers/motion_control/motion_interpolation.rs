@@ -1,3 +1,5 @@
+//! Motion Interpolation strategies
+
 use crate::hwa;
 use hwa::CoordSel;
 use hwa::controllers::MultiTimer;

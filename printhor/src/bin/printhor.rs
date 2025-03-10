@@ -6,9 +6,11 @@
 
 extern crate alloc;
 extern crate core;
-pub mod control;
 pub mod helpers;
 pub mod hwa;
+pub mod motion;
+pub mod processing;
+pub mod tasks;
 
 #[allow(unused)]
 use hwa::{Contract, HwiContract, RawHwiResource};
@@ -455,7 +457,7 @@ async fn init_controllers_and_spawn_tasks(
 
     //#region "Init Gcode processor"
 
-    let processor: hwa::GCodeProcessor = hwa::GCodeProcessor::new(
+    let processor: processing::GCodeProcessor = processing::GCodeProcessor::new(
         event_bus.clone(),
         #[cfg(feature = "with-serial-usb")]
         _context.serial_usb_tx,
@@ -552,7 +554,7 @@ async fn init_controllers_and_spawn_tasks(
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-print-job")] {
             spawner.spawn(
-                control::task_print_job::task_print_job(
+                tasks::task_print_job::task_print_job(
                     processor.clone(),
                     printer_controller.clone(),
                     sd_card_controller.clone(),
@@ -568,7 +570,7 @@ async fn init_controllers_and_spawn_tasks(
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             spawner.spawn(
-                control::task_stepper::task_stepper(
+                tasks::task_stepper::task_stepper(
                     event_bus.clone(),
                     processor.motion_planner.clone(),
                     _wd,
@@ -579,7 +581,7 @@ async fn init_controllers_and_spawn_tasks(
                 if #[cfg(feature = "with-motion-broadcast")] {
                     hwa::Contract::launch_high_priotity(
                         _context.high_priority_core,
-                        control::task_motion_broadcast::task_motion_broadcast(
+                        tasks::task_motion_broadcast::task_motion_broadcast(
                             _motion_broadcast_channel,
                             motion_config,
                             _context.motion_sender
@@ -597,7 +599,7 @@ async fn init_controllers_and_spawn_tasks(
     cfg_if::cfg_if! {
         if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
             spawner.spawn(
-                control::task_temperature::task_temperature(
+                tasks::task_temperature::task_temperature(
                     event_bus.clone(),
                     #[cfg(feature = "with-hot-end")]
                     hot_end_controller,
@@ -617,7 +619,7 @@ async fn init_controllers_and_spawn_tasks(
             feature = "with-motion", feature = "with-hot-end", feature = "with-hot-bed"
         ))] {
             spawner.spawn(
-                control::task_defer::task_defer(processor.clone(), _defer_channel)
+                tasks::task_defer::task_defer(processor.clone(), _defer_channel)
             ).map_err(|_| ())?;
         }
     }
@@ -627,9 +629,9 @@ async fn init_controllers_and_spawn_tasks(
     //#region "Spawn control task"
 
     spawner
-        .spawn(control::task_control::task_control(
+        .spawn(tasks::task_control::task_control(
             processor.clone(),
-            control::GCodeMultiplexedInputStream::new(
+            processing::GCodeMultiplexedInputStream::new(
                 #[cfg(feature = "with-serial-usb")]
                 _context.serial_usb_rx_stream,
                 #[cfg(feature = "with-serial-port-1")]
@@ -651,7 +653,7 @@ async fn init_controllers_and_spawn_tasks(
     cfg_if::cfg_if! {
         if #[cfg(any(test, feature = "integration-test"))] {
             spawner.spawn(
-                control::task_integration::task_integration(
+                tasks::task_integration::task_integration(
                     processor.clone(),
                     #[cfg(feature = "with-sd-card")]
                     sd_card_controller.clone(),

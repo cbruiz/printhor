@@ -1,6 +1,7 @@
+//! Motion Ring buffer (planning -> execution)
 use crate::hwa;
 use hwa::HwiContract;
-use hwa::controllers::{PlanEntry, motion};
+use hwa::controllers::{PlanEntry, motion_control};
 
 /// A ring buffer data structure designed for storing `PlanEntry` items efficiently.
 ///
@@ -102,19 +103,19 @@ impl RingBuffer {
     ///
     /// # Returns
     ///
-    /// * `Result<&mut motion::Segment, ()>` - The mutable reference to the segment or an error if the entry is not a `PlannedMove`.
+    /// * `Result<&mut motion_control::Segment, ()>` - The mutable reference to the segment or an error if the entry is not a `PlannedMove`.
     #[allow(unused)]
     pub fn mut_planned_segment_from_tail(
         &mut self,
         offset: u8,
-    ) -> Result<&mut motion::Segment, ()> {
+    ) -> Result<&mut motion_control::Segment, ()> {
         match self.mut_entry_from_tail(offset) {
             Some(PlanEntry::PlannedMove(_s, _, _, _, _)) => Ok(_s),
             _ => Err(()),
         }
     }
 
-    /// Returns an immutable reference to a `motion::Segment` from the tail of the buffer based on the given offset.
+    /// Returns an immutable reference to a `motion_control::Segment` from the tail of the buffer based on the given offset.
     ///
     /// # Arguments
     ///
@@ -122,8 +123,8 @@ impl RingBuffer {
     ///
     /// # Returns
     ///
-    /// * `Result<&motion::Segment, ()>` - The reference to the segment or an error if the entry is not a `PlannedMove`.
-    pub fn planned_segment_from_tail(&self, offset: u8) -> Result<&motion::Segment, ()> {
+    /// * `Result<&motion_control::Segment, ()>` - The reference to the segment or an error if the entry is not a `PlannedMove`.
+    pub fn planned_segment_from_tail(&self, offset: u8) -> Result<&motion_control::Segment, ()> {
         match self.entry_from_tail(offset) {
             Some(PlanEntry::PlannedMove(_s, _, _, _, _)) => Ok(_s),
             _ => Err(()),

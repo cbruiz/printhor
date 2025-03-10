@@ -2,9 +2,10 @@
 //! This module provides a task that notifies to the U(S)ART the acceptation or the completion of the
 //! GCodes that aren't processed immediately, so processor can accept more
 //! Some firmwares resolves this by allocating extra space in the queue, but that case issues because you can get blocked
-use crate::hwa;
-use crate::hwa::{CommChannel, DeferAction, DeferEvent};
+use crate::{hwa, processing};
+
 use embassy_time::{Duration, with_timeout};
+use hwa::{CommChannel, DeferAction, DeferEvent};
 
 #[derive(Clone, Copy, Default)]
 struct SubscriptionCounting {
@@ -81,7 +82,10 @@ impl Subscriptions {
 }
 
 #[embassy_executor::task(pool_size = 1)]
-pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::types::DeferChannel) {
+pub async fn task_defer(
+    processor: processing::GCodeProcessor,
+    defer_channel: hwa::types::DeferChannel,
+) {
     hwa::info!("[task_defer] started");
 
     let mut subscriptions = Subscriptions::new();
@@ -95,7 +99,7 @@ pub async fn task_defer(processor: hwa::GCodeProcessor, defer_channel: hwa::type
                     subscriptions.total_counts
                 );
                 #[cfg(test)]
-                if crate::control::task_integration::INTEGRATION_STATUS.signaled() {
+                if crate::tasks::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_defer] Ending gracefully");
                     return ();
                 }

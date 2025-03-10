@@ -1,3 +1,4 @@
+//! Spherical Anthropomorphic actuator kinematics: 4x 3DOF
 //! STILL FRESH!! Work in Progress
 
 use crate as hwa;

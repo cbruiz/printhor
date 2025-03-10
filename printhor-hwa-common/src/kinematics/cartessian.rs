@@ -1,3 +1,4 @@
+//! Cartessian kinematics: Identity transform, basically.
 use crate::kinematics::WorldToSpaceTransformer;
 
 pub struct Identity;

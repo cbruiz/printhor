@@ -1,10 +1,12 @@
-//! Auxiliary commandline program to investigate, evaluate and verify and visualize motion planing
+//! Auxiliary commandline program to study, research, analyze, investigate, evaluate and verify the motion pipelines
 extern crate alloc;
 extern crate core;
 
-pub mod control;
 pub mod helpers;
 pub mod hwa;
+pub mod motion;
+pub mod processing;
+pub mod tasks;
 
 mod instrumentation;
 
@@ -13,14 +15,13 @@ use hwa::HwiContract;
 #[allow(unused)]
 use hwa::RawHwiResource;
 
-use control::motion;
-use control::task_stepper::{
-    STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
-};
 use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
 use hwa::controllers;
 use motion::SCurveMotionProfile;
 use printhor_hwa_common::CommChannel;
+use tasks::task_stepper::{
+    STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
+};
 
 #[embassy_executor::main]
 async fn main(spawner: embassy_executor::Spawner) {
@@ -133,7 +134,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         gcode_buff.append("G1 X87.62321 Y103.28552 F7000 S0\n");
 
         let mut parser =
-            control::GCodeLineParser::new(instrumentation::gcode::BufferStream::new(gcode_buff));
+            processing::GCodeLineParser::new(instrumentation::gcode::BufferStream::new(gcode_buff));
 
         loop {
             match parser.next_gcode(CommChannel::Internal).await {
@@ -159,10 +160,10 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
     let _sampling_time: hwa::math::Real =
         hwa::math::Real::from_lit(STEPPER_PLANNER_CLOCK_PERIOD_US as i64, 6).rdp(6);
 
-    let mut data_points = instrumentation::datapoints::DataPoints::new();
+    let mut data_points = instrumentation::data_points::DataPoints::new();
     loop {
         match motion_planner.next_plan(&event_bus).await {
-            controllers::motion::ExecPlan::Segment(mut segment, _channel, _order_num) => {
+            controllers::motion_control::ExecPlan::Segment(mut segment, _channel, _order_num) => {
                 let current_real_pos = motion_planner.motion_status().get_current_position();
                 let position_offset = segment.src_pos - current_real_pos.space_pos;
                 hwa::info!(
@@ -304,7 +305,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                     }
                 }
             }
-            controllers::motion::ExecPlan::SetPosition(position, _channel, _order_num) => {
+            controllers::motion_control::ExecPlan::SetPosition(position, _channel, _order_num) => {
                 motion_planner
                     .motion_status()
                     .update_current_position(_order_num, &position);

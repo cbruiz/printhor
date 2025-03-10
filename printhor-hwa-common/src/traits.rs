@@ -1,3 +1,5 @@
+//! The printhor traits (Work In Progress).
+//! This module expects to define or re-export all the HWI devices interfaces shall satisfy
 #[allow(unused)]
 use crate as hwa;
 

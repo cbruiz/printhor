@@ -1,3 +1,4 @@
+//! Motion step actuator controller/adaptor
 use crate::hwa;
 use hwa::SyncMutexStrategy;
 

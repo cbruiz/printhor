@@ -1,3 +1,4 @@
+/// EventBus machinery
 //#region "Event Bus Channel"
 use crate as hwa;
 
@@ -5,7 +6,6 @@ use core::ops::{BitAnd, BitOr, BitXor};
 use hwa::event_bus::{
     EventBusPubSubType, EventBusPublisherType, EventBusSubscriberType, EventFlags, EventStatus,
 };
-
 /// Represents the *internal* channel controller of the event bus.
 /// It's responsible for managing and
 /// publishing events within the system. The [crate::GenericEventBus]

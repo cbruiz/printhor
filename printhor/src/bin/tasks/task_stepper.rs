@@ -7,22 +7,22 @@
 //!     - Enable all steppers
 //!     - Evaluate the motion profile displacement at [`Contract::STEP_PLANNER_CLOCK_FREQUENCY`]
 //!     - Compute number of steps to do in each axis (independently)
-//!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`](hwa::controllers::motion::MultiTimer)
+//!     - Compute pulse rate across each axis (independently) and construct an iterator leveraging [`MultiTimer`](hwa::controllers::motion_control::MultiTimer)
 //!     - Consume a micro-segment until iterator is exhausted
 //!
 //! TODO: This is a work still in progress
 
-use crate::control;
-use crate::hwa;
-#[allow(unused)]
-use control::motion::MotionProfile;
-use control::motion::SCurveMotionProfile;
+use crate::{hwa, motion};
+
 use embassy_time::Duration;
 use hwa::controllers::ExecPlan;
 use hwa::controllers::LinearMicrosegmentStepInterpolator;
-use hwa::controllers::motion::STEP_DRIVER;
-use hwa::controllers::motion::SegmentIterator;
+use hwa::controllers::motion_control::STEP_DRIVER;
+use hwa::controllers::motion_control::SegmentIterator;
 use hwa::math;
+#[allow(unused)]
+use motion::MotionProfile;
+use motion::SCurveMotionProfile;
 
 use hwa::math::{CoordSel, Real, TVector};
 #[allow(unused)]
@@ -206,7 +206,7 @@ pub async fn task_stepper(
                     steppers_off = true;
                 }
                 #[cfg(test)]
-                if control::task_integration::INTEGRATION_STATUS.signaled() {
+                if crate::tasks::task_integration::INTEGRATION_STATUS.signaled() {
                     hwa::info!("[task_stepper] Ending gracefully");
                     return ();
                 }
@@ -603,7 +603,7 @@ pub async fn task_stepper(
 
                         cfg_if::cfg_if! {
                             if #[cfg(feature="verbose-timings")] {
-                                use crate::control::motion::profile::MotionProfile;
+                                use motion::MotionProfile;
 
                                 //global_timer = embassy_time::Instant::now();
                                 hwa::info!("[task_stepper] v_0: {:?}, v_lim: {:?}, v_1: {:?}; t: {:?}; dist: {{ [{:#?}] {}, |dist|: {:?} {}, steps: [{:#?}] }}; [{:?} moves left]",

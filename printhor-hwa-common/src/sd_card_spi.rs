@@ -1,4 +1,5 @@
-/// Implementation borrowed and adapted from embedded_sdmmc to provide a pseudo-async approach
+//! Implementation borrowed and adapted from embedded_sdmmc to provide a pseudo-async approach
+
 use crate as hwa;
 use core::cell::RefCell;
 #[cfg(feature = "with-sd-card")]

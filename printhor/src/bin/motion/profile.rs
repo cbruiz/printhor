@@ -2,32 +2,11 @@
 //!
 //! \[1\] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)
 
-use crate::control::CodeExecutionFailure;
 use crate::hwa;
+use crate::motion;
+use crate::processing;
 use hwa::math;
 use hwa::math::*;
-
-/// The `MotionProfile` trait provides methods for evaluating motion profiles.
-pub trait MotionProfile {
-    /// Returns the end time of the motion profile.
-    fn end_time(&self) -> Real;
-
-    /// Returns the end position of the motion profile.
-    fn end_pos(&self) -> Real;
-
-    /// Evaluates the position at a given time `t` within the motion profile.
-    ///
-    /// # Parameters
-    ///
-    /// - `t`: The time at which to evaluate the position.
-    ///
-    /// # Returns
-    ///
-    /// An `Option` containing a tuple with:
-    /// - The evaluated position as `Real`.
-    /// - A status as `u8` (implementation-specific).
-    fn eval_position(&self, t: Real) -> Option<Real>;
-}
 
 /// Struct representing the motion profile configuration.
 ///
@@ -226,7 +205,7 @@ impl SCurveMotionProfile {
     ///
     /// # Returns
     ///
-    /// `Result<SCurveMotionProfile, CodeExecutionFailure>` - The computed S-curve motion profile or an error.
+    /// `Result<SCurveMotionProfile,  processing::CodeExecutionFailure>` - The computed S-curve motion profile or an error.
     ///
     /// # Description
     ///
@@ -253,13 +232,13 @@ impl SCurveMotionProfile {
         v_1: Real,
         constraints: &Constraints,
         error_correction: bool,
-    ) -> Result<SCurveMotionProfile, CodeExecutionFailure> {
+    ) -> Result<SCurveMotionProfile, processing::CodeExecutionFailure> {
         if constraints.v_max.is_negligible()
             || constraints.a_max.is_negligible()
             || constraints.j_max.is_negligible()
         {
             hwa::warn!("[SCurveMotionProfile] Unable to perform movement: constraints are unset");
-            return Err(CodeExecutionFailure::NumericalError);
+            return Err(processing::CodeExecutionFailure::NumericalError);
         }
         // Set v_max to arg_max { v_0, v_1, v_max}
         let mut v_max = v_0.max(v_1).max(constraints.v_max);
@@ -421,7 +400,7 @@ impl SCurveMotionProfile {
                 let delta_e = profile.q1 - final_pos;
                 profile
                     .extend(delta_e)
-                    .map_err(|_| CodeExecutionFailure::ERR)?;
+                    .map_err(|_| processing::CodeExecutionFailure::ERR)?;
             }
             return Ok(profile);
             /*
@@ -550,7 +529,7 @@ impl SCurveMotionProfile {
                                     let delta_e = profile.q1 - final_pos;
                                     profile
                                         .extend(delta_e)
-                                        .map_err(|_| CodeExecutionFailure::ERR)?;
+                                        .map_err(|_| processing::CodeExecutionFailure::ERR)?;
                                 }
                                 return Ok(profile);
                             }
@@ -583,7 +562,7 @@ impl SCurveMotionProfile {
                                         let delta_e = profile.q1 - final_pos;
                                         profile
                                             .extend(delta_e)
-                                            .map_err(|_| CodeExecutionFailure::ERR)?;
+                                            .map_err(|_| processing::CodeExecutionFailure::ERR)?;
                                     }
                                     Ok(profile)
                                 } else {
@@ -632,7 +611,7 @@ impl SCurveMotionProfile {
                                         let delta_e = profile.q1 - final_pos;
                                         profile
                                             .extend(delta_e)
-                                            .map_err(|_| CodeExecutionFailure::ERR)?;
+                                            .map_err(|_| processing::CodeExecutionFailure::ERR)?;
                                     }
                                     Ok(profile)
                                 };
@@ -679,7 +658,7 @@ impl SCurveMotionProfile {
                                 if error_correction {
                                     let final_pos = profile.s_i7(&profile.i7_end());
                                     let delta_e = profile.q1 - final_pos;
-                                    profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+                                    profile.extend(delta_e).map_err(|_|  processing::CodeExecutionFailure::ERR)?;
 
                                 }
                                 return Ok(profile);
@@ -738,7 +717,7 @@ impl SCurveMotionProfile {
                             if error_correction {
                                 let final_pos = profile.s_i7(&profile.i7_end());
                                 let delta_e = profile.q1 - final_pos;
-                                profile.extend(delta_e).map_err(|_| CodeExecutionFailure::ERR)?;
+                                profile.extend(delta_e).map_err(|_|  processing::CodeExecutionFailure::ERR)?;
 
                             }
                             return Ok(profile);
@@ -779,7 +758,7 @@ impl SCurveMotionProfile {
                                 let delta_e = profile.q1 - final_pos;
                                 profile
                                     .extend(delta_e)
-                                    .map_err(|_| CodeExecutionFailure::ERR)?;
+                                    .map_err(|_| processing::CodeExecutionFailure::ERR)?;
                             }
                             return Ok(profile);
                         }
@@ -825,7 +804,7 @@ impl SCurveMotionProfile {
         j_max: Real,
         aj_ratio: Real,
         amax_squared: Real,
-    ) -> Result<Times, CodeExecutionFailure> {
+    ) -> Result<Times, processing::CodeExecutionFailure> {
         #[cfg(feature = "debug-motion-planning")]
         hwa::info!(
             "[SCurveMotionProfile] [compute_case_1] with aj_ratio {:?}",
@@ -867,7 +846,7 @@ impl SCurveMotionProfile {
         let (t_j1, t_a) = if a_max_not_reached {
             let t_j = ((v_max - v_0).max(math::ZERO) * j_max_inv)
                 .sqrt()
-                .ok_or(CodeExecutionFailure::NumericalError)?;
+                .ok_or(processing::CodeExecutionFailure::NumericalError)?;
             (t_j, t_j + t_j)
         } else {
             let t_j = aj_ratio;
@@ -876,7 +855,7 @@ impl SCurveMotionProfile {
         let (t_j2, t_d) = if a_min_not_reached {
             let t_j = ((v_max - v_1).max(math::ZERO) * j_max_inv)
                 .sqrt()
-                .ok_or(CodeExecutionFailure::NumericalError)?;
+                .ok_or(processing::CodeExecutionFailure::NumericalError)?;
             (t_j, t_j + t_j)
         } else {
             let t_j = aj_ratio;
@@ -1057,9 +1036,9 @@ impl SCurveMotionProfile {
     /// Compute intermediate piecewise function points to speedup equations
     /// A max between previous segment max pos and next one is applied to guarantee consistency
     /// when the move is (pseudo)triangular, given that position can never decrease
-    fn compute_cache(&mut self) -> Result<(), CodeExecutionFailure> {
+    fn compute_cache(&mut self) -> Result<(), processing::CodeExecutionFailure> {
         if self.v_lim.is_negligible() {
-            return Err(CodeExecutionFailure::NumericalError);
+            return Err(processing::CodeExecutionFailure::NumericalError);
         }
         self.cache.s1_pt = self.s_i1(&self.i1_end());
         self.cache.s2_pt = self.cache.s1_pt.max(self.s_i2(&self.i2_end()));
@@ -1183,7 +1162,7 @@ impl SCurveMotionProfile {
     }
 }
 
-impl MotionProfile for SCurveMotionProfile {
+impl motion::MotionProfile for SCurveMotionProfile {
     #[inline(always)]
     fn end_time(&self) -> Real {
         self.i7_end()
@@ -1272,12 +1251,10 @@ impl core::fmt::Display for SCurveMotionProfile {
 pub mod test {
     //Example 3.9
 
-    use crate::control::CodeExecutionFailure;
-    use crate::control::motion::{Constraints, SCurveMotionProfile};
-    use crate::hwa;
-    use crate::hwa::math::Real;
+    use crate::{hwa, motion, processing};
+    use hwa::math;
+    use motion::{Constraints, SCurveMotionProfile};
     use num_traits::ToPrimitive;
-    use printhor_hwa_common::math;
 
     pub fn do_compute(
         q1: f32,
@@ -1287,22 +1264,22 @@ pub mod test {
         a_max: f32,
         j_max: f32,
         error_correction: bool,
-    ) -> Result<SCurveMotionProfile, CodeExecutionFailure> {
+    ) -> Result<SCurveMotionProfile, processing::CodeExecutionFailure> {
         let constraints = Constraints {
-            v_max: Real::from_f32(v_max),
-            a_max: Real::from_f32(a_max),
-            j_max: Real::from_f32(j_max),
+            v_max: math::Real::from_f32(v_max),
+            a_max: math::Real::from_f32(a_max),
+            j_max: math::Real::from_f32(j_max),
         };
         SCurveMotionProfile::compute(
-            Real::from_f32(q1),
-            Real::from_f32(v_0),
-            Real::from_f32(v_1),
+            math::Real::from_f32(q1),
+            math::Real::from_f32(v_0),
+            math::Real::from_f32(v_1),
             &constraints,
             error_correction,
         )
     }
 
-    fn approx_equal(what: &str, v: Real, expected: f32, tolerance: f32) {
+    fn approx_equal(what: &str, v: math::Real, expected: f32, tolerance: f32) {
         let v1 = v.to_f64().to_f32().unwrap();
         let ok = (v1 - expected).abs() < tolerance;
         assert!(ok, "{} = {} but should be = {}", what, v1, expected);
@@ -1415,7 +1392,7 @@ pub mod test {
 
     #[test]
     fn test_limits() {
-        use crate::control::motion::profile::MotionProfile;
+        use crate::motion::MotionProfile;
         let r = do_compute(10., 1., 0., 10., 10., 30., false).unwrap();
 
         assert_eq!(
@@ -1435,7 +1412,7 @@ pub mod test {
 
         // TODO: s_i8()
 
-        // fn compute_cache(&mut self) -> Result<(), CodeExecutionFailure> {
+        // fn compute_cache(&mut self) -> Result<(),  processing::CodeExecutionFailure> {
         //         if self.v_lim.is_negligible() {
         //             return Err(CodeExecutionFailure::NumericalError);
         //         }

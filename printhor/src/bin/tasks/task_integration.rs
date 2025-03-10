@@ -1,22 +1,20 @@
-#[allow(unused)]
-use crate::control;
-use crate::hwa;
-use crate::hwa::{GCodeProcessor, make_vector_real};
+use crate::{hwa, processing};
 use alloc::string::ToString;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use hwa::CoordSel;
 #[allow(unused)]
 use hwa::HwiContract;
 use hwa::PersistentState;
+use hwa::make_vector_real;
 use hwa::math;
 #[allow(unused)]
 use hwa::{CommChannel, EventBusSubscriber, EventFlags, EventStatus};
 #[allow(unused)]
 use math::Real;
+use processing::GCodeProcessor;
 
 // A global static notifier to indicate when task_integration is completed
 #[cfg(any(test, feature = "integration-test"))]
-pub static INTEGRATION_STATUS: PersistentState<CriticalSectionRawMutex, bool> =
+pub static INTEGRATION_STATUS: PersistentState<hwa::AsyncCsMutexType, bool> =
     PersistentState::new();
 
 #[embassy_executor::task(pool_size = 1)]
@@ -27,19 +25,19 @@ pub async fn task_integration(
 ) {
     #[allow(unused)]
     let expect_immediate = |res| match res {
-        control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => {
-            Ok(control::CodeExecutionSuccess::OK)
+        processing::CodeExecutionSuccess::OK | processing::CodeExecutionSuccess::CONSUMED => {
+            Ok(processing::CodeExecutionSuccess::OK)
         }
-        control::CodeExecutionSuccess::QUEUED => Ok(control::CodeExecutionSuccess::OK),
-        control::CodeExecutionSuccess::DEFERRED(_) => Err(control::CodeExecutionFailure::ERR),
+        processing::CodeExecutionSuccess::QUEUED => Ok(processing::CodeExecutionSuccess::OK),
+        processing::CodeExecutionSuccess::DEFERRED(_) => Err(processing::CodeExecutionFailure::ERR),
     };
     #[allow(unused)]
     let expect_deferred = |res| match res {
-        control::CodeExecutionSuccess::OK | control::CodeExecutionSuccess::CONSUMED => {
-            Err(control::CodeExecutionFailure::ERR)
+        processing::CodeExecutionSuccess::OK | processing::CodeExecutionSuccess::CONSUMED => {
+            Err(processing::CodeExecutionFailure::ERR)
         }
-        control::CodeExecutionSuccess::QUEUED => Err(control::CodeExecutionFailure::ERR),
-        control::CodeExecutionSuccess::DEFERRED(evt) => Ok(evt),
+        processing::CodeExecutionSuccess::QUEUED => Err(processing::CodeExecutionFailure::ERR),
+        processing::CodeExecutionSuccess::DEFERRED(evt) => Ok(evt),
     };
 
     let event_bus = processor.event_bus.clone();
@@ -77,7 +75,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M100),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M100),
                 true,
             )
             .await
@@ -87,7 +85,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M105),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M105),
                 true,
             )
             .await
@@ -97,7 +95,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M115),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M115),
                 true,
             )
             .await
@@ -107,10 +105,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M503(control::S { s: Some(math::ONE) }),
+                    processing::GCodeValue::M503(processing::S { s: Some(math::ONE) }),
                 ),
                 true,
             )
@@ -121,10 +119,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M503(control::S {
+                    processing::GCodeValue::M503(processing::S {
                         s: Some(math::ZERO),
                     }),
                 ),
@@ -137,7 +135,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M114),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M114),
                 true,
             )
             .await
@@ -147,7 +145,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M119),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M119),
                 true,
             )
             .await
@@ -157,7 +155,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::G),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::G),
                 true,
             )
             .await
@@ -167,10 +165,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M117(Some(String::from("hello"))),
+                    processing::GCodeValue::M117(Some(String::from("hello"))),
                 ),
                 true,
             )
@@ -181,10 +179,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M118(Some(String::from("hello"))),
+                    processing::GCodeValue::M118(Some(String::from("hello"))),
                 ),
                 true,
             )
@@ -203,7 +201,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M81),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M81),
                 false,
             )
             .await
@@ -213,10 +211,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::G0(control::FXYZ::from(make_vector_real!(
+                    processing::GCodeValue::G0(processing::FXYZ::from(make_vector_real!(
                         x = 1.0,
                         y = 1.0
                     ))),
@@ -231,10 +229,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M140(control::S {
+                    processing::GCodeValue::M140(processing::S {
                         s: hwa::make_optional_real!(1.0),
                     }),
                 ),
@@ -248,10 +246,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M104(control::S {
+                    processing::GCodeValue::M104(processing::S {
                         s: hwa::make_optional_real!(1.0),
                     }),
                 ),
@@ -265,7 +263,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M106),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M106),
                 false,
             )
             .await
@@ -276,10 +274,10 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(
+                &processing::GCodeCmd::new(
                     0,
                     None,
-                    control::GCodeValue::M109(control::S {
+                    processing::GCodeValue::M109(processing::S {
                         s: hwa::make_optional_real!(1.0),
                     }),
                 ),
@@ -295,7 +293,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M80),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M80),
                 false,
             )
             .await
@@ -313,7 +311,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::M502),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::M502),
                 false,
             )
             .await
@@ -324,8 +322,11 @@ pub async fn task_integration(
     #[cfg(feature = "with-motion")]
     {
         let test_name = "T4 [G28 (Homming)]";
-        let homing_gcode =
-            control::GCodeCmd::new(0, None, control::GCodeValue::G28(control::EXYZ::new()));
+        let homing_gcode = processing::GCodeCmd::new(
+            0,
+            None,
+            processing::GCodeValue::G28(processing::EXYZ::new()),
+        );
 
         hwa::info!("## {} - BEGIN", test_name);
         let evt = processor
@@ -340,7 +341,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::G29),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::G29),
                 true,
             )
             .await
@@ -349,7 +350,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::G29_1),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::G29_1),
                 true,
             )
             .await
@@ -358,7 +359,7 @@ pub async fn task_integration(
         processor
             .execute(
                 CommChannel::Internal,
-                &control::GCodeCmd::new(0, None, control::GCodeValue::G29_2),
+                &processing::GCodeCmd::new(0, None, processing::GCodeValue::G29_2),
                 true,
             )
             .await
@@ -371,10 +372,10 @@ pub async fn task_integration(
     #[cfg(feature = "with-motion")]
     {
         let test_name = "T5 [G92 (Reset Position)]";
-        let set_pos_gcode = control::GCodeCmd::new(
+        let set_pos_gcode = processing::GCodeCmd::new(
             5,
             Some(5),
-            control::GCodeValue::G92(
+            processing::GCodeValue::G92(
                 hwa::make_vector_real!(e = 0.0, x = 0.0, y = 0.0, z = 0.0).into(),
             ),
         );
@@ -392,8 +393,11 @@ pub async fn task_integration(
     #[cfg(feature = "with-motion")]
     {
         let test_name = "T6 [G4 (Dwell)]";
-        let set_pos_gcode =
-            control::GCodeCmd::new(6, Some(6), control::GCodeValue::G4(control::S { s: None }));
+        let set_pos_gcode = processing::GCodeCmd::new(
+            6,
+            Some(6),
+            processing::GCodeValue::G4(processing::S { s: None }),
+        );
 
         hwa::info!("## {} - BEGIN", test_name);
         processor
@@ -409,10 +413,10 @@ pub async fn task_integration(
     #[cfg(feature = "with-sd-card")]
     {
         let test_name = "T7 [M20 (List SDCard)]";
-        let gcode = control::GCodeCmd::new(7, Some(7), control::GCodeValue::M20(None));
+        let gcode = processing::GCodeCmd::new(7, Some(7), processing::GCodeValue::M20(None));
 
         hwa::info!("## {} - BEGIN", test_name);
-        control::task_control::execute(
+        crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
             &gcode,
@@ -432,14 +436,14 @@ pub async fn task_integration(
     #[cfg(feature = "with-sd-card")]
     {
         let test_name = "T8 [M20 (List SDCard)]";
-        let gcode = control::GCodeCmd::new(
+        let gcode = processing::GCodeCmd::new(
             8,
             Some(8),
-            control::GCodeValue::M20(Some("/dir/".to_string())),
+            processing::GCodeValue::M20(Some("/dir/".to_string())),
         );
 
         hwa::info!("## {} - BEGIN", test_name);
-        control::task_control::execute(
+        crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
             &gcode,
@@ -452,13 +456,13 @@ pub async fn task_integration(
         .and_then(expect_immediate)
         .expect("M20 (ListDir) OK");
 
-        let gcode = control::GCodeCmd::new(
+        let gcode = processing::GCodeCmd::new(
             8,
             Some(8),
-            control::GCodeValue::M20(Some("/XXX/".to_string())),
+            processing::GCodeValue::M20(Some("/XXX/".to_string())),
         );
 
-        control::task_control::execute(
+        crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
             &gcode,
@@ -477,9 +481,9 @@ pub async fn task_integration(
         let test_name = "T6 []";
         hwa::info!("Testing G1 Ortho");
 
-        let g1_code = control::GCodeCmd::new(
+        let g1_code = tasks::GCodeCmd::new(
             0, None,
-            control::GCodeValue::G1(control::XYZEFS {
+            tasks::GCodeValue::G1(tasks::XYZEFS {
                 x: Some(Real::new(10, 0)),
                 y: None,
                 z: None,
@@ -509,9 +513,9 @@ pub async fn task_integration(
         let test_name = "T7 []";
         hwa::info!("Testing G1 Oblique");
 
-        let g1_code = control::GCodeCmd::new(
+        let g1_code = tasks::GCodeCmd::new(
             0, None,
-            control::GCodeValue::G1(control::XYZEFS {
+            tasks::GCodeValue::G1(tasks::XYZEFS {
                 x: Some(Real::new(20, 0)),
                 y: Some(Real::new(20, 0)),
                 z: None,
@@ -571,9 +575,9 @@ pub async fn task_integration(
     #[cfg(feature = "integration-test-move-boundaries")]
     {
         let test_name = "T9 []";
-        let g1_code = control::GCodeCmd::new(
+        let g1_code = tasks::GCodeCmd::new(
             0, None,
-            control::GCodeValue::G1(control::XYZEFS {
+            tasks::GCodeValue::G1(tasks::XYZEFS {
                 x: Some(Real::new(7414, 2)),
                 y: Some(Real::new(9066, 2)),
                 z: None,
@@ -749,13 +753,13 @@ pub async fn task_integration(
     {
         let test_name = "T14 [Plotting)]";
 
-        let gcode = control::GCodeCmd::new(
+        let gcode = processing::GCodeCmd::new(
             8,
             Some(8),
-            control::GCodeValue::M23(Some("dir/laser.g".to_string())),
+            processing::GCodeValue::M23(Some("dir/laser.g".to_string())),
         );
         hwa::info!("## {} - BEGIN", test_name);
-        let resp = control::task_control::execute(
+        let resp = crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
             &gcode,
@@ -781,9 +785,9 @@ pub async fn task_integration(
             Ok(_) => {
                 // command resume (eq: M24)
 
-                let gcode = control::GCodeCmd::new(8, Some(8), control::GCodeValue::M24);
+                let gcode = processing::GCodeCmd::new(8, Some(8), processing::GCodeValue::M24);
 
-                let resp = control::task_control::execute(
+                let resp = crate::tasks::task_control::execute(
                     &mut processor,
                     CommChannel::Internal,
                     &gcode,
@@ -830,13 +834,13 @@ pub async fn task_integration(
     {
         let test_name = "T15 [Plotting 2)]";
 
-        let gcode = control::GCodeCmd::new(
+        let gcode = processing::GCodeCmd::new(
             9,
             Some(9),
-            control::GCodeValue::M23(Some("dir/pen.g".to_string())),
+            processing::GCodeValue::M23(Some("dir/pen.g".to_string())),
         );
         hwa::info!("## {} - BEGIN", test_name);
-        let resp = control::task_control::execute(
+        let resp = crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
             &gcode,
@@ -862,9 +866,9 @@ pub async fn task_integration(
             Ok(_) => {
                 // command resume (eq: M24)
 
-                let gcode = control::GCodeCmd::new(10, Some(10), control::GCodeValue::M24);
+                let gcode = processing::GCodeCmd::new(10, Some(10), processing::GCodeValue::M24);
 
-                let resp = control::task_control::execute(
+                let resp = crate::tasks::task_control::execute(
                     &mut processor,
                     CommChannel::Internal,
                     &gcode,
@@ -915,13 +919,13 @@ pub async fn task_integration(
         hwa::info!("## {} - BEGIN", test_name);
 
         // Set DRY_RUN Mode
-        let resp = control::task_control::execute(
+        let resp = crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
-            &(control::GCodeCmd::new(
+            &(processing::GCodeCmd::new(
                 11,
                 Some(11),
-                control::GCodeValue::M37(control::S {
+                processing::GCodeValue::M37(processing::S {
                     s: Some(Real::new(1, 0)),
                 }),
             )),
@@ -937,12 +941,12 @@ pub async fn task_integration(
             return;
         }
 
-        let gcode = control::GCodeCmd::new(
+        let gcode = processing::GCodeCmd::new(
             9,
             Some(9),
-            control::GCodeValue::M23(Some("BENCHY.G".to_string())),
+            processing::GCodeValue::M23(Some("BENCHY.G".to_string())),
         );
-        let resp = control::task_control::execute(
+        let resp = crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
             &gcode,
@@ -967,9 +971,9 @@ pub async fn task_integration(
             Ok(_) => {
                 // command resume (eq: M24)
 
-                let gcode = control::GCodeCmd::new(10, Some(10), control::GCodeValue::M24);
+                let gcode = processing::GCodeCmd::new(10, Some(10), processing::GCodeValue::M24);
 
-                let resp = control::task_control::execute(
+                let resp = crate::tasks::task_control::execute(
                     &mut processor,
                     CommChannel::Internal,
                     &gcode,
@@ -1005,13 +1009,13 @@ pub async fn task_integration(
         }
 
         // Unset DRY_RUN Mode
-        let resp = control::task_control::execute(
+        let resp = crate::tasks::task_control::execute(
             &mut processor,
             CommChannel::Internal,
-            &(control::GCodeCmd::new(
+            &(processing::GCodeCmd::new(
                 11,
                 Some(11),
-                control::GCodeValue::M37(control::S {
+                processing::GCodeValue::M37(processing::S {
                     s: Some(Real::new(0, 0)),
                 }),
             )),
@@ -1069,8 +1073,8 @@ fn finish_task(success: Result<(), &'static str>) {
 #[cfg(not(feature = "s-plot-bin"))]
 #[cfg(test)]
 mod integration_test {
-    use crate::control::task_integration::INTEGRATION_STATUS;
     use crate::hwa;
+    use crate::tasks::task_integration::INTEGRATION_STATUS;
     use std::marker::PhantomData;
     use std::sync::{Condvar, Mutex};
 
