@@ -1,5 +1,4 @@
 //! Motion segment module
-//! TODO: This feature is still in incubation
 use crate::hwa;
 use hwa::math::Real;
 use hwa::math::TVector;
@@ -69,7 +68,7 @@ impl Segment {
                     true => None,
                     false => Some(coord_value * _flow_rate),
                 },
-                _ => match coord_value.is_zero() {
+                _ => match coord_value.is_negligible() {
                     true => None,
                     false => Some(coord_value),
                 },
@@ -82,25 +81,24 @@ impl Segment {
 mod tests {
     use super::*;
     use crate::hwa::math;
-    use crate::hwa::math::Real;
     use crate::hwa::math::TVector;
     use crate::motion::{Constraints, SCurveMotionProfile, SegmentSampler};
 
     fn dummy_segment() -> Segment {
         Segment {
-            speed_enter_su_s: Real::from_f32(10.0),
-            speed_exit_su_s: Real::from_f32(15.0),
-            speed_target_su_s: Real::from_f32(20.0),
-            displacement_su: Real::from_f32(100.0),
-            speed_enter_constrained_su_s: Real::from_f32(10.0),
-            speed_exit_constrained_su_s: Real::from_f32(15.0),
-            proj_prev: Real::from_f32(0.0),
-            proj_next: Real::from_f32(100.0),
-            unit_vector_dir: TVector::one(),
+            speed_enter_su_s: hwa::make_real!(10.0),
+            speed_exit_su_s: hwa::make_real!(15.0),
+            speed_target_su_s: hwa::make_real!(20.0),
+            displacement_su: (TVector::one() * math::ONE_HUNDRED).norm2().unwrap(),
+            speed_enter_constrained_su_s: hwa::make_real!(10.0),
+            speed_exit_constrained_su_s: hwa::make_real!(15.0),
+            proj_prev: hwa::make_real!(0.0),
+            proj_next: hwa::make_real!(100.0),
+            unit_vector_dir: TVector::one().unit(),
             src_pos: TVector::zero(),
             dest_pos: TVector::one() * math::ONE_HUNDRED,
             dest_world_pos: TVector::one() * math::ONE_HUNDRED,
-            tool_power: Real::from_f32(5.0),
+            tool_power: hwa::make_real!(5.0),
             constraints: Constraints {
                 v_max: math::ONE_HUNDRED,
                 a_max: math::ONE_THOUSAND,
@@ -112,29 +110,79 @@ mod tests {
     #[test]
     fn test_segment_creation() {
         let segment = dummy_segment();
-        assert_eq!(segment.speed_enter_su_s, Real::from_f32(10.0));
-        assert_eq!(segment.speed_exit_su_s, Real::from_f32(15.0));
-        assert_eq!(segment.speed_target_su_s, Real::from_f32(20.0));
+        assert_eq!(segment.speed_enter_su_s, hwa::make_real!(10.0));
+        assert_eq!(segment.speed_exit_su_s, hwa::make_real!(15.0));
+        assert_eq!(segment.speed_target_su_s, hwa::make_real!(20.0));
+    }
+
+    #[cfg(feature = "with-x-axis")]
+    #[test]
+    fn test_segment_deviation_correction() {
+        let mut segment = dummy_segment();
+
+        // Simulate a deviation of 0.1 in the 'x' axis
+        let deviation = hwa::make_vector_real!(x = 0.1);
+        let expected_dist = (TVector::one() * math::ONE_HUNDRED).norm2().unwrap();
+        segment.src_pos += deviation;
+        
+        segment.fix_deviation(&deviation, hwa::make_real!(1.0));
+        
+        assert_eq!(segment.displacement_su, expected_dist);
+        assert!((segment.src_pos - TVector::zero()).norm2().unwrap().is_negligible());
+    }
+
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))]
+    #[test]
+    fn test_segment_deviation_correction_in_boundaries() {
+        let mut segment = Segment {
+            speed_enter_su_s: hwa::make_real!(1.0),
+            speed_exit_su_s: hwa::make_real!(1.0),
+            speed_target_su_s: hwa::make_real!(10.0),
+            displacement_su: hwa::make_real!(1.0),
+            speed_enter_constrained_su_s: hwa::make_real!(1.0),
+            speed_exit_constrained_su_s: hwa::make_real!(1.0),
+            proj_prev: hwa::make_real!(0.0),
+            proj_next: hwa::make_real!(0.0),
+            unit_vector_dir: hwa::make_vector_real!(x=0.0, y=1.0),
+            src_pos: hwa::make_vector_real!(x=0.0, y=0.0),
+            dest_pos: hwa::make_vector_real!(x=0.0, y=1.0),
+            dest_world_pos: hwa::make_vector_real!(x=0.0, y=1.0),
+            tool_power: hwa::make_real!(0.0),
+            constraints: Constraints {
+                v_max: math::ONE_HUNDRED,
+                a_max: math::ONE_THOUSAND,
+                j_max: math::ONE_THOUSAND,
+            },
+        };
+
+        // Simulate a deviation of 0.1 in the 'x' axis
+        let deviation = hwa::make_vector_real!(x = 0.1);
+        let expected_dist = hwa::make_real!(1.0);
+        segment.src_pos += deviation;
+
+        segment.fix_deviation(&deviation, hwa::make_real!(1.0));
+
+        assert_eq!(segment.displacement_su.rdp(6), expected_dist.rdp(6));
     }
 
     #[test]
     fn test_segment_iterator() {
         use crate::motion::MotionProfile;
         let constraints = Constraints {
-            v_max: Real::from_f32(10.0),
-            a_max: Real::from_f32(2.0),
-            j_max: Real::from_f32(1.0),
+            v_max: hwa::make_real!(10.0),
+            a_max: hwa::make_real!(2.0),
+            j_max: hwa::make_real!(1.0),
         };
         let motion_profile = SCurveMotionProfile::compute(
-            Real::from_f32(20.0),
-            Real::from_f32(0.0),
-            Real::from_f32(5.0),
+            hwa::make_real!(20.0),
+            hwa::make_real!(0.0),
+            hwa::make_real!(5.0),
             &constraints,
             true,
         )
         .unwrap();
         // Set sampling time to 60% of profile time
-        let sampling_period = motion_profile.end_time() * Real::from_f32(0.6);
+        let sampling_period = motion_profile.end_time() * hwa::make_real!(0.6);
         let mut sampler = SegmentSampler::new(&motion_profile, sampling_period);
 
         // Test iterator before exhaustion (expected to be at 60%)
@@ -156,19 +204,20 @@ mod tests {
     fn test_segment_iterator_exhaustion() {
         use crate::motion::MotionProfile;
         let constraints = Constraints {
-            v_max: Real::from_f32(10.0),
-            a_max: Real::from_f32(2.0),
-            j_max: Real::from_f32(1.0),
+            v_max: hwa::make_real!(10.0),
+            a_max: hwa::make_real!(2.0),
+            j_max: hwa::make_real!(1.0),
         };
         let motion_profile = SCurveMotionProfile::compute(
-            Real::from_f32(20.0),
-            Real::from_f32(0.0),
-            Real::from_f32(5.0),
+            hwa::make_real!(20.0),
+            hwa::make_real!(0.0),
+            hwa::make_real!(5.0),
             &constraints,
             true,
         )
         .unwrap();
-        let sampling_period = Real::from_f32(100.0);
+        
+        let sampling_period = hwa::make_real!(100.0);
         let mut sampler = SegmentSampler::new(&motion_profile, sampling_period);
 
         // Set to a time past the end of the profile
@@ -176,7 +225,7 @@ mod tests {
 
         assert_eq!(micro_segment.unwrap(), motion_profile.end_pos(), "At end");
         let micro_segment = sampler.next();
-        assert!(micro_segment.is_none(), "Does not avance more");
+        assert!(micro_segment.is_none(), "Does not advance more");
         assert!(sampler.is_exhausted(), "Is exhausted");
     }
 }

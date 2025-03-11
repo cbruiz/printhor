@@ -17,8 +17,6 @@ pub trait MotionProfile {
     ///
     /// # Returns
     ///
-    /// An `Option` containing a tuple with:
-    /// - The evaluated position as `Real`.
-    /// - A status as `u8` (implementation-specific).
-    fn eval_position(&self, t: hwa::math::Real) -> Option<hwa::math::Real>;
+    /// The evaluated position as `Real`.
+    fn eval_position(&self, t: hwa::math::Real) -> hwa::math::Real;
 }

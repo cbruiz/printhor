@@ -864,7 +864,7 @@ impl MotionPlanner {
                     true => None,
                     false => Some(coord_value * flow_rate),
                 },
-                _ => match coord_value.is_zero() {
+                _ => match coord_value.is_negligible() {
                     true => None,
                     false => Some(coord_value),
                 },

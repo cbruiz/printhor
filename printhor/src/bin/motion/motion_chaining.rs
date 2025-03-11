@@ -62,9 +62,7 @@ pub fn perform_motion_chaining(
 
     // Perform cornering optimization in a single pass with a flood fill algorithm
     loop {
-        if right_offset > left_offset {
-            break;
-        } else if left_offset == right_offset {
+        if left_offset <= right_offset {
             let mid_segment = rb.mut_planned_segment_from_tail(left_offset)?;
 
             mid_segment.speed_enter_su_s = left_watermark;
@@ -77,7 +75,7 @@ pub fn perform_motion_chaining(
                         Some(PlanEntry::PlannedMove(_s, _, _, _, _)),
                         Some(PlanEntry::PlannedMove(_t, _, _, _, _)),
                     ) => (_s, _t),
-                    _ => panic!(""),
+                    _ => return Err(()),
                 };
 
             hwa::trace!("\tleft [{}] right[{}]", left_offset, right_offset);

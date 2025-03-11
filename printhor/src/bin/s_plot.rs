@@ -41,13 +41,23 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             // Max speed
-            motion_planner.motion_config().set_max_speed(hwa::Contract::DEFAULT_MAX_SPEED_PS);
+            motion_planner.motion_config().set_max_speed(
+                hwa::Contract::DEFAULT_MAX_SPEED_PS
+            );
 
-            motion_planner.motion_config().set_max_accel(hwa::Contract::DEFAULT_MAX_ACCEL_PS);
+            motion_planner.motion_config().set_max_accel(
+                hwa::make_vector_real!(x=9810.0, y=9810.0, z=9810.0)
+                //hwa::Contract::DEFAULT_MAX_ACCEL_PS
+            );
 
-            motion_planner.motion_config().set_max_jerk(hwa::Contract::DEFAULT_MAX_JERK_PS);
+            motion_planner.motion_config().set_max_jerk(
+                hwa::make_vector_real!(x=9810.0, y=9810.0, z=9810.0) * hwa::make_real!(2.0)
+                //hwa::Contract::DEFAULT_MAX_JERK_PS 
+            );
 
-            motion_planner.motion_config().set_default_travel_speed(hwa::Contract::DEFAULT_TRAVEL_SPEED_PS);
+            motion_planner.motion_config().set_default_travel_speed(
+                hwa::Contract::DEFAULT_TRAVEL_SPEED_PS
+            );
 
             motion_planner.motion_config().set_space_units_per_world_unit(hwa::Contract::DEFAULT_UNITS_PER_WU);
 
@@ -273,12 +283,14 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                         let _adv_steps = micro_segment_interpolator.advanced_steps();
                         let adv_pos = micro_segment_interpolator.advanced_units();
                         hwa::info!(
-                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, vlim: {:?} {}/s",
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, velocity: <{:?}, {:?}, {:?}> {}/s",
                             _order_num,
                             segment_iterator.current_position(),
                             adv_pos,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.v_0,
                             trajectory.v_lim,
+                            trajectory.v_1,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE
                         );
 

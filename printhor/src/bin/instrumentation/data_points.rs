@@ -1,4 +1,5 @@
 //! A module to hold and plot discrete signal changes
+
 use crate::{hwa, motion};
 
 pub(crate) struct DataPointsDimension {
@@ -51,7 +52,7 @@ impl DataPointsDimension {
 pub(crate) struct DataPoints {
     pub current_segment_id: usize,
     pub current_micro_segment_id: usize,
-    pub total_displacement: hwa::math::Real,
+    pub total_displacement: f64,
 
     pub segment_position_marks: DataPointsDimension,
     pub sampled_positions: DataPointsDimension,
@@ -65,7 +66,7 @@ impl DataPoints {
         Self {
             current_segment_id: 0,
             current_micro_segment_id: 0,
-            total_displacement: hwa::math::ZERO,
+            total_displacement: 0.0,
 
             segment_position_marks: DataPointsDimension::new(),
             sampled_positions: DataPointsDimension::new(),
@@ -88,6 +89,7 @@ impl DataPoints {
         )
     }
     pub fn segment_ends(&mut self) {
+        self.total_displacement += self.sampled_positions.last_point;
         self.segment_position_marks.displace();
         self.sampled_positions.displace();
         self.segment_velocity_marks.displace_time();
@@ -102,14 +104,15 @@ impl DataPoints {
         self.current_segment_id
     }
 
-    pub fn micro_segment_ends(&mut self) {}
+    pub fn micro_segment_ends(&mut self) {
+    }
 
     pub fn current_micro_segment_id(&self) -> usize {
         self.current_micro_segment_id
     }
 
     pub fn total_displacement(&self) -> hwa::math::Real {
-        self.total_displacement
+        hwa::math::Real::from_f32(self.total_displacement as f32)
     }
 
     pub fn sampling_tick(&mut self, sampler: &motion::SegmentSampler<motion::SCurveMotionProfile>) {

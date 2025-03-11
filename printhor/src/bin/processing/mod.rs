@@ -26,8 +26,7 @@ pub enum CodeExecutionSuccess {
 }
 
 #[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
-#[derive(Debug)]
-#[allow(unused)]
+#[derive(PartialEq, Debug)]
 pub enum CodeExecutionFailure {
     /// Cannot perform because there is the same or something else running
     BUSY,

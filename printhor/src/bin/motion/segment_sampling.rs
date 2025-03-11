@@ -81,7 +81,8 @@ where
     pub fn next(&mut self) -> Option<Real> {
         if self.exhausted {
             None
-        } else {
+        }
+        else {
             let now = self.last_evaluated_time_s + self.sampling_period_s;
             if now >= self.profile.end_time() {
                 self.exhausted = true;
@@ -91,22 +92,18 @@ where
                 self.dt = now - self.last_evaluated_time_s;
                 self.last_evaluated_time_s = now;
             }
-            match self.profile.eval_position(self.last_evaluated_time_s) {
-                None => None,
-                Some(p) => {
-                    let end_pos = self.profile.end_pos();
-
-                    if p >= end_pos {
-                        self.exhausted = true;
-                        self.ds = end_pos - self.last_evaluated_position_su;
-                        self.last_evaluated_position_su = end_pos;
-                    } else {
-                        self.ds = p - self.last_evaluated_position_su;
-                        self.last_evaluated_position_su = p;
-                    }
-                    Some(self.last_evaluated_position_su)
-                }
+            let p = self.profile.eval_position(self.last_evaluated_time_s);
+            let end_pos = self.profile.end_pos();
+            if p >= end_pos {
+                self.exhausted = true;
+                self.ds = end_pos - self.last_evaluated_position_su;
+                self.last_evaluated_position_su = end_pos;
             }
+            else {
+                self.ds = p - self.last_evaluated_position_su;
+                self.last_evaluated_position_su = p;
+            }
+            Some(self.last_evaluated_position_su)
         }
     }
     
