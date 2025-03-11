@@ -450,7 +450,7 @@ impl SCurveMotionProfile {
                             let sqrt_delta =
                                 ((a_max * a_max * a_max * a_max * j_max_inv * j_max_inv)
                                     + (TWO * ((v_0 * v_0) + (v_1 * v_1))
-                                        + (a_max * ((FOUR * q_1) - (TWO * (t_j) * (v_0 + v_1))))))
+                                    + (a_max * ((FOUR * q_1) - (TWO * (t_j) * (v_0 + v_1))))))
                                     .sqrt()
                                     .unwrap();
                             let aj = (a_max * a_max) * j_max_inv;
@@ -470,10 +470,10 @@ impl SCurveMotionProfile {
                                     t_d_2 = qd * TWO;
                                     t_j2 = ((constraints.j_max * q_1)
                                         - (constraints.j_max
-                                            * (constraints.j_max * q_1 * q_1
-                                                + (v_1 + v_0) * (v_1 + v_0) * (v_1 - v_0)))
-                                            .sqrt()
-                                            .unwrap())
+                                        * (constraints.j_max * q_1 * q_1
+                                        + (v_1 + v_0) * (v_1 + v_0) * (v_1 - v_0)))
+                                        .sqrt()
+                                        .unwrap())
                                         / (constraints.j_max * (v_1 + v_0));
                                 } else if t_d_2 < math::ZERO {
                                     t_d_2 = math::ZERO;
@@ -481,10 +481,10 @@ impl SCurveMotionProfile {
                                     t_a_2 = qd * TWO;
                                     t_j1 = ((constraints.j_max * q_1)
                                         - (constraints.j_max
-                                            * (constraints.j_max * q_1 * q_1
-                                                + (v_1 + v_0) * (v_1 + v_0) * (v_0 - v_1)))
-                                            .sqrt()
-                                            .unwrap())
+                                        * (constraints.j_max * q_1 * q_1
+                                        + (v_1 + v_0) * (v_1 + v_0) * (v_0 - v_1)))
+                                        .sqrt()
+                                        .unwrap())
                                         / (constraints.j_max * (v_1 + v_0));
                                 }
                             } else {
@@ -1253,8 +1253,8 @@ pub mod test {
 
     use crate::{hwa, motion, processing};
     use hwa::math;
-    use motion::{Constraints, SCurveMotionProfile};
     use num_traits::ToPrimitive;
+    use motion::{Constraints, SCurveMotionProfile};
 
     pub fn do_compute(
         q1: f32,

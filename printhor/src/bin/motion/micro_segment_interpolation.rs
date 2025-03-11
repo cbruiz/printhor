@@ -1,4 +1,4 @@
-//! Motion Interpolation strategies
+//! Motion Interpolation (sampling) strategies
 
 use crate::hwa;
 use hwa::CoordSel;
@@ -7,7 +7,7 @@ use hwa::math;
 use math::{Real, TVector};
 
 /// A struct for interpolating microsteps along linear trajectories.
-pub struct LinearMicrosegmentStepInterpolator {
+pub struct MicroSegmentInterpolator {
     /// The direction (unitary) vector in positive coordinates.
     v_dir_abs: TVector<Real>,
     /// The unit director vector
@@ -32,7 +32,7 @@ pub struct LinearMicrosegmentStepInterpolator {
 
 const HALF_STEP: TVector<Real> = TVector::new_with_coord(CoordSel::all_axis(), Some(math::HALF));
 
-impl LinearMicrosegmentStepInterpolator {
+impl MicroSegmentInterpolator {
     /// Constructs a new `LinearMicrosegmentStepInterpolator`.
     ///
     /// # Arguments
@@ -120,26 +120,7 @@ impl LinearMicrosegmentStepInterpolator {
         self.u_steps_advanced += step_increment;
         self.multi_timer.displace_width(numerator);
         self.multi_timer.set_max_count(&step_increment);
-
-        #[cfg(test)]
-        {
-            hwa::trace!("...");
-            hwa::trace!(
-                "step_pos: {:?} steps_to_advance : {:?}",
-                step_pos,
-                steps_to_advance
-            );
-            hwa::trace!(
-                "delta: {:?} steps_to_advance_precise : {:?}",
-                self.delta,
-                steps_to_advance_precise
-            );
-            hwa::trace!(
-                "width: {} tick period by axis: {:?}",
-                numerator,
-                tick_period_by_axis
-            );
-        }
+        
         tick_period_by_axis
             .foreach(|coord, v| self.multi_timer.set_channel_ticks(coord.into(), *v));
         can_advance_more
@@ -189,22 +170,20 @@ impl LinearMicrosegmentStepInterpolator {
 }
 
 #[cfg(test)]
-pub mod interpolation_test {
+mod motion_interpolation_test {
 
-    #[cfg(feature = "wip-tests")]
     #[test]
     fn interpolation_test_1() {
         use crate::hwa;
-        use crate::math;
-        use hwa::controllers::LinearMicrosegmentStepInterpolator;
-        use math::Real;
+        use super::MicroSegmentInterpolator;
 
-        let mut lin = LinearMicrosegmentStepInterpolator::new(
+        let mut lin = MicroSegmentInterpolator::new(
             hwa::make_vector_real!(x = 1.0),
-            Real::from_f32(100.0),
+            hwa::make_real!(100.0),
             hwa::make_vector_real!(x = 160.0),
         );
 
-        lin.advance_to(Real::from_f32(100.0), Real::from_f32(100.0));
+        lin.advance_to(hwa::make_real!(100.0), hwa::make_real!(100.0));
+        assert_eq!(lin.advanced_units(), hwa::make_vector_real!(x = 100.0))
     }
 }

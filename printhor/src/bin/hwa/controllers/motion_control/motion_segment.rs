@@ -1,7 +1,6 @@
 //! Motion segment module
 //! TODO: This feature is still in incubation
 use crate::hwa;
-use crate::motion;
 use hwa::math::Real;
 use hwa::math::TVector;
 
@@ -79,123 +78,13 @@ impl Segment {
     }
 }
 
-/// Iterator over motion segments.
-///
-/// # Type Parameters
-/// - `'a`: Lifetime of the motion profile reference.
-/// - `P`: Type of the motion profile, which must implement the [motion::MotionProfile] trait.
-pub struct SegmentIterator<'a, P>
-where
-    P: motion::MotionProfile,
-{
-    /// Reference to the motion profile.
-    profile: &'a P,
-    /// The time step in secs to increment in each iteration.
-    sampling_period_s: Real,
-    /// Last evaluation position in world units.
-    last_evaluated_position_wu: Real,
-    /// Last evaluation time instant.
-    last_evaluated_time_s: Real,
-    ds: Real,
-    dt: Real,
-    /// State flag indicating whether the iterator is exhausted.
-    exhausted: bool,
-}
-
-impl<'a, P> SegmentIterator<'a, P>
-where
-    P: motion::MotionProfile,
-{
-    /// Creates a new SegmentIterator.
-    ///
-    /// # Parameters
-    /// - `profile`: Reference to the motion profile.
-    /// - `sampling_period`: The sampling period in seconds.
-    ///
-    /// # Returns
-    /// A new instance of `SegmentIterator`.
-    pub const fn new(profile: &'a P, sampling_period_s: Real) -> Self {
-        SegmentIterator {
-            profile,
-            sampling_period_s,
-            last_evaluated_position_wu: Real::zero(),
-            last_evaluated_time_s: Real::zero(),
-            ds: Real::zero(),
-            dt: Real::zero(),
-            exhausted: false,
-        }
-    }
-
-    pub fn current_position(&self) -> Real {
-        self.last_evaluated_position_wu
-    }
-
-    pub fn current_time(&self) -> Real {
-        self.last_evaluated_time_s
-    }
-
-    pub fn ds(&self) -> Real {
-        self.ds
-    }
-
-    pub fn dt(&self) -> Real {
-        self.dt
-    }
-
-    pub fn speed(&self) -> Real {
-        if self.dt.is_negligible() {
-            Real::zero()
-        } else {
-            self.ds / self.dt
-        }
-    }
-
-    /// Advances the iterator and returns the next micro-segment position.
-    ///
-    /// # Returns
-    /// An `Option` containing:
-    /// - The position as real
-    /// - `None` if exhausted.
-    pub fn next(&mut self) -> Option<Real> {
-        if self.exhausted {
-            None
-        } else {
-            let now = self.last_evaluated_time_s + self.sampling_period_s;
-            if now >= self.profile.end_time() {
-                self.exhausted = true;
-                self.dt = self.profile.end_time() - self.last_evaluated_time_s;
-                self.last_evaluated_time_s = self.profile.end_time();
-            } else {
-                self.dt = now - self.last_evaluated_time_s;
-                self.last_evaluated_time_s = now;
-            }
-            match self.profile.eval_position(self.last_evaluated_time_s) {
-                None => None,
-                Some(p) => {
-                    let end_pos = self.profile.end_pos();
-
-                    if p >= end_pos {
-                        self.exhausted = true;
-                        self.ds = end_pos - self.last_evaluated_position_wu;
-                        self.last_evaluated_position_wu = end_pos;
-                    } else {
-                        self.ds = p - self.last_evaluated_position_wu;
-                        self.last_evaluated_position_wu = p;
-                    }
-                    Some(self.last_evaluated_position_wu)
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::hwa::math;
     use crate::hwa::math::Real;
     use crate::hwa::math::TVector;
-    use crate::motion::{Constraints, SCurveMotionProfile};
+    use crate::motion::{Constraints, SCurveMotionProfile, SegmentSampler};
 
     fn dummy_segment() -> Segment {
         Segment {
@@ -246,19 +135,19 @@ mod tests {
         .unwrap();
         // Set sampling time to 60% of profile time
         let sampling_period = motion_profile.end_time() * Real::from_f32(0.6);
-        let mut segment_iter = SegmentIterator::new(&motion_profile, sampling_period);
+        let mut sampler = SegmentSampler::new(&motion_profile, sampling_period);
 
         // Test iterator before exhaustion (expected to be at 60%)
-        let segment = segment_iter.next();
-        assert!(segment.is_some());
+        let micro_segment = sampler.next();
+        assert!(micro_segment.is_some());
 
         // Test iterator at exhaustion (expected to be at 120%), truncated to motion_profile.end_time() and exhausted
-        let segment = segment_iter.next();
-        assert!(segment.is_some());
+        let micro_segment = sampler.next();
+        assert!(micro_segment.is_some());
 
         // Test iterator after exhaustion, expected to return None
-        let segment = segment_iter.next();
-        assert!(segment.is_none());
+        let micro_segment = sampler.next();
+        assert!(micro_segment.is_none());
     }
 
     /// Ensure that the iterator reaches end position oly once if micro-segment advance
@@ -280,14 +169,14 @@ mod tests {
         )
         .unwrap();
         let sampling_period = Real::from_f32(100.0);
-        let mut segment_iter = SegmentIterator::new(&motion_profile, sampling_period);
+        let mut sampler = SegmentSampler::new(&motion_profile, sampling_period);
 
         // Set to a time past the end of the profile
-        let micro_segment = segment_iter.next();
+        let micro_segment = sampler.next();
 
         assert_eq!(micro_segment.unwrap(), motion_profile.end_pos(), "At end");
-        let micro_segment = segment_iter.next();
+        let micro_segment = sampler.next();
         assert!(micro_segment.is_none(), "Does not avance more");
-        assert!(segment_iter.exhausted, "Is exhausted");
+        assert!(sampler.is_exhausted(), "Is exhausted");
     }
 }

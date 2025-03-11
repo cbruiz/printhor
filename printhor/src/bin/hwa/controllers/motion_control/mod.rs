@@ -8,13 +8,10 @@ mod motion_segment;
 mod motion_status;
 
 /// The module to hold the planned segment ring-buffer.
-mod motion_ring_buffer;
+pub(crate) mod motion_ring_buffer;
 
 /// The module with the motion planner logic.
 mod motion_planner;
-
-/// The module for motion interpolation.
-mod motion_interpolation;
 
 /// The module for motion timing (formally: the StepPlan generator).
 mod motion_step_plan;
@@ -27,7 +24,6 @@ mod motion_step_actuator;
 
 use crate::hwa;
 pub use motion_config::*;
-pub use motion_interpolation::*;
 pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;

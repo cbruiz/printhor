@@ -551,9 +551,19 @@ mod test {
     use hwa::{EventFlags, EventStatus};
     use std::sync::RwLock;
     use std::task::Poll;
+    
+    fn init_logging() {
+        let env = env_logger::Env::new().default_filter_or("info");
+        use std::io::Write;
+        let _ = env_logger::builder()
+            .parse_env(env)
+            .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+            .try_init();
+    }
 
     #[test]
     fn test_flags() {
+        init_logging();
         let flags = EventFlags::all();
         hwa::info!("all flags: {:?}", flags);
         let event_status = EventStatus::not_containing(EventFlags::SYS_BOOTING);
@@ -593,6 +603,12 @@ mod test {
         RwLock::new(None);
 
     fn initialize() {
+        let env = env_logger::Env::new().default_filter_or("info");
+        use std::io::Write;
+        let _ = env_logger::builder()
+            .parse_env(env)
+            .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+            .try_init();
         let mut global = EVENT_BUS.write().unwrap();
 
         if global.is_none() {
@@ -612,6 +628,7 @@ mod test {
 
     #[futures_test::test]
     async fn test_event_bus() {
+        init_logging();
         initialize();
         let mg = EVENT_BUS.read().unwrap();
         let event_bus = mg.as_ref().unwrap();

@@ -14,11 +14,10 @@ use hwa::HwiContract;
 
 #[allow(unused)]
 use hwa::RawHwiResource;
-
-use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
+use hwa::CommChannel;
 use hwa::controllers;
-use motion::SCurveMotionProfile;
-use printhor_hwa_common::CommChannel;
+use motion::{SCurveMotionProfile, SegmentSampler, MicroSegmentInterpolator};
+
 use tasks::task_stepper::{
     STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
 };
@@ -200,11 +199,11 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             .get_units_per_space_magnitude()
                             * motion_planner.motion_config().get_micro_steps_as_vector();
 
-                        let mut segment_iterator =
-                            SegmentIterator::new(&trajectory, micro_segment_period_secs);
+                        let mut segment_iterator = 
+                            SegmentSampler::new(&trajectory, micro_segment_period_secs);
 
                         let mut micro_segment_interpolator =
-                            LinearMicrosegmentStepInterpolator::new(
+                            MicroSegmentInterpolator::new(
                                 segment
                                     .unit_vector_dir
                                     .with_coord(relevant_coords.complement(), None)
@@ -223,7 +222,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             // Micro-segment start
 
                             if let Some(estimated_position) = segment_iterator.next() {
-                                data_points.interpolation_tick(&segment_iterator);
+                                data_points.sampling_tick(&segment_iterator);
 
                                 let w = (segment_iterator.dt() * hwa::math::ONE_MILLION).round();
                                 if w.is_negligible() {
@@ -360,13 +359,13 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         fg.axes2d()
             .set_y_label(format!("Position ({})", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
             .points(data_points.segment_position_marks.times, data_points.segment_position_marks.points, &[PlotOption::Color("black")])
-            .lines(data_points.interpolated_positions.times, data_points.interpolated_positions.points, &[PlotOption::Color("blue")])
+            .lines(data_points.sampled_positions.times, data_points.sampled_positions.points, &[PlotOption::Color("blue")])
             //.lines(data_points.time_discrete, data_points.pos_discrete, &[PlotOption::Color("gray")])
         ;
         fg.axes2d()
             .set_y_label(format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
             .points(data_points.segment_velocity_marks.times, data_points.segment_velocity_marks.points, &[PlotOption::Color("black")])
-            .lines(data_points.interpolated_velocities.times, data_points.interpolated_velocities.points, &[PlotOption::Color("red")])
+            .lines(data_points.sampled_velocities.times, data_points.sampled_velocities.points, &[PlotOption::Color("red")])
             //.lines(data_points.time, data_points.spd, &[PlotOption::Color("green")])
             //.lines(data_points.time_discrete_deriv, data_points.spd_discrete, &[PlotOption::Color("gray")])
         ;
