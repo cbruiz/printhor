@@ -551,7 +551,7 @@ mod test {
     use hwa::{EventFlags, EventStatus};
     use std::sync::RwLock;
     use std::task::Poll;
-    
+
     fn init_logging() {
         let env = env_logger::Env::new().default_filter_or("info");
         use std::io::Write;

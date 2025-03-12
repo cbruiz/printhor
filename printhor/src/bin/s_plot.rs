@@ -12,11 +12,11 @@ mod instrumentation;
 
 use hwa::HwiContract;
 
+use hwa::CommChannel;
 #[allow(unused)]
 use hwa::RawHwiResource;
-use hwa::CommChannel;
 use hwa::controllers;
-use motion::{SCurveMotionProfile, SegmentSampler, MicroSegmentInterpolator};
+use motion::{MicroSegmentInterpolator, SCurveMotionProfile, SegmentSampler};
 
 use tasks::task_stepper::{
     STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
@@ -52,7 +52,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
             motion_planner.motion_config().set_max_jerk(
                 hwa::make_vector_real!(x=9810.0, y=9810.0, z=9810.0) * hwa::make_real!(2.0)
-                //hwa::Contract::DEFAULT_MAX_JERK_PS 
+                //hwa::Contract::DEFAULT_MAX_JERK_PS
             );
 
             motion_planner.motion_config().set_default_travel_speed(
@@ -209,18 +209,17 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             .get_units_per_space_magnitude()
                             * motion_planner.motion_config().get_micro_steps_as_vector();
 
-                        let mut segment_iterator = 
+                        let mut segment_iterator =
                             SegmentSampler::new(&trajectory, micro_segment_period_secs);
 
-                        let mut micro_segment_interpolator =
-                            MicroSegmentInterpolator::new(
-                                segment
-                                    .unit_vector_dir
-                                    .with_coord(relevant_coords.complement(), None)
-                                    .abs(),
-                                segment.displacement_su,
-                                steps_per_su.with_coord(relevant_coords.complement(), None),
-                            );
+                        let mut micro_segment_interpolator = MicroSegmentInterpolator::new(
+                            segment
+                                .unit_vector_dir
+                                .with_coord(relevant_coords.complement(), None)
+                                .abs(),
+                            segment.displacement_su,
+                            steps_per_su.with_coord(relevant_coords.complement(), None),
+                        );
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory interpolation START",
                             _order_num

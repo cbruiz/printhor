@@ -120,7 +120,7 @@ impl MicroSegmentInterpolator {
         self.u_steps_advanced += step_increment;
         self.multi_timer.displace_width(numerator);
         self.multi_timer.set_max_count(&step_increment);
-        
+
         tick_period_by_axis
             .foreach(|coord, v| self.multi_timer.set_channel_ticks(coord.into(), *v));
         can_advance_more
@@ -174,8 +174,8 @@ mod motion_interpolation_test {
 
     #[test]
     fn interpolation_test_1() {
-        use crate::hwa;
         use super::MicroSegmentInterpolator;
+        use crate::hwa;
 
         let mut lin = MicroSegmentInterpolator::new(
             hwa::make_vector_real!(x = 1.0),

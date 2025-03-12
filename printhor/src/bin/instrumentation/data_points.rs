@@ -83,10 +83,8 @@ impl DataPoints {
             self.sampled_positions.last_time,
             self.sampled_positions.last_point,
         );
-        self.segment_velocity_marks.push_time_relative(
-            self.sampled_positions.last_time,
-            trajectory.v_0.to_f64(),
-        )
+        self.segment_velocity_marks
+            .push_time_relative(self.sampled_positions.last_time, trajectory.v_0.to_f64())
     }
     pub fn segment_ends(&mut self) {
         self.total_displacement += self.sampled_positions.last_point;
@@ -104,8 +102,7 @@ impl DataPoints {
         self.current_segment_id
     }
 
-    pub fn micro_segment_ends(&mut self) {
-    }
+    pub fn micro_segment_ends(&mut self) {}
 
     pub fn current_micro_segment_id(&self) -> usize {
         self.current_micro_segment_id

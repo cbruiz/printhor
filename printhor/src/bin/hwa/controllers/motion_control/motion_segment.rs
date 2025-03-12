@@ -124,11 +124,16 @@ mod tests {
         let deviation = hwa::make_vector_real!(x = 0.1);
         let expected_dist = (TVector::one() * math::ONE_HUNDRED).norm2().unwrap();
         segment.src_pos += deviation;
-        
+
         segment.fix_deviation(&deviation, hwa::make_real!(1.0));
-        
+
         assert_eq!(segment.displacement_su, expected_dist);
-        assert!((segment.src_pos - TVector::zero()).norm2().unwrap().is_negligible());
+        assert!(
+            (segment.src_pos - TVector::zero())
+                .norm2()
+                .unwrap()
+                .is_negligible()
+        );
     }
 
     #[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))]
@@ -143,10 +148,10 @@ mod tests {
             speed_exit_constrained_su_s: hwa::make_real!(1.0),
             proj_prev: hwa::make_real!(0.0),
             proj_next: hwa::make_real!(0.0),
-            unit_vector_dir: hwa::make_vector_real!(x=0.0, y=1.0),
-            src_pos: hwa::make_vector_real!(x=0.0, y=0.0),
-            dest_pos: hwa::make_vector_real!(x=0.0, y=1.0),
-            dest_world_pos: hwa::make_vector_real!(x=0.0, y=1.0),
+            unit_vector_dir: hwa::make_vector_real!(x = 0.0, y = 1.0),
+            src_pos: hwa::make_vector_real!(x = 0.0, y = 0.0),
+            dest_pos: hwa::make_vector_real!(x = 0.0, y = 1.0),
+            dest_world_pos: hwa::make_vector_real!(x = 0.0, y = 1.0),
             tool_power: hwa::make_real!(0.0),
             constraints: Constraints {
                 v_max: math::ONE_HUNDRED,
@@ -216,12 +221,16 @@ mod tests {
             true,
         )
         .unwrap();
-        
+
         let sampling_period = hwa::make_real!(100.0);
         let mut sampler = SegmentSampler::new(&motion_profile, sampling_period);
 
+        assert!(sampler.instant_speed().is_negligible());
+
         // Set to a time past the end of the profile
         let micro_segment = sampler.next();
+
+        assert!(!sampler.instant_speed().is_negligible());
 
         assert_eq!(micro_segment.unwrap(), motion_profile.end_pos(), "At end");
         let micro_segment = sampler.next();

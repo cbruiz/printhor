@@ -56,15 +56,18 @@ where
         self.last_evaluated_time_s
     }
 
+    /// Gets the instantaneous \[ds\] of the last advance
     pub fn ds(&self) -> Real {
         self.ds
     }
 
+    /// Gets the instantaneous \[dt\] of the last advance
     pub fn dt(&self) -> Real {
         self.dt
     }
 
-    pub fn speed(&self) -> Real {
+    /// Gets the instantaneous speed \[\frac{ds}{dt}\] of the last advance
+    pub fn instant_speed(&self) -> Real {
         if self.dt.is_negligible() {
             Real::zero()
         } else {
@@ -81,8 +84,7 @@ where
     pub fn next(&mut self) -> Option<Real> {
         if self.exhausted {
             None
-        }
-        else {
+        } else {
             let now = self.last_evaluated_time_s + self.sampling_period_s;
             if now >= self.profile.end_time() {
                 self.exhausted = true;
@@ -98,15 +100,14 @@ where
                 self.exhausted = true;
                 self.ds = end_pos - self.last_evaluated_position_su;
                 self.last_evaluated_position_su = end_pos;
-            }
-            else {
+            } else {
                 self.ds = p - self.last_evaluated_position_su;
                 self.last_evaluated_position_su = p;
             }
             Some(self.last_evaluated_position_su)
         }
     }
-    
+
     /// Checks if the segment is exhausted
     pub fn is_exhausted(&self) -> bool {
         self.exhausted

@@ -18,11 +18,11 @@ use embassy_time::Duration;
 use hwa::controllers::ExecPlan;
 use hwa::controllers::motion_control::STEP_DRIVER;
 use hwa::math;
+use motion::MicroSegmentInterpolator;
 #[allow(unused)]
 use motion::MotionProfile;
 use motion::SCurveMotionProfile;
 use motion::SegmentSampler;
-use motion::MicroSegmentInterpolator;
 
 use hwa::math::{CoordSel, Real, TVector};
 #[allow(unused)]
@@ -375,15 +375,14 @@ pub async fn task_stepper(
                         let mut segment_iterator =
                             SegmentSampler::new(&trajectory, micro_segment_period_secs);
 
-                        let mut micro_segment_interpolator =
-                            MicroSegmentInterpolator::new(
-                                segment
-                                    .unit_vector_dir
-                                    .with_coord(relevant_coords.complement(), None)
-                                    .abs(),
-                                segment.displacement_su,
-                                steps_per_su.with_coord(relevant_coords.complement(), None),
-                            );
+                        let mut micro_segment_interpolator = MicroSegmentInterpolator::new(
+                            segment
+                                .unit_vector_dir
+                                .with_coord(relevant_coords.complement(), None)
+                                .abs(),
+                            segment.displacement_su,
+                            steps_per_su.with_coord(relevant_coords.complement(), None),
+                        );
 
                         #[cfg(feature = "verbose-timings")]
                         hwa::info!(
@@ -454,7 +453,7 @@ pub async fn task_stepper(
                                     segment_iterator.current_time(),
                                     segment_iterator.dt(),
                                     segment_iterator.ds(),
-                                    segment_iterator.speed(),
+                                    segment_iterator.instant_speed(),
                                 );
 
                                 let w = (segment_iterator.dt() * math::ONE_MILLION).round();

@@ -1,7 +1,7 @@
 use crate::hwa;
-use hwa::{Contract,math, HwiContract};
 use hwa::controllers::PlanEntry;
 use hwa::controllers::motion_control::motion_ring_buffer::RingBuffer;
+use hwa::{Contract, HwiContract, math};
 
 /// This method performs the cornering optimization algorithm on the motion [RingBuffer].
 ///
@@ -131,7 +131,10 @@ pub fn display_content(
     let mut stb = Vec::new();
     for i in 0..left_offset - right_offset + 1 {
         let s = rb.planned_segment_from_tail(left_offset - i).unwrap();
-        stb.push(format!("[{:?},{:?}]", s.speed_enter_su_s, s.speed_exit_su_s))
+        stb.push(format!(
+            "[{:?},{:?}]",
+            s.speed_enter_su_s, s.speed_exit_su_s
+        ))
     }
     hwa::debug!(": {:?}", stb.join(" "));
     Ok(())
@@ -140,7 +143,5 @@ pub fn display_content(
 #[cfg(test)]
 mod motion_chaining_test {
     #[test]
-    fn to_do() {
-        
-    }
+    fn to_do() {}
 }
