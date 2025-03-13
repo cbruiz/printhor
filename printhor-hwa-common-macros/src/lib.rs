@@ -318,7 +318,10 @@ pub fn make_static_async_controller(input: TokenStream) -> TokenStream {
 /// A sink utility to discard logs if no log feature is enabled.
 #[proc_macro]
 pub fn no_log(_input: TokenStream) -> TokenStream {
-    TokenStream::from(quote! {{}})
+    TokenStream::from(quote! {
+        {
+        }
+    })
 }
 
 //#endregion

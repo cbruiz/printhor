@@ -274,10 +274,7 @@ mod test {
             CELL_INSTANCE.init(hwa::AsyncMutex::new(DummyDevice::new())),
         ));
 
-        assert!(
-            !controller.can_retain(),
-            "A AsyncStandardStrategy StaticAsyncController can NOT retain"
-        );
+        assert!(!controller.can_retain(), "A AsyncStandardStrategy can NOT retain");
 
         let _r = controller.retain().await;
         assert_eq!(_r, Err(()), "NonHoldable cannot retain");
@@ -307,28 +304,15 @@ mod test {
         > = hwa::StaticAsyncController::new(hwa::AsyncHoldableStrategy::new(
             MUTEX_INSTANCE.init(hwa::AsyncMutex::new(DummyDevice::new())),
         ));
+        
+        let alloc_size = hwa::stack_allocation_get();
 
-        assert!(
-            controller.can_retain(),
-            "A Holdable StaticAsyncController can retain"
-        );
-        assert!(
-            controller.retain().await.is_ok(),
-            "A Holdable StaticAsyncController retains"
-        );
-        assert!(
-            controller.try_lock().is_err(),
-            "A retained Holdable cannot be lock until released"
-        );
-        assert!(
-            controller.release().is_ok(),
-            "A Holdable StaticAsyncController releases"
-        );
+        assert!(controller.can_retain(), "A Holdable StaticAsyncController can retain");
+        assert!(controller.retain().await.is_ok(), "A Holdable StaticAsyncController retains");
+        assert!(controller.try_lock().is_err(), "Retained Holdable cannot be lock until released");
+        assert!(controller.release().is_ok(), "A Holdable StaticAsyncController releases");
 
-        assert!(
-            controller.retain().await.is_ok(),
-            "A released Holdable retains again"
-        );
+        assert!(controller.retain().await.is_ok(), "A released Holdable retains again");
 
         let other_controller = controller.clone();
 
@@ -338,6 +322,8 @@ mod test {
 
         let strategy = other_controller.deref();
         let _other_strategy = strategy.clone();
+        
+        hwa::stack_allocation_decrement(alloc_size);
     }
 }
 

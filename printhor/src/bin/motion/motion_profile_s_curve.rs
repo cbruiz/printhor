@@ -1271,10 +1271,6 @@ pub mod test {
             Err(processing::CodeExecutionFailure::NumericalError)
         );
 
-        //TODO if constraints.v_max.is_negligible()
-        //             || constraints.a_max.is_negligible()
-        //             || constraints.j_max.is_negligible()
-
         // TODO: s_i8()
 
         // fn compute_cache(&mut self) -> Result<(),  processing::CodeExecutionFailure> {

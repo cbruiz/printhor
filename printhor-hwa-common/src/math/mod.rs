@@ -34,6 +34,12 @@ mod test {
     use math::TVector;
 
     #[test]
+    fn test_weird_cases() {
+        let real: Option<Real> = hwa::make_optional_real!();
+        assert_eq!(real, None);
+    }
+
+    #[test]
     fn test_real() {
         let zero = math::ZERO;
         let one = math::ONE;
@@ -161,10 +167,15 @@ mod test {
         let _zero: TVector<f32> = TVector::zero();
 
         let _two = math::TWO.to_f64() as f32;
-        let four_four = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(4.0f32));
-        let two_two = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(2.0f32));
 
-        assert_eq!(four_four.sqrt().rdp(6), two_two);
+        cfg_if::cfg_if! {
+            if #[cfg(feature="with-x-axis")] {
+                let four_four = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(4.0f32));
+                let two_two = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(2.0f32));
+                assert_eq!(four_four.sqrt().rdp(6), two_two);
+            }
+        }
+
     }
 
     #[test]
@@ -194,6 +205,7 @@ mod test {
         assert!(!one.is_nan_or_zero());
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_i32() {
         use crate as printhor_hwa_common;
@@ -232,6 +244,7 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_f32() {
         use crate as printhor_hwa_common;
@@ -270,6 +283,7 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_u32() {
         use crate as printhor_hwa_common;
@@ -308,6 +322,7 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_u64() {
         use crate as printhor_hwa_common;
@@ -346,6 +361,7 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_u16() {
         use crate as printhor_hwa_common;
@@ -384,6 +400,7 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_u8() {
         use crate as printhor_hwa_common;
@@ -422,6 +439,7 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
+    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
     #[test]
     fn test_vector_real() {
         let zero = hwa::make_vector_real!(x = 0.0, y = 0.0, z = 0.0);
@@ -431,12 +449,12 @@ mod test {
         assert_eq!(zero, zero.floor());
     }
 
+    #[cfg(feature = "with-x-axis")]
     #[test]
     fn test_axis() {
         use crate as printhor_hwa_common;
-        #[cfg(feature = "with-x-axis")]
+        
         let c = CoordSel::X;
-        #[cfg(feature = "with-x-axis")]
         assert!(!c.is_alternate());
         assert_eq!(CoordSel::UNSET.name(), "?");
         // Format works
@@ -444,17 +462,18 @@ mod test {
         // Alternate format works
         let _ = format!("{:#?}", c);
 
+        
         let one = TVector::one();
-        let two = one.copy_with_coords(CoordSel::all_axis(), Some(2));
+        let two = one.copy_with_coords(CoordSel::all_axis(), Some(math::TWO));
         assert_eq!(one + one, two);
-        let empty = TVector::new_with_coord(CoordSel::empty(), Some(1));
+        let empty = TVector::new_with_coord(CoordSel::empty(), Some(math::ONE));
 
         assert_eq!(one + empty, empty);
 
         #[allow(unused_mut)]
         let mut t2 = empty;
         #[cfg(feature = "with-e-axis")]
-        t2.set_coord(CoordSel::E, Some(1));
+        t2.set_coord(CoordSel::E, Some(math::ONE));
         #[cfg(feature = "with-e-axis")]
         assert_ne!(t2, empty);
         #[cfg(feature = "with-e-axis")]
@@ -463,31 +482,31 @@ mod test {
 
         assert!(TVector::<Real>::new().is_nan_or_zero());
         #[cfg(feature = "with-e-axis")]
-        assert!(!hwa::make_vector!(e = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(e = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-x-axis")]
-        assert!(!hwa::make_vector!(x = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(x = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-y-axis")]
-        assert!(!hwa::make_vector!(y = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(y = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-z-axis")]
-        assert!(!hwa::make_vector!(z = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(z = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-a-axis")]
-        assert!(!hwa::make_vector!(a = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(a = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-b-axis")]
-        assert!(!hwa::make_vector!(b = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(b = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-c-axis")]
-        assert!(!hwa::make_vector!(c = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(c = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-i-axis")]
-        assert!(!hwa::make_vector!(i = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(i = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-j-axis")]
-        assert!(!hwa::make_vector!(j = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(j = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-k-axis")]
-        assert!(!hwa::make_vector!(k = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(k = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-u-axis")]
-        assert!(!hwa::make_vector!(u = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(u = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-v-axis")]
-        assert!(!hwa::make_vector!(v = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(v = 1.0).is_nan_or_zero());
         #[cfg(feature = "with-w-axis")]
-        assert!(!hwa::make_vector!(w = 1).is_nan_or_zero());
+        assert!(!hwa::make_vector!(w = 1.0).is_nan_or_zero());
 
         assert_eq!(TVector::new_with_const_value(1.0), TVector::one());
         assert_eq!(TVector::new().map_nan(&Real::one()), TVector::one());
@@ -672,7 +691,8 @@ mod test {
         assert_eq!(minus_one.clamp_higher_than(zero), zero);
         assert_eq!(one.clamp_higher_than(zero), one);
         assert_eq!(one.clamp_higher_than(none), one);
-        let two = one + one;
+        #[cfg(feature = "with-e-axis")]
+        let two: TVector<Real> = one + one;
 
         #[cfg(feature = "with-e-axis")]
         assert_eq!(
