@@ -74,7 +74,7 @@ impl MicroSegmentInterpolator {
     /// # Returns
     ///
     /// A boolean indicating whether advancement is successful.
-    pub fn advance_to(&mut self, estimated_position: Real, width: Real) -> bool {
+    pub fn advance_to(&mut self, estimated_position: Real, width: Real) -> Result<bool, ()> {
         let axial_pos: TVector<Real> = self.v_dir_abs * estimated_position;
         let step_pos: TVector<Real> = axial_pos * self.u_steps_per_space_magnitude;
 
@@ -102,28 +102,29 @@ impl MicroSegmentInterpolator {
 
         let numerator = width.to_i32().unwrap_or(0) as u32;
         if numerator == 0 {
-            panic!("bad advance");
+            Err(())
+        } else {
+            let tick_period_by_axis = steps_to_advance_precise.map(|_c, v| {
+                v.unwrap_or(math::ZERO).to_i32().and_then(|i| {
+                    if i > 0 {
+                        Some(numerator / (i as u32))
+                    } else {
+                        None
+                    }
+                })
+            });
+
+            let step_increment = steps_to_advance_precise
+                .map_values(|_, cv| cv.to_i32().and_then(|c| Some(c as u32)));
+
+            self.u_steps_advanced += step_increment;
+            self.multi_timer.set_displace_width(numerator);
+            self.multi_timer.set_max_count(&step_increment);
+
+            tick_period_by_axis
+                .foreach(|coord, v| self.multi_timer.set_channel_ticks(coord.into(), *v));
+            Ok(can_advance_more)
         }
-        let tick_period_by_axis = steps_to_advance_precise.map(|_c, v| {
-            v.unwrap_or(math::ZERO).to_i32().and_then(|i| {
-                if i > 0 {
-                    Some(numerator / (i as u32))
-                } else {
-                    None
-                }
-            })
-        });
-
-        let step_increment =
-            steps_to_advance_precise.map_values(|_, cv| cv.to_i32().and_then(|c| Some(c as u32)));
-
-        self.u_steps_advanced += step_increment;
-        self.multi_timer.displace_width(numerator);
-        self.multi_timer.set_max_count(&step_increment);
-
-        tick_period_by_axis
-            .foreach(|coord, v| self.multi_timer.set_channel_ticks(coord.into(), *v));
-        can_advance_more
     }
 
     /// Returns the internal state of the `MultiTimer`.
@@ -164,6 +165,7 @@ impl MicroSegmentInterpolator {
     /// # Returns
     ///
     /// The width of the multi timer as a `u32`.
+    #[inline]
     pub fn width(&self) -> u32 {
         self.multi_timer.width()
     }
@@ -171,6 +173,8 @@ impl MicroSegmentInterpolator {
 
 #[cfg(test)]
 mod motion_interpolation_test {
+    use crate::hwa;
+    use crate::motion::MicroSegmentInterpolator;
 
     #[test]
     fn interpolation_test_1() {
@@ -183,7 +187,24 @@ mod motion_interpolation_test {
             hwa::make_vector_real!(x = 160.0),
         );
 
-        lin.advance_to(hwa::make_real!(100.0), hwa::make_real!(100.0));
+        assert_eq!(lin.width(), 0);
+        assert_eq!(lin.state().width(), 0);
+
+        lin.advance_to(hwa::make_real!(100.0), hwa::make_real!(100.0))
+            .expect("bad advance");
         assert_eq!(lin.advanced_units(), hwa::make_vector_real!(x = 100.0))
+    }
+
+    #[test]
+    fn bad_advance_test() {
+        let mut lin = MicroSegmentInterpolator::new(
+            hwa::make_vector_real!(x = 1.0),
+            hwa::make_real!(100.0),
+            hwa::make_vector_real!(x = 160.0),
+        );
+        assert_eq!(
+            lin.advance_to(hwa::make_real!(100.0), hwa::make_real!(0.0)),
+            Err(())
+        );
     }
 }

@@ -461,8 +461,9 @@ pub async fn task_stepper(
                                     hwa::info!("giving up for any reason");
                                     break;
                                 }
-                                let _has_more =
-                                    micro_segment_interpolator.advance_to(estimated_position, w);
+                                let _has_more = micro_segment_interpolator
+                                    .advance_to(estimated_position, w)
+                                    .expect("bad advance");
 
                                 #[cfg(feature = "verbose-timings")]
                                 hwa::info!(

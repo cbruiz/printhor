@@ -238,8 +238,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                     hwa::info!("giving up for any reason");
                                     break;
                                 }
-                                let _has_more =
-                                    micro_segment_interpolator.advance_to(estimated_position, w);
+                                let _has_more = micro_segment_interpolator
+                                    .advance_to(estimated_position, w)
+                                    .expect("bad advance");
 
                                 hwa::debug!(
                                     "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} [{:?}] {} [{:?}] steps",

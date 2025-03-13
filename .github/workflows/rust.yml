@@ -20,7 +20,7 @@ jobs:
         with:
           submodules: recursive
       - name: Build
-        run: cargo build --features native --package prinThor --bin printhor
+        run: cargo build --release --features native --package prinThor --bin printhor
       - name: Generate doc
         run: cargo doc --no-deps
       - name: Install cargo-llvm-cov

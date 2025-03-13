@@ -195,7 +195,9 @@ where
                     && self.last_status.contains(EventFlags::SYS_ALARM)
                 {
                     #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-                    hwa::debug!("ft_wait_for [{:?}] -> ERR (took: {} us)", what,
+                    hwa::debug!(
+                        "ft_wait_for [{:?}] -> ERR (took: {} us)",
+                        what,
                         t0.elapsed().as_micros()
                     );
                     return Err(());
@@ -203,7 +205,9 @@ where
                 let relevant_bits = self.last_status.bitand(what.mask);
                 if wanted.eq(&relevant_bits) {
                     #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-                    hwa::debug!("ft_wait_for [{:?}] -> DONE (took: {} us)", what,
+                    hwa::debug!(
+                        "ft_wait_for [{:?}] -> DONE (took: {} us)",
+                        what,
                         t0.elapsed().as_micros()
                     );
                     return Ok(());

@@ -175,7 +175,6 @@ mod test {
                 assert_eq!(four_four.sqrt().rdp(6), two_two);
             }
         }
-
     }
 
     #[test]
@@ -205,7 +204,11 @@ mod test {
         assert!(!one.is_nan_or_zero());
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_i32() {
         use crate as printhor_hwa_common;
@@ -244,7 +247,11 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_f32() {
         use crate as printhor_hwa_common;
@@ -283,7 +290,11 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_u32() {
         use crate as printhor_hwa_common;
@@ -322,7 +333,11 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_u64() {
         use crate as printhor_hwa_common;
@@ -361,7 +376,11 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_u16() {
         use crate as printhor_hwa_common;
@@ -400,7 +419,11 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_u8() {
         use crate as printhor_hwa_common;
@@ -439,7 +462,11 @@ mod test {
         assert_eq!(one.abs(), one);
     }
 
-    #[cfg(all(feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+    #[cfg(all(
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
     #[test]
     fn test_vector_real() {
         let zero = hwa::make_vector_real!(x = 0.0, y = 0.0, z = 0.0);
@@ -453,7 +480,7 @@ mod test {
     #[test]
     fn test_axis() {
         use crate as printhor_hwa_common;
-        
+
         let c = CoordSel::X;
         assert!(!c.is_alternate());
         assert_eq!(CoordSel::UNSET.name(), "?");
@@ -462,7 +489,6 @@ mod test {
         // Alternate format works
         let _ = format!("{:#?}", c);
 
-        
         let one = TVector::one();
         let two = one.copy_with_coords(CoordSel::all_axis(), Some(math::TWO));
         assert_eq!(one + one, two);

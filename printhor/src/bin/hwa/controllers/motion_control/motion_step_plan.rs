@@ -118,7 +118,7 @@ impl MultiTimer {
     /// # Arguments
     ///
     /// * `width` - The width to set.
-    pub fn displace_width(&mut self, width_us: u32) {
+    pub fn set_displace_width(&mut self, width_us: u32) {
         #[cfg(feature = "with-motion-broadcast")]
         {
             self.ref_time_us += width_us;
@@ -131,6 +131,7 @@ impl MultiTimer {
     /// # Returns
     ///
     /// The width of the MultiTimer.
+    #[inline]
     pub fn width(&self) -> u32 {
         self.width_us
     }
