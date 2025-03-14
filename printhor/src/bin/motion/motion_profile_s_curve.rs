@@ -6,7 +6,7 @@ use crate::hwa;
 use crate::motion;
 use crate::processing;
 use hwa::math;
-use hwa::math::*;
+use math::*;
 
 /// Struct representing the motion profile configuration.
 ///
@@ -67,7 +67,7 @@ pub struct ProfileConfig {
 /// * `v_max` - The maximum velocity (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s). This defines the upper limit of speed that can be achieved.
 /// * `a_max` - The maximum acceleration (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s²). This represents the highest rate of change of velocity that is permissible.
 /// * `j_max` - The maximum jerk (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s³). This is the maximum rate of change of acceleration.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Constraints {
     /// The maximum velocity (v_max) (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/s).
     /// This defines the upper limit of speed that can be achieved.
@@ -147,6 +147,7 @@ pub struct Times {
 /// * `q1` - Displacement or position to be achieved (in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
 /// * `constraints` - Constraints applied to the motion profile.
 /// * `cache` - Cached values for optimization and repeated calculations.
+#[derive(PartialEq)]
 pub struct SCurveMotionProfile {
     /// Time spent in the first jerk phase.
     pub t_j1: Real,
@@ -191,7 +192,6 @@ pub struct SCurveMotionProfile {
     pub cache: Cache,
 }
 
-#[allow(unused)]
 impl SCurveMotionProfile {
     /// Compute the S-curve motion profile.
     ///
@@ -241,6 +241,7 @@ impl SCurveMotionProfile {
             return Err(processing::CodeExecutionFailure::NumericalError);
         }
         // Set v_max to arg_max { v_0, v_1, v_max}
+        #[allow(unused, unused_mut)]
         let mut v_max = v_0.max(v_1).max(constraints.v_max);
 
         #[cfg(feature = "debug-motion-planning")]
@@ -394,7 +395,7 @@ impl SCurveMotionProfile {
                 cache: Cache::default(),
                 constraints: *constraints,
             };
-            profile.compute_cache();
+            profile.compute_cache()?;
             if error_correction {
                 let final_pos = profile.s_i7(&profile.i7_end());
                 let delta_e = profile.q1 - final_pos;
@@ -402,18 +403,7 @@ impl SCurveMotionProfile {
                     .extend(delta_e)
                     .map_err(|_| processing::CodeExecutionFailure::ERR)?;
             }
-            return Ok(profile);
-            /*
-
-            if t_jstar < t_jmax {
-                hwa::error!(" => cannot accel to travel {} mm from {} to {} ({}). Will take {} mm ({} * (v0+v1))", q_1, v_0, v_1, (v_1 - v_0).abs(), q_lim, t_jstar);
-            }
-            else {
-                hwa::error!("=> cannot accel to travel {} mm from {} to {}. Will take {} mm (((v_0 + v_1) / TWO) * ({} + ((v_1 - v_0).abs() / {})))", q_1, v_0, v_1, q_lim, t_jstar, constraints.a_max);
-            }
-            return Err(CodeExecutionFailure::ERR)
-
-             */
+            Ok(profile)
         } else {
             #[cfg(feature = "debug-motion-planning")]
             hwa::info!(
@@ -428,10 +418,11 @@ impl SCurveMotionProfile {
             // aj_ratio = a_max / j_max
             let mut aj_ratio = a_max * j_max_inv;
 
+            #[allow(unused, unused_mut)]
             let mut prev_vmax = v_max;
             let gamma = Real::from_f32(0.9);
             loop {
-                match Self::compute_case_1(
+                let times = Self::compute_case_1(
                     q_1,
                     v_0,
                     v_1,
@@ -440,241 +431,129 @@ impl SCurveMotionProfile {
                     constraints.j_max,
                     aj_ratio,
                     a_max_squared,
-                ) {
-                    Ok(times) => {
-                        if times.t_v <= ZERO {
-                            // TODO: lagrange multipliers or something better to find a solution with less iterations
+                )?;
+                if times.t_v <= ZERO {
+                    // TODO: lagrange multipliers or something better to find a solution with less iterations
 
-                            let t_j = aj_ratio;
+                    let t_j = aj_ratio;
 
-                            let sqrt_delta =
-                                ((a_max * a_max * a_max * a_max * j_max_inv * j_max_inv)
-                                    + (TWO * ((v_0 * v_0) + (v_1 * v_1))
-                                        + (a_max * ((FOUR * q_1) - (TWO * (t_j) * (v_0 + v_1))))))
+                    let sqrt_delta = ((a_max * a_max * a_max * a_max * j_max_inv * j_max_inv)
+                        + (TWO * ((v_0 * v_0) + (v_1 * v_1))
+                            + (a_max * ((FOUR * q_1) - (TWO * (t_j) * (v_0 + v_1))))))
+                        .sqrt()
+                        .unwrap();
+                    let aj = (a_max * a_max) * j_max_inv;
+                    let mut t_a_2 = (aj - (v_0 + v_0) + sqrt_delta) * HALF * a_max_inv;
+                    let mut t_d_2 = (aj - (v_1 + v_1) + sqrt_delta) * HALF * a_max_inv;
+                    let mut t_j1 = t_j;
+                    let mut t_j2 = t_j;
+
+                    if t_a_2 < ZERO || t_d_2 < ZERO {
+                        // it may happen that Ta or Td becomes negative. In this case, only one of the acceleration or deceleration phase is necessary
+                        let qd = q_1 / (v_0 + v_1);
+                        #[allow(unused)]
+                        let vsum_sq = (v_0 + v_1) * (v_0 + v_1);
+                        if t_a_2 < ZERO {
+                            t_a_2 = ZERO;
+                            t_j1 = ZERO;
+
+                            t_d_2 = qd * TWO;
+                            t_j2 = ((constraints.j_max * q_1)
+                                - (constraints.j_max
+                                    * (constraints.j_max * q_1 * q_1
+                                        + (v_1 + v_0) * (v_1 + v_0) * (v_1 - v_0)))
                                     .sqrt()
-                                    .unwrap();
-                            let aj = (a_max * a_max) * j_max_inv;
-                            let mut t_a_2 = ((aj - (v_0 + v_0) + sqrt_delta) * HALF * a_max_inv);
-                            let mut t_d_2 = ((aj - (v_1 + v_1) + sqrt_delta) * HALF * a_max_inv);
-                            let mut t_j1 = t_j;
-                            let mut t_j2 = t_j;
+                                    .unwrap())
+                                / (constraints.j_max * (v_1 + v_0));
+                        } else if t_d_2 < ZERO {
+                            t_d_2 = ZERO;
+                            t_j2 = ZERO;
+                            t_a_2 = qd * TWO;
+                            t_j1 = ((constraints.j_max * q_1)
+                                - (constraints.j_max
+                                    * (constraints.j_max * q_1 * q_1
+                                        + (v_1 + v_0) * (v_1 + v_0) * (v_0 - v_1)))
+                                    .sqrt()
+                                    .unwrap())
+                                / (constraints.j_max * (v_1 + v_0));
+                        }
+                    } else {
+                        t_j1 = t_j;
+                        t_j2 = t_j;
+                    }
 
-                            if t_a_2 < math::ZERO || t_d_2 < math::ZERO {
-                                // it may happen that Ta or Td becomes negative. In this case, only one of the acceleration or deceleration phase is necessary
-                                let qd = (q_1 / (v_0 + v_1));
-                                let vsum_sq = (v_0 + v_1) * (v_0 + v_1);
-                                if t_a_2 < math::ZERO {
-                                    t_a_2 = math::ZERO;
-                                    t_j1 = math::ZERO;
+                    if t_a_2 >= (t_j1 + t_j1) && t_d_2 >= (t_j2 + t_j2) {
+                        let a_lim_a = constraints.j_max * t_j1;
+                        let a_lim_d = -constraints.j_max * t_j2;
 
-                                    t_d_2 = qd * TWO;
-                                    t_j2 = ((constraints.j_max * q_1)
-                                        - (constraints.j_max
-                                            * (constraints.j_max * q_1 * q_1
-                                                + (v_1 + v_0) * (v_1 + v_0) * (v_1 - v_0)))
-                                            .sqrt()
-                                            .unwrap())
-                                        / (constraints.j_max * (v_1 + v_0));
-                                } else if t_d_2 < math::ZERO {
-                                    t_d_2 = math::ZERO;
-                                    t_j2 = math::ZERO;
-                                    t_a_2 = qd * TWO;
-                                    t_j1 = ((constraints.j_max * q_1)
-                                        - (constraints.j_max
-                                            * (constraints.j_max * q_1 * q_1
-                                                + (v_1 + v_0) * (v_1 + v_0) * (v_0 - v_1)))
-                                            .sqrt()
-                                            .unwrap())
-                                        / (constraints.j_max * (v_1 + v_0));
-                                }
-                            } else {
-                                t_j1 = t_j;
-                                t_j2 = t_j;
+                        let v_lim = v_0 + (t_a_2 - t_j1) * a_lim_a;
+                        #[allow(unused)]
+                        let t = t_a_2 + math::ZERO + t_d_2;
+                        let mut profile = SCurveMotionProfile {
+                            t_j1,
+                            t_a: t_a_2,
+                            t_v: math::ZERO,
+                            t_d: t_d_2,
+                            t_j2,
+                            v_0: v_0,
+                            v_1: v_1,
+                            j_max: constraints.j_max,
+                            a_lim_a,
+                            a_lim_d,
+                            v_lim,
+                            q1: q_1,
+                            cache: Cache::default(),
+                            constraints: *constraints,
+                        };
+                        profile.compute_cache()?;
+                        if error_correction {
+                            let final_pos = profile.s_i7(&profile.i7_end()) + Real::epsilon();
+                            let delta_e = profile.q1 - final_pos;
+                            profile
+                                .extend(delta_e)
+                                .map_err(|_| processing::CodeExecutionFailure::ERR)?;
+                        }
+                        return Ok(profile);
+                    }
+                    a_max *= gamma;
+                    a_max_inv = a_max.recip();
+                    a_max_squared = a_max * a_max;
+                    aj_ratio = a_max * j_max_inv;
+                    if a_max < Real::from_f32(0.1) {
+                        return if (v_1 - v_0).abs().is_negligible() {
+                            let t_v = TWO * (q_1 / (v_0 + v_1));
+                            let mut profile = SCurveMotionProfile {
+                                t_j1: math::ZERO,
+                                t_a: math::ZERO,
+                                t_v,
+                                t_d: math::ZERO,
+                                t_j2: math::ZERO,
+                                v_0: v_0,
+                                v_1: v_1,
+                                j_max: constraints.j_max,
+                                a_lim_a: math::ZERO,
+                                a_lim_d: math::ZERO,
+                                v_lim: v_1,
+                                q1: q_1,
+                                cache: Cache::default(),
+                                constraints: *constraints,
+                            };
+                            profile.compute_cache()?;
+                            if error_correction {
+                                let final_pos = profile.s_i7(&profile.i7_end());
+                                let delta_e = profile.q1 - final_pos;
+                                profile
+                                    .extend(delta_e)
+                                    .map_err(|_| processing::CodeExecutionFailure::ERR)?;
                             }
-
-                            /*
-                            #[cfg(feature = "native")]
-                            std::println!("gamma={} -> a={} -> t_j1={}, t_a_2={} t_j2={} t_d_2={}",
-                                          gamma.rdp(4),
-                                a_max, t_j1, t_a_2, t_j2, t_d_2
-                            );
-                            */
-
-                            if t_a_2 >= (t_j1 + t_j1) && t_d_2 >= (t_j2 + t_j2) {
-                                let a_lim_a = constraints.j_max * t_j1;
-                                let a_lim_d = -constraints.j_max * t_j2;
-
-                                let v_lim = v_0 + (t_a_2 - t_j1) * a_lim_a;
-                                let t = t_a_2 + math::ZERO + t_d_2;
-                                let mut profile = SCurveMotionProfile {
-                                    t_j1,
-                                    t_a: t_a_2,
-                                    t_v: math::ZERO,
-                                    t_d: t_d_2,
-                                    t_j2,
-                                    v_0: v_0,
-                                    v_1: v_1,
-                                    j_max: constraints.j_max,
-                                    a_lim_a,
-                                    a_lim_d,
-                                    v_lim,
-                                    q1: q_1,
-                                    cache: Cache::default(),
-                                    constraints: *constraints,
-                                };
-                                profile.compute_cache();
-                                if error_correction {
-                                    let final_pos =
-                                        profile.s_i7(&profile.i7_end()) + Real::epsilon();
-                                    let delta_e = profile.q1 - final_pos;
-                                    profile
-                                        .extend(delta_e)
-                                        .map_err(|_| processing::CodeExecutionFailure::ERR)?;
-                                }
-                                return Ok(profile);
-                            }
-                            a_max *= gamma;
-                            a_max_inv = a_max.recip();
-                            a_max_squared = a_max * a_max;
-                            aj_ratio = a_max * j_max_inv;
-                            if a_max < Real::from_f32(0.1) {
-                                return if (v_1 - v_0).abs().is_negligible() {
-                                    let t_v = TWO * (q_1 / (v_0 + v_1));
-                                    let mut profile = SCurveMotionProfile {
-                                        t_j1: math::ZERO,
-                                        t_a: math::ZERO,
-                                        t_v,
-                                        t_d: math::ZERO,
-                                        t_j2: math::ZERO,
-                                        v_0: v_0,
-                                        v_1: v_1,
-                                        j_max: constraints.j_max,
-                                        a_lim_a: math::ZERO,
-                                        a_lim_d: math::ZERO,
-                                        v_lim: v_1,
-                                        q1: q_1,
-                                        cache: Cache::default(),
-                                        constraints: *constraints,
-                                    };
-                                    profile.compute_cache()?;
-                                    if error_correction {
-                                        let final_pos = profile.s_i7(&profile.i7_end());
-                                        let delta_e = profile.q1 - final_pos;
-                                        profile
-                                            .extend(delta_e)
-                                            .map_err(|_| processing::CodeExecutionFailure::ERR)?;
-                                    }
-                                    Ok(profile)
-                                } else {
-                                    // Compute the time need to accel
-                                    let t_a = TWO * (q_1 / (v_0 + v_1));
-
-                                    // Compute the accel
-                                    let a = (v_1 - v_0) / t_a;
-                                    let t_j1 = HALF * t_a;
-
-                                    // Constructively define the two parabolas:
-                                    // The first one (smooth accel from v_0):
-                                    // v_{1}(t) := a_{v1} * (t - 0)^2 + v_{0}
-                                    // with a_{v_1} as:
-                                    //  a_{1} = \frac{a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
-                                    // The second one (smooth decel to v_1); TBD
-                                    //  a_{2} = \frac{-a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
-
-                                    let a_1 = (a * t_j1) / (t_j1 * t_j1);
-
-                                    // Finally, reformulating to meet the paper convention it is trivial to determine that:
-                                    // In \dot{q}(t) = v_{0} + j_{max} \frac{t^2}{2}:
-                                    // a_{v1} = j_max / 2, hence j_max = 2 * a_{v1}
-
-                                    let j_max = TWO * a_1;
-
-                                    let mut profile = SCurveMotionProfile {
-                                        t_j1,
-                                        t_a,
-                                        t_v: math::ZERO,
-                                        t_d: math::ZERO,
-                                        t_j2: math::ZERO,
-                                        v_0: v_0,
-                                        v_1: v_1,
-                                        j_max,
-                                        a_lim_a: math::ZERO,
-                                        a_lim_d: math::ZERO,
-                                        v_lim: v_1.max(v_0),
-                                        q1: q_1,
-                                        cache: Cache::default(),
-                                        constraints: *constraints,
-                                    };
-                                    profile.compute_cache();
-                                    if error_correction {
-                                        let final_pos = profile.s_i7(&profile.i7_end());
-                                        let delta_e = profile.q1 - final_pos;
-                                        profile
-                                            .extend(delta_e)
-                                            .map_err(|_| processing::CodeExecutionFailure::ERR)?;
-                                    }
-                                    Ok(profile)
-                                };
-                            }
-                            /*
-                            let tv_excess = times.t_v.abs();
-                            if tv_excess > times.t_a + times.t_d {
-                                panic!("Unable to handle this")
-                            }
-                            let ta = times.t_a * Real::from_f32(0.1);
-                            let td = times.t_d * Real::from_f32(0.1);
-                            let tj1 = times.t_j1 * Real::from_f32(0.1);
-                            let tj2 = times.t_j2 * Real::from_f32(0.1);
-                            let a_lim_a = constraints.j_max * tj1;
-                            let a_lim_d = constraints.j_max * tj2;
-                            let v_lim0 = v_0 + (ta - tj1) * a_lim_a;
-                            let v_lim1 = v_1 + (td - tj2) * a_lim_d;
-                            v_max = v_lim0.max(v_lim1);
-                            let vred = prev_vmax - v_max;
-                            if vred < Real::from_lit(1,1) {
-
-                                let mut profile = SCurveMotionProfile {
-                                    t_j1: times.t_j1,
-                                    t_a: times.t_a,
-                                    t_v: times.t_v,
-                                    t_d: times.t_d,
-                                    t_j2: times.t_j2,
-                                    v_0: v_0,
-                                    v_1: v_1,
-                                    j_max: constraints.j_max,
-                                    a_lim_a,
-                                    a_lim_d,
-                                    v_lim: v_max,
-                                    q1: q_1,
-                                    cache: Cache::default(),
-                                    constraints: *constraints,
-                                };
-                                cfg_if::cfg_if! {
-                                    if #[cfg(feature="verbose-timings")] {
-                                        hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                                    }
-                                }
-                                profile.compute_cache();
-                                if error_correction {
-                                    let final_pos = profile.s_i7(&profile.i7_end());
-                                    let delta_e = profile.q1 - final_pos;
-                                    profile.extend(delta_e).map_err(|_|  processing::CodeExecutionFailure::ERR)?;
-
-                                }
-                                return Ok(profile);
-                            }
-                            else {
-                                prev_vmax = v_max;
-                            }
-                            */
-
-                            /*
+                            Ok(profile)
+                        } else {
+                            // Compute the time need to accel
                             let t_a = TWO * (q_1 / (v_0 + v_1));
 
                             // Compute the accel
                             let a = (v_1 - v_0) / t_a;
                             let t_j1 = HALF * t_a;
-
 
                             // Constructively define the two parabolas:
                             // The first one (smooth accel from v_0):
@@ -703,56 +582,12 @@ impl SCurveMotionProfile {
                                 j_max,
                                 a_lim_a: math::ZERO,
                                 a_lim_d: math::ZERO,
-                                v_lim: v_1,
+                                v_lim: v_1.max(v_0),
                                 q1: q_1,
                                 cache: Cache::default(),
                                 constraints: *constraints,
                             };
-                            cfg_if::cfg_if! {
-                                if #[cfg(feature="verbose-timings")] {
-                                    hwa::debug!("Motion plan computed in {} us", _t0.elapsed().as_micros());
-                                }
-                            }
-                            profile.compute_cache();
-                            if error_correction {
-                                let final_pos = profile.s_i7(&profile.i7_end());
-                                let delta_e = profile.q1 - final_pos;
-                                profile.extend(delta_e).map_err(|_|  processing::CodeExecutionFailure::ERR)?;
-
-                            }
-                            return Ok(profile);
-
-                             */
-                        } else {
-                            // H
-                            hwa::debug!(
-                                "OK at {:?} -> ta = {:?} td = {:?} tv = {:?}",
-                                v_max,
-                                times.t_a,
-                                times.t_d,
-                                times.t_v
-                            );
-                            let a_lim_a = constraints.j_max * times.t_j1;
-                            let a_lim_d = constraints.j_max * times.t_j2;
-                            let v_lim = v_0 + (times.t_a - times.t_j1) * a_lim_a;
-                            let t = times.t_a + times.t_v + times.t_d;
-                            let mut profile = SCurveMotionProfile {
-                                t_j1: times.t_j1,
-                                t_a: times.t_a,
-                                t_v: times.t_v,
-                                t_d: times.t_d,
-                                t_j2: times.t_j2,
-                                v_0,
-                                v_1,
-                                j_max: constraints.j_max,
-                                a_lim_a,
-                                a_lim_d,
-                                v_lim,
-                                q1: q_1,
-                                cache: Cache::default(),
-                                constraints: *constraints,
-                            };
-                            profile.compute_cache();
+                            profile.compute_cache()?;
                             if error_correction {
                                 let final_pos = profile.s_i7(&profile.i7_end());
                                 let delta_e = profile.q1 - final_pos;
@@ -760,10 +595,46 @@ impl SCurveMotionProfile {
                                     .extend(delta_e)
                                     .map_err(|_| processing::CodeExecutionFailure::ERR)?;
                             }
-                            return Ok(profile);
-                        }
+                            Ok(profile)
+                        };
                     }
-                    Err(_e) => return Err(_e),
+                } else {
+                    #[cfg(feature = "debug-motion-planning")]
+                    hwa::debug!(
+                        "OK at {:?} -> ta = {:?} td = {:?} tv = {:?}",
+                        v_max,
+                        times.t_a,
+                        times.t_d,
+                        times.t_v
+                    );
+                    let a_lim_a = constraints.j_max * times.t_j1;
+                    let a_lim_d = constraints.j_max * times.t_j2;
+                    let v_lim = v_0 + (times.t_a - times.t_j1) * a_lim_a;
+                    let mut profile = SCurveMotionProfile {
+                        t_j1: times.t_j1,
+                        t_a: times.t_a,
+                        t_v: times.t_v,
+                        t_d: times.t_d,
+                        t_j2: times.t_j2,
+                        v_0,
+                        v_1,
+                        j_max: constraints.j_max,
+                        a_lim_a,
+                        a_lim_d,
+                        v_lim,
+                        q1: q_1,
+                        cache: Cache::default(),
+                        constraints: *constraints,
+                    };
+                    profile.compute_cache()?;
+                    if error_correction {
+                        let final_pos = profile.s_i7(&profile.i7_end());
+                        let delta_e = profile.q1 - final_pos;
+                        profile
+                            .extend(delta_e)
+                            .map_err(|_| processing::CodeExecutionFailure::ERR)?;
+                    }
+                    return Ok(profile);
                 }
             }
         }
@@ -834,32 +705,32 @@ impl SCurveMotionProfile {
         let j_max_inv = if a_max_not_reached || a_min_not_reached {
             j_max.recip()
         } else {
-            math::ZERO
+            ZERO
         };
 
         let a_max_inv = if !a_max_not_reached || !a_min_not_reached {
             a_max.recip()
         } else {
-            math::ZERO
+            ZERO
         };
 
         let (t_j1, t_a) = if a_max_not_reached {
-            let t_j = ((v_max - v_0).max(math::ZERO) * j_max_inv)
+            let t_j = ((v_max - v_0).max(ZERO) * j_max_inv)
                 .sqrt()
                 .ok_or(processing::CodeExecutionFailure::NumericalError)?;
             (t_j, t_j + t_j)
         } else {
             let t_j = aj_ratio;
-            (t_j, t_j + (v_max - v_0).max(math::ZERO) * a_max_inv)
+            (t_j, t_j + (v_max - v_0).max(ZERO) * a_max_inv)
         };
         let (t_j2, t_d) = if a_min_not_reached {
-            let t_j = ((v_max - v_1).max(math::ZERO) * j_max_inv)
+            let t_j = ((v_max - v_1).max(ZERO) * j_max_inv)
                 .sqrt()
                 .ok_or(processing::CodeExecutionFailure::NumericalError)?;
             (t_j, t_j + t_j)
         } else {
             let t_j = aj_ratio;
-            (t_j, t_j + (v_max - v_1).max(math::ZERO) * a_max_inv)
+            (t_j, t_j + (v_max - v_1).max(ZERO) * a_max_inv)
         };
 
         // Efficiently compute: (q_1 / v_max) - (t_a / 2) * (1 + (v_0 / v_max)) - (t_d / 2) * (1 + (v_1 / v_max))
@@ -881,6 +752,7 @@ impl SCurveMotionProfile {
         })
     }
 
+    #[cfg(feature = "debug-motion-planning")]
     pub fn params_dump(&self) {
         hwa::debug!(
             "Params:\nq_{{1}} = {:?}\nv_{{0}} = {:?}\nv_{{1}} = {:?}\nv_{{max}} = {:?}\na_{{max}} = {:?}\nj_{{max}} = {:?}\nT_{{j1}} = {:?}\nT_{{a}} = {:?}\nT_{{v}} = {:?}\nT_{{j2}} = {:?}\nT_{{d}} = {:?}\na_{{lima}} = {:?}\na_{{limd}} = {:?}\nv_{{lim}} = {:?}",
@@ -1125,7 +997,7 @@ impl SCurveMotionProfile {
     /// $$ s_{i5}(t)_{|t>\delta} = s_{i4}(t) - \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta) $$
     pub fn s_i5(&self, t: &Real) -> Real {
         let dt = (*t) - self.i5_start();
-        let r = (self.j_max * SIXTH * dt * dt * dt);
+        let r = self.j_max * SIXTH * dt * dt * dt;
         self.s_i4(t) - r
     }
 
@@ -1172,7 +1044,7 @@ impl motion::MotionProfile for SCurveMotionProfile {
         self.q1
     }
 
-    /// Computes the position in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE] at given relative instant (uSecs)
+    /// Computes the position in [hwa::HwiContract::SPACE_UNIT_MAGNITUDE] at given relative instant (secs)
     /// * p_{1}(t) = if( 0 <= t < T_{j1} , s_{i1}(t) ) | \[0, T_{j1} \]
     /// * p_{2}(t) = if( T_{j1} <= t < T_{a} - T_{j1}, s_{i2}(t) ) | \[ T_{j1}, T_{a} - T_{j1} \]
     /// * p_{3}(t) = if( T_{a} - T_{j1} <= t < T_{a}, s_{i3}(t) ) | \[ T_{a} - T_{j1}, T_{a} \]
@@ -1180,30 +1052,36 @@ impl motion::MotionProfile for SCurveMotionProfile {
     /// * p_{5}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
     /// * p_{6}(t) = if( T_{a} + T_{v} + T_{j2} <= t < T_{a} + T_{v} + T_{d} - T_{j2}, s_{i6}(t) ) | \[ T_{a} + T_{v} + T_{j2}, T_{a} + T_{v} + T_{d} - T_{j2} \]
     /// * p_{7}(t) = if( T_{a} + T_{v} <= t < T - T_{d} + T_{j2}, s_{i5}(t) ) | \[ T_{a} + T_{v}, T - T_{d} + T_{j2} \]
-    fn eval_position(&self, t: Real) -> Option<Real> {
-        if t < math::ZERO {
-            None
+    fn eval_position(&self, t: Real) -> Real {
+        if t <= ZERO {
+            ZERO
         } else if t >= self.i1_start() && t < self.i1_end() {
-            Some(self.s_i1(&t))
+            self.s_i1(&t)
         } else if t >= self.i2_start() && t < self.i2_end() {
-            Some(self.s_i2(&t))
+            self.s_i2(&t)
         } else if t >= self.i3_start() && t < self.i3_end() {
-            Some(self.s_i3(&t))
+            self.s_i3(&t)
         } else if t >= self.i4_start() && t < self.i4_end() {
-            Some(self.s_i4(&t))
+            self.s_i4(&t)
         } else if t >= self.i5_start() && t < self.i5_end() {
-            Some(self.s_i5(&t))
+            self.s_i5(&t)
         } else if t >= self.i6_start() && t < self.i6_end() {
-            Some(self.s_i6(&t))
+            self.s_i6(&t)
         } else if t >= self.i7_start() && t <= self.i7_end() {
-            Some(self.s_i7(&t))
+            self.s_i7(&t)
         } else {
-            Some(self.q1)
+            self.q1
         }
     }
 }
 
-#[derive(Copy, Clone, Default)]
+impl core::fmt::Debug for SCurveMotionProfile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::write!(f, "SCurveMotionProfile")
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Default)]
 pub struct Cache {
     /// Position at self.s_i1(&self.i1_end())
     pub s1_pt: Real,
@@ -1225,26 +1103,6 @@ pub struct Cache {
 
     /// Position at self.s_i7(&self.i7_end())
     pub s7_pt: Real,
-}
-
-#[cfg(feature = "native")]
-impl core::fmt::Display for SCurveMotionProfile {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "\n\tt_j1={:?}, t_a={:?}, t_v={:?}, t_d={:?}, t_j2={:?}",
-            self.t_j1.rdp(4),
-            self.t_a.rdp(4),
-            self.t_v.rdp(4),
-            self.t_d.rdp(4),
-            self.t_j1.rdp(4),
-        )?;
-        write!(
-            f,
-            "\n\ta_lim_a={:?}, v_lim={:?}, a_lim_d={:?}",
-            self.a_lim_a, self.v_lim, self.a_lim_d,
-        )
-    }
 }
 
 #[cfg(test)]
@@ -1378,8 +1236,9 @@ pub mod test {
         // Exp: Ta = 1.1006, T_v = 0.0, T_d = 1.1006, T_j1 = 0.5503, T_j2 = 0.5503, vlim = 9.0826
         let r = do_compute(10., 0.0, 0., 10., 20., 30., false).unwrap();
 
+        #[cfg(feature = "debug-motion-planning")]
         r.params_dump();
-        hwa::info!("profile: {}", r);
+        hwa::info!("profile: {:?}", r);
         hwa::info!("constraints: {:?}", r.constraints);
 
         approx_equal("T_a", r.t_a, 1.1006, 0.01);
@@ -1397,18 +1256,20 @@ pub mod test {
 
         assert_eq!(
             MotionProfile::eval_position(&r, math::ZERO - math::ONE),
-            None
+            math::ZERO,
         );
 
         let pos = MotionProfile::eval_position(&r, math::ONE_HUNDRED);
-        approx_equal("pos", pos.unwrap(), 10.0, 0.0001);
+        approx_equal("pos", pos, 10.0, 0.0001);
     }
 
     #[test]
     fn test_bad_args() {
-        //TODO if constraints.v_max.is_negligible()
-        //             || constraints.a_max.is_negligible()
-        //             || constraints.j_max.is_negligible()
+        let profile = do_compute(10., 0., 0., 10., 0., 0., false);
+        assert_eq!(
+            profile,
+            Err(processing::CodeExecutionFailure::NumericalError)
+        );
 
         // TODO: s_i8()
 

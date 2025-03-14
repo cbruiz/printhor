@@ -184,7 +184,7 @@ where
             let wanted = what.flags.bitand(what.mask);
 
             #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-            crate::debug!("ft_wait_for [{:?}]...", what);
+            hwa::debug!("ft_wait_for [{:?}]...", what);
             if let Some(msg) = self.inner.try_next_message_pure() {
                 //crate::trace!("last_status = {:?}", msg);
                 self.last_status = msg;
@@ -195,7 +195,7 @@ where
                     && self.last_status.contains(EventFlags::SYS_ALARM)
                 {
                     #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-                    crate::debug!(
+                    hwa::debug!(
                         "ft_wait_for [{:?}] -> ERR (took: {} us)",
                         what,
                         t0.elapsed().as_micros()
@@ -205,7 +205,7 @@ where
                 let relevant_bits = self.last_status.bitand(what.mask);
                 if wanted.eq(&relevant_bits) {
                     #[cfg(any(feature = "with-log", feature = "with-defmt"))]
-                    crate::debug!(
+                    hwa::debug!(
                         "ft_wait_for [{:?}] -> DONE (took: {} us)",
                         what,
                         t0.elapsed().as_micros()

@@ -26,8 +26,7 @@ pub enum CodeExecutionSuccess {
 }
 
 #[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
-#[derive(Debug)]
-#[allow(unused)]
+#[derive(PartialEq, Debug)]
 pub enum CodeExecutionFailure {
     /// Cannot perform because there is the same or something else running
     BUSY,
@@ -46,6 +45,7 @@ pub enum CodeExecutionFailure {
 pub type CodeExecutionResult = Result<CodeExecutionSuccess, CodeExecutionFailure>;
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct S {
     pub s: Option<Real>,
 }
@@ -57,6 +57,7 @@ impl S {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct N {
     pub n: Option<Real>,
 }
@@ -68,6 +69,7 @@ impl N {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct EXYZ {
     #[cfg(feature = "with-e-axis")]
     pub e: Option<Real>,
@@ -224,6 +226,7 @@ impl defmt::Format for EXYZ {
 }
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct FXYZ {
     pub f: Option<Real>,
     //
@@ -378,6 +381,7 @@ impl defmt::Format for FXYZ {
 }
 
 #[derive(Clone, Default, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct EFSXYZ {
     pub f: Option<Real>,
     pub s: Option<Real>,
@@ -495,6 +499,7 @@ impl defmt::Format for EFSXYZ {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct GCodeCmd {
     /// The gcode sequential number as coming from parser
     pub order_num: u32,
@@ -537,6 +542,7 @@ impl core::fmt::Display for GCodeCmd {
 /// The GCode Variants
 //noinspection SpellCheckingInspection
 #[derive(Clone, VariantNames, AsRefStr, Default, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum GCodeValue {
     /// No Operation
     #[default]

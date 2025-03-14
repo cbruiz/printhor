@@ -182,8 +182,12 @@ mod test {
         let controller =
             make_static_sync_controller!("DummyDevice", SyncMutexStrategy, DummyDevice::new());
 
+        let alloc_size = hwa::stack_allocation_get();
+
         let _c2 = controller.clone();
         hwa::info!("OK");
+
+        hwa::stack_allocation_decrement(alloc_size);
     }
 }
 //#endregion

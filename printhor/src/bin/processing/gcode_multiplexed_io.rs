@@ -45,7 +45,7 @@ impl GCodeMultiplexedInputStream {
                 let f1 = self.serial_usb_line_parser.next_gcode(hwa::CommChannel::SerialUsb);
             }
             else {
-                let f1 = core::future::pending::<Result<Option<GCodeCmd>, GCodeLineParserError>>();
+                let f1 = core::future::pending::<Result<Option<processing::GCodeCmd>, processing::GCodeLineParserError>>();
             }
         }
         cfg_if::cfg_if! {
@@ -61,7 +61,7 @@ impl GCodeMultiplexedInputStream {
                 let f3 = self.serial_port2_line_parser.next_gcode(hwa::CommChannel::SerialPort2);
             }
             else {
-                let f3 = core::future::pending::<Result<Option<processing::GCodeCmd>, GCodeLineParserError>>();
+                let f3 = core::future::pending::<Result<Option<processing::GCodeCmd>, processing::GCodeLineParserError>>();
             }
         }
 
@@ -73,7 +73,7 @@ impl GCodeMultiplexedInputStream {
                     }
                     else {
                         hwa::error!("Unexpectedly got nothing");
-                        (Err(GCodeLineParserError::EOF), hwa::CommChannel::Internal)
+                        (Err(processing::GCodeLineParserError::EOF), hwa::CommChannel::Internal)
                     }
                 }
             }

@@ -12,13 +12,12 @@ mod instrumentation;
 
 use hwa::HwiContract;
 
+use hwa::CommChannel;
 #[allow(unused)]
 use hwa::RawHwiResource;
-
-use controllers::{LinearMicrosegmentStepInterpolator, SegmentIterator};
 use hwa::controllers;
-use motion::SCurveMotionProfile;
-use printhor_hwa_common::CommChannel;
+use motion::{MicroSegmentInterpolator, SCurveMotionProfile, SegmentSampler};
+
 use tasks::task_stepper::{
     STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
 };
@@ -42,13 +41,23 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
             // Max speed
-            motion_planner.motion_config().set_max_speed(hwa::Contract::DEFAULT_MAX_SPEED_PS);
+            motion_planner.motion_config().set_max_speed(
+                hwa::Contract::DEFAULT_MAX_SPEED_PS
+            );
 
-            motion_planner.motion_config().set_max_accel(hwa::Contract::DEFAULT_MAX_ACCEL_PS);
+            motion_planner.motion_config().set_max_accel(
+                hwa::make_vector_real!(x=9810.0, y=9810.0, z=9810.0)
+                //hwa::Contract::DEFAULT_MAX_ACCEL_PS
+            );
 
-            motion_planner.motion_config().set_max_jerk(hwa::Contract::DEFAULT_MAX_JERK_PS);
+            motion_planner.motion_config().set_max_jerk(
+                hwa::make_vector_real!(x=9810.0, y=9810.0, z=9810.0) * hwa::make_real!(2.0)
+                //hwa::Contract::DEFAULT_MAX_JERK_PS
+            );
 
-            motion_planner.motion_config().set_default_travel_speed(hwa::Contract::DEFAULT_TRAVEL_SPEED_PS);
+            motion_planner.motion_config().set_default_travel_speed(
+                hwa::Contract::DEFAULT_TRAVEL_SPEED_PS
+            );
 
             motion_planner.motion_config().set_space_units_per_world_unit(hwa::Contract::DEFAULT_UNITS_PER_WU);
 
@@ -201,17 +210,16 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             * motion_planner.motion_config().get_micro_steps_as_vector();
 
                         let mut segment_iterator =
-                            SegmentIterator::new(&trajectory, micro_segment_period_secs);
+                            SegmentSampler::new(&trajectory, micro_segment_period_secs);
 
-                        let mut micro_segment_interpolator =
-                            LinearMicrosegmentStepInterpolator::new(
-                                segment
-                                    .unit_vector_dir
-                                    .with_coord(relevant_coords.complement(), None)
-                                    .abs(),
-                                segment.displacement_su,
-                                steps_per_su.with_coord(relevant_coords.complement(), None),
-                            );
+                        let mut micro_segment_interpolator = MicroSegmentInterpolator::new(
+                            segment
+                                .unit_vector_dir
+                                .with_coord(relevant_coords.complement(), None)
+                                .abs(),
+                            segment.displacement_su,
+                            steps_per_su.with_coord(relevant_coords.complement(), None),
+                        );
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory interpolation START",
                             _order_num
@@ -223,15 +231,16 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             // Micro-segment start
 
                             if let Some(estimated_position) = segment_iterator.next() {
-                                data_points.interpolation_tick(&segment_iterator);
+                                data_points.sampling_tick(&segment_iterator);
 
                                 let w = (segment_iterator.dt() * hwa::math::ONE_MILLION).round();
                                 if w.is_negligible() {
                                     hwa::info!("giving up for any reason");
                                     break;
                                 }
-                                let _has_more =
-                                    micro_segment_interpolator.advance_to(estimated_position, w);
+                                let _has_more = micro_segment_interpolator
+                                    .advance_to(estimated_position, w)
+                                    .expect("bad advance");
 
                                 hwa::debug!(
                                     "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} [{:?}] {} [{:?}] steps",
@@ -274,12 +283,14 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                         let _adv_steps = micro_segment_interpolator.advanced_steps();
                         let adv_pos = micro_segment_interpolator.advanced_units();
                         hwa::info!(
-                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, vlim: {:?} {}/s",
+                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, velocity: <{:?}, {:?}, {:?}> {}/s",
                             _order_num,
                             segment_iterator.current_position(),
                             adv_pos,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.v_0,
                             trajectory.v_lim,
+                            trajectory.v_1,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE
                         );
 
@@ -360,13 +371,13 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         fg.axes2d()
             .set_y_label(format!("Position ({})", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
             .points(data_points.segment_position_marks.times, data_points.segment_position_marks.points, &[PlotOption::Color("black")])
-            .lines(data_points.interpolated_positions.times, data_points.interpolated_positions.points, &[PlotOption::Color("blue")])
+            .lines(data_points.sampled_positions.times, data_points.sampled_positions.points, &[PlotOption::Color("blue")])
             //.lines(data_points.time_discrete, data_points.pos_discrete, &[PlotOption::Color("gray")])
         ;
         fg.axes2d()
             .set_y_label(format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
             .points(data_points.segment_velocity_marks.times, data_points.segment_velocity_marks.points, &[PlotOption::Color("black")])
-            .lines(data_points.interpolated_velocities.times, data_points.interpolated_velocities.points, &[PlotOption::Color("red")])
+            .lines(data_points.sampled_velocities.times, data_points.sampled_velocities.points, &[PlotOption::Color("red")])
             //.lines(data_points.time, data_points.spd, &[PlotOption::Color("green")])
             //.lines(data_points.time_discrete_deriv, data_points.spd_discrete, &[PlotOption::Color("gray")])
         ;

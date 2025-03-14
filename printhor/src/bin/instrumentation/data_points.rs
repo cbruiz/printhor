@@ -1,4 +1,5 @@
 //! A module to hold and plot discrete signal changes
+
 use crate::{hwa, motion};
 
 pub(crate) struct DataPointsDimension {
@@ -51,13 +52,13 @@ impl DataPointsDimension {
 pub(crate) struct DataPoints {
     pub current_segment_id: usize,
     pub current_micro_segment_id: usize,
-    pub total_displacement: hwa::math::Real,
+    pub total_displacement: f64,
 
     pub segment_position_marks: DataPointsDimension,
-    pub interpolated_positions: DataPointsDimension,
+    pub sampled_positions: DataPointsDimension,
 
     pub segment_velocity_marks: DataPointsDimension,
-    pub interpolated_velocities: DataPointsDimension,
+    pub sampled_velocities: DataPointsDimension,
 }
 
 impl DataPoints {
@@ -65,13 +66,13 @@ impl DataPoints {
         Self {
             current_segment_id: 0,
             current_micro_segment_id: 0,
-            total_displacement: hwa::math::ZERO,
+            total_displacement: 0.0,
 
             segment_position_marks: DataPointsDimension::new(),
-            interpolated_positions: DataPointsDimension::new(),
+            sampled_positions: DataPointsDimension::new(),
 
             segment_velocity_marks: DataPointsDimension::new(),
-            interpolated_velocities: DataPointsDimension::new(),
+            sampled_velocities: DataPointsDimension::new(),
         }
     }
 
@@ -79,19 +80,18 @@ impl DataPoints {
         self.current_segment_id += 1;
         self.current_micro_segment_id = 0;
         self.segment_position_marks.push_relative(
-            self.interpolated_positions.last_time,
-            self.interpolated_positions.last_point,
+            self.sampled_positions.last_time,
+            self.sampled_positions.last_point,
         );
-        self.segment_velocity_marks.push_time_relative(
-            self.interpolated_positions.last_time,
-            trajectory.v_0.to_f64(),
-        )
+        self.segment_velocity_marks
+            .push_time_relative(self.sampled_positions.last_time, trajectory.v_0.to_f64())
     }
     pub fn segment_ends(&mut self) {
+        self.total_displacement += self.sampled_positions.last_point;
         self.segment_position_marks.displace();
-        self.interpolated_positions.displace();
+        self.sampled_positions.displace();
         self.segment_velocity_marks.displace_time();
-        self.interpolated_velocities.displace_time();
+        self.sampled_velocities.displace_time();
     }
 
     pub fn num_segments(&self) -> usize {
@@ -109,22 +109,17 @@ impl DataPoints {
     }
 
     pub fn total_displacement(&self) -> hwa::math::Real {
-        self.total_displacement
+        hwa::math::Real::from_f32(self.total_displacement as f32)
     }
 
-    pub fn interpolation_tick(
-        &mut self,
-        interpolation_iterator: &hwa::controllers::motion_control::SegmentIterator<
-            motion::SCurveMotionProfile,
-        >,
-    ) {
-        self.interpolated_positions.push_relative(
-            interpolation_iterator.current_time().to_f64(),
-            interpolation_iterator.current_position().to_f64(),
+    pub fn sampling_tick(&mut self, sampler: &motion::SegmentSampler<motion::SCurveMotionProfile>) {
+        self.sampled_positions.push_relative(
+            sampler.current_time().to_f64(),
+            sampler.current_position().to_f64(),
         );
-        self.interpolated_velocities.push_relative(
-            interpolation_iterator.current_time().to_f64(),
-            (interpolation_iterator.ds() / interpolation_iterator.dt()).to_f64(),
+        self.sampled_velocities.push_relative(
+            sampler.current_time().to_f64(),
+            (sampler.ds() / sampler.dt()).to_f64(),
         )
     }
 }

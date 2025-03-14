@@ -1,5 +1,6 @@
 //! This module contains the peripheral and devices export required for ALL HWI boards
 use crate::hwa;
+#[allow(unused)]
 use crate::processing;
 #[allow(unused)]
 use crate::tasks;
