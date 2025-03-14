@@ -303,81 +303,26 @@ impl SCurveMotionProfile {
         let not_feasible = q_1 <= q_lim;
 
         if not_feasible {
-            #[cfg(feature = "verbose-timings")]
-            hwa::warn!(
-                "[SCurveMotionProfile] Movement NOT FEASIBLE. Performing unconstrained parabolic blends"
-            );
-
-            // y := j_max
-            // e1: q1 = (y * t^3) / 6 + v0 * t
-            // e2: v1 = v0 + y * t^2 / 2 => 2*(v1 - v0) = y * t^2 => y = 2*(v1-v0) / t^2
-            // e1|e2: q1 = ((2*(v1-v0) / t^2) * t^3) / 6 + v0 * t
-            // t = 3*q1 / 2*v0 + v1 | v0+v1 >0 and q1 > 0
-
-            // v1(t) = v0 + j_max * t^2 / 2
-            // s1(t) = (y * t^3) / 6 + v0*t
-            // v2(t) = 2*v1(t_j1) - v0 - j_max * (t - 2t_j1)^2 / 2
-            //  2*v0 + j_max * t_j1^2 / 2
-            // v2(t) = 2*(v0 + j_max * t^2 / 2) - v0 - j_max * (t - 2t_j1)^2 / 2
-
-            // e1: q1 = (y * t^3) / 6 + v0*t
-            // e2: q1 = (- y * t^3) / 6 + a*t^2*T_j1 - a * t * T_j1^2 + t*v_0
-            // e3: T_j1 = t/2
-            // y = q1/x
-
-            // solving -1/6 a x^3 + d/x *x^3/2 - d/x* x^3/4 + v x = d for x
-            // x = (2 (sqrt(d^2 + v^2) - v))/d y d!=0 y a = 0
-
-            // v1(t) = v0 + a * (t^2 / 2)
-            // s1(t) = (a * t^3) / 6 + v0 * t
-
-            // v2(t) = v_1 - a * (((T - t)^2)/2)
-            // s2(t) = v_{1} * t - (1/6) * a * t (t^2 - 3*t*T + 3*T^2)
-
-            // q_b = Int{T/2, T} ( v_1 - a * (((T - t)^2)/2) ) = s2(T) - s2(T/2)
-            // q_b = v_1 * T - (1/6) * a * T (T^2 - 3*T*T + 3*T^2) - ( v_1 * T/2 - (1/6) * a * T/2 ((T/2)^2 - 3*(T/2)*T + 3*T^2) )
-            //   = 1/2 T v_1 - (a T^3)/48
-            //
-            // q_a = Int{0, T/2} (v_0 + a * (t^2 / 2)) = s1(T/2) - s1(0)
-            // q_a = (a * (T/2)^3) / 6 + v_0 * T/2 - ( (a * 0^3) / 6 + v_0 * 0 )
-            // = 1/48 T (a T^2 + 24 * v_0)
-
-            // s = q_a + q_b = 1/2 * T * v_1 - (a * T^3) / 48 + 1/48 * T * (-a T^2 + 24 * v_0) =
-            //   = 1/2 T (v_0 + v_1)
-            // T = (2 * s) / (v_0 + v_1)
-
-            // q_a = 1/48 T (a T^2 + 24 * v_0)
-            // q_b = 1/2 T v_1 - (a T^3)/48
-            // simplifiying q_a = 1/48 ((2 * s) / (v_0 + v_1)) (a ((2 * s) / (v_0 + v_1))^2 + 24 * v_0)
-            // q_a = (s (a s^2 + 6 v_0 (v_0 + v_1)^2))/(6 (v_0 + v_1)^3)
-            // simplifiying q_b = 1/2 ((2 * s) / (v_0 + v_1)) v_1 - (a ((2 * s) / (v_0 + v_1))^3)/48
-            // q_b = (s v_1)/(v_0 + v_1) - (a s^3)/(6 (v_0 + v_1)^3)
-
-            // (q_1 (q_1 q_1^2 + 6 v_0 (v_0 + v_1)^2))/(6 (v_0 + v_1)^3)
-            // (q_1 v_1)/(v_0 + v_1) - (a q_1^3)/(6 (v_0 + v_1)^3)
-
-            // Compute the time need to accel
-            let t_a = TWO * (q_1 / (v_0 + v_1));
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!("[SCurveMotionProfile] Movement NOT feasible. Performing cubic blends");
 
             // Compute the accel
-            let a = (v_1 - v_0) / t_a;
-            let t_j1 = HALF * t_a;
+            let accel = constraints.j_max;
+            // Full trajectory at limit jerk
 
-            // Constructively define the two parabolas:
-            // The first one (smooth accel from v_0):
-            // v_{1}(t) := a_{v1} * (t - 0)^2 + v_{0}
-            // with a_{v_1} as:
-            //  a_{1} = \frac{a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
-            // The second one (smooth decel to v_1); TBD
-            //  a_{2} = \frac{-a \frac{T}{2} - 0}{(0 - \frac{T}{2})^2}
+            // \begin{align*} \textrm{Solve}\;s_{i1}(t, 0) &\le q_{1} \;\textrm{given}:\\ s_{i1}(t, \delta)_{|t>\delta} &= \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta)\\ t &> 0 \land j_{max} > 0 \land q = s_{i1}(t_f,0)\\
+            // t &=  \frac{\sqrt[3]{3j_{max}^2 q + \sqrt{9j_{max}^4q^2+8j_{max}^3v_o^3}}}{j_{max}} - \frac{2v_o}{\sqrt[3]{3j_{max}^2 q + \sqrt{9j_{max}^4q^2+8j_{max}^3v_o^3}}}\\
+            // \end{align*}
 
-            let a_1 = (a * t_j1) / (t_j1 * t_j1);
-
-            // Finally, reformulating to meet the paper convention it is trivial to determine that:
-            // In \dot{q}(t) = v_{0} + j_{max} \frac{t^2}{2}:
-            // a_{v1} = j_max / 2, hence j_max = 2 * a_{v1}
-
-            let j_max = TWO * a_1;
+            let accel_sq = accel * accel;
+            let t_1 = ((math::THREE * accel_sq * q_1)
+                + ((math::NINE * accel_sq * accel_sq * q_1 * q_1)
+                    + (math::EIGHT * accel_sq * accel * v_0 * v_0 * v_0))
+                    .sqrt()
+                    .ok_or(processing::CodeExecutionFailure::NumericalError)?)
+            .cbrt();
+            let t_j1 = (t_1 / accel) - ((math::TWO * v_0) / t_1);
+            let t_a = t_j1;
 
             let mut profile = SCurveMotionProfile {
                 t_j1,
@@ -385,9 +330,9 @@ impl SCurveMotionProfile {
                 t_v: math::ZERO,
                 t_d: math::ZERO,
                 t_j2: math::ZERO,
-                v_0: v_0,
-                v_1: v_1,
-                j_max,
+                v_0,
+                v_1,
+                j_max: accel,
                 a_lim_a: math::ZERO,
                 a_lim_d: math::ZERO,
                 v_lim: v_1.max(v_0),
@@ -463,7 +408,7 @@ impl SCurveMotionProfile {
                                     * (constraints.j_max * q_1 * q_1
                                         + (v_1 + v_0) * (v_1 + v_0) * (v_1 - v_0)))
                                     .sqrt()
-                                    .unwrap())
+                                    .ok_or(processing::CodeExecutionFailure::NumericalError)?)
                                 / (constraints.j_max * (v_1 + v_0));
                         } else if t_d_2 < ZERO {
                             t_d_2 = ZERO;
@@ -474,7 +419,7 @@ impl SCurveMotionProfile {
                                     * (constraints.j_max * q_1 * q_1
                                         + (v_1 + v_0) * (v_1 + v_0) * (v_0 - v_1)))
                                     .sqrt()
-                                    .unwrap())
+                                    .ok_or(processing::CodeExecutionFailure::NumericalError)?)
                                 / (constraints.j_max * (v_1 + v_0));
                         }
                     } else {
@@ -938,15 +883,12 @@ impl SCurveMotionProfile {
     }
 
     /// Acceleration phase, jerk limited acceleration
-    /// <p>
-    /// \[
-    /// \begin{align}{l}
+    /// <p> \[
+    /// \begin{align*}
     /// v_{i1}(t) &= \frac{j_{max}t^2}{2}+v_{0} \\
-    /// s_{i1}(t) &= \int{v_{i1}(t)dt} \\
-    /// s_{i1}(t)_{|t>\delta} &= \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta)
-    /// \end{align}
-    /// \]
-    /// </p>
+    /// s_{i1}(t) &= \int{v_{i1}(t)dt} \implies s_{i1}(t)_{|t>\delta} = \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta)
+    /// \end{align*}
+    /// \] </p>
     ///
     pub fn s_i1(&self, t: &Real) -> Real {
         let dt = (*t) - self.i1_start();
@@ -954,13 +896,12 @@ impl SCurveMotionProfile {
     }
 
     /// Acceleration phase, constant acceleration
-    ///
-    /// $$ v_{i2}(t)_{|t>\delta} = j_{max} T_{j1} t + v_{i1}(\delta) $$
-    ///
-    /// $$ s_{i2}(t) = \int{v_{i2}(t)dt} $$
-    ///
-    /// $$ s_{i2}(t)_{|t>\delta} = \frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i1}(\delta)(t-\delta) + s_{i1}(\delta) $$
-    ///
+    /// <p>\[
+    /// \begin{align*}
+    /// v_{i2}(t)_{|t>\delta} &= j_{max} T_{j1} t + v_{i1}(\delta) \\
+    /// s_{i2}(t) &= \int{v_{i2}(t)dt} \implies s_{i2}(t)_{|t>\delta} = \frac{j_{max} T_{j1} (t - \delta)^2}{2} + v_{i1}(\delta)(t-\delta) + s_{i1}(\delta)
+    /// \end{align*}
+    /// \] </p>
     pub fn s_i2(&self, t: &Real) -> Real {
         let dt = (*t) - self.i2_start();
         (self.j_max * HALF * self.t_j1 * dt) * (dt + self.t_j1) + self.v_0 * dt + self.cache.s1_pt
@@ -1077,7 +1018,17 @@ impl motion::MotionProfile for SCurveMotionProfile {
 
 impl core::fmt::Debug for SCurveMotionProfile {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(f, "SCurveMotionProfile")
+        core::write!(
+            f,
+            "SCurveMotionProfile {{t_j1 = {:?}, t_a = {:?}, j_max = {:?} , v_0 = {:?}, v_1 = {:?}, v_lim = {:?}, q_1 = {:?} }}",
+            self.t_j1,
+            self.t_a,
+            self.j_max,
+            self.v_0,
+            self.v_1,
+            self.v_lim,
+            self.q1
+        )
     }
 }
 

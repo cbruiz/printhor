@@ -7,8 +7,11 @@ pub const ONE: Real = Real::from_fixed(dec!(1.0));
 pub const ONE_AND_HALF: Real = Real::from_fixed(dec!(1.5));
 pub const TWO: Real = Real::from_fixed(dec!(2.0));
 pub const THREE: Real = Real::from_fixed(dec!(3.0));
+pub const THIRD: Real = Real::from_fixed(dec!(0.3333333333333333333333333333));
 pub const FOUR: Real = Real::from_fixed(dec!(4.0));
 pub const SIX: Real = Real::from_fixed(dec!(6.0));
+pub const EIGHT: Real = Real::from_fixed(dec!(8.0));
+pub const NINE: Real = Real::from_fixed(dec!(9.0));
 pub const SIXTH: Real = Real::from_fixed(dec!(0.1666666666666666666666666666));
 
 /// A very small value used to determine the difference between two decimal point numbers.

@@ -194,7 +194,7 @@ impl hwa::HwiContract for Contract {
                     };
 
                     #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
-                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
+                    const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 400;
 
                     #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;

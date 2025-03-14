@@ -14,14 +14,14 @@ pub(crate) struct DataPointsDimension {
 }
 
 impl DataPointsDimension {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             time_offset: 0.0,
             last_time: 0.0,
             point_offset: 0.0,
             last_point: 0.0,
-            times: vec![0.0],
-            points: vec![0.0],
+            times: vec![],
+            points: vec![],
         }
     }
 
@@ -41,15 +41,17 @@ impl DataPointsDimension {
         self.points.push(self.point_offset + self.last_point);
     }
 
-    pub fn push_time_relative(&mut self, time: f64, point: f64) {
+    pub fn push_absolute(&mut self, time: f64, point: f64) {
         self.last_time = time;
         self.last_point = point;
-        self.times.push(self.time_offset + self.last_time);
-        self.points.push(self.last_point);
+        self.times.push(time);
+        self.points.push(point);
     }
 }
 
 pub(crate) struct DataPoints {
+    pub sampling_width: f64,
+    pub reference_time: f64,
     pub current_segment_id: usize,
     pub current_micro_segment_id: usize,
     pub total_displacement: f64,
@@ -63,7 +65,10 @@ pub(crate) struct DataPoints {
 
 impl DataPoints {
     pub fn new() -> Self {
+        use hwa::HwiContract;
         Self {
+            sampling_width: 1.0 / hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY as f64,
+            reference_time: 0.0,
             current_segment_id: 0,
             current_micro_segment_id: 0,
             total_displacement: 0.0,
@@ -76,15 +81,17 @@ impl DataPoints {
         }
     }
 
-    pub fn segment_starts(&mut self, trajectory: &motion::SCurveMotionProfile) {
+    pub fn segment_starts(&mut self, _trajectory: &motion::SCurveMotionProfile) {
         self.current_segment_id += 1;
         self.current_micro_segment_id = 0;
+        hwa::debug!("[s-plot] segment starts at {:.4}", self.reference_time);
         self.segment_position_marks.push_relative(
             self.sampled_positions.last_time,
             self.sampled_positions.last_point,
         );
+        let v0 = _trajectory.v_0.to_f64();
         self.segment_velocity_marks
-            .push_time_relative(self.sampled_positions.last_time, trajectory.v_0.to_f64())
+            .push_absolute(self.reference_time, v0);
     }
     pub fn segment_ends(&mut self) {
         self.total_displacement += self.sampled_positions.last_point;
@@ -92,18 +99,21 @@ impl DataPoints {
         self.sampled_positions.displace();
         self.segment_velocity_marks.displace_time();
         self.sampled_velocities.displace_time();
+        hwa::debug!("[s-plot] segment ends at {:.4}", self.reference_time);
     }
 
     pub fn num_segments(&self) -> usize {
         self.current_segment_id
     }
 
+    #[allow(unused)]
     pub fn current_segment_id(&self) -> usize {
         self.current_segment_id
     }
 
     pub fn micro_segment_ends(&mut self) {}
 
+    #[allow(unused)]
     pub fn current_micro_segment_id(&self) -> usize {
         self.current_micro_segment_id
     }
@@ -113,6 +123,8 @@ impl DataPoints {
     }
 
     pub fn sampling_tick(&mut self, sampler: &motion::SegmentSampler<motion::SCurveMotionProfile>) {
+        self.reference_time += self.sampling_width;
+        hwa::debug!("[s-plot] segment sampled at {:.4}", self.reference_time);
         self.sampled_positions.push_relative(
             sampler.current_time().to_f64(),
             sampler.current_position().to_f64(),

@@ -298,6 +298,7 @@ impl StepPlanExecutor {
                                     Some(v)
                                 }
                             });
+                            true
                         }
                         else {
                             true

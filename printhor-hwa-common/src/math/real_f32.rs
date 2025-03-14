@@ -149,6 +149,64 @@ impl Real {
         y
     }
 
+    // cbrt implementation from rust libm
+    // Warning: This method deviates too much for large values
+    pub fn libm_cbrt(x: f32) -> f32 {
+        const B1: u32 = 709958130; /* B1 = (127-127.0/3-0.03306235651)*2**23 */
+        const B2: u32 = 642849266; /* B2 = (127-127.0/3-24/3-0.03306235651)*2**23 */
+
+        let x1p24 = f32::from_bits(0x4b800000); // 0x1p24f === 2 ^ 24
+
+        let mut r: f32;
+        let mut t: f32;
+        let mut ui: u32 = x.to_bits();
+        let mut hx: u32 = ui & 0x7fffffff;
+
+        if hx >= 0x7f800000 {
+            /* cbrt(NaN,INF) is itself */
+            return x + x;
+        }
+
+        /* rough cbrt to 5 bits */
+        if hx < 0x00800000 {
+            /* zero or subnormal? */
+            if hx == 0 {
+                return x; /* cbrt(+-0) is itself */
+            }
+            ui = (x * x1p24).to_bits();
+            hx = ui & 0x7fffffff;
+            hx = hx / 3 + B2;
+        } else {
+            hx = hx / 3 + B1;
+        }
+        ui &= 0x80000000;
+        ui |= hx;
+
+        /*
+         * First step Newton iteration
+         */
+        t = f32::from_bits(ui);
+        r = t * t * t;
+        t = t * (x + x + r) / (x + r + r);
+
+        /*
+         * Second step Newton iteration
+         */
+        r = t * t * t;
+        t = t * (x + x + r) / (x + r + r);
+
+        t
+    }
+
+    /// Computes the cube root of the argument.
+    pub fn cbrt(self) -> Self {
+        let r = Real::from_inner(Real::libm_cbrt(self.0));
+        //let r = Real::from_inner(self.0.cbrt())
+        //let r = Real::from_inner(micromath::F32::powf(self.0.into(), micromath::F32::from(1.0f32/3.0f32)).into());
+        //hwa::info!("cbrt calculation: cbrt({:?}) = {}", self, r.0);
+        r
+    }
+
     pub fn sin(self) -> Self {
         Real(self.0.sin())
     }

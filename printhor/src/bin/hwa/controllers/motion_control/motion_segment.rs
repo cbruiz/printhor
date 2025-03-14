@@ -30,12 +30,16 @@ pub struct Segment {
     /// Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
     pub displacement_su: Real,
 
+    #[cfg(feature = "with-motion-chaining")]
     /// Constrained initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_enter_constrained_su_s: Real,
+    #[cfg(feature = "with-motion-chaining")]
     /// Constrained speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_exit_constrained_su_s: Real,
+    #[cfg(feature = "with-motion-chaining")]
     /// Projection of the previous segment.
     pub proj_prev: Real,
+    #[cfg(feature = "with-motion-chaining")]
     /// Projection of the next segment.
     pub proj_next: Real,
 

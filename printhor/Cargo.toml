@@ -21,6 +21,7 @@ default = [
 ]
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 
+with-motion-chaining = []
 with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper", "printhor-hwi_skr_mini_e3?/with-motion-stepper", "printhor-hwi_mks_robin_nano?/with-motion-stepper", "printhor-hwi_rp_2040?/with-motion-stepper"]
 with-motion-broadcast = ["printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast", "printhor-hwi_skr_mini_e3?/with-motion-broadcast", "printhor-hwi_mks_robin_nano?/with-motion-broadcast", "printhor-hwi_rp_2040?/with-motion-broadcast"]
 with-motion-cartessian-kinematics = ["printhor-hwi_native?/with-motion-cartessian-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-cartessian-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-cartessian-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-cartessian-kinematics", "printhor-hwi_rp_2040?/with-motion-cartessian-kinematics"]
@@ -56,7 +57,7 @@ with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic", "printhor-hwi_
 
 without-bootloader = []
 
-cornering = []
+
 # Incomplete
 pulsed = []
 # Tests which are not yet working or completed :-/
@@ -78,9 +79,9 @@ with-u-axis = ["printhor-hwi_native?/with-u-axis", "printhor-hwi_skr_mini_e3?/wi
 with-v-axis = ["printhor-hwi_native?/with-v-axis", "printhor-hwi_skr_mini_e3?/with-v-axis", "printhor-hwi_mks_robin_nano?/with-v-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-v-axis", "printhor-hwi_rp_2040?/with-v-axis"]
 with-w-axis = ["printhor-hwi_native?/with-w-axis", "printhor-hwi_skr_mini_e3?/with-w-axis", "printhor-hwi_mks_robin_nano?/with-w-axis", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-w-axis", "printhor-hwi_rp_2040?/with-w-axis"]
 
-float-point-f32-impl = ["printhor-hwi_native?/float-point-f32-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f32-impl", "printhor-hwi_skr_mini_e3?/float-point-f32-impl", "printhor-hwi_mks_robin_nano?/float-point-f32-impl", "printhor-hwi_rp_2040?/float-point-f32-impl"]
-float-point-f64-impl = ["printhor-hwi_native?/float-point-f64-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f64-impl", "printhor-hwi_skr_mini_e3?/float-point-f64-impl", "printhor-hwi_mks_robin_nano?/float-point-f64-impl", "printhor-hwi_rp_2040?/float-point-f64-impl"]
-fixed-point-128-impl = ["printhor-hwi_native?/fixed-point-128-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/fixed-point-128-impl", "printhor-hwi_skr_mini_e3?/fixed-point-128-impl", "printhor-hwi_mks_robin_nano?/fixed-point-128-impl", "printhor-hwi_rp_2040?/fixed-point-128-impl"]
+float-point-f32-impl = ["printhor-hwa-common/float-point-f32-impl", "printhor-hwi_native?/float-point-f32-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f32-impl", "printhor-hwi_skr_mini_e3?/float-point-f32-impl", "printhor-hwi_mks_robin_nano?/float-point-f32-impl", "printhor-hwi_rp_2040?/float-point-f32-impl"]
+float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl", "printhor-hwi_native?/float-point-f64-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/float-point-f64-impl", "printhor-hwi_skr_mini_e3?/float-point-f64-impl", "printhor-hwi_mks_robin_nano?/float-point-f64-impl", "printhor-hwi_rp_2040?/float-point-f64-impl"]
+fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "printhor-hwi_native?/fixed-point-128-impl", "printhor-hwi_nucleo_64_arduino_cnc_hat?/fixed-point-128-impl", "printhor-hwi_skr_mini_e3?/fixed-point-128-impl", "printhor-hwi_mks_robin_nano?/fixed-point-128-impl", "printhor-hwi_rp_2040?/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 # Debug trick for testing timings with digital probe. Enable is threated as reference output clock.
 
@@ -113,7 +114,7 @@ ili9341_spi = []
 
 s-plot-bin = ["printhor-hwi_native?/s-plot-bin", "gnuplot"]
 integration-test = [
-    "cornering",
+    "with-motion-chaining",
     "integration-test-m100",
     "integration-test-power-on",
     #"integration-test-homing",
@@ -253,13 +254,15 @@ native = [
     #"assert-motion",
     #"trace-commands",
 
-    "cornering",
+    "with-motion-chaining",
 
     "cartessian-cnc",
     #"cartessian-fdm",
     #"core-xy-fdm",
     #"corexy-cnc"
     #"anthropomorphic-quad-robot"
+
+    #"fixed-point-128-impl",
 
     "with-serial-usb",
     "with-serial-port-1",
@@ -285,7 +288,7 @@ native = [
 
 mks_robin_nano = [
     #"nightly",
-    "cornering",
+    "with-motion-chaining",
     "without-bootloader", "printhor-hwi_mks_robin_nano/without-bootloader", # SHOULD NOT
     "with-defmt",
     "with-trinamic",
@@ -327,7 +330,7 @@ nucleo64-l476rg = [
     #"trace-commands",
     #"debug-gcode",
 
-    "cornering",
+    "with-motion-chaining",
 
     "cartessian-fdm-wip",
     #"anthropomorphic-quad-robot",
@@ -362,7 +365,7 @@ nucleo64-f410rb = [
     #"assert-motion",
     "trace-commands",
 
-    "cornering",
+    "with-motion-chaining",
 
     "cartessian-cnc",
 
@@ -509,6 +512,8 @@ tmc2209 = { version = "0.2.2", optional = true }
 # Common base
 printhor-hwa-common = { version = "0.0", default-features = false, features = [], path = "../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0", default-features = false, features = [], path = "../printhor-hwa-utils" }
+rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
+rust_decimal_macros = { optional = true, version = "1.36.0" }
 
 # Boards
 printhor-hwi_native = { version = "0.0", default-features = false, optional = true }

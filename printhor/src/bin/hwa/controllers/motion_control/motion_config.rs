@@ -279,7 +279,7 @@ impl MotionConfig {
         );
         if hwa::Contract::CLAMP_MIN_SPEED {
             hwa::info!(
-                "[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is space: {:?} {}/s",
+                "[MotionConfig:ComputedConf] Min speed (1 step at center of `SegmentSampling`) is space: {:?} {}/s",
                 v_min,
                 Contract::SPACE_UNIT_MAGNITUDE
             );

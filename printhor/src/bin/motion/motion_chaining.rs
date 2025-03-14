@@ -1,7 +1,94 @@
+//! The motion chaining algorithm
 use crate::hwa;
-use hwa::controllers::PlanEntry;
-use hwa::controllers::motion_control::motion_ring_buffer::RingBuffer;
-use hwa::{Contract, HwiContract, math};
+#[allow(unused)]
+use hwa::{
+    Contract, HwiContract,
+    controllers::{PlanEntry, motion_control::motion_ring_buffer::RingBuffer},
+    math,
+};
+
+/// Compute the maximum speed that can be gained between the current segment and the next one.
+/// 1. `H1` Traveling at maximum acceleration (3rd order acceleration: constant jerk)
+/// 2. Compute `t` as the time needed to travel target displacement given `H1`.
+/// 3. Final speed (`v_max`) is the velocity reached at `t`.
+/// <p>\[
+/// \begin{align*} \textrm{Solve}\; s_{i1}(t, 0) & \le q_{1} \;\textrm{given}: &\\
+/// & s_{i1}(t, \delta)_{|t>\delta} = \frac{j_{max} (t-\delta)^3}{6} + v_{0} (t-\delta)\\
+/// & \delta = 0 \land t_{max} > 0 \land j_{max} > 0 \land q_1 = s_{i1}(t_{max},\delta)\\
+/// \\
+/// \hline
+/// \\
+/// & t_{max} = \frac{\sqrt[3]{3j_{max}^2 q_1 + \sqrt{9j_{max}^4q_{1}^2+8j_{max}^3v_o^3}}}{j_{max}} - \frac{2v_o}{\sqrt[3]{3j_{max}^2 q_1 + \sqrt{9j_{max}^4q_1^2+8j_{max}^3v_o^3}}}\\
+/// & v_{1} = v_0 + \frac{j_{max}t_{max}^2}{2}\\
+/// \end{align*}
+/// \]</p>
+/// ...
+pub fn compute_gain(
+    is_initial: bool,
+    _num_order: u32,
+    curr_segment: &mut hwa::controllers::Segment,
+) {
+    if is_initial {
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[motion_chaining] Computing initial gain for segment {:?}",
+            _num_order
+        );
+    } else {
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[motion_chaining] Re-computing gain for segment @[head -{:?}]",
+            _num_order
+        );
+    }
+    let q_1 = curr_segment.displacement_su;
+    let v_0 = curr_segment.speed_enter_su_s;
+
+    let accel = curr_segment.constraints.j_max;
+    let accel_sq = accel * accel;
+    let t1 = ((math::THREE * accel_sq * q_1)
+        + ((math::NINE * accel_sq * accel_sq * q_1 * q_1)
+            + (math::EIGHT * accel_sq * accel * v_0 * v_0 * v_0))
+            .sqrt()
+            .or_else(|| Some(math::ZERO))
+            .unwrap())
+    .cbrt();
+    let t_max = (t1 / accel) - ((math::TWO * v_0) / t1);
+    let v_max = v_0 + ((accel * t_max * t_max) * math::HALF);
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "debug-motion-planning")] {
+            hwa::info!("--");
+            hwa::info!("q_1: {:?}", q_1);
+            hwa::info!("v_0: {:?}", v_0);
+            hwa::info!("accel: {:?}", accel);
+            hwa::info!("t_max: {:?}", t_max);
+            hwa::info!("v_max: {:?}", v_max);
+            let smax = v_0 * t_max + ((accel * t_max * t_max * t_max ) * math::SIXTH);
+            hwa::info!("s_max(check): {:?}", smax);
+            let vmax = v_0 + ((accel * t_max * t_max ) * math::HALF);
+            hwa::info!("v_max(check): {:?}", vmax);
+        }
+    }
+    curr_segment.speed_exit_constrained_su_s = v_max.min(curr_segment.constraints.v_max);
+    curr_segment.speed_enter_constrained_su_s = curr_segment.speed_exit_su_s - v_max;
+    if is_initial {
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[motion_chaining] Initial gain for segment {:?}: {:?} , {:?}",
+            _num_order,
+            curr_segment.speed_enter_constrained_su_s,
+            curr_segment.speed_exit_constrained_su_s,
+        );
+    } else {
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[motion_chaining] Gain for segment @[head-{:?}]: {:?} , {:?}",
+            _num_order,
+            curr_segment.speed_enter_constrained_su_s,
+            curr_segment.speed_exit_constrained_su_s,
+        );
+    }
+}
 
 /// This method performs the cornering optimization algorithm on the motion [RingBuffer].
 ///
@@ -32,20 +119,28 @@ pub fn perform_motion_chaining(
         RingBuffer,
     >,
 ) -> Result<(), ()> {
-    let mut left_offset = 2;
-    let mut left_watermark = math::ZERO;
-    let mut right_watermark = math::ZERO;
+    // The current left segment offset (from tail)
+    let mut offset_left = 2;
+    // The current right segment offset (from tail)
+    let mut offset_right = 1;
+    // The amount of level increased at left
+    let mut water_level_left = math::ZERO;
+    // The amount of level increased at right
+    let mut water_level_right = math::ZERO;
     // Assuming queued items are computed left to right:
     // First, locate the top left segment. That one with null projection
-    // Also, set
-    for index in 2..rb.used {
+    for index in 1..rb.used {
         match rb.planned_segment_from_tail(index) {
-            Ok(prev_segment_candidate) => {
-                if prev_segment_candidate.proj_next.is_defined_positive() {
-                    left_offset = index;
-                    left_watermark = prev_segment_candidate.speed_enter_su_s;
+            Ok(segment) => {
+                if index == 1 {
+                    water_level_right = segment.speed_exit_su_s;
                 } else {
-                    break;
+                    if segment.proj_next.is_defined_positive() {
+                        offset_left = index;
+                        water_level_left = segment.speed_enter_su_s;
+                    } else {
+                        break;
+                    }
                 }
             }
             Err(_) => break,
@@ -53,24 +148,52 @@ pub fn perform_motion_chaining(
     }
 
     #[allow(unused)]
-    let from_offset = left_offset;
+    let from_offset = offset_left;
     #[allow(unused)]
     let to_offset = 1;
 
-    hwa::debug!("Cornering algorithm START");
-    let mut right_offset = 1;
+    //if from_offset < 19 {
+    //    return Ok(())
+    //}
+
+    #[cfg(feature = "debug-motion-planning")]
+    hwa::info!("[motion_chaining] #########################");
+    #[cfg(feature = "debug-motion-planning")]
+    hwa::info!("[motion_chaining] Cornering algorithm START");
+
+    #[cfg(all(test, feature = "debug-motion-planning"))]
+    display_content(&rb, from_offset, to_offset)?;
+
+    #[cfg(feature = "debug-motion-planning")]
+    hwa::info!(
+        "[motion_chaining] Applying from tail -{:?} to -{:?}",
+        offset_left,
+        offset_right
+    );
 
     // Perform cornering optimization in a single pass with a flood fill algorithm
     loop {
-        if left_offset <= right_offset {
-            let mid_segment = rb.mut_planned_segment_from_tail(left_offset)?;
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::debug!(
+            "[motion_chaining] # Segment indexes (from tail): left: -{} right: -{}",
+            offset_left,
+            offset_right
+        );
+        #[cfg(feature = "debug-motion-planning")]
+        hwa::info!(
+            "[motion_chaining] # Water level: {:?} right: {:?}",
+            water_level_left,
+            water_level_right
+        );
+        if offset_left <= offset_right {
+            let mid_segment = rb.mut_planned_segment_from_tail(offset_left)?;
 
-            mid_segment.speed_enter_su_s = left_watermark;
-            mid_segment.speed_exit_su_s = right_watermark;
+            mid_segment.speed_enter_su_s = water_level_left;
+            mid_segment.speed_exit_su_s = water_level_right;
             break;
         } else {
             let (left_segment, right_segment) =
-                match rb.entries_from_tail(left_offset, right_offset) {
+                match rb.entries_from_tail(offset_left, offset_right) {
                     (
                         Some(PlanEntry::PlannedMove(_s, _, _, _, _)),
                         Some(PlanEntry::PlannedMove(_t, _, _, _, _)),
@@ -78,65 +201,97 @@ pub fn perform_motion_chaining(
                     _ => return Err(()),
                 };
 
-            hwa::trace!("\tleft [{}] right[{}]", left_offset, right_offset);
+            let level_left = left_segment.speed_enter_su_s;
+            let level_right = right_segment.speed_exit_su_s;
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!(
+                "[motion_chaining] # with current level [{:?} {:?}]",
+                level_left,
+                level_right
+            );
 
-            let left_max_inc = (left_segment.proj_next * left_segment.speed_target_su_s)
-                .min(left_segment.speed_exit_constrained_su_s);
+            let diff_at_left = water_level_left - level_left;
+            let diff_at_right = water_level_right - level_right;
 
-            let right_max_inc = (right_segment.proj_prev * right_segment.speed_target_su_s)
-                .min(right_segment.speed_enter_constrained_su_s);
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!(
+                "[motion_chaining] # and diff [{:?} {:?}]",
+                diff_at_left,
+                diff_at_right
+            );
 
-            let water_left = (left_watermark + left_max_inc).min(left_segment.speed_target_su_s);
-            let water_right =
-                (right_watermark + right_max_inc).min(right_segment.speed_target_su_s);
+            if !diff_at_left.is_negligible() {
+                left_segment.speed_enter_su_s = water_level_left;
+                left_segment.speed_exit_su_s = water_level_left;
+                compute_gain(false, offset_left as u32, left_segment);
+            }
+            if !diff_at_right.is_negligible() {
+                right_segment.speed_enter_su_s = water_level_right;
+                right_segment.speed_exit_su_s = water_level_right;
+                compute_gain(false, offset_right as u32, right_segment);
+            }
 
-            if water_left <= water_right {
-                // Flood at right
-                hwa::trace!("flood to right  [{:?} {:?}]", water_left, water_right);
-                left_segment.speed_enter_su_s = left_watermark;
-                left_segment.speed_exit_su_s = water_left;
-                right_segment.speed_enter_su_s = water_left;
-                right_segment.speed_exit_su_s = right_watermark;
-                left_watermark = water_left;
-                left_offset -= 1;
+            let gain_at_left = left_segment.speed_exit_constrained_su_s;
+
+            let gain_at_right =
+                right_segment.speed_exit_su_s - right_segment.speed_enter_constrained_su_s;
+
+            #[cfg(feature = "debug-motion-planning")]
+            hwa::info!(
+                "[motion_chaining] # and possible gain [{:?} {:?}]",
+                gain_at_left,
+                gain_at_right
+            );
+
+            if gain_at_left <= gain_at_right {
+                // Flood to right
+                #[cfg(feature = "debug-motion-planning")]
+                hwa::info!("[motion_chaining] # flood [ .. |-> .. ])");
+                left_segment.speed_enter_su_s = water_level_left;
+                left_segment.speed_exit_su_s = gain_at_left;
+                water_level_left = left_segment.speed_exit_su_s;
+                #[cfg(all(test, feature = "debug-motion-planning"))]
+                display_content(&rb, from_offset, to_offset)?;
+                offset_left -= 1;
             } else {
-                // Flood at left
-                hwa::trace!("flood to left [{:?} {:?}]", water_left, water_right);
-                left_segment.speed_enter_su_s = left_watermark;
-                left_segment.speed_exit_su_s = water_right;
-                right_segment.speed_enter_su_s = water_right;
-                right_segment.speed_exit_su_s = right_watermark;
-                right_watermark = water_right;
-                right_offset += 1;
+                // Flood to left
+                #[cfg(feature = "debug-motion-planning")]
+                hwa::info!("[motion_chaining] # flood [ .. <-| .. ])");
+                right_segment.speed_exit_su_s = water_level_right;
+                right_segment.speed_enter_su_s = gain_at_right;
+                water_level_right = right_segment.speed_enter_su_s;
+                #[cfg(all(test, feature = "debug-motion-planning"))]
+                display_content(&rb, from_offset, to_offset)?;
+                offset_right += 1;
             }
         }
     }
-    #[cfg(feature = "native")]
+    #[cfg(all(test, feature = "debug-motion-planning"))]
     display_content(&rb, from_offset, to_offset)?;
 
-    hwa::debug!("Cornering algorithm END");
+    #[cfg(feature = "debug-motion-planning")]
+    hwa::info!("[motion_chaining] Cornering algorithm END");
     Ok(())
 }
 
-#[cfg(feature = "native")]
-#[allow(unused)]
+#[cfg(all(test, feature = "debug-motion-planning"))]
 pub fn display_content(
     rb: &embassy_sync::mutex::MutexGuard<
         <hwa::types::MotionRingBufferMutexStrategy as hwa::AsyncMutexStrategy>::AsyncMutexType,
-        hwa::controllers::motion_control::motion_ring_buffer::RingBuffer,
+        RingBuffer,
     >,
     left_offset: u8,
     right_offset: u8,
 ) -> Result<(), ()> {
     let mut stb = Vec::new();
     for i in 0..left_offset - right_offset + 1 {
-        let s = rb.planned_segment_from_tail(left_offset - i).unwrap();
+        let s = rb.planned_segment_from_tail(left_offset - i)?;
         stb.push(format!(
             "[{:?},{:?}]",
             s.speed_enter_su_s, s.speed_exit_su_s
         ))
     }
-    hwa::debug!(": {:?}", stb.join(" "));
+    hwa::info!(": {:?}", stb.join(" "));
     Ok(())
 }
 

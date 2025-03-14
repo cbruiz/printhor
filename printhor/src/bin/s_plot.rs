@@ -175,6 +175,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
             controllers::motion_control::ExecPlan::Segment(mut segment, _channel, _order_num) => {
                 let current_real_pos = motion_planner.motion_status().get_current_position();
                 let position_offset = segment.src_pos - current_real_pos.space_pos;
+                #[cfg(feature = "debug-motion")]
                 hwa::info!(
                     "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
                     _order_num,
@@ -193,6 +194,8 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                     false,
                 ) {
                     Ok(trajectory) => {
+                        #[cfg(feature = "debug-motion-planning")]
+                        hwa::info!("profile: {:?}", trajectory);
                         // The relevant coords (those that will move)
                         let mut relevant_coords = hwa::math::CoordSel::empty();
                         // The relevant coords that will move forward
@@ -220,6 +223,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             segment.displacement_su,
                             steps_per_su.with_coord(relevant_coords.complement(), None),
                         );
+                        #[cfg(feature = "debug-motion")]
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory interpolation START",
                             _order_num
@@ -242,7 +246,8 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                     .advance_to(estimated_position, w)
                                     .expect("bad advance");
 
-                                hwa::debug!(
+                                #[cfg(feature = "debug-motion")]
+                                hwa::info!(
                                     "[task_stepper] segment:{:?}|{:?} Trajectory micro-segment advanced: {:?} [{:?}] {} [{:?}] steps",
                                     data_points.current_segment_id(),
                                     data_points.current_micro_segment_id(),
@@ -282,6 +287,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
                         let _adv_steps = micro_segment_interpolator.advanced_steps();
                         let adv_pos = micro_segment_interpolator.advanced_units();
+                        #[cfg(feature = "debug-motion")]
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, velocity: <{:?}, {:?}, {:?}> {}/s",
                             _order_num,
@@ -293,7 +299,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             trajectory.v_1,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE
                         );
-
+                        #[cfg(feature = "debug-motion")]
                         hwa::info!(
                             "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: [{:#?}] steps",
                             _order_num,
@@ -376,8 +382,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         ;
         fg.axes2d()
             .set_y_label(format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[])
-            .points(data_points.segment_velocity_marks.times, data_points.segment_velocity_marks.points, &[PlotOption::Color("black")])
-            .lines(data_points.sampled_velocities.times, data_points.sampled_velocities.points, &[PlotOption::Color("red")])
+            //.points(data_points.segment_velocity_marks.times, data_points.segment_velocity_marks.points, &[PlotOption::Color("black")])
+            .lines(data_points.sampled_velocities.times.clone(), data_points.sampled_velocities.points.clone(), &[PlotOption::Color("red")])
+            .points(data_points.sampled_velocities.times, data_points.sampled_velocities.points, &[PlotOption::Color("black")])
             //.lines(data_points.time, data_points.spd, &[PlotOption::Color("green")])
             //.lines(data_points.time_discrete_deriv, data_points.spd_discrete, &[PlotOption::Color("gray")])
         ;

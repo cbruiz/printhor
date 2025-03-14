@@ -99,6 +99,10 @@ impl Real {
         (*self) * hwa::math::PI / hwa::make_real!(180.0)
     }
 
+    pub fn cbrt(self) -> Self {
+        Real::from_fixed(self.0.powd(math::THIRD.0))
+    }
+
     pub fn sqrt(self) -> Option<Self> {
         match self.0.sqrt() {
             None => None,

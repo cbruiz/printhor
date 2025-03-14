@@ -8,6 +8,8 @@ pub const ONE_AND_HALF: Real = Real::from_f64(1.5);
 pub const TWO: Real = Real::from_f64(2.0);
 pub const THREE: Real = Real::from_f64(3.0);
 pub const FOUR: Real = Real::from_f64(4.0);
+pub const EIGHT: Real = Real::from_f64(8.0);
+pub const NINE: Real = Real::from_f64(9.0);
 pub const SIX: Real = Real::from_f64(6.0);
 pub const SIXTH: Real = Real::from_f64(1.0 / 6.0);
 

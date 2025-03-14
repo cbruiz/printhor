@@ -1,6 +1,7 @@
 //! The Motion profile trait and its implementations
 //!
 mod micro_segment_interpolation;
+#[cfg(feature = "with-motion-chaining")]
 mod motion_chaining;
 mod motion_profile_s_curve;
 mod motion_profile_traits;
@@ -8,6 +9,7 @@ mod segment_sampling;
 // Re-exports
 
 pub use micro_segment_interpolation::*;
+#[cfg(feature = "with-motion-chaining")]
 pub use motion_chaining::*;
 pub use motion_profile_s_curve::*;
 pub use motion_profile_traits::*;

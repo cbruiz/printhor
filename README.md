@@ -1173,5 +1173,16 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
 
 ## Controlling the code size
 
+```bash
 brew install bloaty
 bloaty ./bloaty -d sections,symbols -n 0  --csv | bloaty-metafile > meta.json
+```
+
+# Appendix
+
+### Maintaining stack up to date
+
+```bash
+cargo install cargo-update
+cargo-install-update install-update --all
+```

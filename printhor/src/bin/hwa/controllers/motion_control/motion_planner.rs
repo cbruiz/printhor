@@ -414,123 +414,59 @@ impl MotionPlanner {
                 let mut is_defer = rb.used == Contract::SEGMENT_QUEUE_SIZE - 1;
 
                 if rb.used < Contract::SEGMENT_QUEUE_SIZE {
-                    #[cfg(feature = "cornering")]
+                    #[cfg(feature = "with-motion-chaining")]
                     let mut do_adjust = false;
 
                     let curr_insert_index = rb.index_from_tail(0).unwrap();
 
                     let (curr_planned_entry, event) = match move_type {
-                        ScheduledMove::Move(curr_segment_in, order_num) => {
+                        ScheduledMove::Move(curr_segment_in, _order_num) => {
                             let mut curr_segment = curr_segment_in;
-                            // TODO:
-                            // 1) Find a better way to approximate
-                            // 2) Move outside ringbuffer lock
-                            // solving sqrt(((abs(x-v_0))/jmax)) > q_1  for x
-                            // x < v_0 - jmax q_1^2
-                            // x > jmax * q_1^2 + v_0
-
-                            let mut curr_vmax = curr_segment.speed_target_su_s;
-                            #[cfg(feature = "cornering")]
-                            {
-                                let q_1 = curr_segment.displacement_su;
-                                let v_0 = curr_segment.speed_enter_su_s;
-                                let v_1 = curr_segment.speed_exit_su_s;
-                                let t_jmax =
-                                    curr_segment.constraints.a_max / curr_segment.constraints.j_max;
-
-                                loop {
-                                    let t_jstar = Real::vmin(
-                                        (((curr_vmax - v_0).abs())
-                                            / curr_segment.constraints.j_max)
-                                            .sqrt(),
-                                        Some(t_jmax),
-                                    )
-                                    .unwrap_or(math::ZERO);
-
-                                    let q_lim = if t_jstar < t_jmax {
-                                        t_jstar * (v_0 + curr_vmax)
-                                    } else {
-                                        ((v_0 + curr_vmax) / math::TWO)
-                                            * (t_jstar
-                                                + ((curr_vmax - v_0).abs()
-                                                    / curr_segment.constraints.a_max))
-                                    };
-
-                                    if q_1 >= q_lim {
-                                        break;
-                                    } else {
-                                        if curr_vmax < v_0 || curr_vmax < v_1 {
-                                            //TODO: Study this case
-                                            break;
-                                        }
-                                        curr_vmax *= Real::from_f32(0.5);
-                                    }
-                                }
-                            }
-
-                            let curr_boundary = curr_vmax.min(curr_segment.constraints.v_max);
-                            let v_marginal_gain = curr_boundary - curr_segment.speed_exit_su_s;
-                            hwa::debug!(
-                                "\t- constraint = {:?} bound = {:?}",
-                                curr_vmax,
-                                curr_boundary
-                            );
-                            hwa::debug!("\t= v_margin: {:?}", v_marginal_gain);
-                            curr_segment.speed_enter_constrained_su_s = v_marginal_gain;
-                            curr_segment.speed_exit_constrained_su_s = v_marginal_gain;
-
-                            hwa::debug!(
-                                "s: vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}] / d = {:?}",
-                                curr_segment.speed_enter_su_s,
-                                curr_segment.speed_enter_constrained_su_s,
-                                curr_segment.speed_target_su_s,
-                                curr_segment.speed_exit_constrained_su_s,
-                                curr_segment.speed_exit_su_s,
-                                curr_segment.displacement_su
-                            );
-
-                            hwa::debug!("\t= max_gain: {:?}", v_marginal_gain);
+                            #[cfg(feature = "with-motion-chaining")]
+                            motion::compute_gain(true, _order_num, &mut curr_segment);
 
                             if let Ok(prev_index) = rb.index_from_tail(1) {
                                 match &mut rb.data[prev_index as usize] {
                                     PlanEntry::PlannedMove(prev_segment, _, _, _, _) => {
-                                        let proj: Real = prev_segment
-                                            .unit_vector_dir
-                                            .orthogonal_projection(curr_segment.unit_vector_dir);
-                                        if proj.is_defined_positive() {
-                                            hwa::debug!(
-                                                "RingBuffer [{:?}, {:?}] chained: ({:?}) proj ({:?}) = ({:?})",
-                                                prev_index,
-                                                curr_insert_index,
-                                                prev_segment.unit_vector_dir,
-                                                curr_segment.unit_vector_dir,
-                                                proj
-                                            );
-                                            hwa::debug!(
-                                                "\ts : vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}]:",
-                                                prev_segment.speed_enter_su_s,
-                                                prev_segment.speed_enter_constrained_su_s,
-                                                prev_segment.speed_target_su_s,
-                                                prev_segment.speed_exit_su_s,
-                                                prev_segment.speed_exit_constrained_su_s,
-                                            );
-                                            hwa::debug!("\t\tproj = {:?}", proj);
-                                            cfg_if::cfg_if! {
-                                                if #[cfg(feature = "cornering")] {
-                                                    do_adjust = true;
-                                                }
+                                        #[cfg(feature = "with-motion-chaining")]
+                                        {
+                                            let proj: Real =
+                                                prev_segment.unit_vector_dir.orthogonal_projection(
+                                                    curr_segment.unit_vector_dir,
+                                                );
+                                            if proj.is_defined_positive() {
+                                                hwa::debug!(
+                                                    "RingBuffer [{:?}, {:?}] chained: ({:?}) proj ({:?}) = ({:?})",
+                                                    prev_index,
+                                                    curr_insert_index,
+                                                    prev_segment.unit_vector_dir,
+                                                    curr_segment.unit_vector_dir,
+                                                    proj
+                                                );
+                                                #[cfg(feature = "with-motion-chaining")]
+                                                hwa::debug!(
+                                                    "\ts : vi = [{:?} < {:?}] - vtarget = {:?} - vo = [{:?} < {:?}]:",
+                                                    prev_segment.speed_enter_su_s,
+                                                    prev_segment.speed_enter_constrained_su_s,
+                                                    prev_segment.speed_target_su_s,
+                                                    prev_segment.speed_exit_su_s,
+                                                    prev_segment.speed_exit_constrained_su_s,
+                                                );
+                                                hwa::debug!("\t\tproj = {:?}", proj);
+                                                do_adjust = true;
+                                                prev_segment.proj_next = proj;
+                                                curr_segment.proj_prev = proj;
                                             }
-                                            prev_segment.proj_next = proj;
-                                            curr_segment.proj_prev = proj;
                                         }
                                     }
                                     _ => {}
                                 }
                             }
+
                             #[cfg(feature = "debug-motion")]
                             hwa::info!(
                                 "[MotionPlanner] order_num:{:?} L:{:?} MotionPlan queued. space src: [{:#?}], dest: [{:#?}], vmax: [ {:?}, [{:?}] ]",
-                                order_num,
+                                _order_num,
                                 line_tag.unwrap_or(0),
                                 curr_segment.src_pos,
                                 curr_segment.dest_pos,
@@ -543,7 +479,7 @@ impl MotionPlanner {
                                     curr_segment.dest_pos,
                                 );
                                 self.motion_status
-                                    .update_last_planned_position(order_num, &pos);
+                                    .update_last_planned_position(_order_num, &pos);
                             }
                             (
                                 PlanEntry::PlannedMove(
@@ -551,7 +487,7 @@ impl MotionPlanner {
                                     action,
                                     channel,
                                     is_defer,
-                                    order_num,
+                                    _order_num,
                                 ),
                                 hwa::EventStatus::containing(EventFlags::NOTHING),
                             )
@@ -598,9 +534,9 @@ impl MotionPlanner {
 
                     rb.data[curr_insert_index as usize] = curr_planned_entry;
                     rb.used += 1;
-                    #[cfg(feature = "cornering")]
+                    #[cfg(feature = "with-motion-chaining")]
                     if do_adjust {
-                        let _ = crate::motion::perform_motion_chaining(rb);
+                        let _ = motion::perform_motion_chaining(rb);
                     }
 
                     event_bus
@@ -911,8 +847,11 @@ impl MotionPlanner {
                 speed_exit_su_s: min_speed_module,
                 speed_target_su_s: module_target_speed,
                 displacement_su: module_target_distance,
+                #[cfg(feature = "with-motion-chaining")]
                 speed_enter_constrained_su_s: min_speed_module,
+                #[cfg(feature = "with-motion-chaining")]
                 speed_exit_constrained_su_s: min_speed_module,
+                #[cfg(feature = "with-motion-chaining")]
                 proj_prev: Real::zero(),
                 unit_vector_dir,
                 src_pos: p0_pos.space_pos.selecting(relevant_space_coords),
@@ -924,6 +863,7 @@ impl MotionPlanner {
                     a_max: module_target_accel,
                     j_max: module_target_jerk,
                 },
+                #[cfg(feature = "with-motion-chaining")]
                 proj_next: Real::zero(),
             };
 
