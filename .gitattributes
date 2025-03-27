@@ -5,3 +5,5 @@
 *.gcode linguist-language=linguist-vendored
 *.sh linguist-language=linguist-vendored
 *.html linguist-language=linguist-vendored
+*.json linguist-language=linguist-vendored
+*.nix linguist-language=linguist-vendored

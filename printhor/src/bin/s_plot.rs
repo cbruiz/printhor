@@ -371,7 +371,10 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
             //.lines(data_points.time_discrete_deriv, data_points.spd_discrete, &[PlotOption::Color("gray")])
         ;
         #[cfg(not(test))]
-        fg.show_and_keep_running().unwrap();
+        match fg.show_and_keep_running() {
+            Err(_err) => {hwa::error!("Unable to show plot: {:?}", _err)}
+            _ => {}
+        }
         _ = fg.save_to_pdf("plot.pdf", 10.0f32, 10.0f32);
     }
 
