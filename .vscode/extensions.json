@@ -1,0 +1,9 @@
+{
+    "recommendations": [
+        "edwinhuish.better-comments-next",
+        "vadimcn.vscode-lldb",
+        "serayuzgur.crates",
+        "mobalic.jetbrains-dark-theme",
+        "rust-lang.rust-analyzer"
+    ]
+}
