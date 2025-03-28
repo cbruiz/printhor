@@ -216,6 +216,7 @@ impl SCurveMotionProfile {
     ///
     /// # Examples
     ///
+    /// \[ $$ v_1 = \frac{1}{0} $$ \]
     /// ```
     /// let constraints = Constraints {
     ///     v_max: Real::from_f32(10.0),
