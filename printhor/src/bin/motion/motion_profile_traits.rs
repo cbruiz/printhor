@@ -9,6 +9,8 @@ pub trait MotionProfile {
     /// Returns the end position of the motion_control profile.
     fn end_pos(&self) -> hwa::math::Real;
 
+    fn eval_interval(&self, t: hwa::math::Real) -> usize;
+
     /// Evaluates the position at a given time `t` within the motion_control profile.
     ///
     /// # Parameters
@@ -19,4 +21,7 @@ pub trait MotionProfile {
     ///
     /// The evaluated position as `Real`.
     fn eval_position(&self, t: hwa::math::Real) -> hwa::math::Real;
+    
+    fn eval_velocity(&self, t: hwa::math::Real) -> hwa::math::Real;
+    fn eval_acceleration(&self, t: hwa::math::Real) -> hwa::math::Real;
 }

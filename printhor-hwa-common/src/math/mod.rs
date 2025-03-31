@@ -25,6 +25,64 @@ cfg_if::cfg_if! {
 mod geometry;
 pub use geometry::*;
 
+/// Solve a x^3 + b x^2 + c x + d = 0 using cardano method
+/// 
+/// https://en.wikipedia.org/wiki/Cubic_function#Cardano's_method
+pub fn solve_cubic(a: Real, b: Real, c: Real, d: Real) -> Option<Real> {
+    // Convert to depressed cubic form: t^3 + pt + q = 0 using substitution x = t - b/(3a)
+    let a1 = b / a;
+    let a2 = c / a;
+    let a3 = d / a;
+
+    let p = a2 - (a1 * a1) / THREE;
+    let q = TWO * a1 * a1 * a1 / TWENTY_SEVEN - a1 * a2 / THREE + a3;
+
+    let discriminant = (q * q) / FOUR + (p * p * p) / TWENTY_SEVEN;
+
+    if discriminant > ZERO {
+        // One real root and two complex conjugate roots
+        let sqrt_d = discriminant.sqrt().unwrap();
+        let u = (-q / TWO + sqrt_d).cbrt();
+        let v = (-q / TWO - sqrt_d).cbrt();
+        let t = u + v;
+        let x = t - a1 / THREE;
+        assert!(x >= ZERO);
+        Some(x)
+    } else if discriminant == ZERO {
+        // All roots real, at least two are equal
+        let u = (-q / TWO).cbrt();
+        let t1 = TWO * u;
+        let t2 = -u;
+        let r1 = t1 - a1 / THREE;
+        let r2 = t2 - a1 / THREE;
+        if r1.is_defined_positive() && r1.is_negligible() {
+            if r2.is_defined_positive() && r2.is_negligible() && r2 < r1 {
+                Some(r2)
+            }
+            else {
+                Some(r1)
+            }
+        }
+        else {
+            Some(r2)
+        }
+    } else {
+        // All roots real and unequal (casus irreducibilis)
+        /*
+        let r = (-p * p * p / TWENTY_SEVEN).sqrt().unwrap();
+        let phi = (-q / (TWO * r)).acos();
+        let t = TWO * r.cbrt();
+
+        for k in 0..3 {
+            let angle = (phi + PI * PI * Real::from_lit(k.into(), 0)) / THREE;
+            let root = t * angle.cos() - a1 / THREE;
+            // [...]
+        }
+        */
+        todo!("Not implemented")
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate as hwa;

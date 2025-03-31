@@ -246,15 +246,15 @@ native = [
     #"debug-position",
     #"debug-position-deviation",
     #"debug-motion-displacement",
-    #"debug-motion-planning",
+    "debug-motion-planning",
     #"debug-motion",
     #"debug-motion-broadcast",
     #"debug-gcode",
     #"verbose-timings",
-    #"assert-motion",
+    "assert-motion",
     #"trace-commands",
 
-    "with-motion-chaining",
+    #"with-motion-chaining",
 
     "cartessian-cnc",
     #"cartessian-fdm",

@@ -312,6 +312,10 @@ pub async fn task_stepper(
                     segment.displacement_su,
                     segment.speed_enter_su_s,
                     segment.speed_exit_su_s,
+                    #[cfg(feature = "with-motion-chaining")]
+                    segment.accel_enter_su_s,
+                    #[cfg(feature = "with-motion-chaining")]
+                    segment.accel_exit_su_s,
                     &segment.constraints,
                     false,
                 ) {

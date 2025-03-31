@@ -43,34 +43,31 @@ pub fn compute_gain(
     }
     let q_1 = curr_segment.displacement_su;
     let v_0 = curr_segment.speed_enter_su_s;
+    
+    let t_1 = math::solve_cubic(
+        curr_segment.constraints.j_max * math::SIXTH, 
+        curr_segment.accel_enter_su_s * math::HALF,
+        v_0, -q_1).unwrap();
 
-    let accel = curr_segment.constraints.j_max;
-    let accel_sq = accel * accel;
-    let t1 = ((math::THREE * accel_sq * q_1)
-        + ((math::NINE * accel_sq * accel_sq * q_1 * q_1)
-            + (math::EIGHT * accel_sq * accel * v_0 * v_0 * v_0))
-            .sqrt()
-            .or_else(|| Some(math::ZERO))
-            .unwrap())
-    .cbrt();
-    let t_max = (t1 / accel) - ((math::TWO * v_0) / t1);
-    let v_max = v_0 + ((accel * t_max * t_max) * math::HALF);
+    let a_max = curr_segment.constraints.j_max * t_1 + curr_segment.accel_enter_su_s;
+    let v_max = curr_segment.constraints.j_max * t_1 * t_1 * math::HALF
+        + curr_segment.accel_enter_su_s * t_1 + v_0;
     cfg_if::cfg_if! {
         if #[cfg(feature = "debug-motion-planning")] {
             hwa::info!("--");
             hwa::info!("q_1: {:?}", q_1);
             hwa::info!("v_0: {:?}", v_0);
-            hwa::info!("accel: {:?}", accel);
-            hwa::info!("t_max: {:?}", t_max);
+            hwa::info!("t_max: {:?}", t_1);
+            hwa::info!("a_max: {:?}", a_max);
             hwa::info!("v_max: {:?}", v_max);
-            let smax = v_0 * t_max + ((accel * t_max * t_max * t_max ) * math::SIXTH);
-            hwa::info!("s_max(check): {:?}", smax);
-            let vmax = v_0 + ((accel * t_max * t_max ) * math::HALF);
-            hwa::info!("v_max(check): {:?}", vmax);
+            let s_max = curr_segment.constraints.j_max * t_1 * t_1 * t_1 * math::SIXTH + curr_segment.accel_enter_su_s * t_1 * t_1 * math::HALF + v_0 * t_1;
+            hwa::info!("s_max(check): {:?}", s_max);
+            hwa::info!("v_max(check): {:?}", curr_segment.speed_exit_su_s);
         }
     }
     curr_segment.speed_exit_constrained_su_s = v_max.min(curr_segment.constraints.v_max);
     curr_segment.speed_enter_constrained_su_s = curr_segment.speed_exit_su_s - v_max;
+    curr_segment.accel_exit_su_s = a_max.min(curr_segment.constraints.a_max);
     if is_initial {
         #[cfg(feature = "debug-motion-planning")]
         hwa::info!(
@@ -127,6 +124,10 @@ pub fn perform_motion_chaining(
     let mut water_level_left = math::ZERO;
     // The amount of level increased at right
     let mut water_level_right = math::ZERO;
+    // The current acceleration at left
+    let mut accel_left = math::ZERO;
+    // the current acceleration at right
+    let mut accel_right = math::ZERO;
     // Assuming queued items are computed left to right:
     // First, locate the top left segment. That one with null projection
     for index in 1..rb.used {
@@ -138,6 +139,7 @@ pub fn perform_motion_chaining(
                     if segment.proj_next.is_defined_positive() {
                         offset_left = index;
                         water_level_left = segment.speed_enter_su_s;
+                        //accel_left = segment.accel_exit_su_s;
                     } else {
                         break;
                     }
@@ -152,9 +154,10 @@ pub fn perform_motion_chaining(
     #[allow(unused)]
     let to_offset = 1;
 
-    //if from_offset < 19 {
-    //    return Ok(())
-    //}
+    if from_offset < 4 {
+        //return Ok(())
+        hwa::info!("gotcha");
+    }
 
     #[cfg(feature = "debug-motion-planning")]
     hwa::info!("[motion_chaining] #########################");
@@ -187,9 +190,10 @@ pub fn perform_motion_chaining(
         );
         if offset_left <= offset_right {
             let mid_segment = rb.mut_planned_segment_from_tail(offset_left)?;
-
             mid_segment.speed_enter_su_s = water_level_left;
             mid_segment.speed_exit_su_s = water_level_right;
+            mid_segment.accel_enter_su_s = accel_left;
+            mid_segment.accel_exit_su_s =  accel_right;
             break;
         } else {
             let (left_segment, right_segment) =
@@ -221,11 +225,13 @@ pub fn perform_motion_chaining(
             );
 
             if !diff_at_left.is_negligible() {
+                left_segment.accel_enter_su_s = accel_left;
                 left_segment.speed_enter_su_s = water_level_left;
                 left_segment.speed_exit_su_s = water_level_left;
                 compute_gain(false, offset_left as u32, left_segment);
             }
             if !diff_at_right.is_negligible() {
+                right_segment.accel_enter_su_s = accel_right;
                 right_segment.speed_enter_su_s = water_level_right;
                 right_segment.speed_exit_su_s = water_level_right;
                 compute_gain(false, offset_right as u32, right_segment);
@@ -250,6 +256,7 @@ pub fn perform_motion_chaining(
                 left_segment.speed_enter_su_s = water_level_left;
                 left_segment.speed_exit_su_s = gain_at_left;
                 water_level_left = left_segment.speed_exit_su_s;
+                accel_left = left_segment.accel_exit_su_s;
                 #[cfg(all(test, feature = "debug-motion-planning"))]
                 display_content(&rb, from_offset, to_offset)?;
                 offset_left -= 1;
@@ -259,7 +266,10 @@ pub fn perform_motion_chaining(
                 hwa::info!("[motion_chaining] # flood [ .. <-| .. ])");
                 right_segment.speed_exit_su_s = water_level_right;
                 right_segment.speed_enter_su_s = gain_at_right;
+                right_segment.accel_enter_su_s = left_segment.accel_exit_su_s;
+                right_segment.accel_exit_su_s = accel_right;
                 water_level_right = right_segment.speed_enter_su_s;
+                accel_right = right_segment.accel_enter_su_s;
                 #[cfg(all(test, feature = "debug-motion-planning"))]
                 display_content(&rb, from_offset, to_offset)?;
                 offset_right += 1;

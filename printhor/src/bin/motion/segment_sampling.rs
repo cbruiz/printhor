@@ -1,5 +1,6 @@
 use crate::{hwa, motion};
 use hwa::math::Real;
+use printhor_hwa_common::math;
 
 /// Iterator over motion segments.
 ///
@@ -52,6 +53,21 @@ where
         self.last_evaluated_position_su
     }
 
+    pub fn current_interval(&self) -> usize {
+        let now = self.last_evaluated_time_s;
+        self.profile.eval_interval(now)
+    }
+
+    pub fn current_velocity(&self) -> Real {
+        let now = self.last_evaluated_time_s;
+        self.profile.eval_velocity(now)
+    }
+
+    pub fn current_acceleration(&self) -> Real {
+        let now = self.last_evaluated_time_s;
+        self.profile.eval_acceleration(now)
+    }
+
     pub fn current_time(&self) -> Real {
         self.last_evaluated_time_s
     }
@@ -67,12 +83,17 @@ where
     }
 
     /// Gets the instantaneous speed \[\frac{ds}{dt}\] of the last advance
-    pub fn instant_speed(&self) -> Real {
+    pub fn instant_velocity(&self) -> Real {
         if self.dt.is_negligible() {
             Real::zero()
         } else {
             self.ds / self.dt
         }
+    }
+
+    /// Gets the instantaneous accel
+    pub fn instant_acceleration(&self) -> Real {
+        math::ONE / math::ZERO
     }
 
     /// Advances the iterator and returns the next micro-segment position.

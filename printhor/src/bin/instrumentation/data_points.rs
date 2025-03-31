@@ -7,6 +7,8 @@ pub(crate) struct DataPointsDimension {
     last_time: f64,
     point_offset: f64,
     last_point: f64,
+    min: Option<f64>,
+    max: Option<f64>,
     /// Position datapoint time in secs
     pub times: Vec<f64>,
     /// Position datapoint displacement in units
@@ -20,32 +22,42 @@ impl DataPointsDimension {
             last_time: 0.0,
             point_offset: 0.0,
             last_point: 0.0,
+            min: None,
+            max: None,
             times: vec![],
             points: vec![],
         }
     }
 
-    pub fn displace(&mut self) {
-        self.displace_time();
+    pub fn accumulate_offset(&mut self) {
         self.point_offset += self.last_point;
     }
 
     pub fn displace_time(&mut self) {
         self.time_offset += self.last_time;
     }
-
-    pub fn push_relative(&mut self, time: f64, point: f64) {
-        self.last_time = time;
-        self.last_point = point;
-        self.times.push(self.time_offset + self.last_time);
-        self.points.push(self.point_offset + self.last_point);
+    
+    fn update_min_max(&mut self, value: f64) {
+        if let Some(current_min) = self.min {
+            self.min = Some(current_min.min(value));
+        }
+        else {
+            self.min = Some(value);
+        }
+        if let Some(current_max) = self.max {
+            self.max = Some(current_max.max(value));
+        }
+        else {
+            self.max = Some(value);
+        }
     }
 
-    pub fn push_absolute(&mut self, time: f64, point: f64) {
+    pub fn push(&mut self, time: f64, point: f64) {
         self.last_time = time;
         self.last_point = point;
         self.times.push(time);
         self.points.push(point);
+        self.update_min_max(point);
     }
 }
 
@@ -54,13 +66,19 @@ pub(crate) struct DataPoints {
     pub reference_time: f64,
     pub current_segment_id: usize,
     pub current_micro_segment_id: usize,
+    pub current_interval: usize,
     pub total_displacement: f64,
-
-    pub segment_position_marks: DataPointsDimension,
+    
+    pub segment_marks: Vec<f64>,
+    pub interval_marks: Vec<f64>,
+    
     pub sampled_positions: DataPointsDimension,
 
-    pub segment_velocity_marks: DataPointsDimension,
     pub sampled_velocities: DataPointsDimension,
+    pub derived_velocities: DataPointsDimension,
+
+    pub sampled_accelerations: DataPointsDimension,
+    pub derived_accelerations: DataPointsDimension,
 }
 
 impl DataPoints {
@@ -71,34 +89,39 @@ impl DataPoints {
             reference_time: 0.0,
             current_segment_id: 0,
             current_micro_segment_id: 0,
+            current_interval: 0,
             total_displacement: 0.0,
 
-            segment_position_marks: DataPointsDimension::new(),
+            segment_marks: Vec::new(),
+            interval_marks: Vec::new(),
+            
             sampled_positions: DataPointsDimension::new(),
 
-            segment_velocity_marks: DataPointsDimension::new(),
             sampled_velocities: DataPointsDimension::new(),
+            derived_velocities: DataPointsDimension::new(),
+
+            sampled_accelerations: DataPointsDimension::new(),
+            derived_accelerations: DataPointsDimension::new(),
         }
     }
 
     pub fn segment_starts(&mut self, _trajectory: &motion::SCurveMotionProfile) {
         self.current_segment_id += 1;
         self.current_micro_segment_id = 0;
+        self.current_interval = 0;
         hwa::debug!("[s-plot] segment starts at {:.4}", self.reference_time);
-        self.segment_position_marks.push_relative(
-            self.sampled_positions.last_time,
-            self.sampled_positions.last_point,
-        );
-        let v0 = _trajectory.v_0.to_f64();
-        self.segment_velocity_marks
-            .push_absolute(self.reference_time, v0);
+        self.segment_marks.push(self.reference_time);
     }
+    
     pub fn segment_ends(&mut self) {
         self.total_displacement += self.sampled_positions.last_point;
-        self.segment_position_marks.displace();
-        self.sampled_positions.displace();
-        self.segment_velocity_marks.displace_time();
+        self.segment_marks.push(self.reference_time);
+        self.sampled_positions.accumulate_offset();
+        self.sampled_positions.displace_time();
         self.sampled_velocities.displace_time();
+        self.derived_velocities.displace_time();
+        self.sampled_accelerations.displace_time();
+        self.derived_accelerations.displace_time();
         hwa::debug!("[s-plot] segment ends at {:.4}", self.reference_time);
     }
 
@@ -125,13 +148,56 @@ impl DataPoints {
     pub fn sampling_tick(&mut self, sampler: &motion::SegmentSampler<motion::SCurveMotionProfile>) {
         self.reference_time += self.sampling_width;
         hwa::debug!("[s-plot] segment sampled at {:.4}", self.reference_time);
-        self.sampled_positions.push_relative(
-            sampler.current_time().to_f64(),
-            sampler.current_position().to_f64(),
+        
+        let interval = sampler.current_interval();
+        if interval != self.current_interval {
+            self.current_interval = interval;
+            self.interval_marks.push(self.reference_time);
+        }
+        
+        self.sampled_positions.push(
+            self.reference_time,
+            self.sampled_positions.point_offset + sampler.current_position().to_f64(),
         );
-        self.sampled_velocities.push_relative(
-            sampler.current_time().to_f64(),
-            (sampler.ds() / sampler.dt()).to_f64(),
-        )
+        self.sampled_velocities.push(
+            self.reference_time,
+            sampler.current_velocity().to_f64(),
+        );
+        self.derived_velocities.push(
+            self.reference_time,
+            sampler.instant_velocity().to_f64(),
+        );
+        self.sampled_accelerations.push(
+            self.reference_time,
+            sampler.current_acceleration().to_f64(),
+        );
+        self.derived_accelerations.push(
+            self.reference_time,
+            sampler.instant_acceleration().to_f64(),
+        );
+    }
+    
+    pub fn min_position(&self) -> Option<f64> {
+        self.sampled_positions.min
+    }
+
+    pub fn min_velocity(&self) -> Option<f64> {
+        self.sampled_velocities.min
+    }
+
+    pub fn min_acceleration(&self) -> Option<f64> {
+        self.sampled_accelerations.min
+    }
+
+    pub fn max_position(&self) -> Option<f64> {
+        self.sampled_positions.max
+    }
+
+    pub fn max_velocity(&self) -> Option<f64> {
+        self.sampled_velocities.max
+    }
+
+    pub fn max_acceleration(&self) -> Option<f64> {
+        self.sampled_accelerations.max
     }
 }

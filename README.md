@@ -75,7 +75,20 @@ If you are interested in this project and want to collaborate, you are welcome.
 A Discord server has been created for informal discussions. Otherwise, GitHub Issues and Pull Requests are preferred.  
 [![Discord Banner 4](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=banner4)](https://discord.gg/VSag6T4KS6)
 
-# Checkout
+# Compiling
+
+## Fast track
+
+<a href="https://idx.google.com/import?url=https%3A%2F%2Fgithub.com%2Fcbruiz%2Fprinthor">
+  <img
+    height="32"
+    alt="Open in IDX"
+    src="https://cdn.idx.dev/btn/open_dark_32.svg">
+</a>
+
+## Step by step
+
+### Checkout
 
 ```shell
 git clone https://github.com/cbruiz/printhor
@@ -83,7 +96,7 @@ cd printhor
 git submodule update --init --recursive
 ```
 
-# Build
+### Build
 
 The minimal toolset required to build and run is:
 * Rust, in order to compile 
@@ -92,7 +105,7 @@ The minimal toolset required to build and run is:
 * __[Optionally]__ cargo-bloat and cargo-size utils are great to analyze the code size.
 * __[Optionally]__ A Rust IDE, like [Jetbrains IDE suite](https://www.jetbrains.com/) (IntelliJ, CLion or RustRover) (recommended), Visual Studio Code (also fine), or others
 
-## Prerequisites: Rust and toolchain
+### Prerequisites: Rust and toolchain
 
 This crate requires **Rust >= 1.85**.
 

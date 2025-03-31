@@ -845,11 +845,13 @@ impl MotionPlanner {
             let segment_data = motion_control::Segment {
                 speed_enter_su_s: min_speed_module,
                 speed_exit_su_s: min_speed_module,
+                #[cfg(feature = "with-motion-chaining")]
+                accel_enter_su_s: math::ZERO,
+                #[cfg(feature = "with-motion-chaining")]
+                accel_exit_su_s: math::ZERO,
                 speed_target_su_s: module_target_speed,
                 displacement_su: module_target_distance,
-                #[cfg(feature = "with-motion-chaining")]
                 speed_enter_constrained_su_s: min_speed_module,
-                #[cfg(feature = "with-motion-chaining")]
                 speed_exit_constrained_su_s: min_speed_module,
                 #[cfg(feature = "with-motion-chaining")]
                 proj_prev: Real::zero(),

@@ -4,12 +4,18 @@ pub const HALF: Real = Real::from_f32(0.5);
 pub const ONE_AND_HALF: Real = Real::from_f32(1.5);
 pub const ONE: Real = Real::from_f32(1.0);
 pub const TWO: Real = Real::from_f32(2.0);
+/// 3.0
 pub const THREE: Real = Real::from_f32(3.0);
+/// 4.0
 pub const FOUR: Real = Real::from_f32(4.0);
+/// 6.0
 pub const SIX: Real = Real::from_f32(6.0);
 pub const EIGHT: Real = Real::from_f32(8.0);
 pub const NINE: Real = Real::from_f32(9.0);
+/// 1.0/6.0
 pub const SIXTH: Real = Real::from_f32(1.0 / 6.0);
+
+pub const TWENTY_SEVEN: Real = Real::from_f32(27.0);
 
 /// A very small value used to determine the difference between two floating point numbers.
 /// This constant is useful for comparisons to handle floating point negligible differences.

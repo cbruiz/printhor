@@ -8,6 +8,8 @@ use hwa::math::TVector;
 /// # Fields
 /// - `speed_enter_sus`: Initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
 /// - `speed_exit_sus`: Speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `accel_enter_sus`: Initial acceleration at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+/// - `accel_exit_sus`: Acceleration at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
 /// - `speed_target_sus`: Target speed for the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
 /// - `displacement_su`: Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
 /// - `speed_enter_constrained_sus`: Constrained initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
@@ -26,16 +28,22 @@ pub struct Segment {
     /// Speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_exit_su_s: Real,
     /// Target speed for the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+    #[cfg(feature = "with-motion-chaining")]
+    /// Initial acceleration at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub accel_enter_su_s: Real,
+    #[cfg(feature = "with-motion-chaining")]
+    /// Acceleration at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+    pub accel_exit_su_s: Real,
+    
     pub speed_target_su_s: Real,
     /// Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
     pub displacement_su: Real,
 
-    #[cfg(feature = "with-motion-chaining")]
     /// Constrained initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_enter_constrained_su_s: Real,
-    #[cfg(feature = "with-motion-chaining")]
     /// Constrained speed at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_exit_constrained_su_s: Real,
+    
     #[cfg(feature = "with-motion-chaining")]
     /// Projection of the previous segment.
     pub proj_prev: Real,
