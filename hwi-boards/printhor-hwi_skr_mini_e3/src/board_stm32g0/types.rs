@@ -76,6 +76,13 @@ cfg_if::cfg_if! {
 
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        // Lock-free: the EEPROM is only used from the (single) executor of the GCode processing
+        pub type EepromMutexStrategy = hwa::AsyncStandardStrategy<hwa::AsyncNoopMutexType, super::device::Eeprom>;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
         pub type PSOnLockType = hwa::SyncNoopMutexType;
         pub type PSOnMutexStrategy = hwa::SyncStandardStrategy<PSOnLockType, super::device::PsOnPin>;
@@ -134,11 +141,29 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature="with-hot-end", feature = "with-hot-bed"))] {
-        pub type HotEndHotBedAdcMutexType = hwa::SyncCsMutexType;
+        pub type HotEndHotBedAdcMutexType = hwa::AsyncCsMutexType;
         pub type HotEndHotBedAdcMutexStrategy = hwa::AsyncStandardStrategy<HotEndHotBedAdcMutexType, crate::board::device::HotEndHotBedAdc>;
+    }
+}
 
-        pub type HotEndHotBedPwmMutexType = hwa::SyncNoopMutexType;
-        pub type HotEndHotBedPwmMutexStrategy = hwa::SyncStandardStrategy<HotEndHotBedPwmMutexType, crate::board::device::HotEndHotBedPwm>;
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1"))] {
+        /// TIM3 is shared by the fans and the heaters
+        pub type Tim3PwmMutexType = hwa::SyncCsMutexType;
+        pub type Tim3PwmMutexStrategy = hwa::SyncStandardStrategy<Tim3PwmMutexType, crate::board::device::PwmFan0Fan1HotendHotbed>;
+        pub type HotEndHotBedPwmMutexStrategy = Tim3PwmMutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-layer")] {
+        pub type FanLayerPwmMutexStrategy = Tim3PwmMutexStrategy;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-extra-1")] {
+        pub type FanExtra1PwmMutexStrategy = Tim3PwmMutexStrategy;
     }
 }
 

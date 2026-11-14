@@ -2,16 +2,20 @@
 mod gcode_multiplexed_io;
 mod gcode_parser;
 mod gcode_processor;
+#[cfg(feature = "with-eeprom")]
+pub mod settings_store;
 
 pub use gcode_parser::{GCodeLineParser, GCodeLineParserError};
 pub use gcode_processor::GCodeProcessor;
+#[cfg(feature = "with-fan-extra-1")]
+pub use gcode_processor::FAN_EXTRA1_MANUAL_POWER;
 
 pub use gcode_multiplexed_io::GCodeMultiplexedInputStream;
 use printhor_hwa_common::math::{Real, TVector};
 use printhor_hwa_common::{CoordSel, EventStatus};
 use strum::{AsRefStr, VariantNames};
 
-#[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[cfg_attr(feature = "native", derive(Debug))]
 #[allow(unused)]
 pub enum CodeExecutionSuccess {
@@ -25,7 +29,7 @@ pub enum CodeExecutionSuccess {
     DEFERRED(EventStatus),
 }
 
-#[cfg_attr(all(feature = "with-defmt", feature = "native"), derive(defmt::Format))]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[derive(PartialEq, Debug)]
 pub enum CodeExecutionFailure {
     /// Cannot perform because there is the same or something else running
@@ -65,6 +69,108 @@ pub struct N {
 impl N {
     pub const fn new() -> Self {
         Self { n: None }
+    }
+}
+
+/// Declares a simple GCode argument holder made of optional [Real] words.
+macro_rules! gcode_args {
+    ($(#[$meta:meta])* $name:ident { $($field:ident),+ $(,)? }) => {
+        $(#[$meta])*
+        #[derive(Clone, Debug)]
+        #[cfg_attr(test, derive(PartialEq))]
+        pub struct $name {
+            $(pub $field: Option<Real>,)+
+        }
+
+        impl $name {
+            pub const fn new() -> Self {
+                Self { $($field: None,)+ }
+            }
+        }
+    };
+}
+
+gcode_args!(
+    /// `S` and `P` words. Used by G4 (S=seconds, P=milliseconds), M106 (S=power, P=fan index)
+    /// and M302 (S=min temp, P=allow cold extrusion)
+    SP { s, p }
+);
+
+gcode_args!(
+    /// `S` and `R` words. Used by M109/M190 (S=wait while heating, R=wait heating and cooling)
+    SR { s, r }
+);
+
+gcode_args!(
+    /// PID constants (M301 hot-end, M304 hot-bed)
+    PID { p, i, d }
+);
+
+gcode_args!(
+    /// M303 PID autotune: `E`=heater index (-1 = bed), `S`=target temperature, `C`=cycles
+    ESC { e, s, c }
+);
+
+gcode_args!(
+    /// M204 acceleration: `S`=generic, `P`=print, `T`=travel (all in world units/s²)
+    SPT { s, p, t }
+);
+
+gcode_args!(
+    /// M207/M208 firmware retraction: `S`=length, `F`=feed rate (world units/min), `Z`=z-hop
+    SFZ { s, f, z }
+);
+
+/// Arc move (G2/G3) in the XY plane.
+///
+/// `I` and `J` are the center offsets relative to the start point. `R` is the radius (alternative form).
+#[cfg(feature = "with-arcs")]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct ARC {
+    pub coords: EFSXYZ,
+    pub i: Option<Real>,
+    pub j: Option<Real>,
+    pub r: Option<Real>,
+}
+
+#[cfg(feature = "with-arcs")]
+impl ARC {
+    pub const fn new() -> Self {
+        Self {
+            coords: EFSXYZ::new(),
+            i: None,
+            j: None,
+            r: None,
+        }
+    }
+}
+
+/// Cubic Bézier spline move (G5) in the XY plane.
+///
+/// `I`/`J`: offset of the first control point relative to the start point. `P`/`Q`: offset of the
+/// second control point relative to the end point.
+#[cfg(feature = "with-beziers")]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct BEZIER {
+    pub coords: EFSXYZ,
+    pub i: Option<Real>,
+    pub j: Option<Real>,
+    pub p: Option<Real>,
+    pub q: Option<Real>,
+}
+
+#[cfg(feature = "with-beziers")]
+impl BEZIER {
+    pub const fn new() -> Self {
+        Self {
+            coords: EFSXYZ::new(),
+            i: None,
+            j: None,
+            p: None,
+            q: None,
+        }
     }
 }
 
@@ -567,16 +673,29 @@ pub enum GCodeValue {
     #[cfg(feature = "with-motion")]
     G1(EFSXYZ),
 
-    /// Dwell
-    #[cfg(feature = "with-motion")]
-    G4(S),
+    /// Clockwise arc move
+    #[cfg(feature = "with-arcs")]
+    G2(ARC),
 
-    /// Set coordinate system data
+    /// Counter-clockwise arc move
+    #[cfg(feature = "with-arcs")]
+    G3(ARC),
+
+    /// Cubic Bézier spline move
+    #[cfg(feature = "with-beziers")]
+    G5(BEZIER),
+
+    /// Dwell (S=seconds, P=milliseconds)
+    #[cfg(feature = "with-motion")]
+    G4(SP),
+
+    /// Firmware retract (see M207)
     #[cfg(feature = "with-motion")]
     G10,
 
+    /// Firmware recover (see M208)
     #[cfg(feature = "with-motion")]
-    G11, // retraction
+    G11,
 
     #[cfg(feature = "with-motion")]
     G17,
@@ -771,14 +890,21 @@ pub enum GCodeValue {
     #[cfg(feature = "with-ps-on")]
     M81,
 
-    /// Settings
+    /// Set extruder to absolute mode
+    #[cfg(feature = "with-motion")]
+    M82,
+
+    /// Set extruder to relative mode
+    #[cfg(feature = "with-motion")]
     M83,
 
     /// Disable steppers
     #[cfg(feature = "with-motion")]
     M84,
 
-    M92,
+    /// Set axis steps per world unit
+    #[cfg(feature = "with-motion")]
+    M92(EXYZ),
 
     /// Show memory usage
     M100,
@@ -790,9 +916,9 @@ pub enum GCodeValue {
     /// Get HotEnd and/or HotBed Temperature
     M105,
 
-    /// Fan On
+    /// Fan On (S=power [0-255])
     #[cfg(feature = "with-fan-layer")]
-    M106,
+    M106(SP),
 
     /// Fan Off
     #[cfg(feature = "with-fan-layer")]
@@ -800,7 +926,7 @@ pub enum GCodeValue {
 
     /// Wait for hotEnd temp
     #[cfg(feature = "with-hot-end")]
-    M109(S),
+    M109(SR),
 
     M110(N), // Settings
 
@@ -829,6 +955,19 @@ pub enum GCodeValue {
     /// Get Endstop Status
     M119,
 
+    /// Set servo/probe angle (P=servo index, only 0 supported, S=angle in degrees).
+    /// With a BLTouch: S10 deploy, S90 stow, S120 self-test, S160 alarm release
+    #[cfg(feature = "with-probe")]
+    M280(SP),
+
+    /// Deploy probe
+    #[cfg(feature = "with-probe")]
+    M401,
+
+    /// Stow probe
+    #[cfg(feature = "with-probe")]
+    M402,
+
     M120,
 
     #[cfg(feature = "with-motion")]
@@ -840,32 +979,40 @@ pub enum GCodeValue {
 
     /// Wait for hotbed temperature
     #[cfg(feature = "with-hot-bed")]
-    M190,
+    M190(SR),
 
     M200,
 
-    /// Print / Travel Move Limits
+    /// Set max acceleration per axis (world units/s²)
     #[cfg(feature = "with-motion")]
-    M201,
+    M201(EXYZ),
 
     M202,
 
-    /// Set Max Feedrate
+    /// Set max feed rate per axis (world units/s)
     #[cfg(feature = "with-motion")]
-    M203,
+    M203(EXYZ),
 
-    M204,
+    /// Set starting acceleration (world units/s²)
+    #[cfg(feature = "with-motion")]
+    M204(SPT),
 
-    /// Set Advanced Settings
+    /// Set Advanced Settings (jerk). Accepted but ignored: Marlin semantics (instant speed change in
+    /// world units/s) differ from the jerk (world units/s³) used by the S-curve motion profile
     M205,
 
-    /// Set Home Offsets
+    /// Set Home Offsets: shifts the coordinate system so that, after homing, the logical
+    /// position is the homing point plus the offset (`logical = native + offset`, as Marlin)
     #[cfg(feature = "with-motion")]
-    M206,
+    M206(EXYZ),
 
-    M207,
+    /// Set firmware retraction (S=length, F=feed rate, Z=z-hop)
+    #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+    M207(SFZ),
 
-    M208,
+    /// Set firmware recover (S=extra length, F=feed rate)
+    #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+    M208(SFZ),
 
     M209,
 
@@ -886,7 +1033,21 @@ pub enum GCodeValue {
     #[cfg(feature = "with-motion")]
     M290, // Babystepping
 
-    M302,
+    /// Set hot-end PID constants
+    #[cfg(feature = "with-hot-end")]
+    M301(PID),
+
+    /// Cold extrusion (S=min temperature, P1=allow cold extrusion)
+    #[cfg(all(feature = "with-hot-end", feature = "with-e-axis"))]
+    M302(SP),
+
+    /// PID autotune
+    #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+    M303(ESC),
+
+    /// Set hot-bed PID constants
+    #[cfg(feature = "with-hot-bed")]
+    M304(PID),
 
     M305,
 
@@ -898,16 +1059,13 @@ pub enum GCodeValue {
     #[cfg(feature = "with-motion")]
     M400,
 
-    M401,
-
-    #[cfg(feature = "with-probe")]
-    M402, // Probing
-
     M404,
 
     M407, // Settings
 
-    M410, // quick stop
+    /// Quick stop: discard the queued moves
+    #[cfg(feature = "with-motion")]
+    M410,
 
     #[cfg(feature = "with-motion")]
     M422, // Probe point
@@ -920,8 +1078,12 @@ pub enum GCodeValue {
 
     M453, // Modes
 
+    /// Store the settings in the EEPROM
+    #[cfg(feature = "with-eeprom")]
     M500,
 
+    /// Restore the settings from the EEPROM
+    #[cfg(feature = "with-eeprom")]
     M501,
 
     /// Restore Default Settings
@@ -976,6 +1138,9 @@ pub enum GCodeValue {
     M907,
 
     M929, // Logging
+
+    /// Clear the alarm state after a fault (thermal or emergency stop)
+    M999,
 }
 
 #[cfg(feature = "with-defmt")]

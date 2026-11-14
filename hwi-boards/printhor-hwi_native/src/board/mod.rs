@@ -6,6 +6,27 @@ use sysinfo;
 pub mod device;
 
 pub mod mocked_peripherals;
+
+/// The Unix socket that simulates the USB serial port: a host connects to it as a client.
+#[cfg(feature = "with-serial-usb")]
+pub const USB_SOCKET_PATH: &str = "/tmp/printhor.sock";
+
+/// A process-wide replacement of [`USB_SOCKET_PATH`], set before the board setup.
+#[cfg(feature = "with-serial-usb")]
+static USB_SOCKET_OVERRIDE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The Unix socket the simulator listens on: [`USB_SOCKET_PATH`] unless it was replaced for this
+/// process (see `test_hooks::use_private_usb_socket`).
+#[cfg(feature = "with-serial-usb")]
+pub fn usb_socket_path() -> &'static str {
+    USB_SOCKET_OVERRIDE.get().map(String::as_str).unwrap_or(USB_SOCKET_PATH)
+}
+
+/// Replaces [`USB_SOCKET_PATH`] for this process. Only the first call has effect.
+#[cfg(all(feature = "with-serial-usb", feature = "with-serial-port-1"))]
+pub(crate) fn set_usb_socket_path(path: String) -> &'static str {
+    USB_SOCKET_OVERRIDE.get_or_init(|| path).as_str()
+}
 mod types;
 
 cfg_if::cfg_if! {
@@ -23,7 +44,7 @@ impl hwa::HwiContract for Contract {
     const MACHINE_BOARD: &'static str = "PC";
     const MACHINE_PROCESSOR: &'static str = std::env::consts::ARCH;
 
-    #[const_env::from_env("PROCESSOR_SYS_CK_MHZ")]
+    #[const_env::env_item("PROCESSOR_SYS_CK_MHZ")]
     const PROCESSOR_SYS_CK_MHZ: u32 = 1_000_000_000;
 
     /// The target [hwa::CommChannel] for M117 (display)
@@ -36,34 +57,26 @@ impl hwa::HwiContract for Contract {
 
     //#region "Watchdog settings"
 
-    #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
+    #[const_env::env_item("WATCHDOG_TIMEOUT_US")]
     const WATCHDOG_TIMEOUT_US: u32 = 10_000_000;
 
     //#endregion
 
     //#region "Memory management/tracking settings"
 
-    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
+    #[const_env::env_item("MAX_HEAP_SIZE_BYTES")]
     const MAX_HEAP_SIZE_BYTES: usize = 0;
 
-    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
+    #[const_env::env_item("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 32768;
 
     fn heap_current_size() -> usize {
-        let mut system = sysinfo::System::new_all();
-        system.refresh_all();
-        match sysinfo::get_current_pid() {
-            Ok(_pid) => {
-                if let Some(process) = system.process(_pid) {
-                    process.memory() as usize
-                } else {
-                    0
-                }
-            }
-            Err(_) => {
-                0
-            }
-        }
+        // sysinfo >= 0.40: constructors are fallible. Only the current process is refreshed
+        // (a full `new_all()` + `refresh_all()` scans every process of the host).
+        let Ok(pid) = sysinfo::get_current_pid() else { return 0 };
+        let Ok(mut system) = sysinfo::System::new() else { return 0 };
+        system.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[pid]), true);
+        system.process(pid).map(|p| p.memory() as usize).unwrap_or(0)
     }
 
     //#endregion
@@ -72,13 +85,18 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-motion")] {
+            /// The homing moves of the simulator run 20 times faster than on a real machine: tests
+            /// do not wait for them (see [crate::simulation] for the simulated end-stops)
+            #[const_env::env_item("HOMING_STEP_FREQUENCY_SCALE")]
+            const HOMING_STEP_FREQUENCY_SCALE: u64 = 20;
+
             cfg_if::cfg_if! {
                 if #[cfg(feature = "with-motion-anthropomorphic-kinematics")] {
 
-                    #[const_env::from_env("SPACE_UNIT_MAGNITUDE")]
+                    #[const_env::env_item("SPACE_UNIT_MAGNITUDE")]
                     const SPACE_UNIT_MAGNITUDE: &'static str = "º";
 
-                    #[const_env::from_env("PHYSICAL_UNIT_MAGNITUDE")]
+                    #[const_env::env_item("PHYSICAL_UNIT_MAGNITUDE")]
                     const PHYSICAL_UNIT_MAGNITUDE: &'static str = "º";
 
                     const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
@@ -104,6 +122,18 @@ impl hwa::HwiContract for Contract {
                         ANTHROPOMORFIC_TRANSFORMER.project_to_world(space_pos).and_then(|pos|
                             Ok(pos - ANTHROPOMORFIC_WORLD_CENTER_WU)
                         )
+                    }
+
+                    fn clamp_to_workspace(&self, world_pos: &hwa::math::TVector<hwa::math::Real>) -> hwa::math::TVector<hwa::math::Real> {
+                        use hwa::kinematics::WorldToSpaceTransformer;
+                        let traslated_world_pos = world_pos.clone() + ANTHROPOMORFIC_WORLD_CENTER_WU;
+                        let clamped = ANTHROPOMORFIC_TRANSFORMER.clamp_to_workspace(&traslated_world_pos);
+                        if clamped == traslated_world_pos {
+                            // Reachable: return the input untouched ((x + c) − c ≠ x in floating point)
+                            *world_pos
+                        } else {
+                            clamped - ANTHROPOMORFIC_WORLD_CENTER_WU
+                        }
                     }
                     
                     /// Apply calculated max feed rate boundaries
@@ -142,16 +172,16 @@ impl hwa::HwiContract for Contract {
                         hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(10))
                     };
 
-                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 50;
 
-                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100;
 
-                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 20;
 
-                    #[const_env::from_env("U_SEGMENT_QUEUE_SIZE")]
+                    #[const_env::env_item("U_SEGMENT_QUEUE_SIZE")]
                     const U_SEGMENT_QUEUE_SIZE: u8 = 10;
 
                 }
@@ -193,13 +223,13 @@ impl hwa::HwiContract for Contract {
                         hwa::math::TVector::new_with_coord(hwa::math::CoordSel::all_axis(), Some(8))
                     };
 
-                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 400;
 
-                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
-                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 20;
 
                 }
@@ -214,20 +244,20 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_MV")]
             const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = 4096;
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_BETA")]
             const HOT_END_THERM_BETA: f32 = 3950.0;
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
 
-            #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
-            const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 1.0;
+            #[const_env::env_item("HOT_END_THERM_PULL_UP_RESISTANCE")]
+            const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = 4700.0;
         }
     }
 
@@ -238,20 +268,20 @@ impl hwa::HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_MV")]
             const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = 4096;
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = 4096;
 
-            #[const_env::from_env("HOT_BED_THERM_BETA")]
+            #[const_env::env_item("HOT_BED_THERM_BETA")]
             const HOT_BED_THERM_BETA: f32 = 3950.0;
 
-            #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_NOMINAL_RESISTANCE")]
             const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = 100_000.0;
 
-            #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
-            const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 1.0;
+            #[const_env::env_item("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+            const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = 4700.0;
         }
     }
 
@@ -296,7 +326,7 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            #[const_env::env_item("SERIAL_USB_PACKET_SIZE")]
             const SERIAL_USB_PACKET_SIZE: usize = 64;
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
             type SerialUsbRx = device::SerialUsbRx;
@@ -305,9 +335,9 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-1")] {
-            #[const_env::from_env("SERIAL_PORT1_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT1_BAUD_RATE")]
             const SERIAL_PORT1_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT1_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT1_RX_BUFFER_SIZE")]
             const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort1Tx = types::SerialPort1TxMutexStrategy;
@@ -317,9 +347,9 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT2_BAUD_RATE")]
             const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT2_RX_BUFFER_SIZE")]
             const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
@@ -329,7 +359,7 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-spi")] {
-            #[const_env::from_env("SPI_FREQUENCY")]
+            #[const_env::env_item("SPI_FREQUENCY")]
             const SPI_FREQUENCY: u32 = 20_000_000;
             type SpiController = types::Spi1MutexStrategyType;
         }
@@ -337,7 +367,7 @@ impl hwa::HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-i2c")] {
-            #[const_env::from_env("I2C_FREQUENCY")]
+            #[const_env::env_item("I2C_FREQUENCY")]
             const I2C_FREQUENCY: u32 = 1_000_000;
             type I2cMotionMutexStrategy = types::I2cMotionMutexStrategy;
         }
@@ -411,6 +441,12 @@ impl hwa::HwiContract for Contract {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-eeprom")] {
+            type EepromMutexStrategy = types::EepromMutexStrategy;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-print-job")] {
             type PrinterControllerSignalMutexType = types::PrinterControllerSignalMutexType;
         }
@@ -455,7 +491,7 @@ impl hwa::HwiContract for Contract {
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-usb"))] {
-                let (usb_tx_device, usb_rx_device) = device::SerialUsbDevice::new("/tmp/printhor.sock".to_string()).await.split();
+                let (usb_tx_device, usb_rx_device) = device::SerialUsbDevice::new(usb_socket_path().to_string()).await.split();
                 let serial_usb_tx = hwa::make_static_async_controller!(
                     "UsbTx",
                     types::SerialUsbTxMutexStrategy,
@@ -518,8 +554,8 @@ impl hwa::HwiContract for Contract {
                             #[cfg(feature="with-e-axis")]
                             comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(3, _pin_state)),
                         )
-                    )
-                ).unwrap();
+                    ).unwrap()
+                );
             }
         }
 
@@ -605,29 +641,31 @@ impl hwa::HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-probe")] {
                 let probe_pwm = pwm1.clone();
+                // Every output has a channel of its own in the shared PWM: on channel 0 they would
+                // overwrite each other's duty (e.g. the hot-end PID the extra fan power)
                 let probe_pwm_channel = hwa::HwiResource::new(0u8);
             }
         }
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-hot-end")] {
                 let hot_end_adc = adc_any.clone();
-                let hot_end_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(23, _pin_state));
+                let hot_end_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(crate::simulation::HEATER_ADC_PIN[crate::simulation::Heater::HotEnd as usize], _pin_state));
                 let hot_end_pwm= pwm1.clone();
-                let hot_end_pwm_channel = hwa::HwiResource::new(0u8);
+                let hot_end_pwm_channel = hwa::HwiResource::new(crate::simulation::HEATER_PWM_CHANNEL[crate::simulation::Heater::HotEnd as usize]);
             }
         }
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-hot-bed")] {
                 let hot_bed_adc = adc_any.clone();
-                let hot_bed_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(24, _pin_state));
+                let hot_bed_adc_pin = hwa::HwiResource::new(mocked_peripherals::MockedIOPin::new(crate::simulation::HEATER_ADC_PIN[crate::simulation::Heater::HotBed as usize], _pin_state));
                 let hot_bed_pwm= pwm1.clone();
-                let hot_bed_pwm_channel = hwa::HwiResource::new(0u8);
+                let hot_bed_pwm_channel = hwa::HwiResource::new(crate::simulation::HEATER_PWM_CHANNEL[crate::simulation::Heater::HotBed as usize]);
             }
         }
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-fan-layer")] {
                 let fan_layer_pwm = pwm1.clone();
-                let fan_layer_pwm_channel = hwa::HwiResource::new(0u8);
+                let fan_layer_pwm_channel = hwa::HwiResource::new(3u8);
             }
         }
 
@@ -644,14 +682,14 @@ impl hwa::HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-laser")] {
                 let laser_pwm = pwm1.clone();
-                let laser_pwm_channel = hwa::HwiResource::new(0u8);
+                let laser_pwm_channel = hwa::HwiResource::new(4u8);
             }
         }
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-fan-extra-1")] {
                 let fan_extra1_pwm = pwm1.clone();
-                let fan_extra1_pwm_channel = hwa::HwiResource::new(0u8);
+                let fan_extra1_pwm_channel = hwa::HwiResource::new(5u8);
             }
         }
 
@@ -723,6 +761,12 @@ impl hwa::HwiContract for Contract {
             fan_layer_pwm_channel,
             #[cfg(feature = "with-sd-card")]
             sd_card_block_device,
+            #[cfg(feature = "with-eeprom")]
+            eeprom: hwa::make_static_async_controller!(
+                "Eeprom",
+                types::EepromMutexStrategy,
+                device::Eeprom::new()
+            ),
             #[cfg(feature = "with-motion-broadcast")]
             high_priority_core: hwa::NoDevice,
         }
@@ -821,7 +865,7 @@ impl hwa::HwiContract for Contract {
                             let spawner = _spawner.make_send();
                             let mut mg = tk.lock().unwrap();
                             let t = mg.deref_mut().take().unwrap();
-                            spawner.must_spawn(t.inner);
+                            spawner.spawn(t.inner);
                         });
                     }).unwrap();
                 Ok(())

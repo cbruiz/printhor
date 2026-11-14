@@ -14,6 +14,12 @@ use crate::processing::GCodeValue;
 use crate::processing::N;
 #[allow(unused)]
 use crate::processing::S;
+#[allow(unused)]
+use crate::processing::{ESC, PID, SFZ, SP, SPT, SR};
+#[cfg(feature = "with-arcs")]
+use crate::processing::ARC;
+#[cfg(feature = "with-beziers")]
+use crate::processing::BEZIER;
 use hwa::CommChannel;
 
 // dyn trait could reduce code size a lot with the penalty of the indirection
@@ -27,6 +33,11 @@ where
     current_line: u32,
     /// The tagged line (NXX) from gcode commands, when provided
     tagged_line_num: Option<u32>,
+    /// The last accepted line number (host protocol). Set by `M110` or by every numbered line
+    /// accepted in sequence
+    last_line_num: Option<u32>,
+    /// Whether numbered lines must arrive in sequence (`N<last+1>`). Only for host channels.
+    check_line_numbers: bool,
 }
 
 impl<STREAM> GCodeLineParser<STREAM>
@@ -38,14 +49,53 @@ where
             raw_parser: async_gcode::Parser::new(stream),
             current_line: 0,
             tagged_line_num: None,
+            last_line_num: None,
+            check_line_numbers: false,
         }
     }
 
+    /// Enables the host protocol line number check: once a numbered line (or `M110`) has been
+    /// accepted, every numbered line must be the next one. Otherwise, the line is rejected with
+    /// [GCodeLineParserError::LineNumberMismatch] so that the host resends it.
+    pub fn with_line_number_check(mut self) -> Self {
+        self.check_line_numbers = true;
+        self
+    }
+
+    /// The last accepted line number (or the last tagged one when the check is disabled)
     pub fn gcode_line(&self) -> Option<u32> {
-        self.tagged_line_num
+        self.last_line_num.or(self.tagged_line_num)
     }
 
     pub async fn next_gcode(
+        &mut self,
+        channel: CommChannel,
+    ) -> Result<GCodeCmd, GCodeLineParserError> {
+        let result = self.next_gcode_unchecked(channel).await;
+        if let Ok(cmd) = &result {
+            // M110 [N<line>] sets the current line number (Marlin semantics)
+            if let GCodeValue::M110(arg) = &cmd.value {
+                let n = arg
+                    .n
+                    .and_then(|v| v.to_i32())
+                    .map(|v| v.max(0) as u32)
+                    .or(cmd.line_tag);
+                if n.is_some() {
+                    self.last_line_num = n;
+                }
+            } else if let Some(n) = cmd.line_tag {
+                match self.last_line_num {
+                    Some(last) if self.check_line_numbers && n != last.wrapping_add(1) => {
+                        return Err(GCodeLineParserError::LineNumberMismatch(last));
+                    }
+                    _ => self.last_line_num = Some(n),
+                }
+            }
+        }
+        result
+    }
+
+    async fn next_gcode_unchecked(
         &mut self,
         _channel: CommChannel,
     ) -> Result<GCodeCmd, GCodeLineParserError> {
@@ -222,7 +272,7 @@ where
     }
 
     pub async fn reset(&mut self) {
-        hwa::debug!("AsyncGcodeParser reset");
+        hwa::trace!("AsyncGcodeParser reset");
         self.raw_parser.reset().await;
     }
 
@@ -242,6 +292,12 @@ where
     pub async fn close(&mut self) {
         self.raw_parser.reset().await;
     }
+
+    /// Consumes the parser and returns its input stream, so that the stream can be closed (an SD
+    /// card file keeps its entries open until its stream is closed).
+    pub fn into_stream(self) -> STREAM {
+        self.raw_parser.into_inner()
+    }
 }
 
 /// Initialize and EMPTY GCodeValue variant from ch, frx spec coming from parser
@@ -254,10 +310,18 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('g', Some((0, 0))) => Some(GCodeValue::G0(FXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((1, 0))) => Some(GCodeValue::G1(EFSXYZ::new())),
+        #[cfg(feature = "with-arcs")]
+        ('g', Some((2, 0))) => Some(GCodeValue::G2(ARC::new())),
+        #[cfg(feature = "with-arcs")]
+        ('g', Some((3, 0))) => Some(GCodeValue::G3(ARC::new())),
+        #[cfg(feature = "with-beziers")]
+        ('g', Some((5, 0))) => Some(GCodeValue::G5(BEZIER::new())),
         #[cfg(feature = "with-motion")]
-        ('g', Some((4, 0))) => Some(GCodeValue::G4(S::new())),
+        ('g', Some((4, 0))) => Some(GCodeValue::G4(SP::new())),
         #[cfg(feature = "with-motion")]
         ('g', Some((10, 0))) => Some(GCodeValue::G10),
+        #[cfg(feature = "with-motion")]
+        ('g', Some((11, 0))) => Some(GCodeValue::G11),
         #[cfg(feature = "with-motion")]
         ('g', Some((17, 0))) => Some(GCodeValue::G17),
         #[cfg(feature = "with-motion")]
@@ -299,6 +363,8 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((24, 0))) => Some(GCodeValue::M24),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((25, 0))) => Some(GCodeValue::M25),
+        #[cfg(feature = "with-sd-card")]
+        ('m', Some((524, 0))) => Some(GCodeValue::M524),
         ('m', Some((37, 0))) => Some(GCodeValue::M37(S::new())),
         ('m', Some((73, 0))) => Some(GCodeValue::M73),
         ('m', Some((79, 0))) => Some(GCodeValue::M79),
@@ -306,40 +372,75 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((80, 0))) => Some(GCodeValue::M80),
         #[cfg(feature = "with-ps-on")]
         ('m', Some((81, 0))) => Some(GCodeValue::M81),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((18, 0))) => Some(GCodeValue::M84),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((82, 0))) => Some(GCodeValue::M82),
+        #[cfg(feature = "with-motion")]
         ('m', Some((83, 0))) => Some(GCodeValue::M83),
         #[cfg(feature = "with-motion")]
         ('m', Some((84, 0))) => Some(GCodeValue::M84),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((92, 0))) => Some(GCodeValue::M92(EXYZ::new())),
         ('m', Some((100, 0))) => Some(GCodeValue::M100),
         #[cfg(feature = "with-hot-end")]
         ('m', Some((104, 0))) => Some(GCodeValue::M104(S::new())),
         ('m', Some((105, 0))) => Some(GCodeValue::M105),
         #[cfg(feature = "with-fan-layer")]
-        ('m', Some((106, 0))) => Some(GCodeValue::M106),
+        ('m', Some((106, 0))) => Some(GCodeValue::M106(SP::new())),
         #[cfg(feature = "with-fan-layer")]
         ('m', Some((107, 0))) => Some(GCodeValue::M107),
         #[cfg(feature = "with-hot-end")]
-        ('m', Some((109, 0))) => Some(GCodeValue::M109(S::new())),
+        ('m', Some((109, 0))) => Some(GCodeValue::M109(SR::new())),
         ('m', Some((110, 0))) => Some(GCodeValue::M110(N::new())),
         #[cfg(feature = "with-motion")]
         ('m', Some((114, 0))) => Some(GCodeValue::M114),
+        ('m', Some((112, 0))) => Some(GCodeValue::M112),
         ('m', Some((115, 0))) => Some(GCodeValue::M115),
         ('m', Some((117, 0))) => Some(GCodeValue::M117(None)),
         ('m', Some((118, 0))) => Some(GCodeValue::M118(None)),
         ('m', Some((119, 0))) => Some(GCodeValue::M119),
+        #[cfg(feature = "with-probe")]
+        ('m', Some((280, 0))) => Some(GCodeValue::M280(SP::new())),
+        #[cfg(feature = "with-probe")]
+        ('m', Some((401, 0))) => Some(GCodeValue::M401),
+        #[cfg(feature = "with-probe")]
+        ('m', Some((402, 0))) => Some(GCodeValue::M402),
         #[cfg(feature = "with-hot-bed")]
         ('m', Some((140, 0))) => Some(GCodeValue::M140(S::new())),
         #[cfg(feature = "with-hot-bed")]
-        ('m', Some((190, 0))) => Some(GCodeValue::M190),
+        ('m', Some((190, 0))) => Some(GCodeValue::M190(SR::new())),
         #[cfg(feature = "with-motion")]
-        ('m', Some((201, 0))) => Some(GCodeValue::M201),
+        ('m', Some((201, 0))) => Some(GCodeValue::M201(EXYZ::new())),
         #[cfg(feature = "with-motion")]
-        ('m', Some((203, 0))) => Some(GCodeValue::M203),
-        ('m', Some((204, 0))) => Some(GCodeValue::M204),
+        ('m', Some((203, 0))) => Some(GCodeValue::M203(EXYZ::new())),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((204, 0))) => Some(GCodeValue::M204(SPT::new())),
         ('m', Some((205, 0))) => Some(GCodeValue::M205),
         #[cfg(feature = "with-motion")]
-        ('m', Some((206, 0))) => Some(GCodeValue::M206),
+        ('m', Some((206, 0))) => Some(GCodeValue::M206(EXYZ::new())),
+        #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+        ('m', Some((207, 0))) => Some(GCodeValue::M207(SFZ::new())),
+        #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+        ('m', Some((208, 0))) => Some(GCodeValue::M208(SFZ::new())),
         ('m', Some((220, 0))) => Some(GCodeValue::M220(S::new())),
         ('m', Some((221, 0))) => Some(GCodeValue::M221(S::new())),
+        #[cfg(feature = "with-hot-end")]
+        ('m', Some((301, 0))) => Some(GCodeValue::M301(PID::new())),
+        #[cfg(all(feature = "with-hot-end", feature = "with-e-axis"))]
+        ('m', Some((302, 0))) => Some(GCodeValue::M302(SP::new())),
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+        ('m', Some((303, 0))) => Some(GCodeValue::M303(ESC::new())),
+        #[cfg(feature = "with-hot-bed")]
+        ('m', Some((304, 0))) => Some(GCodeValue::M304(PID::new())),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((400, 0))) => Some(GCodeValue::M400),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((410, 0))) => Some(GCodeValue::M410),
+        #[cfg(feature = "with-eeprom")]
+        ('m', Some((500, 0))) => Some(GCodeValue::M500),
+        #[cfg(feature = "with-eeprom")]
+        ('m', Some((501, 0))) => Some(GCodeValue::M501),
         ('m', Some((502, 0))) => Some(GCodeValue::M502),
         ('m', Some((503, 0))) => Some(GCodeValue::M503(S::new())),
         #[cfg(feature = "with-motion")]
@@ -350,6 +451,7 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((900, 0))) => Some(GCodeValue::M900),
         #[cfg(feature = "with-motion")]
         ('m', Some((907, 0))) => Some(GCodeValue::M907),
+        ('m', Some((999, 0))) => Some(GCodeValue::M999),
         _ => None,
     }
 }
@@ -429,78 +531,84 @@ fn update_current(
         },
 
         #[cfg(feature = "with-motion")]
-        GCodeValue::G1(coord) => match (ch, frx) {
-            #[cfg(feature = "with-e-axis")]
-            ('e', Some(val)) => {
-                coord.e.replace(helpers::to_fixed(val));
-            }
-            ('f', Some(val)) => {
-                coord.f.replace(helpers::to_fixed(val));
-            }
-            ('s', Some(val)) => {
-                coord.s.replace(helpers::to_fixed(val));
-            }
-            //
-            #[cfg(feature = "with-x-axis")]
-            ('x', Some(val)) => {
-                coord.x.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-y-axis")]
-            ('y', Some(val)) => {
-                coord.y.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-z-axis")]
-            ('z', Some(val)) => {
-                coord.z.replace(helpers::to_fixed(val));
-            }
-            //
-            #[cfg(feature = "with-a-axis")]
-            ('a', Some(val)) => {
-                coord.a.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-b-axis")]
-            ('b', Some(val)) => {
-                coord.b.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-c-axis")]
-            ('c', Some(val)) => {
-                coord.c.replace(helpers::to_fixed(val));
-            }
-            //
-            #[cfg(feature = "with-i-axis")]
-            ('i', Some(val)) => {
-                coord.i.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-j-axis")]
-            ('j', Some(val)) => {
-                coord.j.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-k-axis")]
-            ('k', Some(val)) => {
-                coord.k.replace(helpers::to_fixed(val));
-            }
-            //
-            #[cfg(feature = "with-u-axis")]
-            ('u', Some(val)) => {
-                coord.u.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-v-axis")]
-            ('v', Some(val)) => {
-                coord.v.replace(helpers::to_fixed(val));
-            }
-            #[cfg(feature = "with-w-axis")]
-            ('w', Some(val)) => {
-                coord.w.replace(helpers::to_fixed(val));
-            }
-            _ => {}
+        GCodeValue::G1(coord) => update_efsxyz(coord, ch, frx),
+        #[cfg(feature = "with-arcs")]
+        GCodeValue::G2(arc) | GCodeValue::G3(arc) => match ch {
+            'i' => set_word(&mut arc.i, 'i', ch, frx),
+            'j' => set_word(&mut arc.j, 'j', ch, frx),
+            'r' => set_word(&mut arc.r, 'r', ch, frx),
+            _ => update_efsxyz(&mut arc.coords, ch, frx),
+        },
+        #[cfg(feature = "with-beziers")]
+        GCodeValue::G5(bz) => match ch {
+            'i' => set_word(&mut bz.i, 'i', ch, frx),
+            'j' => set_word(&mut bz.j, 'j', ch, frx),
+            'p' => set_word(&mut bz.p, 'p', ch, frx),
+            'q' => set_word(&mut bz.q, 'q', ch, frx),
+            _ => update_efsxyz(&mut bz.coords, ch, frx),
         },
         #[cfg(feature = "with-motion")]
         GCodeValue::G4(param) => match (ch, frx) {
             ('s', Some(val)) => {
                 param.s.replace(helpers::to_fixed(val).abs());
             }
+            ('p', Some(val)) => {
+                param.p.replace(helpers::to_fixed(val).abs());
+            }
             _ => {}
         },
+        #[cfg(feature = "with-motion")]
+        GCodeValue::M92(coord)
+        | GCodeValue::M201(coord)
+        | GCodeValue::M203(coord)
+        | GCodeValue::M206(coord) => {
+            update_exyz(coord, ch, frx)
+        }
+        #[cfg(feature = "with-motion")]
+        GCodeValue::M204(p) => {
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.p, 'p', ch, frx);
+            set_word(&mut p.t, 't', ch, frx);
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+        GCodeValue::M207(p) | GCodeValue::M208(p) => {
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.f, 'f', ch, frx);
+            set_word(&mut p.z, 'z', ch, frx);
+        }
+        #[cfg(feature = "with-probe")]
+        GCodeValue::M280(p) => {
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.p, 'p', ch, frx);
+        }
+        #[cfg(feature = "with-fan-layer")]
+        GCodeValue::M106(p) => {
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.p, 'p', ch, frx);
+        }
+        #[cfg(all(feature = "with-hot-end", feature = "with-e-axis"))]
+        GCodeValue::M302(p) => {
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.p, 'p', ch, frx);
+        }
+        #[cfg(feature = "with-hot-end")]
+        GCodeValue::M301(p) => {
+            set_word(&mut p.p, 'p', ch, frx);
+            set_word(&mut p.i, 'i', ch, frx);
+            set_word(&mut p.d, 'd', ch, frx);
+        }
+        #[cfg(feature = "with-hot-bed")]
+        GCodeValue::M304(p) => {
+            set_word(&mut p.p, 'p', ch, frx);
+            set_word(&mut p.i, 'i', ch, frx);
+            set_word(&mut p.d, 'd', ch, frx);
+        }
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+        GCodeValue::M303(p) => {
+            set_word(&mut p.e, 'e', ch, frx);
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.c, 'c', ch, frx);
+        }
         #[cfg(feature = "with-motion")]
         GCodeValue::G28(coord) => match (ch, frx) {
             #[cfg(feature = "with-e-axis")]
@@ -647,12 +755,15 @@ fn update_current(
             _ => {}
         },
         #[cfg(feature = "with-hot-end")]
-        GCodeValue::M109(coord) => match (ch, frx) {
-            ('s', Some(val)) => {
-                coord.s.replace(helpers::to_fixed(val));
-            }
-            _ => {}
-        },
+        GCodeValue::M109(coord) => {
+            set_word(&mut coord.s, 's', ch, frx);
+            set_word(&mut coord.r, 'r', ch, frx);
+        }
+        #[cfg(feature = "with-hot-bed")]
+        GCodeValue::M190(coord) => {
+            set_word(&mut coord.s, 's', ch, frx);
+            set_word(&mut coord.r, 'r', ch, frx);
+        }
         GCodeValue::M117(msg) | GCodeValue::M118(msg) => {
             if let async_gcode::RealValue::Literal(async_gcode::Literal::String(text)) = fv {
                 msg.replace(text);
@@ -665,7 +776,7 @@ fn update_current(
             }
             _ => {}
         },
-        GCodeValue::M220(coord) => match (ch, frx) {
+        GCodeValue::M220(coord) | GCodeValue::M221(coord) => match (ch, frx) {
             ('s', Some(val)) => {
                 coord.s.replace(helpers::to_fixed(val));
             }
@@ -687,6 +798,145 @@ fn update_current(
     }
 }
 
+/// Updates the words of a linear move (shared by G1 and G2/G3)
+#[cfg(feature = "with-motion")]
+fn update_efsxyz(coord: &mut EFSXYZ, ch: char, frx: Option<(i32, u8)>) {
+    match (ch, frx) {
+        #[cfg(feature = "with-e-axis")]
+        ('e', Some(val)) => {
+            coord.e.replace(helpers::to_fixed(val));
+        }
+        ('f', Some(val)) => {
+            coord.f.replace(helpers::to_fixed(val));
+        }
+        ('s', Some(val)) => {
+            coord.s.replace(helpers::to_fixed(val));
+        }
+        //
+        #[cfg(feature = "with-x-axis")]
+        ('x', Some(val)) => {
+            coord.x.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-y-axis")]
+        ('y', Some(val)) => {
+            coord.y.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-z-axis")]
+        ('z', Some(val)) => {
+            coord.z.replace(helpers::to_fixed(val));
+        }
+        //
+        #[cfg(feature = "with-a-axis")]
+        ('a', Some(val)) => {
+            coord.a.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-b-axis")]
+        ('b', Some(val)) => {
+            coord.b.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-c-axis")]
+        ('c', Some(val)) => {
+            coord.c.replace(helpers::to_fixed(val));
+        }
+        //
+        #[cfg(feature = "with-i-axis")]
+        ('i', Some(val)) => {
+            coord.i.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-j-axis")]
+        ('j', Some(val)) => {
+            coord.j.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-k-axis")]
+        ('k', Some(val)) => {
+            coord.k.replace(helpers::to_fixed(val));
+        }
+        //
+        #[cfg(feature = "with-u-axis")]
+        ('u', Some(val)) => {
+            coord.u.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-v-axis")]
+        ('v', Some(val)) => {
+            coord.v.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-w-axis")]
+        ('w', Some(val)) => {
+            coord.w.replace(helpers::to_fixed(val));
+        }
+        _ => {}
+    }
+}
+
+/// Updates the per-axis words of an [EXYZ] argument
+#[allow(unused)]
+fn update_exyz(coord: &mut EXYZ, ch: char, frx: Option<(i32, u8)>) {
+    match (ch, frx) {
+        #[cfg(feature = "with-e-axis")]
+        ('e', Some(val)) => {
+            coord.e.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-x-axis")]
+        ('x', Some(val)) => {
+            coord.x.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-y-axis")]
+        ('y', Some(val)) => {
+            coord.y.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-z-axis")]
+        ('z', Some(val)) => {
+            coord.z.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-a-axis")]
+        ('a', Some(val)) => {
+            coord.a.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-b-axis")]
+        ('b', Some(val)) => {
+            coord.b.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-c-axis")]
+        ('c', Some(val)) => {
+            coord.c.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-i-axis")]
+        ('i', Some(val)) => {
+            coord.i.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-j-axis")]
+        ('j', Some(val)) => {
+            coord.j.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-k-axis")]
+        ('k', Some(val)) => {
+            coord.k.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-u-axis")]
+        ('u', Some(val)) => {
+            coord.u.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-v-axis")]
+        ('v', Some(val)) => {
+            coord.v.replace(helpers::to_fixed(val));
+        }
+        #[cfg(feature = "with-w-axis")]
+        ('w', Some(val)) => {
+            coord.w.replace(helpers::to_fixed(val));
+        }
+        _ => {}
+    }
+}
+
+/// Assigns `val` to `slot` when `ch` matches `letter`
+#[allow(unused)]
+#[inline]
+fn set_word(slot: &mut Option<hwa::math::Real>, letter: char, ch: char, frx: Option<(i32, u8)>) {
+    if let (true, Some(val)) = (ch == letter, frx) {
+        slot.replace(helpers::to_fixed(val));
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum GCodeLineParserError {
@@ -699,6 +949,8 @@ pub enum GCodeLineParserError {
     /// Unexpected fatal error
     #[allow(unused)]
     FatalError,
+    /// A numbered line is not the expected one (host protocol). Holds the last accepted line
+    LineNumberMismatch(u32),
 }
 
 #[cfg(feature = "debug-gcode")]
@@ -826,6 +1078,9 @@ impl defmt::Format for GCodeLineParserError {
             }
             GCodeLineParserError::FatalError => {
                 defmt::write!(fmt, "FatalError");
+            }
+            GCodeLineParserError::LineNumberMismatch(ln) => {
+                defmt::write!(fmt, "LineNumberMismatch(last={})", ln);
             }
             GCodeLineParserError::EOF => {
                 defmt::write!(fmt, "EOF");
@@ -955,6 +1210,116 @@ mod tests {
         }
 
         async fn recovery_check(&mut self) {}
+    }
+
+    /// Chunked stream with the shape of `SDCardStream`: bytes come from a 512-byte buffer that
+    /// a non-inlined call refills.
+    #[cfg(feature = "perf-bench")]
+    struct ChunkStream {
+        data: Vec<u8>,
+        pos: usize,
+        buf: [u8; 512],
+        len: usize,
+        idx: usize,
+    }
+
+    #[cfg(feature = "perf-bench")]
+    impl ChunkStream {
+        #[inline(never)]
+        fn refill(&mut self) -> usize {
+            let n = (self.data.len() - self.pos).min(self.buf.len());
+            self.buf[..n].copy_from_slice(&self.data[self.pos..self.pos + n]);
+            self.pos += n;
+            self.len = n;
+            self.idx = 0;
+            n
+        }
+    }
+
+    #[cfg(feature = "perf-bench")]
+    impl async_gcode::ByteStream for ChunkStream {
+        type Item = Result<u8, async_gcode::Error>;
+
+        async fn next(&mut self) -> Option<Self::Item> {
+            if self.idx >= self.len && self.refill() == 0 {
+                return None;
+            }
+            let b = self.buf[self.idx];
+            self.idx += 1;
+            Some(Ok(b))
+        }
+
+        async fn recovery_check(&mut self) {}
+    }
+
+    /// Host benchmark of the whole G-code line path (`async-gcode` plus [GCodeLineParser]).
+    /// Compiled only with the `perf-bench` feature. Point `PRINTHOR_BENCH_GCODE` to a G-code file
+    /// (for instance `benchy.g` from `data/sdcard.img`) and run:
+    ///
+    /// ```text
+    /// PRINTHOR_BENCH_GCODE=benchy.g cargo test --release --features integration-test,perf-bench --bin printhor perf_bench_gcode_line_parser -- --nocapture
+    /// ```
+    #[cfg(feature = "perf-bench")]
+    #[futures_test::test]
+    async fn perf_bench_gcode_line_parser() {
+        let Ok(path) = std::env::var("PRINTHOR_BENCH_GCODE") else {
+            println!("PERF gcode_line_parser skipped: PRINTHOR_BENCH_GCODE is not set");
+            return;
+        };
+        let data = std::fs::read(&path).expect("readable G-code file");
+        let mut times = Vec::new();
+        let (mut commands, mut errors) = (0u32, 0u32);
+        for _ in 0..7 {
+            let stream = ChunkStream {
+                data: data.clone(),
+                pos: 0,
+                buf: [0; 512],
+                len: 0,
+                idx: 0,
+            };
+            let mut parser = GCodeLineParser::new(stream);
+            (commands, errors) = (0, 0);
+            let t0 = std::time::Instant::now();
+            loop {
+                match parser.next_gcode(CommChannel::Internal).await {
+                    Ok(cmd) => {
+                        commands += 1;
+                        std::hint::black_box(cmd);
+                    }
+                    Err(GCodeLineParserError::EOF) => break,
+                    Err(_) => errors += 1,
+                }
+            }
+            times.push(t0.elapsed().as_secs_f64());
+        }
+        times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let median = times[times.len() / 2];
+        println!(
+            "PERF gcode_line_parser: {} commands, {} errors, {} bytes, median {:.2} ms ({:.2} ns/byte, {:.1} ns/command)",
+            commands,
+            errors,
+            data.len(),
+            median * 1e3,
+            median * 1e9 / data.len() as f64,
+            median * 1e9 / commands as f64
+        );
+    }
+
+    #[cfg(feature = "with-beziers")]
+    #[futures_test::test]
+    async fn test_g5() {
+        let stream = BufferStream::new("G5 I1 J2 P-3 Q4 X10 Y20 E0.5 F600\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let cmd = parser.next_gcode(CommChannel::Internal).await.expect("G5 OK");
+        match cmd.value {
+            GCodeValue::G5(bz) => {
+                let r = |v: f32| Some(hwa::math::Real::from_f32(v));
+                assert_eq!((bz.i, bz.j, bz.p, bz.q), (r(1.0), r(2.0), r(-3.0), r(4.0)));
+                assert_eq!((bz.coords.x, bz.coords.y), (r(10.0), r(20.0)));
+                assert_eq!(bz.coords.f, r(600.0));
+            }
+            other => panic!("unexpected {:?}", other),
+        }
     }
 
     #[futures_test::test]
@@ -1316,6 +1681,26 @@ mod tests {
     }
 
     #[futures_test::test]
+    async fn test_line_number_sequence() {
+        let stream = BufferStream::new(
+            "N7 M114*32\nN9 M114*46\nN8 M114*47\nN10 M110 N3*79\nN4 M105*35\n".as_bytes().to_vec().into(),
+        );
+        let mut parser = GCodeLineParser::new(stream).with_line_number_check();
+        let r = parser.next_gcode(CommChannel::Internal).await;
+        assert!(r.is_ok(), "N7: {:?}", r.err().map(|e| alloc::format!("{:?}", e)));
+        assert_eq!(parser.gcode_line(), Some(7));
+        assert!(matches!(
+            parser.next_gcode(CommChannel::Internal).await,
+            Err(GCodeLineParserError::LineNumberMismatch(7))
+        ));
+        assert!(parser.next_gcode(CommChannel::Internal).await.is_ok());
+        assert!(parser.next_gcode(CommChannel::Internal).await.is_ok());
+        assert_eq!(parser.gcode_line(), Some(3));
+        assert!(parser.next_gcode(CommChannel::Internal).await.is_ok());
+        assert_eq!(parser.gcode_line(), Some(4));
+    }
+
+    #[futures_test::test]
     async fn test_g_variants() {
         let stream = BufferStream::new("G\nG0\nG1\nG2\nG4\nG10\nG17\nG21\nG28\nG29\nG29.1\nG29.2\nG31\nG32\nG80\nG90\nG91\nG92\nG94\n".as_bytes().to_vec().into());
 
@@ -1406,13 +1791,20 @@ mod tests {
             parser.next_gcode(CommChannel::Internal).await,
             Ok(GCodeCmd::new(2, None, GCodeValue::G1(EFSXYZ::new())))
         );
+        #[cfg(feature = "with-arcs")]
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,
-            Err(GCodeLineParserError::GCodeNotImplemented(3, "G2".into()))
+            Ok(GCodeCmd::new(3, None, GCodeValue::G2(ARC::new())))
+        );
+        // Without arc support G2 is not a known G-code
+        #[cfg(not(feature = "with-arcs"))]
+        assert_eq!(
+            parser.next_gcode(CommChannel::Internal).await,
+            Err(GCodeLineParserError::GCodeNotImplemented(3, alloc::string::String::from("G2")))
         );
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,
-            Ok(GCodeCmd::new(4, None, GCodeValue::G4(S::new())))
+            Ok(GCodeCmd::new(4, None, GCodeValue::G4(SP::new())))
         );
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,

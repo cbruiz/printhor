@@ -176,7 +176,7 @@ where
     /// }
     /// ```
     pub async fn ft_wait_for(&mut self, what: EventStatus) -> Result<(), ()> {
-        if what.flags.is_empty() {
+        if what.mask.is_empty() {
             Ok(())
         } else {
             #[cfg(any(feature = "with-log", feature = "with-defmt"))]
@@ -351,3 +351,6 @@ where
 }
 
 //#endregion
+
+#[cfg(test)]
+mod coverage_tests;

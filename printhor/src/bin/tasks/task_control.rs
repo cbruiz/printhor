@@ -19,6 +19,20 @@ cfg_if::cfg_if! {
     }
 }
 
+// Marlin hosts/displays only recognise `Error:` (capitalised, colon) as an error marker
+#[cfg(feature = "marlin-compat")]
+const ERR_PREFIX: &str = "Error:";
+#[cfg(not(feature = "marlin-compat"))]
+const ERR_PREFIX: &str = "error;";
+#[cfg(feature = "marlin-compat")]
+const ERR_PARSER: &str = "Error:ParserError\n";
+#[cfg(not(feature = "marlin-compat"))]
+const ERR_PARSER: &str = "error; (ParserError)\n";
+#[cfg(feature = "marlin-compat")]
+const ERR_INTERNAL: &str = "Error:Internal error\n";
+#[cfg(not(feature = "marlin-compat"))]
+const ERR_INTERNAL: &str = "error; Internal error\n";
+
 pub async fn do_with_timeout<F: core::future::Future>(
     _timeout: Duration,
     fut: F,
@@ -80,20 +94,41 @@ pub async fn task_control(
             }
             Ok((Err(processing::GCodeLineParserError::ParseError(_x)), channel)) => {
                 hwa::error!("[{:?}] GCode N/A ParserError", channel);
-                processor.write(channel, "error; (ParserError)\n").await;
+                processor.write(channel, ERR_PARSER).await;
+                // Hosts sending numbered lines (with checksum) are asked to resend the line
+                if let Some(last_line) = gcode_input_stream.get_gcode_line(channel) {
+                    let s = alloc::format!("Resend: {}\n", last_line + 1);
+                    processor.write(channel, s.as_str()).await;
+                }
+                processor.write_ok(channel).await;
+            }
+            Ok((Err(processing::GCodeLineParserError::LineNumberMismatch(last_line)), channel)) => {
+                hwa::warn!("[{:?}] Line number out of sequence", channel);
+                let s = alloc::format!(
+                    "Error:Line Number is not Last Line Number+1, Last Line: {}\nResend: {}\n",
+                    last_line,
+                    last_line.wrapping_add(1)
+                );
+                processor.write(channel, s.as_str()).await;
+                processor.write_ok(channel).await;
             }
             Ok((
                 Err(processing::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)),
                 channel,
             )) => {
                 hwa::error!("GCode {} (NotImplemented)", _gcode_name.as_str());
+                #[cfg(feature = "marlin-compat")]
+                let s = alloc::format!("echo:Unknown command: \"{}\"\n", _gcode_name);
+                #[cfg(not(feature = "marlin-compat"))]
                 let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
                 processor.write(channel, &s).await;
+                processor.write_ok(channel).await;
             }
             Ok((Err(processing::GCodeLineParserError::FatalError), channel)) => {
                 hwa::error!("[{:?}] GCode N/A (Internal error)", channel);
-                let s = "error; Internal error\n";
+                let s = ERR_INTERNAL;
                 processor.write(channel, s).await;
+                processor.write_ok(channel).await;
             }
             Ok((Err(processing::GCodeLineParserError::EOF), _channel)) => {
                 hwa::warn!("{:?} Got EOF", _channel);
@@ -273,8 +308,39 @@ pub async fn execute(
         }
         #[cfg(feature = "with-sd-card")]
         processing::GCodeValue::M21 => Ok(processing::CodeExecutionSuccess::OK),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+        processing::GCodeValue::M524 => {
+            match _printer_controller
+                .set(hwa::controllers::PrinterControllerEvent::Abort(channel))
+                .await
+            {
+                Ok(_) => {
+                    #[cfg(feature = "with-motion")]
+                    processor.quick_stop().await;
+                    processor.shutdown_heaters().await;
+                    #[cfg(feature = "with-fan-layer")]
+                    processor.fan_layer.lock().await.set_power(0);
+                    processor.write(channel, "echo: Print job aborted\n").await;
+                    Ok(processing::CodeExecutionSuccess::OK)
+                }
+                Err(_e) => {
+                    let s = alloc::format!("echo: M524: Unable to abort: {:?}\n", _e);
+                    processor.write(channel, s.as_str()).await;
+                    Err(processing::CodeExecutionFailure::ERR)
+                }
+            }
+        }
         #[cfg(feature = "with-print-job")]
         processing::GCodeValue::M23(file) => {
+            let file_name = file.clone().unwrap_or_default();
+            match _card_controller.new_stream(file_name.as_str()).await {
+                Ok(stream) => stream.close().await,
+                Err(_e) => {
+                    let s = alloc::format!("open failed, File: {}.\n", file_name);
+                    processor.write(channel, s.as_str()).await;
+                    return Err(processing::CodeExecutionFailure::ERR);
+                }
+            }
             match _printer_controller
                 .set(hwa::controllers::PrinterControllerEvent::SetFile(
                     channel,
@@ -295,8 +361,7 @@ pub async fn execute(
                         .event_bus
                         .publish_event(EventStatus::not_containing(EventFlags::JOB_COMPLETED))
                         .await;
-                    // TODO
-                    Ok(processing::CodeExecutionSuccess::CONSUMED)
+                    Ok(processing::CodeExecutionSuccess::OK)
                 }
                 Err(_e) => {
                     let s = alloc::format!("echo: M23: Unable to set: {:?}\n", _e);
@@ -391,9 +456,11 @@ async fn report(
             }
         }
         Err(_e) => {
-            hwa::info!("Control sending ERR");
-            let s = alloc::format!("error; {} ({:?})\n", gc, _e);
+            hwa::warn!("Control sending ERR for {} ({:?})", gc, _e);
+            let s = alloc::format!("{} {} ({:?})\n", ERR_PREFIX, gc, _e);
             processor.write(channel, s.as_str()).await;
+            // Every command gets an `ok`, so that hosts (OctoPrint, Pronterface...) do not stall
+            processor.write_ok(channel).await;
         }
     }
 }

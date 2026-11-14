@@ -1,7 +1,8 @@
-![Minimum Rust: 1.85](https://img.shields.io/badge/Minimum%20Rust%20Version-1.85-green.svg)
+![Minimum Rust: 1.99](https://img.shields.io/badge/Minimum%20Rust%20Version-1.99-green.svg)
 [![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
 ![CI](https://github.com/cbruiz/printhor/actions/workflows/rust.yml/badge.svg)
-[![Coverage Status](https://coveralls.io/repos/github/cbruiz/printhor/badge.svg?branch=main)](https://coveralls.io/github/cbruiz/printhor?branch=main)[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Coverage Status](https://coveralls.io/repos/github/cbruiz/printhor/badge.svg?branch=main)](https://coveralls.io/github/cbruiz/printhor?branch=main)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
 
 <h3>Printhor: The highly reliable but not necessarily functional 3D printer and robotics firmware</h3>
@@ -10,23 +11,23 @@
 
 # Overview
 
-Printhor is a generic and hardware-agnostic (firmware) framework for FDM printers, CNC, Engravers and robots implemented in Rust.
+Printhor is a generic and hardware-agnostic (firmware) framework for FDM printers, CNC machines, engravers and robots, implemented in Rust.
 
-Basically, it's a GCode interpreter capable to process a stream of GCodes (position and control orders), schedule them, compute a motion profile on the fly and finally perform the hardware level instructions (step pulses, PWM signals, ... or even dataframes broadcast for a dedicated break-board) in real time.
+Basically, it's a GCode interpreter capable of processing a stream of GCodes (position and control orders), scheduling them, computing a motion profile on the fly and finally performing the hardware level instructions (step pulses, PWM signals, ... or even data frames broadcast to a dedicated breakout board) in real time.
 
-There are many productive firmwares in the community like gbrl, marlin, reprap, etc. Each single one have a concrete approach and guidelines.
-This one aims to provide a research environment for not strictly productive purpose, but a reliable platform with the following goals:
+There are many production-grade firmwares in the community, like grbl, Marlin, RepRapFirmware, etc. Each one has its own approach and guidelines.
+This one aims to provide a research environment, not strictly meant for production, but a reliable platform with the following goals:
 * Robustness.
 * Numerical stability.
-* Efficient resources utilization and close-to-preemptive multitasking.
+* Efficient use of resources and close-to-preemptive multitasking.
   * Leverage async multitasking.
-  * Maintain busy waits to a minimum.
-  * Ensure leverage of DMA transfers as much as possible.
-  * Ensure of leverage of FPU when present.
+  * Keep busy waits to a minimum.
+  * Leverage DMA transfers as much as possible.
+  * Leverage the FPU when present.
 * Simplicity.
 * Clarity and readability.
 
-Which means the principal short-term goal is not to develop a productive firmware for final user rather than providing an environment in which anyone can test and experiment any concrete approach to feed the community with good quality, state-of-the-art or innovative feature increments.
+This means that the main short-term goal is not to develop a production firmware for end users, but to provide an environment in which anyone can test and experiment with any concrete approach, to feed the community with good quality, state-of-the-art or innovative feature increments.
 
 ## Documentation (work in progress)
 
@@ -34,7 +35,7 @@ Which means the principal short-term goal is not to develop a productive firmwar
 
 ## Features
 * "Clean" hardware abstraction.
-* Vector geometry / linear algebra calculus for kinematics
+* Vector geometry and linear algebra for kinematics
   * Smooth acceleration and jerk limited motion plan leveraging "Trajectory with Double S Velocity Profile" [1]. Briefly explained at [Plan implementation](printhor/src/bin/motion/motion_profile_traits.rs) and visually explained in [Printhor motion plan. A simplified overview of the velocity integration](https://www.geogebra.org/m/hwpnmhcu) (GeoGebra).
     
     "[1] Biagiotti, L., Melchiorri, C.: Trajectory Planning for Automatic Machines and Robots. Springer, Heidelberg (2008). [DOI:10.1007/978-3-540-85629-0](https://doi.org/10.1007/978-3-540-85629-0)"
@@ -43,29 +44,31 @@ Which means the principal short-term goal is not to develop a productive firmwar
 * Precise thermal control plan with PID. Briefly explained at [Temperature Task](printhor/src/bin/tasks/task_temperature.rs).
 * Simple, secure and efficient resource and peripherals sharing.
 * Clean and simple async tasks coordination/intercommunication with event based primitives.
-* High behavior customization.
-* Low level action distribution leveraging dedicated break-boards. 
+* Highly customizable behavior.
+* Low-level action distribution leveraging dedicated breakout boards.
 * Wide GCode standard coverage.
 * Native simulation for development and benchmarking.
-  * Many others coming.
+* Many others coming.
 
 ## Overall status
 
-<table>
-    <thead>
-        <tr><th>Feature</th><th>Status</th></tr>
-    </thead>
-    <tbody>
-        <tr><td>Simulation</td><td>Functional</td></tr>
-        <tr><td>I/O</td><td>Functional</td></tr>
-        <tr><td>State and logic</td><td>Testing</td></tr>
-        <tr><td>Motion Planner</td><td>Functional</td></tr>
-        <tr><td>Kinematics</td><td>Testing</td></tr>
-        <tr><td>Thermal Control</td><td>Incubation</td></tr>
-        <tr><td>Display</td><td>TODO</td></tr>
-        <tr><td>Laser/CNC</td><td>Draft</td></tr>
-    </tbody>
-</table>
+| Feature | Status | Notes |
+|---|---|---|
+| Native simulation | Functional | Mocked peripherals, stdin prompt, integration tests |
+| I/O (serial, USB, SD card) | Functional | Host line-number protocol (`N`/`M110`); SD listing and print jobs |
+| GCode parsing | Functional | See [GCode compliance](#gcode-compliance) for the codes actually supported |
+| State and logic | Testing | Event bus, print job control (pause/resume/abort), alarms (`M112`/`M999`) |
+| Motion planner | Functional | Double S (jerk-limited) profile, look-ahead chaining, quick stop (`M410`) |
+| Arcs (`G2`/`G3`) and Bézier splines (`G5`) | Testing | `with-arcs` / `with-beziers` features, segmented into linear moves |
+| Kinematics | Testing | Cartesian, Core-XY, anthropomorphic; Delta in Draft |
+| Homing | Testing | Abortable with `M410`/`M112`; home offsets (`M206`) |
+| Thermal control | Testing | PID, autotune (`M303`), thermal runaway / sensor fault protection |
+| Firmware retraction | Testing | `G10`/`G11`, `M207`/`M208` |
+| Settings persistence | Testing | `M500`/`M501` (`with-eeprom`), `M502`/`M503` |
+| Probing | Draft | `G31`/`G32` (sled dock/undock) only |
+| Bed leveling | TODO | `G29*` accepted without effect; `with-mesh-leveling` has no implementation yet |
+| Laser/CNC | Draft | `M3`/`M4`/`M5` accepted without effect |
+| Display | TODO | `M117` is echoed to the display channel |
 
 Assuming the following maturity convention:
  TODO -> Draft -> Incubation -> Testing -> Functional -> Done
@@ -99,25 +102,25 @@ git submodule update --init --recursive
 ### Build
 
 The minimal toolset required to build and run is:
-* Rust, in order to compile 
-* cargo binutils, to produce the image binary that you can flash via SD card as usual.
-* __[Optionally]__ probe-run, if you are willing to use a SWD/Jlink debugger (https://github.com/knurling-rs/probe-run)
-* __[Optionally]__ cargo-bloat and cargo-size utils are great to analyze the code size.
+* Rust, to compile.
+* cargo-binutils, to produce the binary image that you can flash via SD card as usual.
+* __[Optionally]__ probe-rs, if you are willing to use an SWD/J-Link debug probe (https://probe.rs)
+* __[Optionally]__ cargo-bloat and `cargo size` (from cargo-binutils) are great to analyze the code size.
 * __[Optionally]__ A Rust IDE, like [Jetbrains IDE suite](https://www.jetbrains.com/) (IntelliJ, CLion or RustRover) (recommended), Visual Studio Code (also fine), or others
 
 ### Prerequisites: Rust and toolchain
 
-This crate requires **Rust >= 1.85**.
+This crate requires **Rust >= 1.99**, on the stable channel (selected by `rust-toolchain.toml`).
 
 For official guide, please see https://www.rust-lang.org/tools/install
 
-However, if your os is unix based:
+However, if your OS is Unix-based:
 ```shell
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup update
 ```
 
-For microcontrollers (currently few stm32 only), the specific target toolchain and cargo binutils is also needed:
+For microcontrollers (STM32 and RP2040), the target toolchains and cargo-binutils are also needed:
 
 ```shell
 rustup target add thumbv7em-none-eabi
@@ -127,18 +130,18 @@ rustup component add llvm-tools
 cargo install cargo-binutils
 ```
 
-Optionally, for debugging on baremetal microcontrollers (currently few stm32 only):
+Optionally, for flashing and debugging bare-metal microcontrollers with a debug probe (the runner configured in `.cargo/config.toml`):
 
 ```shell
-cargo install probe-run
+cargo install probe-rs-tools --locked
 ```
 
 ## Native simulator backend
 
 The framework with a set of mocked peripherals (most of them without any logic).
-Provides a commandline GCode prompt on standard input
+It provides a command-line GCode prompt on the standard input.
 
-__Note__: A SDCard image in ./data/ is required to be open if sd-card feature is enabled in native :)
+__Note__: The native simulator enables the `with-sd-card` feature by default, which needs the SD card image `data/sdcard.img`.
 
 ```shell
 RUST_LOG=info cargo run --bin printhor
@@ -146,14 +149,14 @@ RUST_LOG=info cargo run --bin printhor
 
 ### Integration tests
 
-Native backend has a special feature called integration-test which is used to perform "some kind of" integration tests. Still
-pending to be matured.
+The native backend has a special feature, `integration-test`, which runs "some kind of" integration tests. It is still
+immature.
 
 ```shell
 RUST_LOG=info cargo run --features integration-test --bin printhor
 ```
 
-Testing with GCode sender though socat
+Testing with a GCode sender through socat:
 
 ```shell
 RUST_LOG=info cargo build --bin printhor
@@ -168,11 +171,11 @@ socat pty,link=printhor,rawer EXEC:target/debug/printhor,pty,rawer
 | [MKS Robin Nano v3.1](hwi-boards/printhor-hwi_mks_robin_nano/README.md)                           | Almost Functional |
 | [Nucleo-f410rb + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
 | [Nucleo-l476rg + Arduino CNC Hat v3](hwi-boards/printhor-hwi_nucleo_64_arduino_cnc_hat/README.md) | Almost Functional |
-| [Raspberry PI 2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                    | Draft             |
+| [Raspberry Pi RP2040](hwi-boards/printhor-hwi_rp_2040/README.md)                                  | Draft             |
 | [ESP32-S3-WROOM](hwi-boards/printhor-hwi_esp32/README.md)                                         | Naïve Skeleton    |
 
 
-## Extra utilery
+## Extra utilities
 
 A simple stand-alone std binary to experiment with motion plan and see what it does (kind of playground):
 
@@ -196,13 +199,13 @@ There are (currently) two plots:
   * A continuous blue curve for the analytic __ideal__ position estimation.
   * A stepped gray curve for the __real__ (discrete) position. 
 * Velocity:
-  * A continuos green curve for the online derivation of __ideal__ position datapoints.
-  * A slopped gray polyline for the online derivation of __real__ (discrete) position datapoints in the sampling interval.
+  * A continuous green curve for the online derivation of __ideal__ position datapoints.
+  * A sloped gray polyline for the online derivation of __real__ (discrete) position datapoints in the sampling interval.
 
 ### Example output with the deprecated plotting style:
 ![alt text](printhor/img/motion_plan_old.png "Motion Plan")
 
-This plot were self-explanatory, but deprecated in flavor of the previous one.
+This plot was self-explanatory, but it has been deprecated in favor of the previous one.
 We are keeping it because it is clear and useful for a high level understanding.
 
 # TODO
@@ -218,893 +221,120 @@ We are keeping it because it is clear and useful for a high level understanding.
 
 # Customization
 
-For a single board, the high-level features (hotend, hotbed, fan, SDCard, ... ) can be activated/deactivated by cargo feature selection or directly editing the main cargo.toml
-In order to change pins, writing/adapting some code is required, as of now. There is not expected to be, at least in the short term any kind of configuration file.
+For a single board, the high-level features (hotend, hotbed, fan, SD card, ...) can be enabled/disabled by cargo feature selection or by directly editing `printhor/Cargo.toml`.
+In order to change pins, writing/adapting some code is required, as of now. No configuration file is planned, at least in the short term.
 
-Because of that limitation (Rust makes that hard to tackle because of the strict typing), a clean code organization it's crucial and pretty straightforward to assume slight customizations by editing code.  
+Because of that limitation (strict typing makes it hard to tackle in Rust), a clean code organization is crucial, so that slight customizations are straightforward to make by editing the code.
 
 # Architecture
 
-printhor is composed by the following architectural blocks
-* embassy-rs, as the harware and async foundation https://github.com/embassy-rs/embassy
-* async-gcode, as the core of the GCode interpretation  https://github.com/ithinuel/async-gcode
+Printhor is composed of the following architectural blocks:
+* embassy-rs, as the hardware and async foundation https://github.com/embassy-rs/embassy
+* async-gcode, as the core of the GCode interpretation: a fork (https://github.com/cbruiz/async-gcode, the `libs/async-gcode` submodule) of https://github.com/ithinuel/async-gcode
 * printhor-hwa-common (within the project), as the hardware abstraction layer contract and common machinery
-* A set of crates (withn the project) for each harware/board. Currently:
+* printhor-hwa-utils (within the project), with the mutex strategies and other utilities shared by the HWA and HWI crates
+* A set of crates (within the project), one for each hardware/board. Currently:
   * printhor-hwi_native : The native simulator.
-  * printhor-hwi_skr_mini_e3 : A BigTreeTech SKR Mini E3 V3 (See [Datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0)).
-  * printhor-hwi_mks_robin_nano_v3_1 : (See [Datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1))
-  * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [Datasheets/NUCLEO-L476RG_CNC_SHIELD_V3](datasheets/NUCLEO-L476RG))
+  * printhor-hwi_skr_mini_e3 : A BigTreeTech SKR Mini E3 V3.0 (See [datasheets/SKR_MINI_E3-V3.0](datasheets/SKR_MINI_E3-V3.0)).
+  * printhor-hwi_mks_robin_nano : A MKS Robin Nano V3.1 (See [datasheets/MKS-ROBIN-NANO-V3.1](datasheets/MKS-ROBIN-NANO-V3.1)).
+  * printhor-hwi_nucleo_64_arduino_cnc_hat : A Nucleo-64 development board (currently L476RG or F410RB) with Arduino CNC Shield v3.x (See [datasheets/NUCLEO-L476RG](datasheets/NUCLEO-L476RG) and [datasheets/NUCLEO-F410RB](datasheets/NUCLEO-F410RB)).
+  * printhor-hwi_rp_2040 : A Raspberry Pi RP2040 board (See [datasheets/RP2040](datasheets/RP2040)).
+  * printhor-hwi_esp32 : An ESP32-S3-WROOM board (skeleton).
 
-Intentionally, traits are in general avoided in HWI layer when not strictly required in favour of defining a more decoupled and easy to evolve interface based on:
+In general, traits are intentionally avoided in the HWI layer when not strictly required, in favor of defining a more decoupled and easy to evolve interface based on:
 * type aliases
 * module exports
 
 # Similar, related software and shout-outs
 
-* https://embassy.dev/ Rust Embassy; The next-generation framework for embedded applications. The most important and core framework conforming the pillars of this project.
+* https://embassy.dev/ Rust Embassy; The next-generation framework for embedded applications. The most important and core framework, forming the pillars of this project.
 * https://github.com/ithinuel/async-gcode This powerful GCode implementation is a fundamental piece of this project.
-* https://github.com/nviennot/turbo-resin Exactly the same a printhor but focused in resin printers. The Project which inspired and motivated this one.
-* https://github.com/marcbone/s_curve A really appreciated know-how. The current selected motion profile is based on this work, but intense reinterpretation were performed to make this project work.The book referenced by the author of s-curve is a key reading considered to conduct the goals of the motion plan. Nevertheless, our implementation is still un-mature/unproven to ask for a merge. 
+* https://github.com/nviennot/turbo-resin The same idea as Printhor, but focused on resin printers. The project that inspired and motivated this one.
+* https://github.com/marcbone/s_curve Much appreciated know-how. The current motion profile is based on this work, but it was heavily reinterpreted to make this project work. The book referenced by the author of s_curve is a key reading for the goals of the motion plan. Nevertheless, our implementation is still too immature/unproven to ask for a merge.
 
-# GCode compliancy [Draft]
+# GCode compliance
 
-Gcode implementation status, as from https://reprap.org/wiki/G-code
+This list reflects the codes the firmware actually parses and executes (`printhor/src/bin/processing`).
+Codes are only available when the listed cargo feature is enabled.
 
-* WIP: Work In Progress
-* ILT: In the Long Term
-* TODO: To Do
+Status:
+* DONE: Implemented
+* DONE*: Implemented with limitations
+* Accepted: Acknowledged with `ok`. Only the default/only supported mode exists
+* Accepted, no effect: Acknowledged with `ok` for compatibility with slicers, but does nothing yet
 
-<table><thead>
-    <tr><th>M-Code</th><th>Mode</th><th>Description</th><th>Status</th></tr>
-</thead><tbody>
-    <tr>
-        <td rowspan="1">M</td>
-        <td>*</td>
-        <td>List all supported m-codes</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M0</td>
-        <td>*</td>
-        <td>Stop or Unconditional stop</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M1</td>
-        <td>*</td>
-        <td>Sleep or Conditional stop</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M2</td>
-        <td>*</td>
-        <td>Program End</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="2">M3</td>
-        <td>CNC</td>
-        <td>Spindle On, Clockwise</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td>LASER</td>
-        <td>Laser On</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="2">M4</td>
-        <td>CNC</td>
-        <td>Spindle On, Counter-Clockwise</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td>LASER</td>
-        <td>Laser On</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="2">M5</td>
-        <td>CNC</td>
-        <td>Spindle Off</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td>LASER</td>
-        <td>Laser Off</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M6</td>
-        <td>*</td>
-        <td>Tool change</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M7</td>
-        <td>CNC</td>
-        <td>Mist Coolant On</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M8</td>
-        <td>CNC</td>
-        <td>Flood Coolant On</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M9</td>
-        <td>CNC</td>
-        <td>Coolant Off</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M10</td>
-        <td>CNC</td>
-        <td>Vacuum On</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M11</td>
-        <td>CNC</td>
-        <td>Vacuum Off</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M13</td>
-        <td>CNC</td>
-        <td>Spindle on (clockwise rotation) and coolant on (flood)</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M16</td>
-        <td>CNC</td>
-        <td>Expected Printer Check</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M17</td>
-        <td>*</td>
-        <td>Enable/Power all stepper motors</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M18</td>
-        <td>*</td>
-        <td>Disable all stepper motors</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M20</td>
-        <td>*</td>
-        <td>List SD card</td>
-        <td>DONE*</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M21</td>
-        <td>*</td>
-        <td>Initialize SD card</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M22</td>
-        <td>*</td>
-        <td>Release SD card</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M23</td>
-        <td>*</td>
-        <td>Select SD file</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M24</td>
-        <td>*</td>
-        <td>Start/resume SD print</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M25</td>
-        <td>*</td>
-        <td>Pause SD print</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M26</td>
-        <td>*</td>
-        <td>Set SD position</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M27</td>
-        <td>*</td>
-        <td>Report SD print status</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M30</td>
-        <td>*</td>
-        <td>Program Stop</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M31</td>
-        <td>*</td>
-        <td>Output time since last M109 or SD card start to serial</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M32</td>
-        <td>*</td>
-        <td>Select file and start SD print</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M33</td>
-        <td>*</td>
-        <td>Get the long name for an SD card file or folder</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M37</td>
-        <td>*</td>
-        <td>Simulation mode (Dry run mode)</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M73</td>
-        <td>*</td>
-        <td>Set/Get build percentage</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M79</td>
-        <td>*</td>
-        <td>Soft reset</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M80</td>
-        <td>*</td>
-        <td>ATX Power On</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M81</td>
-        <td>*</td>
-        <td>ATX Power Off</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M82</td>
-        <td>*</td>
-        <td>Set extruder to absolute mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M83</td>
-        <td>*</td>
-        <td>Set extruder to relative mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M92</td>
-        <td>*</td>
-        <td>Set axis_steps_per_unit</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M104</td>
-        <td>FFF</td>
-        <td>Set Hotend Temperature</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M105</td>
-        <td>FFF</td>
-        <td>Get Hotend and/or Hotbed Temperature</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M106</td>
-        <td>*</td>
-        <td>Fan On</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M107</td>
-        <td>*</td>
-        <td>Fan Off</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M109</td>
-        <td>FFF</td>
-        <td>Set Extruder Temperature and Wait</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M110</td>
-        <td>*</td>
-        <td>Set Current Line Number</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M111</td>
-        <td>*</td>
-        <td>Set Debug Level</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M112</td>
-        <td>*</td>
-        <td>Full (Emergency) Stop</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M114</td>
-        <td>*</td>
-        <td>Get Current Position</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M115</td>
-        <td>*</td>
-        <td>Get Firmware Version and Capabilities</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M116</td>
-        <td>*</td>
-        <td>Wait</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M117</td>
-        <td>*</td>
-        <td>Display message</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M118</td>
-        <td>*</td>
-        <td>Echo message on host</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M119</td>
-        <td>*</td>
-        <td>Get Endstop Status</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M120</td>
-        <td>*</td>
-        <td>Enable endstop detection</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M121</td>
-        <td>*</td>
-        <td>Disable endstop detection</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M140</td>
-        <td>*</td>
-        <td>Set hotbed Temperature (Fast)</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M190</td>
-        <td>*</td>
-        <td>Wait for hotbed temperature</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M200</td>
-        <td>*</td>
-        <td>Set filament diameter</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M201</td>
-        <td>*</td>
-        <td>Set max acceleration</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M202</td>
-        <td>*</td>
-        <td>Set max travel acceleration</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M203</td>
-        <td>*</td>
-        <td>Set maximum feedrate</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M204</td>
-        <td>*</td>
-        <td>Set default acceleration</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M205</td>
-        <td>*</td>
-        <td>Advanced settings</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M206</td>
-        <td>*</td>
-        <td>Offset axes</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M207</td>
-        <td>*</td>
-        <td>Set retract length</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M208</td>
-        <td>*</td>
-        <td>Set unretract length</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M209</td>
-        <td>FFF</td>
-        <td>Enable automatic retract</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M210</td>
-        <td>*</td>
-        <td>Set homing feedrates</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M211</td>
-        <td>*</td>
-        <td>Disable/Enable software endstops</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M212</td>
-        <td>*</td>
-        <td>Set Bed Level Sensor Offset</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M218</td>
-        <td>*</td>
-        <td>Set Hotend Offset</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M220</td>
-        <td>*</td>
-        <td>Set speed factor override percentage</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M221</td>
-        <td>*</td>
-        <td>Set extrude factor override percentage</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M290</td>
-        <td>*</td>
-        <td>Babystepping</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M302</td>
-        <td>*</td>
-        <td>Allow cold extrudes</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M305</td>
-        <td>*</td>
-        <td>Set thermistor and ADC parameters</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M350</td>
-        <td>*</td>
-        <td>Set microstepping mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M360</td>
-        <td>*</td>
-        <td>Report firmware configuration</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M400</td>
-        <td>*</td>
-        <td>Wait for current moves to finish</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M401</td>
-        <td>*</td>
-        <td>Deploy Z Probe</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M402</td>
-        <td>*</td>
-        <td>Stow Z Probe</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M404</td>
-        <td>*</td>
-        <td>Filament width and nozzle diameter</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M407</td>
-        <td>*</td>
-        <td>Display filament diameter</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M410</td>
-        <td>*</td>
-        <td>Quick-Stop</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M422</td>
-        <td>*</td>
-        <td>Set a G34 Point</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M450</td>
-        <td>*</td>
-        <td>Report Printer Mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M451</td>
-        <td>*</td>
-        <td>Select FFF Printer Mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M452</td>
-        <td>*</td>
-        <td>Select Laser Printer Mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M453</td>
-        <td>*</td>
-        <td>Select CNC Printer Mode</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M500</td>
-        <td>*</td>
-        <td>Store parameters in non-volatile storage</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M501</td>
-        <td>*</td>
-        <td>Read parameters from EEPROM</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M502</td>
-        <td>*</td>
-        <td>Restore Default Settings</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M503</td>
-        <td>*</td>
-        <td>Report Current Settings</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M504</td>
-        <td>*</td>
-        <td>Validate EEPROM</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M505</td>
-        <td>*</td>
-        <td>Clear EEPROM and RESET Printer</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M510</td>
-        <td>*</td>
-        <td>Lock Machine</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M511</td>
-        <td>*</td>
-        <td>Unlock Machine with Passcode</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M512</td>
-        <td>*</td>
-        <td>Set Passcode</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M513</td>
-        <td>*</td>
-        <td>Remove Password</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M524</td>
-        <td>*</td>
-        <td>Abort SD Printing</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M555</td>
-        <td>*</td>
-        <td>Set compatibility</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M563</td>
-        <td>*</td>
-        <td>Define or remove a tool</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M851</td>
-        <td>*</td>
-        <td>Set Z-Probe Offset</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M862.1</td>
-        <td>*</td>
-        <td>Check nozzle diameter</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M862.2</td>
-        <td>*</td>
-        <td>Check model code</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M862.3</td>
-        <td>*</td>
-        <td>Model name</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">M929</td>
-        <td>*</td>
-        <td>Start/stop event logging to SD card</td>
-        <td>ILT</td>
-    </tr>
+Any other code is rejected with an error (not implemented).
 
-</tbody></table>
+| Code | Feature | Description | Status |
+|---|---|---|---|
+| G | * | List the supported G-codes | DONE |
+| G0 | `with-motion` | Rapid move (`X Y Z F`) | DONE |
+| G1 | `with-motion` | Linear move (`X Y Z E F`) | DONE |
+| G2 / G3 | `with-arcs` | Arc move CW / CCW in the XY plane (`I J` center offset or `R` radius; helical with `Z`) | DONE |
+| G4 | `with-motion` | Dwell (`P` ms / `S` s) | DONE |
+| G5 | `with-beziers` | Cubic Bézier spline in the XY plane (`I J` = 1st control point relative to the start, `P Q` = 2nd control point relative to the end). Both pairs are required | DONE |
+| G10 / G11 | `with-motion` | Firmware retract / recover (needs `with-e-axis`; otherwise accepted without effect) | DONE |
+| G17 | `with-motion` | XY plane selection (the only plane supported) | Accepted |
+| G21 | `with-motion` | Millimeter units (the only unit supported) | Accepted |
+| G28 | `with-motion` | Homing. Abortable with `M410`/`M112` | DONE |
+| G29 / G29.1 / G29.2 | `with-motion` | Bed leveling | Accepted, no effect |
+| G31 / G32 | `with-probe` | Dock / undock the probe sled | DONE |
+| G80 | `with-motion` | Cancel canned cycle | Accepted |
+| G90 / G91 | `with-motion` | Absolute / relative positioning | DONE |
+| G92 | `with-motion` | Set position. Also declares the position as known (manual homing) | DONE |
+| G94 | `with-motion` | Units per minute feed rate mode (the only mode supported) | Accepted |
+| M | * | List the supported M-codes | DONE |
+| M2 | `with-sd-card + with-print-job` | Program end / abort the print job | DONE |
+| M3 / M4 / M5 | * | Spindle or laser on (CW/CCW) / off | Accepted, no effect |
+| M20 | `with-sd-card` | List SD files (files only, no directories) | DONE* |
+| M21 | `with-sd-card` | Init SD card | DONE |
+| M23 | `with-sd-card + with-print-job` | Select SD file | DONE |
+| M24 | `with-sd-card + with-print-job` | Start / resume SD print | DONE |
+| M25 | `with-sd-card + with-print-job` | Pause SD print | DONE |
+| M37 | * | Dry run mode (`S1` on / `S0` off) | DONE |
+| M73 | * | Set print progress | Accepted, no effect |
+| M79 | * | Software reset | DONE |
+| M80 / M81 | `with-ps-on` | ATX power on / off | DONE |
+| M82 / M83 | `with-motion` | Absolute / relative extruder mode | DONE |
+| M84 | `with-motion` | Disable steppers | DONE |
+| M92 | `with-motion` | Set steps per unit | DONE |
+| M100 | * | Report memory usage | DONE |
+| M104 / M109 | `with-hot-end` | Set / wait for hot-end temperature | DONE |
+| M105 | * | Report temperatures | DONE |
+| M106 / M107 | `with-fan-layer` | Layer fan on (`S` 0-255) / off | DONE |
+| M110 | * | Set current line number (host protocol) | DONE |
+| M112 | * | Emergency stop (heaters off, motion aborted, alarm until `M999`) | DONE |
+| M114 | `with-motion` | Report current position | DONE |
+| M115 | * | Firmware version and capabilities | DONE |
+| M117 | * | Display message | DONE |
+| M118 | * | Echo message to the host | DONE |
+| M119 | `with-motion` | Report endstop status | DONE |
+| M140 / M190 | `with-hot-bed` | Set / wait for bed temperature | DONE |
+| M201 | `with-motion` | Max acceleration per axis | DONE |
+| M203 | `with-motion` | Max feed rate per axis | DONE |
+| M204 | `with-motion` | Starting acceleration (`P` print, `T` travel) | DONE |
+| M205 | * | Jerk settings: accepted but ignored (Marlin semantics differ from the S-curve jerk) | Accepted, no effect |
+| M206 | `with-motion` | Home offsets (applied on the next homing, as Marlin) | DONE |
+| M207 / M208 | `with-motion + with-e-axis` | Firmware retraction / recover settings | DONE |
+| M220 | * | Feed rate percentage | DONE |
+| M221 | * | Flow percentage | DONE |
+| M301 / M304 | `with-hot-end / with-hot-bed` | Hot-end / bed PID constants | DONE |
+| M302 | `with-hot-end + with-e-axis` | Cold extrusion prevention | DONE |
+| M303 | `with-hot-end or with-hot-bed` | PID autotune | DONE |
+| M400 | `with-motion` | Wait for the queued moves to finish | DONE |
+| M410 | `with-motion` | Quick stop: abort the current move and discard the queue | DONE |
+| M500 / M501 | `with-eeprom` | Store / restore settings | DONE |
+| M502 | * | Restore default settings | DONE |
+| M503 | * | Report current settings | DONE |
+| M524 | `with-sd-card` | Abort SD print | DONE |
+| M862.1 / M862.3 | `with-motion` | Prusa printer checks | Accepted, no effect |
+| M900 | `with-motion` | Linear advance factor | Accepted, no effect |
+| M907 | `with-motion` | Motor current | Accepted, no effect |
+| M999 | * | Clear the alarm state (homing required afterward) | DONE |
 
-<table><thead>
-    <tr><th>G-Code</th><th>Mode</th><th>Description</th><th>Status</th></tr>
-</thead><tbody>
-    <tr>
-        <td rowspan="1">G</td>
-        <td>*</td>
-        <td>List all supported g-codes</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G0</td>
-        <td>*</td>
-        <td>Rapid Move</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G1</td>
-        <td>*</td>
-        <td>Linear Move</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G4</td>
-        <td>*</td>
-        <td>Dwell</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G10</td>
-        <td>*</td>
-        <td>Retract/Set coordinate system</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G11</td>
-        <td>*</td>
-        <td>Unretract</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G17</td>
-        <td>*</td>
-        <td>Plane Selection XY (default)</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G18</td>
-        <td>CNC</td>
-        <td>Plane Selection ZX</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G19</td>
-        <td>CNC</td>
-        <td>Plane Selection YZ</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G21</td>
-        <td>*</td>
-        <td>Set Units to Millimeters</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G22</td>
-        <td>*</td>
-        <td>Firmware Retract</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G23</td>
-        <td>*</td>
-        <td>Firmware Recover</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G28</td>
-        <td>*</td>
-        <td>Move to Origin (Home)</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G29</td>
-        <td>*</td>
-        <td>Detailed Z-Probe</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G29.1</td>
-        <td>*</td>
-        <td>Set Z probe head offset</td>
-        <td>WIP</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G29.2</td>
-        <td>*</td>
-        <td>Set Z probe head offset calculated from toolhead position</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G30</td>
-        <td>*</td>
-        <td>Single Z-Probe</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G31</td>
-        <td>*</td>
-        <td>Set or Report Current Probe status</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G38.2</td>
-        <td>*</td>
-        <td>Probe toward workpiece, stop on contact, signal error if failure</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G38.3</td>
-        <td>*</td>
-        <td>Probe toward workpiece, stop on contact</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G38.4</td>
-        <td>*</td>
-        <td>Probe away from workpiece, stop on loss of contact, signal error if failure</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G38.5</td>
-        <td>*</td>
-        <td>Probe away from workpiece, stop on loss of contact</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G80</td>
-        <td>*</td>
-        <td>Mesh-based Z probe</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G81</td>
-        <td>*</td>
-        <td>Mesh bed leveling status</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G82</td>
-        <td>*</td>
-        <td>Single Z probe at current location</td>
-        <td>TODO</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G90</td>
-        <td>*</td>
-        <td>Set to Absolute Positioning</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G91</td>
-        <td>*</td>
-        <td>Set to Relative Positioning</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G92</td>
-        <td>*</td>
-        <td>Set Position</td>
-        <td>DONE</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G92.1</td>
-        <td>*</td>
-        <td>Reset axis offsets (and parameters 5211-5219) to zero. (X Y Z A B C U V W)</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G92.2</td>
-        <td>*</td>
-        <td>Reset axis offsets to zero</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G93</td>
-        <td>CNC</td>
-        <td>Feed Rate Mode (Inverse Time Mode)</td>
-        <td>ILT</td>
-    </tr>
-    <tr>
-        <td rowspan="1">G94</td>
-        <td>CNC</td>
-        <td>Feed Rate Mode (Units per Minute)</td>
-        <td>ILT</td>
-    </tr>
+With `grbl-compat`, the GRBL status query (`?`) and `$` commands are also accepted.
 
-</tbody></table>
-    
- 
-### 3DPrint Gcode sample
+### 3D print GCode sample
 
     M73 P0 R87
     M73 Q0 S87
@@ -1168,7 +398,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
     G1 X90.788 Y67.532 E.45862
     G1 X91.819 Y67.297 E.03317
 
-### Laser Gcode sample
+### Laser GCode sample
     G21
     G90
     M206 X-45. Y-10. Z-20.; Laser offset
@@ -1188,7 +418,7 @@ Gcode implementation status, as from https://reprap.org/wiki/G-code
 
 ```bash
 brew install bloaty
-bloaty ./bloaty -d sections,symbols -n 0  --csv | bloaty-metafile > meta.json
+bloaty target/thumbv7em-none-eabihf/release/printhor -d sections,symbols -n 0 --csv | bloaty-metafile > meta.json
 ```
 
 # Appendix

@@ -12,7 +12,7 @@ mod types;
 pub(crate) mod io;
 
 #[global_allocator]
-static HEAP: alloc_cortex_m::CortexMHeap = alloc_cortex_m::CortexMHeap::empty();
+static HEAP: embedded_alloc::LlffHeap = embedded_alloc::LlffHeap::empty();
 
 pub struct Contract;
 impl HwiContract for Contract {
@@ -36,17 +36,17 @@ impl HwiContract for Contract {
 
     //#region "Watchdog settings"
 
-    #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
+    #[const_env::env_item("WATCHDOG_TIMEOUT_US")]
     const WATCHDOG_TIMEOUT_US: u32 = 5_000_000;
 
     //#endregion
 
     //#region "Memory management/tracking settings"
 
-    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
+    #[const_env::env_item("MAX_HEAP_SIZE_BYTES")]
     const MAX_HEAP_SIZE_BYTES: usize = 512;
 
-    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
+    #[const_env::env_item("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 16384;
 
     fn heap_current_size() -> usize {
@@ -104,13 +104,13 @@ impl HwiContract for Contract {
                         hwa::make_vector!(x=2, y=2, z=2, e=2)
                     };
 
-                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
 
-                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
-                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 10;
                 }
             }
@@ -124,38 +124,38 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_MV")]
             const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_BETA: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_PULL_UP_RESISTANCE")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = todo!("fill me");
         }
     }
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_MV")]
             const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_THERM_BETA")]
+            #[const_env::env_item("HOT_BED_THERM_BETA")]
             const HOT_BED_THERM_BETA: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_NOMINAL_RESISTANCE")]
             const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_PULL_UP_RESISTANCE")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = todo!("fill me");
         }
     }
@@ -191,7 +191,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            #[const_env::env_item("SERIAL_USB_PACKET_SIZE")]
             const SERIAL_USB_PACKET_SIZE: usize = 64;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
@@ -202,9 +202,9 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-1")] {
 
-            #[const_env::from_env("SERIAL_PORT1_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT1_BAUD_RATE")]
             const SERIAL_PORT1_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT1_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT1_RX_BUFFER_SIZE")]
             const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort1Tx = types::SerialPort1TxMutexStrategy;
@@ -214,9 +214,9 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT2_BAUD_RATE")]
             const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT2_RX_BUFFER_SIZE")]
             const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
@@ -226,7 +226,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-spi")] {
-            #[const_env::from_env("SPI_FREQUENCY")]
+            #[const_env::env_item("SPI_FREQUENCY")]
             const SPI_FREQUENCY: u32 = 20_000_000;
             type SpiController = types::Spi1MutexStrategyType;
         }
@@ -234,7 +234,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-i2c")] {
-            #[const_env::from_env("I2C_FREQUENCY")]
+            #[const_env::env_item("I2C_FREQUENCY")]
             const I2C_FREQUENCY: u32 = 100_000;
             type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
         }
@@ -359,6 +359,25 @@ impl HwiContract for Contract {
 
         let p = embassy_rp::init(config);
 
+        // embassy-rp >= 0.9 requires binding the DMA channel interrupts too. All RP2040 DMA
+        // channels share DMA_IRQ_0, which can only be bound once, so every binding lives here.
+        embassy_rp::bind_interrupts!(struct BoardIrqs {
+            #[cfg(feature = "with-serial-port-1")]
+            UART0_IRQ => embassy_rp::uart::InterruptHandler<embassy_rp::peripherals::UART0>;
+            #[cfg(feature = "with-serial-port-2")]
+            UART1_IRQ => embassy_rp::uart::InterruptHandler<embassy_rp::peripherals::UART1>;
+            #[cfg(any(feature = "with-serial-port-1", feature = "with-serial-port-2"))]
+            DMA_IRQ_0 =>
+                #[cfg(feature = "with-serial-port-1")]
+                embassy_rp::dma::InterruptHandler<embassy_rp::peripherals::DMA_CH0>,
+                #[cfg(feature = "with-serial-port-1")]
+                embassy_rp::dma::InterruptHandler<embassy_rp::peripherals::DMA_CH1>,
+                #[cfg(feature = "with-serial-port-2")]
+                embassy_rp::dma::InterruptHandler<embassy_rp::peripherals::DMA_CH2>,
+                #[cfg(feature = "with-serial-port-2")]
+                embassy_rp::dma::InterruptHandler<embassy_rp::peripherals::DMA_CH3>;
+        });
+
         let watchdog = device::Watchdog::new(p.WATCHDOG);
 
         //#endregion
@@ -399,10 +418,6 @@ impl HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-1"))] {
 
-                embassy_rp::bind_interrupts!(struct SerialPort1IRQs {
-                    UART0_IRQ => embassy_rp::uart::InterruptHandler<embassy_rp::peripherals::UART0>;
-                });
-
                 let mut cfg = embassy_rp::uart::Config::default();
                 cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
                 cfg.data_bits = embassy_rp::uart::DataBits::DataBits8;
@@ -411,7 +426,7 @@ impl HwiContract for Contract {
 
                 let dev = embassy_rp::uart::Uart::new(p.UART0,
                     p.PIN_0, p.PIN_1,
-                    SerialPort1IRQs,
+                    BoardIrqs,
                     p.DMA_CH0,
                     p.DMA_CH1,
                     cfg,
@@ -435,10 +450,6 @@ impl HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-serial-port-2"))] {
 
-                embassy_rp::bind_interrupts!(struct SerialPort2IRQs {
-                    UART1_IRQ => embassy_rp::uart::InterruptHandler<embassy_rp::peripherals::UART1>;
-                });
-
                 let mut cfg = embassy_rp::uart::Config::default();
                 cfg.baudrate = Self::SERIAL_PORT1_BAUD_RATE;
                 cfg.data_bits = embassy_rp::uart::DataBits::DataBits8;
@@ -447,7 +458,7 @@ impl HwiContract for Contract {
 
                 let dev = embassy_rp::uart::Uart::new(p.UART1,
                     p.PIN_4, p.PIN_5,
-                    SerialPort2IRQs,
+                    BoardIrqs,
                     p.DMA_CH2,
                     p.DMA_CH3,
                     cfg,
@@ -703,7 +714,7 @@ impl HwiContract for Contract {
                 spawn_core1(core, stack, || {
                     let executor1 =
                         EXECUTOR_HIGH.init::<{ crate::MAX_STATIC_MEMORY }>("executor1", Executor::new());
-                    executor1.run(|spawner| unwrap!(spawner.spawn(r.token)))
+                    executor1.run(|spawner| spawner.spawn(r.token))
                 });
                 Ok(())
                 

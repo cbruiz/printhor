@@ -54,7 +54,7 @@ pub struct WatchdogAdapter {
 }
 
 impl WatchdogAdapter {
-    pub fn new(peri: embassy_rp::peripherals::WATCHDOG) -> Self {
+    pub fn new(peri: embassy_rp::Peri<'static, embassy_rp::peripherals::WATCHDOG>) -> Self {
         Self {
             inner: embassy_rp::watchdog::Watchdog::new(peri),
         }
@@ -67,7 +67,10 @@ impl WatchdogAdapter {
     }
     #[inline(always)]
     pub fn pet(&mut self) {
-        self.inner.feed();
+        // embassy-rp >= 0.9: feed() reloads with an explicit period
+        self.inner.feed(embassy_time::Duration::from_micros(
+            crate::Contract::WATCHDOG_TIMEOUT_US as u64,
+        ));
     }
 }
 

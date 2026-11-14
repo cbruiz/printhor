@@ -135,6 +135,12 @@ where
         let _ = card.release_device();
     }
 
+    /// Number of entries (directories and files) currently opened on the card
+    #[allow(unused)]
+    pub async fn opened_entries_count(&self) -> usize {
+        self.card.lock().await.opened_entries_count()
+    }
+
     pub async fn list_dir<F>(&self, dir: &hwa::sd_card::EntryRef, func: F)
     where
         F: FnMut(&embedded_sdmmc::DirEntry),
@@ -329,7 +335,12 @@ where
     }
 }
 
-const BSIZE: usize = 32;
+/// Read chunk of the G-code stream: one SD block. Every chunk locks the card controller and
+/// retains/releases the device (the SPI bus on real boards), so small chunks multiply that cost
+/// (32-byte chunks were ~16x more calls for the same bytes).
+const BSIZE: usize = 512;
+// BSIZE must fit in u16 because SDCardStream::bytes_read is u16.
+const _: () = assert!(BSIZE <= u16::MAX as usize, "BSIZE exceeds u16::MAX; update bytes_read field type");
 
 pub struct SDCardStream<
     D,
@@ -345,8 +356,8 @@ pub struct SDCardStream<
     buffer: [u8; BSIZE],
     #[cfg(feature = "native")]
     buff_str: String,
-    bytes_read: u8,
-    current_byte_index: u8,
+    bytes_read: u16,
+    current_byte_index: u16,
 }
 
 impl<D, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_OPENED_ENTRIES: usize>
@@ -367,6 +378,17 @@ where
             bytes_read: 0,
             current_byte_index: 0,
         }
+    }
+}
+
+impl<D, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_OPENED_ENTRIES: usize>
+    SDCardStream<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>
+where
+    D: hwa::traits::AsyncSDBlockDevice + 'static,
+{
+    /// Closes the stream, releasing the opened entries of its path
+    pub async fn close(mut self) {
+        self.card_controller.close_path(&mut self.path).await;
     }
 }
 
@@ -394,26 +416,29 @@ where
                     #[cfg(feature = "native")]
                     {
                         self.buff_str =
-                            String::from_utf8(self.buffer[..bytes_read].to_vec()).unwrap();
+                            String::from_utf8_lossy(&self.buffer[..bytes_read]).into_owned();
                     }
-                    self.bytes_read = bytes_read as u8;
+                    self.bytes_read = bytes_read as u16;
                     if bytes_read > 0 {
                         let byte = self.buffer[self.current_byte_index as usize];
                         self.current_byte_index = 1;
                         Some(Ok(byte))
                     } else {
-                        // FIXME not correct
-                        self.bytes_read = 0;
-                        self.current_byte_index = 0;
+                        // EOF: no more data in this block
+                        hwa::debug!("SDCardStream: EOF reached");
                         None
                     }
                 }
-                Err(_) => Some(Err(async_gcode::Error::NumberOverflow)),
+                Err(e) => {
+                    hwa::error!("SDCardStream: read error: {:?}", e);
+                    None
+                }
             }
         }
     }
 
     async fn recovery_check(&mut self) {
-        //TODO
+        self.bytes_read = 0;
+        self.current_byte_index = 0;
     }
 }

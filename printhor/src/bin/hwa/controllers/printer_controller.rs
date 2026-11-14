@@ -203,6 +203,16 @@ impl PrinterController {
         }
     }
 
+    /// Marks the current job as finished (Ready), with no event. Called when the job ends normally
+    pub fn finish(&self, channel: CommChannel) {
+        self.status.signal(PrinterControllerStatus::Ready(channel));
+    }
+
+    /// Whether a job is selected or running
+    pub async fn is_busy(&self) -> bool {
+        !matches!(self.status.wait().await, PrinterControllerStatus::Ready(_))
+    }
+
     pub async fn consume(&self) -> PrinterControllerEvent {
         let evt = self.channel.wait().await;
         self.channel.reset();

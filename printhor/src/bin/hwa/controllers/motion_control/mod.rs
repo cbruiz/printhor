@@ -67,9 +67,13 @@ pub enum PlanEntry {
     ///
     /// *_1: Segment* - The motion segment.
     ///
-    /// *_2: CommChannel* - The input channel requesting the move.
+    /// *_2: DeferAction* - The defer action.
     ///
-    /// *_3: bool* - Indicates if motion is deferred or not.
+    /// *_3: CommChannel* - The input channel requesting the move.
+    ///
+    /// *_4: bool* - Indicates if motion is deferred or not.
+    ///
+    /// *_5: u32* - The motion id (sequential number, for tracceability)
     PlannedMove(Segment, hwa::DeferAction, hwa::CommChannel, bool, u32),
     /// A homing action request.
     ///

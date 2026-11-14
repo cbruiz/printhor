@@ -22,6 +22,8 @@ use hwa::math::TVector;
 /// - `tool_power`: Tool power utilized in the segment.
 /// - `constraints`: Motion constraints applicable to the segment.
 #[derive(Clone, Copy)]
+#[cfg_attr(feature = "with-log", derive(Debug))]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 pub struct Segment {
     /// Initial speed at the entry of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub speed_enter_su_s: Real,
@@ -34,6 +36,15 @@ pub struct Segment {
     #[cfg(feature = "with-motion-chaining")]
     /// Acceleration at the exit of the segment in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
     pub accel_exit_su_s: Real,
+
+    #[cfg(feature = "with-motion-chaining")]
+    pub t_1: Real,
+
+    #[cfg(feature = "with-motion-chaining")]
+    pub t_2: Real,
+
+    #[cfg(feature = "with-motion-chaining")]
+    pub t_3: Real,
     
     pub speed_target_su_s: Real,
     /// Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
@@ -94,12 +105,22 @@ mod tests {
     use super::*;
     use crate::hwa::math;
     use crate::hwa::math::TVector;
-    use crate::motion::{Constraints, SCurveMotionProfile, SegmentSampler};
+    use crate::motion::{Constraints, HybridMotionProfile, SegmentSampler};
 
     fn dummy_segment() -> Segment {
         Segment {
             speed_enter_su_s: hwa::make_real!(10.0),
             speed_exit_su_s: hwa::make_real!(15.0),
+            #[cfg(feature = "with-motion-chaining")]
+            accel_enter_su_s: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            accel_exit_su_s: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            t_1: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            t_2: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            t_3: math::ZERO,
             speed_target_su_s: hwa::make_real!(20.0),
             displacement_su: (TVector::one() * math::ONE_HUNDRED).norm2().unwrap(),
             speed_enter_constrained_su_s: hwa::make_real!(10.0),
@@ -152,6 +173,16 @@ mod tests {
     #[test]
     fn test_segment_deviation_correction_in_boundaries() {
         let mut segment = Segment {
+            #[cfg(feature = "with-motion-chaining")]
+            accel_enter_su_s: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            accel_exit_su_s: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            t_1: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            t_2: math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            t_3: math::ZERO,
             speed_enter_su_s: hwa::make_real!(1.0),
             speed_exit_su_s: hwa::make_real!(1.0),
             speed_target_su_s: hwa::make_real!(10.0),
@@ -190,10 +221,14 @@ mod tests {
             a_max: hwa::make_real!(2.0),
             j_max: hwa::make_real!(1.0),
         };
-        let motion_profile = SCurveMotionProfile::compute(
+        let motion_profile = HybridMotionProfile::compute(
             hwa::make_real!(20.0),
             hwa::make_real!(0.0),
             hwa::make_real!(5.0),
+            #[cfg(feature = "with-motion-chaining")]
+            math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            math::ZERO,
             &constraints,
             true,
         )
@@ -225,10 +260,14 @@ mod tests {
             a_max: hwa::make_real!(2.0),
             j_max: hwa::make_real!(1.0),
         };
-        let motion_profile = SCurveMotionProfile::compute(
+        let motion_profile = HybridMotionProfile::compute(
             hwa::make_real!(20.0),
             hwa::make_real!(0.0),
             hwa::make_real!(5.0),
+            #[cfg(feature = "with-motion-chaining")]
+            math::ZERO,
+            #[cfg(feature = "with-motion-chaining")]
+            math::ZERO,
             &constraints,
             true,
         )
@@ -237,12 +276,12 @@ mod tests {
         let sampling_period = hwa::make_real!(100.0);
         let mut sampler = SegmentSampler::new(&motion_profile, sampling_period);
 
-        assert!(sampler.instant_speed().is_negligible());
+        assert!(sampler.current_speed().is_negligible());
 
         // Set to a time past the end of the profile
         let micro_segment = sampler.next();
 
-        assert!(!sampler.instant_speed().is_negligible());
+        assert!(!sampler.current_speed().is_negligible());
 
         assert_eq!(micro_segment.unwrap(), motion_profile.end_pos(), "At end");
         let micro_segment = sampler.next();

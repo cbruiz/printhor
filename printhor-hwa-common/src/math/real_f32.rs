@@ -19,8 +19,20 @@ impl Real {
         Self(num)
     }
 
+    /// Powers of ten that are exact in `f32` (`10^k = 2^k·5^k`, `5^10 < 2^24`): the same values
+    /// `powi` produces, without its loop.
+    const POW10: [f32; 11] = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10];
+
+    /// `num / 10^scale`. Hot path (G-code literals, loop counters, µs → s): `scale == 0` is a
+    /// plain conversion and small scales use an exact table, bit-identical to `powi`.
     pub fn from_lit(num: i64, scale: u32) -> Self {
-        let s = FloatCore::powi(10.0f32, scale as i32);
+        if scale == 0 {
+            return Self(num as f32);
+        }
+        let s = match Self::POW10.get(scale as usize) {
+            Some(p) => *p,
+            None => FloatCore::powi(10.0f32, scale as i32),
+        };
         Self((num as f32) / s)
     }
 
@@ -128,8 +140,20 @@ impl Real {
         } else if self == math::ZERO {
             Some(math::ZERO)
         } else {
-            // The famous inverse square root approximation of 'ID Software'
-            let r = math::ONE / Real::from_inner(Self::quake_isqrt(self.inner()));
+            // y ≈ 1/sqrt(x) (fast inverse square root + 3 Newton iterations).
+            // sqrt(x) = x·y avoids the costly division of the former `1/y`, and a final
+            // division-free Markstein/Heron correction `r += ½·y·(x - r²)` brings the
+            // result to ≤ 1 ulp (the uncorrected estimate drifts a few ulps).
+            // Subnormals defeat the exponent-based seed: scale them by an even power of two
+            // (exact) and undo it on the result (sqrt(x·4^k) = sqrt(x)·2^k)
+            let (x, unscale) = if self.0 < f32::MIN_POSITIVE {
+                (self.0 * 16777216.0f32, 1.0 / 4096.0f32)
+            } else {
+                (self.0, 1.0)
+            };
+            let y = Self::quake_isqrt(x);
+            let r0 = x * y;
+            let r = Real::from_inner((r0 + 0.5f32 * y * (x - r0 * r0)) * unscale);
             if self < math::EPSILON {
                 hwa::trace!("Very small sqrt calculation: sqrt({:?}) = {:?} ", self.0, r);
             }
@@ -157,8 +181,6 @@ impl Real {
 
         let x1p24 = f32::from_bits(0x4b800000); // 0x1p24f === 2 ^ 24
 
-        let mut r: f32;
-        let mut t: f32;
         let mut ui: u32 = x.to_bits();
         let mut hx: u32 = ui & 0x7fffffff;
 
@@ -185,17 +207,20 @@ impl Real {
         /*
          * First step Newton iteration
          */
-        t = f32::from_bits(ui);
-        r = t * t * t;
-        t = t * (x + x + r) / (x + r + r);
+        // The Newton steps are performed in f64 (as libm's cbrtf does): in f32, `t³` and `2x + t³`
+        // under/overflow for very small/large magnitudes
+        let xd = x as f64;
+        let mut t = f32::from_bits(ui) as f64;
+        let mut r = t * t * t;
+        t = t * (xd + xd + r) / (xd + r + r);
 
         /*
          * Second step Newton iteration
          */
         r = t * t * t;
-        t = t * (x + x + r) / (x + r + r);
+        t = t * (xd + xd + r) / (xd + r + r);
 
-        t
+        t as f32
     }
 
     /// Computes the cube root of the argument.

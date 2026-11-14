@@ -8,7 +8,7 @@ use critical_section::Mutex as CsMutex;
 use embassy_sync::waitqueue::WakerRegistration;
 
 /// The size of the timer queue.
-#[const_env::from_env("TIMER_QUEUE_SIZE")]
+#[const_env::env_item("TIMER_QUEUE_SIZE")]
 const TIMER_QUEUE_SIZE: usize = 4;
 
 /// Represents the state of the soft timer driver.
@@ -87,56 +87,52 @@ impl StepPlanExecutor {
     /// ```
     fn try_consume(&mut self) -> bool {
         if self.num_queued > 0 {
+            // Checked before dequeuing: the plan stays queued (and accounted) until the actuator
+            // is set up, instead of being dropped while still counted in `num_queued`.
+            let Some(pins) = self.actuator.as_ref() else {
+                hwa::error!("try_consume: actuator not initialized");
+                return false;
+            };
             if let Some(timer) = self.queue[self.head as usize].take() {
                 self.current = timer;
                 self.tick_count = 0;
 
-                match self.actuator.as_ref() {
-                    None => {
-                        unreachable!("Driver instance not set")
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "with-motion-broadcast")] {
+                        if pins.broadcast_channel.try_send(
+                            hwa::MotionBroadcastEvent::Delta(self.current.delta)
+                        ).is_err() {
+                            hwa::warn!("Unable to broadcast: Overflow");
+                        }
+                        self.current.ref_time_us += self.current.interval_width
                     }
-                    Some(pins) => {
-                        cfg_if::cfg_if! {
-                            if #[cfg(feature = "with-motion-broadcast")] {
-                                if pins.broadcast_channel.try_send(
-                                    hwa::MotionBroadcastEvent::Delta(self.current.delta)
-                                ).is_err() {
-                                    hwa::warn!("Unable to broadcast: Overflow");
-                                }
-                                self.current.ref_time_us += self.current.interval_width
-                            }
-                        }
+                }
 
-                        cfg_if::cfg_if! {
-                            if #[cfg(feature = "debug-signals")] {
-                                use core::ops::BitAnd;
-                                let dir_mask = hwa::CoordSel::all_axis().bitand(
-                                    (hwa::CoordSel::Y | hwa::CoordSel::X).complement()
-                                );
-                                pins.set_forward_direction(hwa::CoordSel::Y, hwa::CoordSel::Y);
-                            }
-                            else {
-                                let dir_mask = hwa::CoordSel::all_axis();
-                            }
-                        }
-
-                        if self.current_stepper_enable_flags != self.current.stepper_enable_flags {
-                            pins.enable_steppers(self.current.stepper_enable_flags);
-                            self.current_stepper_enable_flags = self.current.stepper_enable_flags;
-                        }
-                        if self.current_stepper_dir_fwd_flags != self.current.stepper_dir_fwd_flags
-                        {
-                            pins.set_forward_direction(
-                                self.current.stepper_dir_fwd_flags,
-                                dir_mask,
-                            );
-                            self.current_stepper_dir_fwd_flags = self.current.stepper_dir_fwd_flags;
-                        }
+                cfg_if::cfg_if! {
+                    if #[cfg(feature = "debug-signals")] {
+                        use core::ops::BitAnd;
+                        let dir_mask = hwa::CoordSel::all_axis().bitand(
+                            (hwa::CoordSel::Y | hwa::CoordSel::X).complement()
+                        );
+                        pins.set_forward_direction(hwa::CoordSel::Y, hwa::CoordSel::Y);
                     }
+                    else {
+                        let dir_mask = hwa::CoordSel::all_axis();
+                    }
+                }
+
+                if self.current_stepper_enable_flags != self.current.stepper_enable_flags {
+                    pins.enable_steppers(self.current.stepper_enable_flags);
+                    self.current_stepper_enable_flags = self.current.stepper_enable_flags;
+                }
+                if self.current_stepper_dir_fwd_flags != self.current.stepper_dir_fwd_flags {
+                    pins.set_forward_direction(self.current.stepper_dir_fwd_flags, dir_mask);
+                    self.current_stepper_dir_fwd_flags = self.current.stepper_dir_fwd_flags;
                 }
                 hwa::trace!("u-segment dequeued at {}", self.head);
             } else {
-                unreachable!("Unable to deque!!!")
+                hwa::error!("try_consume: queue slot at head={} is empty with num_queued={}", self.head, self.num_queued);
+                return false;
             }
             self.state = StepPlannerExecutorState::Duty;
             self.head += 1;
@@ -223,7 +219,11 @@ impl StepPlanExecutor {
             }
         }
 
-        if self.tick_count >= self.current.interval_width {
+        // A window is only closed once all its steps were emitted. When a window carries more
+        // steps than ticks (feed rate above one step per tick, or rounding at the max feed rate)
+        // it is stretched by the few ticks required instead of silently dropping the remaining
+        // steps (which used to be lost without being accounted in the position).
+        if self.tick_count >= self.current.interval_width && !self.current.has_pending_steps() {
             //hwa::info!("u-segment completed in {} us", self.tick_count);
             if self.try_consume() {}
             cfg_if::cfg_if! {
@@ -477,19 +477,8 @@ impl SoftTimer {
         })
     }
 
-    /// Resets the internal state of the `SoftTimer`.
-    ///
-    /// This method clears the current stepper direction and enable flags, effectively
-    /// resetting the timer to its initial state. The operation is enclosed within a
-    /// critical section to ensure safe concurrent access and modification of the
-    /// internal state.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// let timer = SoftTimer::new();
-    /// timer.reset();
-    /// ```
+    /// Polls a [`push`](Self::push): queues the plan when there is a free slot, or registers
+    /// the waker and returns `Poll::Pending` while the queue is full.
     fn poll_push(
         &self,
         cx: &mut Context<'_>,
@@ -553,34 +542,23 @@ impl SoftTimer {
         poll_fn(move |cx| self.poll_flush(cx))
     }
 
+    /// Forgets the stepper enable and direction state applied so far, so that the next plan
+    /// applies both again.
     ///
-    /// Publishes a flush event to ensure all queued operations in the `SoftTimer`
-    /// are performed before subsequent operations.
-    ///
-    /// This method initializes a future that will resolve to a `FlushResult`,
-    /// which indicates whether the flush operation was completed successfully.
-    /// The process is carried out within a critical section to ensure the internal
-    /// state is safely accessed and modified concurrently.
-    ///
-    /// # Returns
-    ///
-    /// A future resolving to `FlushResult`, detailing the success or failure
-    /// of the flush process.
+    /// It must be called whenever the drivers are enabled, disabled or redirected outside the
+    /// executor (park, `M84`, emergency stop...). Otherwise a plan with the same flags as the
+    /// previous one would skip enabling its drivers and step disabled ones.
     ///
     /// # Example
     ///
     /// ```
     /// let timer = SoftTimer::new();
-    /// let result = timer.flush().await;
-    /// match result {
-    ///     FlushResult::Success => println!("Flush operation completed successfully."),
-    ///     FlushResult::Incomplete => println!("Flush operation was incomplete."),
-    /// }
+    /// timer.reset();
     /// ```
     pub fn reset(&self) {
         critical_section::with(|cs| {
             let mut r = self.0.borrow_ref_mut(cs);
-            r.current_stepper_dir_fwd_flags = hwa::CoordSel::UNSET;
+            r.current_stepper_enable_flags = hwa::CoordSel::UNSET;
             r.current_stepper_dir_fwd_flags = hwa::CoordSel::UNSET;
         });
     }
@@ -729,3 +707,6 @@ pub extern "Rust" fn do_tick() {
         }
     });
 }
+
+#[cfg(test)]
+mod executor_tests;

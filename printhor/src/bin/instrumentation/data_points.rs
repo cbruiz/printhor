@@ -30,7 +30,9 @@ impl DataPointsDimension {
     }
 
     pub fn accumulate_offset(&mut self) {
-        self.point_offset += self.last_point;
+        // last_point already contains the absolute position (point_offset + segment_displacement).
+        // Set the new offset to this absolute value so the next segment starts from here.
+        self.point_offset = self.last_point;
     }
 
     pub fn displace_time(&mut self) {
@@ -62,7 +64,6 @@ impl DataPointsDimension {
 }
 
 pub(crate) struct DataPoints {
-    pub sampling_width: f64,
     pub reference_time: f64,
     pub current_segment_id: usize,
     pub current_micro_segment_id: usize,
@@ -83,9 +84,7 @@ pub(crate) struct DataPoints {
 
 impl DataPoints {
     pub fn new() -> Self {
-        use hwa::HwiContract;
         Self {
-            sampling_width: 1.0 / hwa::Contract::MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY as f64,
             reference_time: 0.0,
             current_segment_id: 0,
             current_micro_segment_id: 0,
@@ -105,7 +104,7 @@ impl DataPoints {
         }
     }
 
-    pub fn segment_starts(&mut self, _trajectory: &motion::SCurveMotionProfile) {
+    pub fn segment_starts(&mut self, _trajectory: &motion::HybridMotionProfile) {
         self.current_segment_id += 1;
         self.current_micro_segment_id = 0;
         self.current_interval = 0;
@@ -114,7 +113,9 @@ impl DataPoints {
     }
     
     pub fn segment_ends(&mut self) {
-        self.total_displacement += self.sampled_positions.last_point;
+        // last_point is absolute (point_offset + segment_displacement); subtract current
+        // offset to get only this segment's contribution.
+        self.total_displacement += self.sampled_positions.last_point - self.sampled_positions.point_offset;
         self.segment_marks.push(self.reference_time);
         self.sampled_positions.accumulate_offset();
         self.sampled_positions.displace_time();
@@ -145,8 +146,9 @@ impl DataPoints {
         hwa::math::Real::from_f32(self.total_displacement as f32)
     }
 
-    pub fn sampling_tick(&mut self, sampler: &motion::SegmentSampler<motion::SCurveMotionProfile>) {
-        self.reference_time += self.sampling_width;
+    pub fn sampling_tick(&mut self, sampler: &motion::SegmentSampler<motion::HybridMotionProfile>) {
+        // Actual width of this window (the last one of a segment may differ from the period)
+        self.reference_time += sampler.dt().to_f64();
         hwa::debug!("[s-plot] segment sampled at {:.4}", self.reference_time);
         
         let interval = sampler.current_interval();
@@ -161,7 +163,7 @@ impl DataPoints {
         );
         self.sampled_velocities.push(
             self.reference_time,
-            sampler.current_velocity().to_f64(),
+            sampler.current_speed().to_f64(),
         );
         self.derived_velocities.push(
             self.reference_time,
@@ -199,5 +201,22 @@ impl DataPoints {
 
     pub fn max_acceleration(&self) -> Option<f64> {
         self.sampled_accelerations.max
+    }
+
+    pub fn write_csv(&self, path: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut file = std::fs::File::create(path)?;
+        writeln!(file, "time,position,velocity,acceleration")?;
+        for i in 0..self.sampled_positions.times.len() {
+            writeln!(
+                file,
+                "{:.6},{:.6},{:.6},{:.6}",
+                self.sampled_positions.times[i],
+                self.sampled_positions.points[i],
+                self.sampled_velocities.points[i],
+                self.sampled_accelerations.points[i]
+            )?;
+        }
+        Ok(())
     }
 }

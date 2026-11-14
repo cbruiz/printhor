@@ -105,6 +105,14 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        pub type EepromController = hwa::StaticAsyncController<
+            <hwa::Contract as HwiContract>::EepromMutexStrategy
+        >;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
         pub type PSOnController = hwa::StaticSyncController<
             <hwa::Contract as HwiContract>::PSOnMutexStrategy

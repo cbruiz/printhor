@@ -4,11 +4,15 @@ use std::io::{stdout, Write};
 use embassy_executor::SendSpawner;
 use embassy_sync::pipe::Pipe;
 use embassy_time::{Duration, with_timeout};
-use async_std::io::ReadExt;
+use smol::io::AsyncReadExt;
 use printhor_hwa_common::HwiContract;
 use crate::board::TERMINATION;
 
 pub static SERIAL_PIPE: Pipe<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}> = Pipe::<hwa::AsyncCsMutexType, {crate::Contract::SERIAL_PORT1_RX_BUFFER_SIZE}>::new();
+
+/// When enabled (`Some`), what the firmware writes to serial port 1 is also appended here, so that
+/// host-side tests can check the responses. See [crate::test_hooks].
+pub static SERIAL_PORT_1_CAPTURE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 #[embassy_executor::task(pool_size=1)]
 pub async fn task_mocked_uart() {
 
@@ -18,7 +22,8 @@ pub async fn task_mocked_uart() {
     // Another solution could be leveraging a wrapper/crate on top of native select() with the proper ioctl on stdin, but is not worthy in this case.
     // Unbuffered I/O requirement for piping simulator with Universal Gcode Sender and others by socat.
 
-    let mut stream = async_std::io::stdin();
+    // Blocking stdin moved to smol's thread pool (same approach async-std used internally)
+    let mut stream = smol::Unblock::new(std::io::stdin());
     let mut buf = [0u8; 1];
     let mut error_reading = false;
 
@@ -64,7 +69,7 @@ pub struct MockedUart {
 impl MockedUart {
     pub(crate) fn new(spawner: SendSpawner) -> Self {
 
-        spawner.spawn(task_mocked_uart()).unwrap();
+        spawner.spawn(task_mocked_uart().unwrap());
 
         Self {
             spawner,
@@ -104,7 +109,11 @@ impl MockedUartTx {
     pub async fn wrapped_flush(&mut self) {
     }
     pub async fn wrapped_write(&mut self, b: &[u8]) {
-        print!("{}", std::str::from_utf8(b).unwrap());
+        let s = std::str::from_utf8(b).unwrap();
+        if let Some(capture) = SERIAL_PORT_1_CAPTURE.lock().unwrap().as_mut() {
+            capture.push_str(s);
+        }
+        print!("{}", s);
         let _ = stdout().flush().ok();
     }
 }

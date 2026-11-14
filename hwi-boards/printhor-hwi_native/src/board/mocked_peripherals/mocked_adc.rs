@@ -1,23 +1,41 @@
 use printhor_hwa_common as hwa;
-use embassy_time::Instant;
 use crate::board::mocked_peripherals::MockedIOPin;
+use crate::simulation::{self, Heater, Thermistor};
 
+/// A 12-bit ADC whose pins read the thermistors of the simulated heaters (see [crate::simulation])
 pub struct MockedAdc<PERI> {
     _peri: PERI,
-    // For simulation: Time since expected read was required.
-    time_since: Instant,
-    // For simulation: Target expected read.
-    expected_read: u16,
     default_sample: u16,
 }
 impl<PERI> MockedAdc<PERI> {
     pub(crate) fn new(_peri: PERI, default_sample: u16) -> Self {
         Self {
             _peri,
-            time_since: Instant::now(),
-            expected_read: 4000,
             default_sample,
         }
+    }
+}
+
+/// The thermistor of each heater, as configured in the board contract
+#[allow(unused)]
+fn thermistor(heater: Heater) -> Option<Thermistor> {
+    use hwa::HwiContract;
+    type C = crate::board::Contract;
+    match heater {
+        #[cfg(feature = "with-hot-end")]
+        Heater::HotEnd => Some(Thermistor {
+            beta: <C as HwiContract>::HOT_END_THERM_BETA,
+            nominal_resistance: <C as HwiContract>::HOT_END_THERM_NOMINAL_RESISTANCE,
+            pull_up_resistance: <C as HwiContract>::HOT_END_THERM_PULL_UP_RESISTANCE,
+        }),
+        #[cfg(feature = "with-hot-bed")]
+        Heater::HotBed => Some(Thermistor {
+            beta: <C as HwiContract>::HOT_BED_THERM_BETA,
+            nominal_resistance: <C as HwiContract>::HOT_BED_THERM_NOMINAL_RESISTANCE,
+            pull_up_resistance: <C as HwiContract>::HOT_BED_THERM_PULL_UP_RESISTANCE,
+        }),
+        #[allow(unreachable_patterns)]
+        _ => None,
     }
 }
 
@@ -29,17 +47,11 @@ impl<PERI> hwa::traits::UnifiedAdc16 for MockedAdc<PERI> {
         Ok(self.default_sample)
     }
 
-    async fn read_adc(&mut self, _pin: &mut Self::SamplePin) -> u16 {
-        const EXPECTED_TIME: f32 = 10.0f32;
-        let elapsed = self.time_since.elapsed().as_secs() as f32;
-        // Add some noise as measurement * cos( w * t)
-        // for instance: temp_deviation: measurement, w: frequency
-        let noise = 5.0f32 * (0.1f32 * elapsed).cos();
-        let mut simulated_measure = self.expected_read as f32;
-        if elapsed < EXPECTED_TIME {
-            // Simulated linear ramp to reach temp
-            simulated_measure *= (elapsed / EXPECTED_TIME) as f32;
+    async fn read_adc(&mut self, pin: &mut Self::SamplePin) -> u16 {
+        match simulation::thermistor_temperature(pin.id()) {
+            Some((heater, temp)) => thermistor(heater).map(|t| t.sample(temp)).unwrap_or(0),
+            // Nothing connected: floating input
+            None => 0,
         }
-        (5.0f32 + simulated_measure + noise) as u16
     }
 }

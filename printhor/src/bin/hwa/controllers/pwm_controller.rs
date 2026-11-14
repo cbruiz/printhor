@@ -42,12 +42,13 @@ where
         self.pwm.apply_mut(|pwm| {
             if power > 0 {
                 let max_duty = pwm.get_max_duty();
+                let max_duty_u32: u32 = max_duty.into();
                 let duty_result: Result<u32, _> =
-                    (((power as u32) * max_duty.into()) / 100u32).try_into();
+                    (((power as u64) * (max_duty_u32 as u64)) / 100u64).try_into();
                 match duty_result {
                     Ok(duty) => {
                         let d: <H::Resource as Pwm>::Duty = duty.try_into().unwrap_or(max_duty);
-                        hwa::trace!("Set duty: {:?}", d);
+                        hwa::trace!("Set duty: {}", Into::<u32>::into(d));
                         pwm.set_duty(self.pwm_chan, d.min(max_duty));
                         pwm.enable(self.pwm_chan);
                     }
@@ -57,6 +58,8 @@ where
                     }
                 }
             } else {
+                // Duty 0 first, so that the output is driven low (heater MOSFET gate off)
+                pwm.set_duty(self.pwm_chan, 0u16.into());
                 pwm.disable(self.pwm_chan);
             }
         });

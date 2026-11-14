@@ -15,8 +15,23 @@ impl Real {
         Self::from_lit(num, scale)
     }
 
+    /// Powers of ten that are exact in `f64` (`10^k = 2^k·5^k`, `5^22 < 2^53`): the same values
+    /// `powi` produces, without its loop.
+    const POW10: [F; 23] = [
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+        1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+    ];
+
+    /// `num / 10^scale`. Hot path (G-code literals, loop counters, µs → s): `scale == 0` is a
+    /// plain conversion and small scales use an exact table, bit-identical to `powi`.
     pub fn from_lit(num: i64, scale: u32) -> Self {
-        let s = F::powi(10.0, scale as i32);
+        if scale == 0 {
+            return Self(num as F);
+        }
+        let s = match Self::POW10.get(scale as usize) {
+            Some(p) => *p,
+            None => F::powi(10.0, scale as i32),
+        };
         Self((num as F) / s)
     }
 
@@ -223,8 +238,18 @@ impl Real {
         } else if self == math::ZERO {
             Some(math::ZERO)
         } else {
-            // The famous inverse square root approximation of 'ID Software'
-            let r = math::ONE / Real::from_inner(Self::quake_isqrt(self.inner()));
+            // y ≈ 1/sqrt(x). See `quake_isqrt` for the convergence analysis.
+            // sqrt(x) = x·y (no division) plus a division-free Markstein/Heron correction.
+            // Subnormals defeat the exponent-based seed: scale them by an even power of two
+            // (exact) and undo it on the result (sqrt(x·4^k) = sqrt(x)·2^k)
+            let (x, unscale) = if self.0 < f64::MIN_POSITIVE {
+                (self.0 * 18014398509481984.0f64, 1.0 / 134217728.0f64)
+            } else {
+                (self.0, 1.0)
+            };
+            let y = Self::quake_isqrt(x);
+            let r0 = x * y;
+            let r = Real::from_inner((r0 + 0.5 * y * (x - r0 * r0)) * unscale);
             if self < math::EPSILON {
                 hwa::trace!("Very small sqrt calculation: sqrt({:?}) = {:?} ", self.0, r);
             }
@@ -232,11 +257,18 @@ impl Real {
         }
     }
 
+    /// Fast inverse square root with Newton refinement.
+    ///
+    /// The magic-constant seed has a relative error ≈ 3.4e-2 and every Newton step squares it
+    /// (e_{k+1} ≈ 1.5·e_k²): 1.7e-3 → 4.5e-6 → 3e-11 → 1.4e-21.
+    /// **Four** iterations are therefore required to reach f64 precision (ε ≈ 2.2e-16);
+    /// with only three the result was limited to ~3e-11 relative error.
     fn quake_isqrt(number: f64) -> f64 {
         let xhalf = number * 0.5;
         let mut y = f64::from_bits(
             0x5fe6ec85e7de30da_i64.wrapping_sub(number.to_bits() as i64 >> 1) as u64,
         );
+        y = y * (1.5 - xhalf * y * y);
         y = y * (1.5 - xhalf * y * y);
         y = y * (1.5 - xhalf * y * y);
         y = y * (1.5 - xhalf * y * y);
@@ -257,6 +289,10 @@ impl Real {
 
     /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
     pub fn atan2(self, other: Real) -> Self {
+        if self.0 == 0.0 && other.0 == 0.0 {
+            // micromath computes 0/0 at the origin. 0 by convention
+            return Real(0.0);
+        }
         Real(
             micromath::F32(self.0 as f32)
                 .atan2(micromath::F32(other.0 as f32))
@@ -266,7 +302,9 @@ impl Real {
 
     /// Computes the arccosine of a number. Return value is in radians in the range [0, pi] or NaN if the number is outside the range [-1, 1].
     pub fn acos(self) -> Self {
-        Real(self.0.acos())
+        // micromath (f32), like the other transcendental functions of this backend:
+        // `f64::acos` is not available in `core`, so `self.0.acos()` broke the no_std f64 build.
+        Real(<f32 as micromath::F32Ext>::acos(self.0 as f32) as f64)
     }
 
     #[inline]

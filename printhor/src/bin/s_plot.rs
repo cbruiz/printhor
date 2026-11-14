@@ -16,7 +16,44 @@ use hwa::CommChannel;
 #[allow(unused)]
 use hwa::RawHwiResource;
 use hwa::controllers;
-use motion::{MicroSegmentInterpolator, SCurveMotionProfile, SegmentSampler};
+use motion::{MicroSegmentInterpolator, HybridMotionProfile, SegmentSampler};
+
+// ── Scenario helper functions ─────────────────────────────────────────────────
+
+#[allow(dead_code)]
+fn gcode_collinear_x(segments: u32, step_mm: f32, speed_mm_min: Option<f32>) -> instrumentation::gcode::GCodeBuffer {
+    let mut b = instrumentation::gcode::GCodeBuffer::new();
+    let mut x = 0.0f32;
+    for _ in 0..segments {
+        x += step_mm;
+        match speed_mm_min {
+            Some(f) => b.append(&format!("G1 X{:.5} F{:.0}\n", x, f)),
+            None => b.append(&format!("G0 X{:.5}\n", x)),
+        }
+    }
+    b
+}
+
+#[allow(dead_code)]
+fn gcode_reference_collinear(total_mm: f32, speed_mm_min: Option<f32>) -> instrumentation::gcode::GCodeBuffer {
+    let mut b = instrumentation::gcode::GCodeBuffer::new();
+    match speed_mm_min {
+        Some(f) => b.append(&format!("G1 X{:.5} F{:.0}\n", total_mm, f)),
+        None => b.append(&format!("G0 X{:.5}\n", total_mm)),
+    }
+    b
+}
+
+#[allow(dead_code)]
+fn gcode_g92_diagonal() -> instrumentation::gcode::GCodeBuffer {
+    let mut b = instrumentation::gcode::GCodeBuffer::new();
+    b.append("G92 X100.18164 Y105\n");
+    b.append("G1 X99.63526 Y104.99686 F7000 S0\n");
+    b.append("G1 X99.09117 Y104.98748 F7000 S0\n");
+    b.append("G1 X98.54937 Y104.97192 F7000 S0\n");
+    b.append("G1 X98.00986 Y104.95024 F7000 S0\n");
+    b
+}
 
 use tasks::task_stepper::{
     STEPPER_PLANNER_CLOCK_PERIOD_US, STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
@@ -116,12 +153,23 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         let mut gcode_buff = instrumentation::gcode::GCodeBuffer::new();
 
         // standard case: 
+        //gcode_buff.append("G0 X50\n");
+        //gcode_buff.append("G0 X100\n");
+
+        // other case: <- WIP
+
+
+        gcode_buff.append("G0 X10\n");
+        gcode_buff.append("G0 X20\n");
+        gcode_buff.append("G0 X30\n");
+        gcode_buff.append("G0 X40\n");
         gcode_buff.append("G0 X50\n");
-        gcode_buff.append("G0 X0\n");
+
 
         //gcode_buff.append("G0 Z2.2000 F3000; pen up\n");
         //gcode_buff.append("G0 X100.18164 Y105\n");
         //gcode_buff.append("G0 Z1.2000 F3000; pen down\n");
+
 
 
         /*
@@ -130,8 +178,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         gcode_buff.append("G1 X99.09117 Y104.98748 F7000 S0\n");
         gcode_buff.append("G1 X98.54937 Y104.97192 F7000 S0\n");
         gcode_buff.append("G1 X98.00986 Y104.95024 F7000 S0\n");
-        */
-        /*
+*/
+
+
         gcode_buff.append("G1 X97.47261 Y104.92249 F7000 S0\n");
         gcode_buff.append("G1 X96.93764 Y104.88873 F7000 S0\n");
         gcode_buff.append("G1 X96.40494 Y104.84902 F7000 S0\n");
@@ -152,7 +201,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         gcode_buff.append("G1 X88.62661 Y103.55409 F7000 S0\n");
         gcode_buff.append("G1 X88.12357 Y103.42248 F7000 S0\n");
         gcode_buff.append("G1 X87.62321 Y103.28552 F7000 S0\n");
-         */
+
 
         let mut parser =
             processing::GCodeLineParser::new(instrumentation::gcode::BufferStream::new(gcode_buff));
@@ -189,17 +238,40 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                 let position_offset = segment.src_pos - current_real_pos.space_pos;
                 #[cfg(feature = "debug-motion")]
                 hwa::info!(
-                    "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
-                    _order_num,
-                    position_offset,
-                    hwa::Contract::SPACE_UNIT_MAGNITUDE,
-                );
+                        "[task_stepper] order_num:{:?} Correcting offset [{:?}] {}",
+                        _order_num,
+                        position_offset,
+                        hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                    );
                 segment.fix_deviation(
                     &position_offset,
                     motion_planner.motion_config().get_flow_rate_as_real(),
                 );
 
-                match SCurveMotionProfile::compute(
+                hwa::info!(
+                        "[s_plot] order_num:{:?} pre-profile speeds: s={:?} ain={:?} aout={:?} vin={:?} vout={:?} vcin={:?} vcout={:?} target={:?}",
+                        _order_num,
+                        segment.displacement_su,
+                        {
+                            #[cfg(feature = "with-motion-chaining")]
+                            { segment.accel_enter_su_s }
+                            #[cfg(not(feature = "with-motion-chaining"))]
+                            { hwa::math::ZERO }
+                        },
+                        {
+                            #[cfg(feature = "with-motion-chaining")]
+                            { segment.accel_exit_su_s }
+                            #[cfg(not(feature = "with-motion-chaining"))]
+                            { hwa::math::ZERO }
+                        },
+                        segment.speed_enter_su_s,
+                        segment.speed_exit_su_s,
+                        segment.speed_enter_constrained_su_s,
+                        segment.speed_exit_constrained_su_s,
+                        segment.speed_target_su_s,
+                    );
+
+                match HybridMotionProfile::compute(
                     segment.displacement_su,
                     segment.speed_enter_su_s,
                     segment.speed_exit_su_s,
@@ -248,20 +320,28 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
 
                         // Micro-segments interpolation along segment
                         data_points.segment_starts(&trajectory);
+                        let mut v_window_start = {
+                            use motion::MotionProfile;
+                            trajectory.eval_velocity(hwa::math::ZERO)
+                        };
                         loop {
                             // Micro-segment start
 
                             if let Some(estimated_position) = segment_iterator.next() {
                                 data_points.sampling_tick(&segment_iterator);
 
-                                let w = (segment_iterator.dt() * hwa::math::ONE_MILLION).round();
-                                if w.is_negligible() {
-                                    hwa::info!("giving up for any reason");
-                                    break;
-                                }
+                                let w = hwa::math::Real::from_lit(segment_iterator.dt_us().max(1) as i64, 0);
+                                let v_window_end = segment_iterator.current_speed();
                                 let _has_more = micro_segment_interpolator
-                                    .advance_to(estimated_position, w)
+                                    .advance_to_with_velocity(
+                                        estimated_position,
+                                        w,
+                                        v_window_start,
+                                        v_window_end,
+                                        STEPPER_PLANNER_CLOCK_PERIOD_US,
+                                    )
                                     .expect("bad advance");
+                                v_window_start = v_window_end;
 
                                 #[cfg(feature = "debug-motion")]
                                 hwa::info!(
@@ -279,7 +359,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                                 );
 
                                 #[cfg(feature = "verbose-timings")]
-                                let t1 = embassy_time::Instant::now();
+                                let _t1 = embassy_time::Instant::now();
 
                                 let _ = micro_segment_interpolator.state().clone();
                                 let _ = relevant_coords;
@@ -306,14 +386,18 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                         let adv_pos = micro_segment_interpolator.advanced_units();
                         //#[cfg(feature = "debug-motion")]
                         hwa::info!(
-                            "[task_stepper] order_num:{:?} Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, velocity: <{:?}, {:?}, {:?}> {}/s",
+                            "[task_stepper] order_num:{:?} [{:?}] Trajectory advanced. vector displacement space: {:?} [{:#?}] {}, velocity: <v_i={:?} v_lim={:?} v_o={:?}> {}/s, accel: <a_i={:?} a_o={:?}> {}/s^2",
                             _order_num,
+                            trajectory.kind,
                             segment_iterator.current_position(),
                             adv_pos,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE,
                             trajectory.v_i,
                             trajectory.v_lim,
                             trajectory.v_o,
+                            hwa::Contract::SPACE_UNIT_MAGNITUDE,
+                            trajectory.a_i,
+                            trajectory.a_o,
                             hwa::Contract::SPACE_UNIT_MAGNITUDE
                         );
                         #[cfg(feature = "debug-motion")]
@@ -334,8 +418,8 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
                             .motion_status()
                             .update_current_position(_order_num, &pos);
                     }
-                    _ => {
-                        hwa::error!("Unable to compute motion plan. Discarding...");
+                    Err(_e) => {
+                        hwa::error!("Unable to compute motion plan. Discarding. err: {:?}. Segment: {:?}", _e, segment);
                     }
                 }
             }
@@ -360,6 +444,9 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         use gnuplot::{AxesCommon, Figure};
         #[allow(unused)]
         use gnuplot::{DashType, PlotOption};
+
+        hwa::info!("Writing data points to s_plot.csv...");
+        let _ = data_points.write_csv("s_plot.csv");
 
         let mut fg = Figure::new();
 
@@ -387,7 +474,7 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
         fg.set_multiplot_layout(3, 1)
             .set_title(
                 format!(
-                    "{} Double S-Curve velocity profile\n[{:?} segments, {:?} {} displacement, {:?} hz interp, {:?} hz sampling]",
+                    "{} Hybrid S-Curve/Quintic velocity profile\n[{:?} segments, {:?} {} displacement, {:?} hz interp, {:?} hz sampling]",
                     MATH_PRECISION,
                     data_points.num_segments(),
                     data_points.total_displacement(),
@@ -401,59 +488,89 @@ async fn printhor_main(spawner: embassy_executor::Spawner, _keep_feeding: bool) 
             .set_multiplot_fill_order(RowsFirst, Downwards);
 
         // Position panel
-        let position_panel = fg.axes2d();
-        position_panel.set_y_label(
-            format!("Position ({})", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[]
-        );
-        for instant in data_points.interval_marks.iter() {
-            position_panel.arrow(
-                gnuplot::Coordinate::Axis(*instant),
-                gnuplot::Coordinate::Axis(min_position - position_margin),
-                gnuplot::Coordinate::Axis(*instant),
-                gnuplot::Coordinate::Axis(max_position + position_margin), 
-                &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::ArrowSize(0.5)]);
+        {
+            let position_panel = fg.axes2d();
+            position_panel.set_y_label(
+                format!("Position ({})", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[]
+            );
+            for instant in data_points.segment_marks.iter() {
+                position_panel.arrow(
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(min_position - position_margin),
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(max_position + position_margin),
+                    &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::Color("black".into()), PlotOption::ArrowSize(0.5)]);
+            }
+            for instant in data_points.interval_marks.iter() {
+                position_panel.arrow(
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(min_position - position_margin),
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(max_position + position_margin),
+                    &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::ArrowSize(0.5)]);
+            }
+            position_panel.lines(
+                data_points.sampled_positions.times.clone(), data_points.sampled_positions.points.clone(),
+                &[PlotOption::Color("blue".into())]
+            );
+            position_panel.set_x_range(AutoOption::Fix(0.0), AutoOption::Fix(data_points.reference_time));
+            position_panel.set_y_range(AutoOption::Fix(min_position - position_margin), AutoOption::Fix(max_position + position_margin));
         }
-        position_panel.lines(
-            data_points.sampled_positions.times, data_points.sampled_positions.points,
-            &[PlotOption::Color("blue")]
-        );
-        position_panel.set_x_range(AutoOption::Fix(0.0), AutoOption::Fix(data_points.reference_time));
-        position_panel.set_y_range(AutoOption::Fix(min_position - position_margin), AutoOption::Fix(max_position + position_margin));
 
         // Velocity panel
-        let velocity_panel = fg.axes2d();
-        velocity_panel.set_y_label(
-            format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[]
-        );
-        for instant in data_points.interval_marks.iter() {
-            velocity_panel.arrow(
-                gnuplot::Coordinate::Axis(*instant),
-                gnuplot::Coordinate::Axis(min_velocity - position_margin),
-                gnuplot::Coordinate::Axis(*instant),
-                gnuplot::Coordinate::Axis(max_velocity + position_margin),
-                &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::ArrowSize(0.5)]);
+        {
+            let velocity_panel = fg.axes2d();
+            velocity_panel.set_y_label(
+                format!("Velocity ({}/s)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[]
+            );
+            for instant in data_points.segment_marks.iter() {
+                velocity_panel.arrow(
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(min_velocity - velocity_margin),
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(max_velocity + velocity_margin),
+                    &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::Color("black".into()), PlotOption::ArrowSize(0.5)]);
+            }
+            for instant in data_points.interval_marks.iter() {
+                velocity_panel.arrow(
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(min_velocity - velocity_margin),
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(max_velocity + velocity_margin),
+                    &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::ArrowSize(0.5)]);
+            }
+            velocity_panel.lines(data_points.sampled_velocities.times.clone(), data_points.sampled_velocities.points.clone(), &[PlotOption::Color("green".into())]);
+            velocity_panel.set_x_range(AutoOption::Fix(0.0), AutoOption::Fix(data_points.reference_time));
+            velocity_panel.set_y_range(AutoOption::Fix(min_velocity - velocity_margin), AutoOption::Fix(max_velocity + velocity_margin));
         }
-        velocity_panel.lines(data_points.sampled_velocities.times.clone(), data_points.sampled_velocities.points.clone(), &[PlotOption::Color("green")]);
-        velocity_panel.set_x_range(AutoOption::Fix(0.0), AutoOption::Fix(data_points.reference_time));
-        velocity_panel.set_y_range(AutoOption::Fix(min_velocity - velocity_margin), AutoOption::Fix(max_velocity + velocity_margin));
 
         // Acceleration panel
-        let acceleration_panel = fg.axes2d();
-        acceleration_panel.set_y_label(
-            format!("Acceleration ({}/s^2)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[]
-        );
-        for instant in data_points.interval_marks.iter() {
-            acceleration_panel.arrow(
-                gnuplot::Coordinate::Axis(*instant),
-                gnuplot::Coordinate::Axis(min_acceleration - acceleration_margin),
-                gnuplot::Coordinate::Axis(*instant),
-                gnuplot::Coordinate::Axis(max_acceleration + acceleration_margin),
-                &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::ArrowSize(0.5)]);
+        {
+            let acceleration_panel = fg.axes2d();
+            acceleration_panel.set_y_label(
+                format!("Acceleration ({}/s^2)", hwa::Contract::SPACE_UNIT_MAGNITUDE).as_str(), &[]
+            );
+            for instant in data_points.segment_marks.iter() {
+                acceleration_panel.arrow(
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(min_acceleration - acceleration_margin),
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(max_acceleration + acceleration_margin),
+                    &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::Color("black".into()), PlotOption::ArrowSize(0.5)]);
+            }
+            for instant in data_points.interval_marks.iter() {
+                acceleration_panel.arrow(
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(min_acceleration - acceleration_margin),
+                    gnuplot::Coordinate::Axis(*instant),
+                    gnuplot::Coordinate::Axis(max_acceleration + acceleration_margin),
+                    &[PlotOption::ArrowType(gnuplot::NoArrow), PlotOption::ArrowSize(0.5)]);
+            }
+            acceleration_panel.lines(data_points.sampled_accelerations.times.clone(), data_points.sampled_accelerations.points.clone(), &[PlotOption::Color("red".into())]);
+            acceleration_panel.set_x_range(AutoOption::Fix(0.0), AutoOption::Fix(data_points.reference_time));
+            acceleration_panel.set_y_range(AutoOption::Fix(min_acceleration - acceleration_margin), AutoOption::Fix(max_acceleration + acceleration_margin));
         }
-        acceleration_panel.lines(data_points.sampled_accelerations.times.clone(), data_points.sampled_accelerations.points.clone(), &[PlotOption::Color("red")]);
-        acceleration_panel.set_x_range(AutoOption::Fix(0.0), AutoOption::Fix(data_points.reference_time));
-        acceleration_panel.set_y_range(AutoOption::Fix(min_acceleration - acceleration_margin), AutoOption::Fix(max_acceleration + acceleration_margin));
-        
+
 
         #[cfg(not(test))]
         match fg.show_and_keep_running() {
@@ -554,7 +671,7 @@ mod test {
         let executor = hwa::make_static_ref!("Executor", MockedExecutor, MockedExecutor::new());
         // 2. Spawn the [mocked_main] task
         executor.run(|spawner| {
-            let _tk = spawner.must_spawn(mocked_splot_main(spawner));
+            let _tk = spawner.spawn(mocked_splot_main(spawner).unwrap());
         });
     }
 }

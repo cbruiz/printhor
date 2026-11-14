@@ -20,6 +20,14 @@ pub trait WorldToSpaceTransformer {
     fn project_to_world(&self, _space_pos: &TVector<Real>) -> Result<TVector<Real>, ()> {
         Ok(*_space_pos)
     }
+
+    /// Returns the reachable world position closest to `_world_pos` (identity by default).
+    ///
+    /// Kinematics with a bounded workspace (e.g. articulated arms) override it so that the planner
+    /// records the position the effector will actually reach instead of an unreachable target.
+    fn clamp_to_workspace(&self, _world_pos: &TVector<Real>) -> TVector<Real> {
+        *_world_pos
+    }
 }
 
 cfg_if::cfg_if! {
@@ -34,3 +42,6 @@ cfg_if::cfg_if! {
     }
 }
 pub mod cartessian;
+
+#[cfg(test)]
+mod coverage_tests;

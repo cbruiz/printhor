@@ -6,6 +6,7 @@ use std::path::Path;
 use hwa::traits::{AsyncSDBlockDevice, SDBlockDevice};
 use embedded_sdmmc::{Block, BlockCount, BlockIdx};
 
+#[allow(unused)]
 #[derive(Debug, Clone)]
 enum Error {
     #[allow(unused)]
@@ -41,8 +42,8 @@ impl MockedSDCardBlockDevice {
 }
 
 impl AsyncSDBlockDevice for MockedSDCardBlockDevice {
-    async fn do_retain(&self) -> Result<(), ()> {
-        Ok(())
+    fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<> {
+        core::future::ready(Ok(()))
     }
     fn do_release(&self) -> Result<(), ()> {
         Ok(())
@@ -56,7 +57,6 @@ impl SDBlockDevice for MockedSDCardBlockDevice {
         &self,
         blocks: &mut [Block],
         start_block_idx: BlockIdx,
-        _reason: &str,
     ) -> Result<(), Self::Error> {
         self.file
             .borrow_mut()

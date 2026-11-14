@@ -25,8 +25,10 @@ cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
         mod adc_controller;
         pub use adc_controller::GenericAdcController;
-        mod heater_controller;
-        pub use heater_controller::HeaterController;
+        pub mod heater_controller;
+        pub use heater_controller::{
+            AutotuneOutcome, HeaterConfig, HeaterController, HeaterError, HeaterFault,
+        };
     }
 }
 

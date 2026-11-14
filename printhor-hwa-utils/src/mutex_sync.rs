@@ -127,7 +127,6 @@ where
 mod test {
     use crate as hwa;
     use hwa::SyncMutexStrategy;
-    use printhor_hwa_common_macros::make_static_sync_controller;
     use std::ops::Deref;
 
     struct DummyDevice {

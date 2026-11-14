@@ -54,17 +54,17 @@ impl HwiContract for Contract {
 
     //#region "Watchdog settings"
 
-    #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
+    #[const_env::env_item("WATCHDOG_TIMEOUT_US")]
     const WATCHDOG_TIMEOUT_US: u32 = 8_000_000;
 
     //#endregion
 
     //#region "Memory management/tracking settings"
 
-    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
+    #[const_env::env_item("MAX_HEAP_SIZE_BYTES")]
     const MAX_HEAP_SIZE_BYTES: usize = 512;
 
-    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
+    #[const_env::env_item("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 16384;
 
     fn heap_current_size() -> usize {
@@ -112,13 +112,13 @@ impl HwiContract for Contract {
                         hwa::make_vector!(x=2, y=2, z=2, e=2)
                     };
 
-                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
 
-                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
-                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 10;
                 }
                 else {
@@ -135,38 +135,38 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_MV")]
             const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_BETA: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_PULL_UP_RESISTANCE")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = todo!("fill me");
         }
     }
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_MV")]
             const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_THERM_BETA")]
+            #[const_env::env_item("HOT_BED_THERM_BETA")]
             const HOT_BED_THERM_BETA: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_NOMINAL_RESISTANCE")]
             const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = todo!("fill me");
 
-            #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_PULL_UP_RESISTANCE")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = todo!("fill me");
         }
     }
@@ -202,7 +202,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-usb")] {
-            #[const_env::from_env("SERIAL_USB_PACKET_SIZE")]
+            #[const_env::env_item("SERIAL_USB_PACKET_SIZE")]
             const SERIAL_USB_PACKET_SIZE: usize = 64;
 
             type SerialUsbTx = types::SerialUsbTxMutexStrategy;
@@ -213,9 +213,9 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-1")] {
 
-            #[const_env::from_env("SERIAL_PORT1_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT1_BAUD_RATE")]
             const SERIAL_PORT1_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT1_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT1_RX_BUFFER_SIZE")]
             const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort1Tx = types::SerialPort1TxMutexStrategy;
@@ -225,9 +225,9 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT2_BAUD_RATE")]
             const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT2_RX_BUFFER_SIZE")]
             const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
@@ -237,7 +237,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-spi")] {
-            #[const_env::from_env("SPI_FREQUENCY")]
+            #[const_env::env_item("SPI_FREQUENCY")]
             const SPI_FREQUENCY: u32 = 20_000_000;
             type SpiController = types::Spi1MutexStrategyType;
         }
@@ -245,7 +245,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-i2c")] {
-            #[const_env::from_env("I2C_FREQUENCY")]
+            #[const_env::env_item("I2C_FREQUENCY")]
             const I2C_FREQUENCY: u32 = 100_000;
             type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
         }

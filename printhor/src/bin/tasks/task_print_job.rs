@@ -44,7 +44,9 @@ use embassy_time::Instant;
 /// 5. **State Updates**: Publishes events to signal the state of the print job (e.g., `JOB_PAUSED`, `JOB_COMPLETED`).
 ///
 /// The robust handling of print job execution ensures that the 3D printer can efficiently and reliably process and execute the G-code commands.
-/// FIXME: JOB_PAUSE status flag remains!!
+///
+/// Job status flags: `JOB_PAUSED` while a file is selected or the job is paused, `JOB_PRINTING`
+/// while running and `JOB_COMPLETED` when the end of the file is reached.
 #[allow(unused_mut)]
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_print_job(
@@ -65,7 +67,7 @@ pub async fn task_print_job(
         Err(_) => crate::initialization_error(),
     }
 
-    let mut print_job_parser = None;
+    let mut print_job_parser: Option<hwa::types::SDCardLineParser> = None;
     let mut job_time = Duration::from_ticks(0);
 
     loop {
@@ -92,6 +94,10 @@ pub async fn task_print_job(
                     file_path.as_str()
                 );
                 job_time = Duration::from_ticks(0);
+                // A previously selected file is closed before selecting the new one
+                if let Some(p) = print_job_parser.take() {
+                    p.into_stream().close().await;
+                }
                 print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
                     Ok(stream) => {
                         let parser = processing::GCodeLineParser::new(stream);
@@ -122,6 +128,14 @@ pub async fn task_print_job(
                     .await;
             }
             Ok(PrinterControllerEvent::Resume(channel)) => {
+                processor
+                    .event_bus
+                    .publish_event(
+                        EventStatus::containing(EventFlags::JOB_PRINTING)
+                            .and_not_containing(EventFlags::JOB_PAUSED)
+                            .and_not_containing(EventFlags::JOB_COMPLETED),
+                    )
+                    .await;
                 let mut interrupted = false;
                 let mut fatal_error = false;
                 let job_t0 = Instant::now();
@@ -187,7 +201,11 @@ pub async fn task_print_job(
                                         Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
                                             hwa::debug!("[task-print-job] Deferred {} (D)", gcode);
                                             if subscriber.ft_wait_for(_status).await.is_err() {
-                                                // Must pause. Recoverable when SYS_ALARM go down
+                                                // SYS_ALARM (machine halted): the job is aborted
+                                                hwa::error!(
+                                                    "[task-print-job] SYS_ALARM raised. Aborting job"
+                                                );
+                                                fatal_error = true;
                                                 break;
                                             } else {
                                                 hwa::debug!(
@@ -283,6 +301,8 @@ pub async fn task_print_job(
                                         current_line
                                     );
                                 }
+                                // The line number check is only enabled for host channels
+                                processing::GCodeLineParserError::LineNumberMismatch(_) => {}
                             }
                         }
                     }
@@ -310,13 +330,17 @@ pub async fn task_print_job(
                         .event_bus
                         .publish_event(
                             EventStatus::containing(EventFlags::JOB_COMPLETED)
-                                .and_not_containing(EventFlags::JOB_PAUSED),
+                                .and_not_containing(EventFlags::JOB_PAUSED)
+                                .and_not_containing(EventFlags::JOB_PRINTING),
                         )
                         .await;
+                    printer_controller.finish(channel);
+                    processor.write(channel, "Done printing file\n").await;
                     // Job completed or cancelled
+                    // Closing the stream releases the file (and its directories) on the card
                     match print_job_parser.take() {
                         None => {}
-                        Some(mut p) => p.close().await,
+                        Some(p) => p.into_stream().close().await,
                     }
                     hwa::info!(
                         "[task-print-job] Job completed in {:03} seconds",
@@ -324,17 +348,31 @@ pub async fn task_print_job(
                     );
                 }
             }
+            Ok(PrinterControllerEvent::Pause(channel)) => {
+                // The job loop was interrupted. The parser is kept so that M24 resumes from here
+                processor
+                    .event_bus
+                    .publish_event(
+                        EventStatus::containing(EventFlags::JOB_PAUSED)
+                            .and_not_containing(EventFlags::JOB_PRINTING),
+                    )
+                    .await;
+                let _ = channel;
+            }
             Ok(PrinterControllerEvent::Abort(channel)) => {
+                processor
+                    .event_bus
+                    .publish_event(
+                        EventStatus::not_containing(EventFlags::JOB_PAUSED)
+                            .and_not_containing(EventFlags::JOB_PRINTING),
+                    )
+                    .await;
                 processor.write(channel, "echo: Job aborted\n").await;
                 match print_job_parser.take() {
                     None => {}
-                    Some(mut p) => p.close().await,
+                    Some(p) => p.into_stream().close().await,
                 }
                 hwa::debug!("[task-print-job] File done");
-            }
-            Ok(_) => {
-                hwa::warn!("[task-print-job] Unexpected event");
-                continue;
             }
         }
     }

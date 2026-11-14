@@ -34,6 +34,14 @@ pub enum SDCardError {
     NotFound,
 }
 
+impl core::fmt::Display for SDCardError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl core::error::Error for SDCardError {}
+
 pub struct DummyTimeSource {}
 impl TimeSource for DummyTimeSource {
     fn get_timestamp(&self) -> Timestamp {
@@ -103,16 +111,17 @@ where
     where
         D: hwa::traits::AsyncSDBlockDevice,
     {
-        let mut card = VolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
+        let card = VolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
         hwa::debug!("Locking device...");
-        let _ = card.device().do_retain().await;
+        let retain = card.device(|d| d.do_retain());
+        let _ = retain.await;
         hwa::debug!("Opening volume...");
         let vol = card.open_raw_volume(VolumeIdx(partition));
         hwa::debug!("Unlocking device...");
-        let _ = card.device().do_release();
+        let _ = card.device(|d| d.do_release());
         let mut opened_dirs = heapless::Vec::new();
         let mut opened_dirs_ref_counts = heapless::Vec::new();
-        for _ in 0..MAX_DIRS {
+        for _ in 0..MAX_OPENED_ENTRIES {
             let _ = opened_dirs.push(None);
             let _ = opened_dirs_ref_counts.push(RefCounts::empty());
         }
@@ -125,11 +134,12 @@ where
     }
 
     pub async fn retain_device(&mut self) -> Result<(), ()> {
-        self.mgr.device().do_retain().await
+        let retain = self.mgr.device(|d| d.do_retain());
+        retain.await
     }
 
     pub fn release_device(&mut self) -> Result<(), ()> {
-        self.mgr.device().do_release()
+        self.mgr.device(|d| d.do_release())
     }
 
     pub fn open_path(
@@ -185,6 +195,11 @@ where
         }
     }
 
+    /// Number of entries (directories and files) currently opened on the card
+    pub fn opened_entries_count(&self) -> usize {
+        self.opened_entries.iter().filter(|e| e.is_some()).count()
+    }
+
     pub fn release_path(&mut self, _path_stack: &mut heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>) {
         loop {
             match _path_stack.pop() {
@@ -212,7 +227,7 @@ where
                 },
                 Some(Entry::File(file)) => match self.mgr.close_file(file) {
                     Ok(_) => {
-                        hwa::info!("Closed file");
+                        hwa::debug!("Closed file");
                     }
                     Err(_e) => {
                         hwa::error!("Inconsistency error closing file. Continuing anyway");
@@ -370,13 +385,16 @@ where
         }
     }
 
-    pub fn list_dir<F>(&mut self, dir_ref: &EntryRef, func: F)
+    pub fn list_dir<F>(&mut self, dir_ref: &EntryRef, mut func: F)
     where
         F: FnMut(&embedded_sdmmc::DirEntry),
     {
         match &self.opened_entries[dir_ref.0 as usize] {
             Some(Entry::Directory(dir)) => {
-                let _ = self.mgr.iterate_dir(*dir, func);
+                let _ = self.mgr.iterate_dir(*dir, |entry| {
+                    func(entry);
+                    core::ops::ControlFlow::Continue(())
+                });
             }
             Some(Entry::File(_)) => {
                 hwa::error!("Unable to list a file entry")
@@ -438,7 +456,6 @@ mod test {
             &self,
             _blocks: &mut [Block],
             _start_block_idx: BlockIdx,
-            _reason: &str,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -470,8 +487,9 @@ mod test {
         <<H as hwa::AsyncMutexStrategy>::Resource as hwa::traits::SDBlockDevice>::Error:
             From<SDCardError>,
     {
-        async fn do_retain(&self) -> Result<(), ()> {
-            self.dev.retain().await
+        fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<H> {
+            let dev = self.dev.clone();
+            async move { dev.retain().await }
         }
 
         fn do_release(&self) -> Result<(), ()> {
@@ -493,10 +511,9 @@ mod test {
             &self,
             blocks: &mut [Block],
             start_block_idx: BlockIdx,
-            reason: &str,
         ) -> Result<(), Self::Error> {
             self.dev.apply_or_error(
-                |dev| dev.read(blocks, start_block_idx, reason),
+                |dev| dev.read(blocks, start_block_idx),
                 SDCardError::InternalError.into(),
             )
         }
@@ -524,3 +541,6 @@ mod test {
         let mut _card: SDStateManager<_, 2, 2, 4> = SDStateManager::new(a, 0).await;
     }
 }
+
+#[cfg(test)]
+mod coverage_tests;

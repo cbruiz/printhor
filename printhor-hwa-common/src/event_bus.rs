@@ -7,7 +7,7 @@ use core::ops::{BitAnd, BitOr};
 use hwa::event_bus_channel::{EventBusChannelController, EventBusSubscriber};
 use printhor_hwa_utils::*;
 
-#[const_env::from_env("EVENT_BUS_NUM_SUBSCRIBERS")]
+#[const_env::env_item("EVENT_BUS_NUM_SUBSCRIBERS")]
 const EVENT_BUS_NUM_SUBSCRIBERS: usize = 6;
 
 pub type EventBusPubSubType<M> =

@@ -207,7 +207,7 @@ impl TrinamicController {
             chop_conf.set_intpol(false);
             #[cfg(not(feature = "pulsed"))]
             chop_conf.set_dedge(true);
-            chop_conf.set_mres(micro_steps_pow_of_2);
+            chop_conf.set_mres(micro_steps_pow_of_2.into());
             if Self::write_register(uart, addr, chop_conf).await.is_ok() {
                 hwa::info!("[TrinamicController] Write OK to addr {}", addr);
             }
@@ -219,7 +219,7 @@ impl TrinamicController {
 
         match Self::read_register::<tmc2209::reg::CHOPCONF>(uart, addr).await {
             Ok(chop_conf) => {
-                if chop_conf.ntpol() == false && chop_conf.mres() == micro_steps_pow_of_2 {
+                if chop_conf.intpol() == false && u32::from(chop_conf.mres()) == micro_steps_pow_of_2 {
                     hwa::info!(
                         "[TrinamicController] Trinamic check for stepper {} is OK",
                         addr

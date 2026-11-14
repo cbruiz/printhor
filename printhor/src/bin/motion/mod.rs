@@ -3,15 +3,17 @@
 mod micro_segment_interpolation;
 #[cfg(feature = "with-motion-chaining")]
 mod motion_chaining;
-mod motion_profile_s_curve;
+mod motion_profile_hybrid;
 mod motion_profile_traits;
 mod segment_sampling;
+#[cfg(all(test, feature = "perf-bench"))]
+mod perf_bench;
 // Re-exports
 
 pub use micro_segment_interpolation::*;
 #[cfg(feature = "with-motion-chaining")]
 pub use motion_chaining::*;
-pub use motion_profile_s_curve::*;
+pub use motion_profile_hybrid::*;
 pub use motion_profile_traits::*;
 pub use segment_sampling::*;
 

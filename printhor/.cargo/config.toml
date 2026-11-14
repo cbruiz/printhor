@@ -24,7 +24,6 @@ HOT_BED_THERM_BETA = "3950.0"
 
 DEFMT_LOG = "info"
 RUST_LOG = "warn"
-ASYNC_STD_THREAD_COUNT = "1"
 EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 
 ###########################

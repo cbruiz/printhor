@@ -20,8 +20,10 @@ pub struct SerialTxWrapper<P> {
 
 impl<P> SerialTxWrapper<P> {
     pub const fn new(peri: P, baud_rate: u32) -> Self {
-        let _ticks_by_word =
-            embassy_time::Duration::from_micros(((1000000 / baud_rate) * 10) as u64).as_ticks();
+        // A word is 10 bits (start + 8 data + stop). Rounded up, so the wait is never shorter
+        // than the actual transmission time
+        let word_us = (10_000_000u64 + baud_rate as u64 - 1) / baud_rate as u64;
+        let _ticks_by_word = embassy_time::Duration::from_micros(word_us).as_ticks();
         Self {
             peri,
             _ticks_by_word,
@@ -50,7 +52,7 @@ where
                 }
             }
             embassy_time::Timer::after(embassy_time::Duration::from_millis(1)).await;
-            Ok(data.len())
+            r.map(|_| data.len())
         }
     }
     fn wrapped_flush(&mut self) -> impl core::future::Future<Output = ()> {
@@ -103,6 +105,9 @@ mod test {
                 // Nothing
                 Ok(buf.len())
             }
+            async fn flush(&mut self) -> Result<(), Self::Error> {
+                Ok(())
+            }
         }
 
         let mut async_wrapper = hwa::SerialTxWrapper::new(DummyDevice::new(), 115200);
@@ -111,3 +116,6 @@ mod test {
         async_wrapper.wrapped_flush().await;
     }
 }
+
+#[cfg(test)]
+mod coverage_tests;

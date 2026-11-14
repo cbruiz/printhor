@@ -16,11 +16,11 @@ exclude = [
 	"hwi-boards/printhor-hwi_rp_2040",
 	"hwi-boards/printhor-hwi_skr_mini_e3",
 	"hwi-boards/printhor-hwi_esp32",
+	"hwi-boards/printhor-hwi_boilerplate",
 ]
 
 [workspace.package]
 license = "MIT"
-license-file = "LICENSE"
 
 [workspace.lints.clippy]
 [workspace.lints.rust]
@@ -38,14 +38,16 @@ printhor-hwi_rp_2040 = {path = "hwi-boards/printhor-hwi_rp_2040"}
 
 async-gcode = { path = "libs/async-gcode" }
 
-embassy-stm32 = { path = "libs/embassy/embassy-stm32" }
-embassy-rp = { path = "libs/embassy/embassy-rp" }
-embassy-executor = { path = "libs/embassy/embassy-executor" }
-embassy-sync = { path = "libs/embassy/embassy-sync" }
-embassy-time = { path = "libs/embassy/embassy-time" }
-embassy-futures = { path = "libs/embassy/embassy-futures" }
-embassy-embedded-hal = { path = "libs/embassy/embassy-embedded-hal" }
-embassy-usb = { path = "libs/embassy/embassy-usb" }
+# Embassy is taken from its crates.io releases. To build against the `libs/embassy` submodule
+# (embassy `main`) instead, uncomment these patches and align the versions in the manifests.
+#embassy-stm32 = { path = "libs/embassy/embassy-stm32" }
+#embassy-rp = { path = "libs/embassy/embassy-rp" }
+#embassy-executor = { path = "libs/embassy/embassy-executor" }
+#embassy-sync = { path = "libs/embassy/embassy-sync" }
+#embassy-time = { path = "libs/embassy/embassy-time" }
+#embassy-futures = { path = "libs/embassy/embassy-futures" }
+#embassy-embedded-hal = { path = "libs/embassy/embassy-embedded-hal" }
+#embassy-usb = { path = "libs/embassy/embassy-usb" }
 
 [profile.dev]
 codegen-units = 1

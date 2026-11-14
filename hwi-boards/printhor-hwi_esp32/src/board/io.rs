@@ -73,8 +73,8 @@ pub mod serial_usb {
         pub fn spawn(&mut self, spawner: embassy_executor::Spawner) {
             self.builder
                 .take()
-                .map(|builder| match spawner.spawn(serial_usb_task(builder.build())) {
-                    Ok(_) => (),
+                .map(|builder| match serial_usb_task(builder.build()) {
+                    Ok(token) => spawner.spawn(token),
                     Err(_) => {
                         core::panic!("Unable to spawn USB task")
                     }
