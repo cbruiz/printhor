@@ -1589,8 +1589,7 @@ pub async fn task_integration(
         hwa::info!("## {} - END", test_name);
     }
 
-    // SD print jobs from a host, one file per outcome (data/sdcard.img, folder TESTS). Runs after
-    // T20, which ends with M112 + M999: the position is invalidated (homing required).
+    // SD print jobs from a host, one file per outcome (data/sdcard.img, folder TESTS).
     #[cfg(all(
         test,
         feature = "native",
@@ -1621,15 +1620,19 @@ pub async fn task_integration(
             }};
         }
 
-        // A move without homing aborts the job
-        let out = job!("TESTS/NOHOME.G", "Job aborted");
-        ensure!(out.contains("Job aborted"), "NOHOME.G was not aborted", out);
-        ensure!(!event_bus.has_flags(EventFlags::JOB_PRINTING).await, "still printing after abort", out);
+        // Power on first: otherwise NOHOME.G would abort because of the power (PowerRequired)
+        // instead of the missing homing, and the test would pass for the wrong reason.
         #[cfg(feature = "with-ps-on")]
         {
             let out = serial_until("M80\n", "ok", Duration::from_secs(20)).await;
             ensure!(out.contains("ok"), "M80 failed", out);
         }
+        // A move without homing aborts the job. The position is invalidated here: T20 (which
+        // ends with M112) does not run in every configuration (e.g. without a hot-end)
+        processor.motion_planner.motion_status().invalidate_position();
+        let out = job!("TESTS/NOHOME.G", "Job aborted");
+        ensure!(out.contains("Job aborted"), "NOHOME.G was not aborted", out);
+        ensure!(!event_bus.has_flags(EventFlags::JOB_PRINTING).await, "still printing after abort", out);
         let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
 

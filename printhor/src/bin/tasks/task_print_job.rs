@@ -343,8 +343,8 @@ pub async fn task_print_job(
                         Some(p) => p.into_stream().close().await,
                     }
                     hwa::info!(
-                        "[task-print-job] Job completed in {:03} seconds",
-                        job_time.as_millis() as f64 / 1000.0
+                        "[task-print-job] Job completed in {} ms",
+                        job_time.as_millis()
                     );
                 }
             }
