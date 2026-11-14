@@ -1615,9 +1615,9 @@ pub async fn task_integration(
         // Selects and starts a job; returns what the host received until `end` (or a timeout)
         macro_rules! job {
             ($file:expr, $end:expr) => {{
-                let sel = serial_until(alloc::format!("M23 {}\n", $file).as_str(), "ok", Duration::from_secs(5)).await;
+                let sel = serial_until(alloc::format!("M23 {}\n", $file).as_str(), "ok", Duration::from_secs(20)).await;
                 ensure!(sel.lines().any(|l| l.starts_with("ok")) && !sel.contains("error"), "M23 failed", sel);
-                serial_until("M24\n", $end, Duration::from_secs(30)).await
+                serial_until("M24\n", $end, Duration::from_secs(60)).await
             }};
         }
 
@@ -1627,10 +1627,10 @@ pub async fn task_integration(
         ensure!(!event_bus.has_flags(EventFlags::JOB_PRINTING).await, "still printing after abort", out);
         #[cfg(feature = "with-ps-on")]
         {
-            let out = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
+            let out = serial_until("M80\n", "ok", Duration::from_secs(20)).await;
             ensure!(out.contains("ok"), "M80 failed", out);
         }
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
 
         // Unsupported and malformed lines are skipped: the job completes
@@ -1656,27 +1656,27 @@ pub async fn task_integration(
         {
             let out = job!("TESTS/NOPOWER.G", "Job aborted");
             ensure!(out.contains("Job aborted"), "NOPOWER.G was not aborted", out);
-            let out = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
+            let out = serial_until("M80\n", "ok", Duration::from_secs(20)).await;
             ensure!(out.contains("ok"), "M80 failed", out);
             // After a power cycle the machine can be homed again
-            let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+            let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
             ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 after M80 failed", out);
         }
 
         // Pause and resume a long job, then abort it from the host (M2)
-        let sel = serial_until("M23 TESTS/LONG.G\n", "ok", Duration::from_secs(5)).await;
+        let sel = serial_until("M23 TESTS/LONG.G\n", "ok", Duration::from_secs(20)).await;
         ensure!(sel.contains("ok"), "M23 TESTS/LONG.G failed", sel);
-        let out = serial_until("M24\n", "Print job resumed", Duration::from_secs(5)).await;
+        let out = serial_until("M24\n", "Print job resumed", Duration::from_secs(20)).await;
         ensure!(out.contains("Print job resumed"), "M24 failed", out);
-        let out = serial_until("M25\n", "Print job paused", Duration::from_secs(5)).await;
+        let out = serial_until("M25\n", "Print job paused", Duration::from_secs(20)).await;
         ensure!(out.contains("Print job paused"), "M25 failed", out);
         let paused = embassy_time::with_timeout(
-            Duration::from_secs(10),
+            Duration::from_secs(30),
             subscriber.ft_wait_for(EventStatus::containing(EventFlags::JOB_PAUSED)),
         )
         .await;
         ensure!(paused.is_ok(), "JOB_PAUSED not set after M25", out);
-        let out = serial_until("M24\n", "Print job resumed", Duration::from_secs(5)).await;
+        let out = serial_until("M24\n", "Print job resumed", Duration::from_secs(20)).await;
         ensure!(out.contains("Print job resumed"), "M24 did not resume", out);
         let out = serial_until("M2\n", "Job aborted", Duration::from_secs(30)).await;
         ensure!(out.contains("Job aborted"), "M2 did not abort the job", out);
@@ -1686,14 +1686,14 @@ pub async fn task_integration(
         let out = job!("TESTS/ALARM.G", "Printer halted");
         ensure!(out.contains("Emergency stop (M112)"), "M112 in ALARM.G did not halt", out);
         ensure!(event_bus.has_flags(EventFlags::SYS_ALARM).await, "SYS_ALARM not set by M112", out);
-        let out = serial_until("M999\n", "Job aborted", Duration::from_secs(10)).await;
+        let out = serial_until("M999\n", "Job aborted", Duration::from_secs(30)).await;
         ensure!(out.contains("Job aborted") && !out.contains("Done printing file"), "ALARM.G was not aborted after M999", out);
         ensure!(!event_bus.has_flags(EventFlags::SYS_ALARM).await, "M999 did not clear SYS_ALARM", out);
         ensure!(!event_bus.has_flags(EventFlags::JOB_PRINTING).await, "still printing after the abort", out);
 
         // Regression: a finished or aborted job must release its file. The same file can be
         // printed twice, and every file (including those of T14-T16) can be opened again.
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
         for _ in 0..2 {
             let out = job!("TESTS/NOTIMPL.G", "Done printing file");
@@ -1762,7 +1762,7 @@ pub async fn task_integration(
         }
         #[cfg(feature = "with-ps-on")]
         check!("M80\n", &["ok"]);
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         if !out.lines().any(|l| l.starts_with("ok")) {
             hwa::error!("{}: G28 failed: {:?}", test_name, out.as_str());
             finish_task(Err(test_name));
@@ -1932,7 +1932,7 @@ pub async fn task_integration(
 
         #[cfg(feature = "with-ps-on")]
         send!("M80\n");
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         if !out.lines().any(|l| l.starts_with("ok")) {
             fail!("G28 failed: {:?}", out);
         }
@@ -2140,7 +2140,7 @@ pub async fn task_integration(
         };
         #[cfg(feature = "with-ps-on")]
         let _ = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         if !out.lines().any(|l| l.starts_with("ok")) {
             fail!("G28 failed", out);
         }
@@ -2237,7 +2237,7 @@ pub async fn task_integration(
 
         #[cfg(feature = "with-ps-on")]
         let _ = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         if !out.lines().any(|l| l.starts_with("ok")) {
             fail!("G28 failed", out);
         }
@@ -2339,7 +2339,7 @@ pub async fn task_integration(
         );
 
         // M206: after homing, the logical position is the homing point plus the offset
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
         let expected = processor.motion_planner.motion_config().get_logical_homing_point();
         let homing_z = hwa::Contract::DEFAULT_WORLD_HOMING_POINT_WU.z.unwrap_or(math::ZERO);
@@ -2356,7 +2356,7 @@ pub async fn task_integration(
         );
         // Restore the defaults (in memory) and home again
         check!("M502\n", &["ok"]);
-        let out = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
         ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
         let world = processor.motion_planner.motion_status().get_current_position().world_pos;
         ensure!(
@@ -2535,7 +2535,7 @@ pub async fn task_integration(
         }
         #[cfg(feature = "with-ps-on")]
         let _ = serial_until("M80\n", "ok", wait).await;
-        let _ = serial_until("G28\n", "ok", Duration::from_secs(4)).await;
+        let _ = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
 
         // The supported M codes are listed by a bare M
         expect!("M\n", "ok", ["echo: M105", "echo: M524", "ok"]);

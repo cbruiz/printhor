@@ -30,3 +30,5 @@ libs/*/target
 /printhor/test-data
 /s_plot.csv
 /printhor/s_plot.csv
+/*.md
+!/README.md
