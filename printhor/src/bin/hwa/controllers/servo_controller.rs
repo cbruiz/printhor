@@ -42,6 +42,12 @@ pub trait ProbeTrait {
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after entering test mode.
     fn probe_test_mode(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
+
+    /// Sets the raw servo angle (M280). The operation waits for a specified duration.
+    fn probe_set_angle(&mut self, angle: u16, sleep_us: u64) -> impl core::future::Future<Output = ()>;
+
+    /// Diagnostic: (duty, max duty) currently applied to the servo channel
+    fn probe_pwm_state(&mut self) -> (u32, u32);
 }
 
 /// The `GenericServoController` structure is responsible for managing a servo motor
@@ -85,12 +91,15 @@ where
             let max_duty = self.servo.apply(|servo| servo.get_max_duty());
             // 100% duty period width (uS)
             const PERIOD: u32 = 20_000;
-            // minimum pulse width (uS)
-            const MIN_PULSE_WIDTH: u32 = 600;
-            // period width by degree (uS/deg)
-            const US_BY_DEG: u32 = 10;
+            // Standard (Arduino/Marlin) servo mapping: 0º -> 544 uS, 180º -> 2400 uS.
+            // A BLTouch decodes the pulse width as a command, so it must match what it expects:
+            // 10º deploy = 647 uS, 60º test = 1162 uS, 90º stow = 1473 uS, 120º self-test = 1782 uS,
+            // 160º alarm release = 2194 uS.
+            const MIN_PULSE_WIDTH: u32 = 544;
+            const MAX_PULSE_WIDTH: u32 = 2400;
 
-            let duty_us = MIN_PULSE_WIDTH + US_BY_DEG * (angle as u32);
+            let duty_us = MIN_PULSE_WIDTH
+                + ((MAX_PULSE_WIDTH - MIN_PULSE_WIDTH) * (angle.min(180) as u32) + 90) / 180;
             let duty_cnt = (duty_us * max_duty.into() / PERIOD) as u16;
 
             #[cfg(feature = "trace-commands")]
@@ -101,8 +110,11 @@ where
                 duty_cnt,
                 Into::<u32>::into(max_duty),
             );
+            // Only the compare value changes (preloaded: applied at the next period). Disabling and
+            // enabling the channel around it would emit a truncated pulse of random width, which a
+            // BLTouch decodes as a random command (test mode, alarm...) and then gets stuck.
+            // `enable` is idempotent: it only matters the first time.
             self.servo.apply_mut(|servo| {
-                servo.disable(self.channel);
                 servo.set_duty(self.channel, duty_cnt.into());
                 servo.enable(self.channel);
             });
@@ -161,5 +173,15 @@ where
 
     async fn probe_test_mode(&mut self, sleep_us: u64) {
         self.set_angle(60, sleep_us).await;
+    }
+
+    async fn probe_set_angle(&mut self, angle: u16, sleep_us: u64) {
+        self.set_angle(angle, sleep_us).await;
+    }
+
+    fn probe_pwm_state(&mut self) -> (u32, u32) {
+        let channel = self.channel;
+        self.servo
+            .apply(|servo| (servo.get_duty(channel).into(), servo.get_max_duty().into()))
     }
 }

@@ -1,17 +1,17 @@
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
 use crate::Contract;
-use async_std::os::unix::net::{Incoming, UnixListener, UnixStream};
-use async_std::io::{ReadExt, WriteExt};
+use smol::net::unix::{UnixListener, UnixStream};
+use smol::io::{AsyncReadExt, AsyncWriteExt};
 use std::io::ErrorKind;
 use std::net::Shutdown;
-use async_std::stream::StreamExt;
 
 /// A quick and dirty approach to get it done with the unix sockets communication
 /// The approach is thought to be full duplex in relation with an external process
 
 pub struct RawConnectionManager {
-    incoming: &'static hwa::AsyncMutex<hwa::AsyncNoopMutexType, Incoming<'static>>,
+    /// Accepts are serialized by the `reader` lock (only the Rx side accepts connections)
+    listener: &'static UnixListener,
     reader: &'static hwa::AsyncMutex<hwa::AsyncNoopMutexType, Option<UnixStream>>,
     writer: &'static hwa::AsyncMutex<hwa::AsyncNoopMutexType, Option<UnixStream>>,
 }
@@ -23,7 +23,7 @@ pub struct MockedUartUnixSocket {
 impl MockedUartUnixSocket {
     pub async fn new(socket_path: String) -> Self {
 
-        match async_std::fs::remove_file(&socket_path).await {
+        match smol::fs::remove_file(&socket_path).await {
             Ok(_) => {
                 // Fine
             }
@@ -39,7 +39,7 @@ impl MockedUartUnixSocket {
             }
         }
 
-        let instance = match UnixListener::bind(socket_path).await {
+        let instance = match UnixListener::bind(socket_path) {
             Ok(listener) => listener,
             // Address is in use, not enough permissions to do it [...]
             Err(_e) => panic!("[mocked-unix-socket] Can't bind to socket path: {:?}", _e),
@@ -55,11 +55,7 @@ impl MockedUartUnixSocket {
                 "UnixConnection",
                 RawConnectionManager,
                 RawConnectionManager {
-                    incoming: hwa::make_static_ref! {
-                        "Acceptor",
-                        hwa::AsyncMutex<hwa::AsyncNoopMutexType, Incoming<'static>>,
-                        hwa::AsyncMutex::new(listener.incoming())
-                    },
+                    listener,
                     reader: hwa::make_static_ref! {
                         "UnixSocketReader",
                         hwa::AsyncMutex<hwa::AsyncNoopMutexType, Option<UnixStream>>,
@@ -103,12 +99,11 @@ impl MockedUartNamedPipeRx {
         let reader_instance = match rg.as_mut() {
             None => {
                 // Wait for another accept
-                let mut ag = self.manager.incoming.lock().await;
                 if !self.is_already_trying_to_listen {
                     hwa::info!("[mocked-unix-socket] Waiting for connection");
                     self.is_already_trying_to_listen = true;
                 }
-                let stream = ag.next().await.unwrap().unwrap();
+                let (stream, _addr) = self.manager.listener.accept().await.unwrap();
                 let mut wg = self.manager.writer.lock().await;
                 wg.replace(stream.clone());
                 rg.replace(stream);

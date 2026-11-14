@@ -12,6 +12,10 @@ use hwa::controllers::ProbeTrait;
 use hwa::math;
 use math::{ArithmeticOps, CoordSel, Real, TVector};
 
+/// Time for the probe pin to deploy or stow before moving (a BLTouch needs a few hundred ms)
+#[cfg(feature = "with-probe")]
+pub const PROBE_SETTLE_US: u64 = 500_000;
+
 pub struct MotionDriver {
     #[cfg(feature = "with-motion")]
     pub step_actuator: hwa::controllers::StepActuatorController,
@@ -118,6 +122,8 @@ impl MotionDriver {
 
         #[allow(unused_mut)]
         let mut homing_position = TVector::zero();
+        #[allow(unused_mut)]
+        let mut homing_ok = true;
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-e-axis")] {
@@ -155,7 +161,7 @@ impl MotionDriver {
                 // Raise Z axis 10mm to avoid obstacles during X and Y homing
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [Homing] Raise Z +10mm");
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::Z, Some(math::ONE)),
                     Real::from_lit(10, 0),
                     _steps_per_world_unit,
@@ -177,7 +183,7 @@ impl MotionDriver {
                     "[trace-commands] [Homing] Quick Homing X axis with a max of -{:?} mm",
                     _machine_bounds.x.unwrap_or(math::ZERO)
                 );
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::X, Some(math::ONE.neg())),
                     _machine_bounds.x.unwrap_or(Real::zero()),
                     _steps_per_world_unit,
@@ -191,7 +197,7 @@ impl MotionDriver {
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [Homing] Quick Separate X axis 5 mm");
                 // Home the X axis precisely
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::X, Some(math::ONE)),
                     Real::from_lit(5, 0),
                     _steps_per_world_unit,
@@ -207,7 +213,7 @@ impl MotionDriver {
                 hwa::info!("[trace-commands] [trace-commands] [Homing] Slow approximate X axis up to 6 mm");
 
                 // Home the X axis precisely
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::X, Some(math::ONE.neg())),
                     Real::from_lit(6, 0),
                     _steps_per_world_unit,
@@ -229,7 +235,7 @@ impl MotionDriver {
                     "[trace-commands] [Homing] Quick Homing Y axis with a max of -{:?} mm",
                     _machine_bounds.y.unwrap_or(math::ZERO)
                 );
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::Y, Some(math::ONE.neg())),
                     _machine_bounds.y.unwrap_or(Real::zero()),
                     _steps_per_world_unit,
@@ -244,7 +250,7 @@ impl MotionDriver {
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [Homing] Quick Separate Y axis 5 mm");
                 // Home the Y axis precisely
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::Y, Some(math::ONE)),
                     Real::from_lit(5, 0),
                     _steps_per_world_unit,
@@ -258,9 +264,9 @@ impl MotionDriver {
 
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [Homing] Slow approximate Y axis up to 6 mm");
-                // Home the X axis precisely
-                self.shabbily_move_to(
-                    TVector::new().with_coord(CoordSel::X, Some(math::ONE.neg())),
+                // Home the Y axis precisely
+                homing_ok &= self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Y, Some(math::ONE.neg())),
                     Real::from_lit(6, 0),
                     _steps_per_world_unit,
                     1000,
@@ -275,8 +281,30 @@ impl MotionDriver {
 
         cfg_if::cfg_if! {
             if #[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))] {
-                // TODO:
-                // Go to center
+                let x_center = _machine_bounds.x.unwrap_or(math::ZERO) / Real::from_lit(2, 0);
+                let y_center = _machine_bounds.y.unwrap_or(math::ZERO) / Real::from_lit(2, 0);
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Move to center X={:?} Y={:?}", x_center, y_center);
+                homing_ok &= self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::X, Some(math::ONE)),
+                    x_center,
+                    _steps_per_world_unit,
+                    2000,
+                    false,
+                    Some(&mut homing_position),
+                )
+                .await;
+                homing_ok &= self.shabbily_move_to(
+                    TVector::new().with_coord(CoordSel::Y, Some(math::ONE)),
+                    y_center,
+                    _steps_per_world_unit,
+                    2000,
+                    false,
+                    Some(&mut homing_position),
+                )
+                .await;
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] - Now at center: {:?}", homing_position);
             }
         }
 
@@ -284,7 +312,7 @@ impl MotionDriver {
             if #[cfg(feature = "with-z-axis")] {
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [Homing] Upper Z + 10mm");
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::Z, Some(math::ONE.neg())),
                     Real::from_lit(10, 0),
                     _steps_per_world_unit,
@@ -298,16 +326,15 @@ impl MotionDriver {
 
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-probe")] {
-                        self.probe_controller.lock().await.probe_pin_down(100).await;
+                        self.probe_controller.lock().await.probe_pin_down(PROBE_SETTLE_US).await;
                     }
                 }
 
-                // FIXME: As of now, until tested in real hardware, for safety
                 let zbounds = homing_position.z.unwrap_or(math::ZERO)
-                    + _machine_bounds.z.unwrap_or(math::ONE) / Real::from_lit(16, 0);
+                    + _machine_bounds.z.unwrap_or(math::ONE);
                 #[cfg(feature = "trace-commands")]
-                hwa::info!("[trace-commands] [Homing] Lower Z up to {:?} mm", zbounds); // reduced for safety
-                self.shabbily_move_to(
+                hwa::info!("[trace-commands] [Homing] Lower Z up to {:?} mm", zbounds);
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::Z, Some(math::ONE.neg())),
                     zbounds,
                     _steps_per_world_unit,
@@ -321,13 +348,13 @@ impl MotionDriver {
 
                 cfg_if::cfg_if! {
                     if #[cfg(feature = "with-probe")] {
-                        self.probe_controller.lock().await.probe_pin_up(100).await;
+                        self.probe_controller.lock().await.probe_pin_up(PROBE_SETTLE_US).await;
                     }
                 }
 
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [Homing] Upper Z + 10mm again por safety");
-                self.shabbily_move_to(
+                homing_ok &= self.shabbily_move_to(
                     TVector::new().with_coord(CoordSel::Z, Some(math::ONE)),
                     Real::from_lit(10, 0),
                     _steps_per_world_unit,
@@ -350,8 +377,39 @@ impl MotionDriver {
             Contract::DEFAULT_WORLD_HOMING_POINT_WU
         );
 
-        Ok(Contract::DEFAULT_WORLD_HOMING_POINT_WU)
+        if homing_ok {
+            Ok(Contract::DEFAULT_WORLD_HOMING_POINT_WU)
+        } else {
+            hwa::error!("[Homing] End-stop not triggered within the axis travel");
+            Err(homing_position)
+        }
     }
+    /// Translates a direction in world coordinates to motor (space) coordinates.
+    ///
+    /// Identity for cartesian machines. For Core-XY, a move along X (or Y) requires both motors.
+    fn world_to_motor_direction(vdir: &TVector<Real>) -> TVector<Real> {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "with-motion-core-xy-kinematics")] {
+                use hwa::HwiContract;
+                let x = vdir.get_coord(CoordSel::X);
+                let y = vdir.get_coord(CoordSel::Y);
+                if x.is_none() && y.is_none() {
+                    return *vdir;
+                }
+                let filled = vdir
+                    .with_coord(CoordSel::X, Some(x.unwrap_or(math::ZERO)))
+                    .with_coord(CoordSel::Y, Some(y.unwrap_or(math::ZERO)));
+                match hwa::Contract.project_to_space(&filled) {
+                    Ok(space) => space.map_values(|_, v| (!v.is_zero()).then_some(v)),
+                    Err(_) => *vdir,
+                }
+            }
+            else {
+                *vdir
+            }
+        }
+    }
+
     async fn shabbily_move_to(
         &mut self,
         vdir: TVector<Real>,
@@ -360,7 +418,13 @@ impl MotionDriver {
         step_frequency: u64,
         check_endstops: bool,
         position: Option<&mut TVector<Real>>,
-    ) -> TVector<u32> {
+    ) -> bool {
+        // The end-stops to check are the ones of the world axis of the move
+        let mut endstop_channel = hwa::CoordSel::empty();
+        vdir.foreach_values(|coord, v| endstop_channel.set(coord, !v.is_zero()));
+        // The direction is given in world coordinates: translate it to motors
+        let vdir = Self::world_to_motor_direction(&vdir);
+
         let steps_to_advance: TVector<u32> = (vdir * module * steps_per_mm)
             .abs()
             .round()
@@ -377,19 +441,44 @@ impl MotionDriver {
             coord_sel.set(coord, applied);
         });
 
-        let mut ticker = embassy_time::Ticker::every(Duration::from_hz(step_frequency));
+        // Simulators may speed the homing moves up (the same steps and end-stop checks, faster)
+        let step_frequency = step_frequency * Contract::HOMING_STEP_FREQUENCY_SCALE;
+        // Not a Ticker: after a late wake-up (other tasks hogging the CPU) a Ticker fires the
+        // missed ticks back to back, a burst of steps the motor can not follow. Here, a late step
+        // just restarts the schedule from now.
+        let step_period = Duration::from_hz(step_frequency);
+        let mut next_step = embassy_time::Instant::now() + step_period;
 
+        let mut endstop_triggered = false;
+        #[cfg(feature = "debug-homing-latency")]
+        let (mut max_late_us, mut late_count, t_start) =
+            (0u64, 0u32, embassy_time::Instant::now());
         loop {
             let mut completed = false;
-            if check_endstops && self.step_actuator().end_stop_triggered(channel) {
+            if check_endstops && self.step_actuator().end_stop_triggered(endstop_channel) {
                 hwa::debug!("ENDSTOP TRIGGERED");
+                endstop_triggered = true;
                 completed = true;
             }
             if !steps_advanced.bounded_by(&steps_to_advance) {
                 hwa::trace!("FULL ADV");
                 completed = true;
             }
+            // M410/M112: interrupt the move. Treated as a failure, so the position stays unknown
+            let aborted = crate::tasks::task_stepper::motion_aborted();
+            if aborted {
+                hwa::warn!("[motion_driver] Move interrupted (motion aborted)");
+                completed = true;
+            }
             if completed {
+                #[cfg(feature = "debug-homing-latency")]
+                hwa::info!(
+                    "[homing-latency] move done: max_late = {} us, late(>{}us) = {}, steps = {:?}",
+                    max_late_us,
+                    step_period.as_micros() / 2,
+                    late_count,
+                    steps_advanced
+                );
                 match position {
                     Some(mut _p) => {
                         *_p += vdir
@@ -399,7 +488,8 @@ impl MotionDriver {
                     None => {}
                 }
 
-                return steps_advanced;
+                // When checking end-stops, reaching the full travel means the end-stop was not found
+                return !aborted && (!check_endstops || endstop_triggered);
             }
             cfg_if::cfg_if! {
                 if #[cfg(feature="pulsed")] {
@@ -415,7 +505,29 @@ impl MotionDriver {
                 }
             }
             steps_advanced.increment(coord_sel, 1);
-            ticker.next().await;
+            let now = embassy_time::Instant::now();
+            #[cfg(feature = "debug-homing-latency")]
+            {
+                // `next_step - step_period` is when this step was due
+                let due = next_step - step_period;
+                if now > due {
+                    let late = (now - due).as_micros();
+                    max_late_us = max_late_us.max(late);
+                    if late > step_period.as_micros() / 2 {
+                        late_count += 1;
+                        hwa::warn!(
+                            "[homing-latency] step late by {} us at t = {} ms",
+                            late,
+                            (now - t_start).as_millis()
+                        );
+                    }
+                }
+            }
+            if now >= next_step {
+                next_step = now + step_period;
+            }
+            embassy_time::Timer::at(next_step).await;
+            next_step += step_period;
         }
     }
 }

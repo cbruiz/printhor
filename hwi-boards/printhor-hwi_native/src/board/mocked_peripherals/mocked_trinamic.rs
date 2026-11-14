@@ -197,10 +197,10 @@ fn trinamic_proto() {
                 let mut reg_ref = tmc2209::reg::CHOPCONF::default();
                 reg_ref.set_intpol(false);
                 reg_ref.set_dedge(true);
-                reg_ref.set_mres(5);
+                reg_ref.set_mres(5u32.into());
                 let reg_val = reg_ref.0;
                 let chopconf = tmc2209::reg::CHOPCONF::try_from(rq).unwrap();
-                assert_eq!(reg_ref.ntpol(), chopconf.ntpol());
+                assert_eq!(reg_ref.intpol(), chopconf.intpol());
                 let chopconf_val = chopconf.0;
                 assert_eq!(reg_val, chopconf_val);
             }

@@ -56,9 +56,9 @@ cfg_if::cfg_if! {
                 self.set_enabled(hwa::CoordSel::all_axis(), false)
             }
 
-            fn disable(&mut self, _channels: hwa::CoordSel)
+            fn disable(&mut self, channels: hwa::CoordSel)
             {
-                self.set_enabled(hwa::CoordSel::all_axis(), false)
+                self.set_enabled(channels, false)
             }
 
             fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool);
@@ -127,8 +127,49 @@ cfg_if::cfg_if! {
         pub use embedded_sdmmc::BlockDevice as SDBlockDevice;
 
         pub trait AsyncSDBlockDevice: embedded_sdmmc::BlockDevice {
-            fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>>;
+            /// The returned future must not borrow `self`: since embedded-sdmmc 0.10 the device is
+            /// only reachable inside `VolumeManager::device(|d| ..)`, so the future is awaited
+            /// after that borrow ends.
+            fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<Self>;
             fn do_release(&self) -> Result<(), ()>;
         }
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        /// Errors of an [AsyncEeprom] device
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+        pub enum EepromError {
+            /// The access goes beyond the capacity of the device
+            OutOfBounds,
+            /// The device did not answer (or answered with an error)
+            Bus,
+            /// The device did not finish an internal write cycle in time
+            Timeout,
+        }
+
+        /// A non-volatile byte-addressable memory (EEPROM or alike), used to persist the settings
+        /// (M500/M501).
+        ///
+        /// Boards with such a memory implement this trait (see [crate::eeprom::I2cEeprom24x] for
+        /// the common I2C 24Cxx chips) and export it through
+        /// [crate::HwiContract::EepromMutexStrategy]. Every operation is async: the bus transfers
+        /// and the internal write cycles never block the executor.
+        pub trait AsyncEeprom {
+            /// The capacity of the memory in bytes
+            fn capacity(&self) -> usize;
+
+            /// Reads `buffer.len()` bytes starting at `offset`
+            fn read(&mut self, offset: usize, buffer: &mut [u8]) -> impl core::future::Future<Output = Result<(), EepromError>>;
+
+            /// Writes `data` starting at `offset`. Implementations should skip the unchanged
+            /// regions to reduce the wear and the latency.
+            fn write(&mut self, offset: usize, data: &[u8]) -> impl core::future::Future<Output = Result<(), EepromError>>;
+        }
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests;

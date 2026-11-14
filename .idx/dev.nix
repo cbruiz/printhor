@@ -19,7 +19,7 @@
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [
         "rust-lang.rust-analyzer"
-        "serayuzgur.crates"
+        "fill-labs.dependi"
         "vadimcn.vscode-lldb"
         "edwinhuish.better-comments-next"
         "MoBalic.jetbrains-dark-theme"

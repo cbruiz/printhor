@@ -91,15 +91,15 @@ pub trait HwiContract: Sized {
         if #[cfg(feature = "with-motion")] {
 
             /// The world unit magnitude. by default: mm
-            #[const_env::from_env("WORLD_UNIT_MAGNITUDE")]
+            #[const_env::env_item("WORLD_UNIT_MAGNITUDE")]
             const WORLD_UNIT_MAGNITUDE: &'static str = "mm";
 
             /// The (work)space unit magnitude. by default: mm
-            #[const_env::from_env("SPACE_UNIT_MAGNITUDE")]
+            #[const_env::env_item("SPACE_UNIT_MAGNITUDE")]
             const SPACE_UNIT_MAGNITUDE: &'static str = "mm";
 
             /// The physical unit magnitude. by default: mm
-            #[const_env::from_env("PHYSICAL_UNIT_MAGNITUDE")]
+            #[const_env::env_item("PHYSICAL_UNIT_MAGNITUDE")]
             const PHYSICAL_UNIT_MAGNITUDE: &'static str = "mm";
 
             /// World size to apply bounds restriction in World Units ([hwa::HwiContract::WORLD_UNIT_MAGNITUDE])
@@ -118,6 +118,14 @@ pub trait HwiContract: Sized {
             const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
                 hwa::math::TVector::new_with_coord(hwa::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
             };
+
+            /// Speed-up of the step clock of the homing moves (1: the step frequencies of the homing
+            /// sequence as they are).
+            ///
+            /// Only meant for simulators, where the time of the homing moves is wall time spent by
+            /// tests: the very same steps and end-stop checks are run, faster. Real boards must keep
+            /// the default (the multiplication by a constant 1 is optimized away).
+            const HOMING_STEP_FREQUENCY_SCALE: u64 = 1;
 
             /// Transforms a World position to (Work)space position. By default, identity transform applied
             ///
@@ -164,6 +172,12 @@ pub trait HwiContract: Sized {
                         TRANSFORMER.project_to_world(_space_pos)
                     }
                 }
+            }
+
+            /// Returns the reachable world position closest to `world_pos`.
+            /// Identity by default (unbounded / box-bounded kinematics).
+            fn clamp_to_workspace(&self, world_pos: &hwa::math::TVector<hwa::math::Real>) -> hwa::math::TVector<hwa::math::Real> {
+                *world_pos
             }
 
             /// Apply calculated min speed boundaries
@@ -240,6 +254,44 @@ pub trait HwiContract: Sized {
             /// This value can be calculated based in the board schematics or physically measured.
             #[doc = include_str!("../../doc/thermal_sensors.md")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32;
+
+            /// Max temperature (ºC) of the **HotEnd**. Reaching it shuts down every heater and raises
+            /// `SYS_ALARM` (MAXTEMP). Targets above `HOT_END_MAX_TEMP - 15` are rejected.
+            const HOT_END_MAX_TEMP: f32 = 275.0;
+
+            /// Min temperature (ºC) of the **HotEnd**. A lower reading while heating is considered a
+            /// sensor failure (MINTEMP), as it is what an open/disconnected thermistor reads.
+            const HOT_END_MIN_TEMP: f32 = 5.0;
+
+            /// Thermal runaway protection: once the target is reached, the temperature may not fall
+            /// more than this hysteresis (ºC) below the target for longer than the period.
+            const HOT_END_THERMAL_PROTECTION_HYSTERESIS: f32 = 4.0;
+
+            /// Thermal runaway protection period in seconds.
+            const HOT_END_THERMAL_PROTECTION_PERIOD_S: u32 = 40;
+
+            /// Heating watch: while heating, the temperature must increase at least this amount (ºC)...
+            const HOT_END_WATCH_TEMP_INCREASE: f32 = 2.0;
+
+            /// ...every period (seconds). Otherwise, heating is considered failed.
+            const HOT_END_WATCH_TEMP_PERIOD_S: u32 = 20;
+
+            /// The temperature is considered reached (M109) when within this window (ºC)
+            const HOT_END_TEMP_WINDOW: f32 = 3.0;
+
+            /// Default PID proportional constant (Marlin units: output in [0, 255] per ºC).
+            ///
+            /// Defaults are the ones of a stock Creality Ender-3. Tune them with `M303`.
+            const HOT_END_PID_KP: f32 = 21.73;
+
+            /// Default PID integral constant (Marlin units: per second)
+            const HOT_END_PID_KI: f32 = 1.54;
+
+            /// Default PID derivative constant (Marlin units: seconds)
+            const HOT_END_PID_KD: f32 = 76.55;
+
+            /// Extrusion is prevented below this hot-end temperature (ºC). See M302.
+            const EXTRUDE_MIN_TEMP: f32 = 170.0;
         }
     }
 
@@ -272,6 +324,36 @@ pub trait HwiContract: Sized {
             /// This value can be calculated based in the board schematics or physically measured.
             #[doc = include_str!("../../doc/thermal_sensors.md")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32;
+
+            /// Max temperature (ºC) of the **HotBed** (MAXTEMP). See [HwiContract::HOT_END_MAX_TEMP]
+            const HOT_BED_MAX_TEMP: f32 = 125.0;
+
+            /// Min temperature (ºC) of the **HotBed** (MINTEMP). See [HwiContract::HOT_END_MIN_TEMP]
+            const HOT_BED_MIN_TEMP: f32 = 5.0;
+
+            /// See [HwiContract::HOT_END_THERMAL_PROTECTION_HYSTERESIS]
+            const HOT_BED_THERMAL_PROTECTION_HYSTERESIS: f32 = 2.0;
+
+            /// See [HwiContract::HOT_END_THERMAL_PROTECTION_PERIOD_S]
+            const HOT_BED_THERMAL_PROTECTION_PERIOD_S: u32 = 20;
+
+            /// See [HwiContract::HOT_END_WATCH_TEMP_INCREASE]
+            const HOT_BED_WATCH_TEMP_INCREASE: f32 = 2.0;
+
+            /// See [HwiContract::HOT_END_WATCH_TEMP_PERIOD_S]
+            const HOT_BED_WATCH_TEMP_PERIOD_S: u32 = 60;
+
+            /// See [HwiContract::HOT_END_TEMP_WINDOW]
+            const HOT_BED_TEMP_WINDOW: f32 = 2.0;
+
+            /// See [HwiContract::HOT_END_PID_KP]
+            const HOT_BED_PID_KP: f32 = 462.1;
+
+            /// See [HwiContract::HOT_END_PID_KI]
+            const HOT_BED_PID_KI: f32 = 85.47;
+
+            /// See [HwiContract::HOT_END_PID_KD]
+            const HOT_BED_PID_KD: f32 = 624.59;
         }
     }
     //#endregion
@@ -430,6 +512,16 @@ pub trait HwiContract: Sized {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-eeprom")] {
+            /// Offset (bytes) of the settings image in the EEPROM. Allows reserving the
+            /// beginning of the memory for other purposes (e.g. a bootloader)
+            const EEPROM_SETTINGS_OFFSET: usize = 0;
+            /// The non-volatile memory where the settings are persisted (M500/M501)
+            type EepromMutexStrategy: hwa::AsyncMutexStrategy<Resource: traits::AsyncEeprom>;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-trinamic")] {
             const TRINAMIC_UART_BAUD_RATE: u32;
             type TrinamicUartDevice: traits::TrinamicUartTrait;
@@ -567,6 +659,9 @@ where
 
     #[cfg(feature = "with-fan-extra-1")]
     pub fan_extra1_pwm_channel: C::FanExtra1PwmChannel,
+
+    #[cfg(feature = "with-eeprom")]
+    pub eeprom: hwa::StaticAsyncController<C::EepromMutexStrategy>,
 
     #[cfg(feature = "with-motion-broadcast")]
     pub high_priority_core: C::HighPriorityCore,

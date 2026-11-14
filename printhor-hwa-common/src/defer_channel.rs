@@ -35,10 +35,10 @@
 //!     type MutexType = embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 //!
 //!     let event1 = DeferEvent::AwaitRequested(
-//!         DeferAction::Homing, CommChannel::default()
+//!         DeferAction::Homing, CommChannel::default(), 0
 //!     );
 //!     let event2 = DeferEvent::Completed(
-//!         DeferAction::RapidMove, CommChannel::default()
+//!         DeferAction::RapidMove, CommChannel::default(), 1
 //!     );
 //!
 //!     let defer_channel: hwa::GenericDeferChannel<MutexType> = GenericDeferChannel::new(
@@ -119,6 +119,13 @@ pub enum DeferAction {
     HotBedTemperature,
 }
 
+#[cfg(feature = "with-motion")]
+impl Default for DeferAction {
+    fn default() -> Self {
+        DeferAction::LinearMove
+    }
+}
+
 //#endregion
 
 //#region "Defer Event"
@@ -137,9 +144,9 @@ pub enum DeferAction {
 /// use hwa::{DeferEvent, DeferAction, CommChannel};
 /// // Example usage of DeferEvent
 /// #[cfg(feature = "with-motion")]
-/// let _event1 = DeferEvent::AwaitRequested(DeferAction::Homing, CommChannel::default());
+/// let _event1 = DeferEvent::AwaitRequested(DeferAction::Homing, CommChannel::default(), 0);
 /// #[cfg(feature = "with-motion")]
-/// let _event2 = DeferEvent::Completed(DeferAction::RapidMove, CommChannel::default());
+/// let _event2 = DeferEvent::Completed(DeferAction::RapidMove, CommChannel::default(), 1);
 /// ```
 pub enum DeferEvent {
     /// A request for defer action
@@ -154,7 +161,7 @@ pub enum DeferEvent {
 //#region "Defer Channel"
 
 /// The queue size of the defer channel
-#[const_env::from_env("DEFER_CHANNEL_SIZE")]
+#[const_env::env_item("DEFER_CHANNEL_SIZE")]
 pub const DEFER_CHANNEL_SIZE: usize = 4;
 
 pub type DeferChannelChannelType<M> = Channel<M, DeferEvent, DEFER_CHANNEL_SIZE>;

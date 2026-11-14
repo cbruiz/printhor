@@ -2,6 +2,7 @@
 name = "printhor-hwa-common-macros"
 version = "0.0.4"
 edition = "2024"
+license.workspace = true
 
 [features]
 default = ["std"]
@@ -11,9 +12,8 @@ fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl"]
 std = []
 
 [dependencies]
-syn = "2.0"
+syn = { version = "3.0", features = ["full"] } # Expr::Await etc. (no longer unified from syn 2 users)
 quote = "1.0"
-proc-macro2 = "1.0"
 cfg-if = "1"
 
 [dev-dependencies]
@@ -22,3 +22,6 @@ printhor-hwa-utils = {version = "0", default-features = false, path = "../printh
 
 [lib]
 proc-macro = true
+
+[lints]
+workspace = true

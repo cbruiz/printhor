@@ -28,3 +28,7 @@ libs/*/target
 /run*.sh
 /*.info
 /printhor/test-data
+/s_plot.csv
+/printhor/s_plot.csv
+/*.md
+!/README.md

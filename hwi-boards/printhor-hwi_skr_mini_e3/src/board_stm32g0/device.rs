@@ -33,7 +33,7 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-spi")] {
-        pub type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
+        pub type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async, embassy_stm32::spi::mode::Master>;
     }
 }
 
@@ -42,28 +42,40 @@ pub type PwmLaser =
     embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
 
 cfg_if::cfg_if! {
-    if #[cfg(any(feature="with-hot-end", feature="with-hot-end"))] {
-        pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-        pub use embassy_stm32::adc::Instance as AdcTrait;
-        pub use embassy_stm32::adc::AdcChannel as AdcPinTrait;
-        pub use embassy_stm32::adc::VrefInt as VrefInt;
-        pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        /// ADC1 shared by the hot-end (TH0: PA0) and hot-bed (THB: PC4) thermistors
+        pub type HotEndHotBedAdc = super::io::adc::AdcWrapper<embassy_stm32::peripherals::ADC1>;
+        pub type HotEndHotBedAdcPin = embassy_stm32::adc::AnyAdcChannel<'static, embassy_stm32::peripherals::ADC1>;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-end")] {
+        pub type HotEndAdcPin = HotEndHotBedAdcPin;
+        pub type HotEndPwmChannel = PwmChannel;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-bed")] {
+        pub type HotBedAdcPin = HotEndHotBedAdcPin;
+        pub type HotBedPwmChannel = PwmChannel;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-layer")] {
+        pub type FanLayerPwmChannel = PwmChannel;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-extra-1")] {
+        pub type FanExtra1PwmChannel = PwmChannel;
+    }
+}
 
-    }
-}
 cfg_if::cfg_if! {
-    if #[cfg(feature="with-hot-bed")] {
-        pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
-        pub type AdcHotbedPeripheral = AdcHotendHotbedPeripheral;
-        pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
-    }
-}
-cfg_if::cfg_if! {
-    if #[cfg(feature="with-hot-end")] {
-        pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
-        pub type AdcHotend = AdcHotendHotbed;
-        pub type AdcHotbed = AdcHotendHotbed;
-        pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
+    if #[cfg(feature = "with-eeprom")] {
+        /// On-board AT24C32 (4KB) EEPROM on I2C1 (PB6: SCL, PB7: SDA)
+        pub type EepromI2c = embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>;
+        pub type Eeprom = hwa::eeprom::At24c32<EepromI2c>;
     }
 }
 
@@ -104,18 +116,11 @@ cfg_if::cfg_if! {
 }
 
 
+/// TIM3 drives FAN0 (PC6, CH1), FAN1 (PC7, CH2), HE0 (PC8, CH3) and the bed (PC9, CH4)
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-fan-layer", feature = "with-fan-extra-1"))]
 pub type PwmFan0Fan1HotendHotbed =
     embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
 
-#[cfg(any(feature ="with-fan-layer"))]
-pub type PwmFanLayer = PwmFan0Fan1HotendHotbed;
-#[cfg(any(feature = "with-fan-extra-1"))]
-pub type PwmFanExtra1 = PwmFan0Fan1HotendHotbed;
-#[cfg(any(feature = "with-hot-end"))]
-pub type PwmHotend = PwmFan0Fan1HotendHotbed;
-#[cfg(any(feature = "with-hot-bed"))]
-pub type PwmHotbed = PwmFan0Fan1HotendHotbed;
 
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed", feature = "with-probe",
     feature = "with-fan-layer", feature = "with-fan-extra-1", feature = "with-laser"))]

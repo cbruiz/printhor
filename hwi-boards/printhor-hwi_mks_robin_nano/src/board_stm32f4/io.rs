@@ -73,8 +73,8 @@ pub mod serial_usb {
         pub fn spawn(&mut self, spawner: embassy_executor::Spawner) {
             self.builder
                 .take()
-                .map(|builder| match spawner.spawn(serial_usb_task(builder.build())) {
-                    Ok(_) => (),
+                .map(|builder| match serial_usb_task(builder.build()) {
+                    Ok(token) => spawner.spawn(token),
                     Err(_) => {
                         panic!("Unable to spawn USB task")
                     }
@@ -224,6 +224,125 @@ pub mod serial_port_2 {
 
         async fn recovery_check(&mut self) {
             // Optional. Needed when io is susceptible to need reestablished or reset
+        }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        /// ADC for the thermistors (TH1: PC1, TB: PC0).
+        ///
+        /// The thermistors are sampled every few hundred milliseconds, so blocking conversions
+        /// (a few microseconds each, averaged in software) are simpler than DMA.
+        pub mod adc {
+            use printhor_hwa_common as hwa;
+
+            /// Number of conversions averaged per sample (the F4 ADC has no hardware oversampling)
+            const AVERAGED_SAMPLES: u32 = 8;
+
+            pub struct AdcWrapper<T>
+            where
+                T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+            {
+                adc: embassy_stm32::adc::Adc<'static, T>,
+            }
+
+            impl<T> AdcWrapper<T>
+            where
+                T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+            {
+                pub fn new(adc_peripheral: embassy_stm32::Peri<'static, T>) -> Self {
+                    // The ADC prescaler is derived from PCLK2 to keep the kernel clock in range
+                    let mut config = embassy_stm32::adc::AdcConfig::default();
+                    config.resolution = Some(embassy_stm32::adc::Resolution::BITS12);
+                    Self {
+                        adc: embassy_stm32::adc::Adc::new_with_config(adc_peripheral, config),
+                    }
+                }
+            }
+
+            impl<T> hwa::traits::UnifiedAdc16 for AdcWrapper<T>
+            where
+                T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+            {
+                type VRefPin = ();
+                type SamplePin = embassy_stm32::adc::AnyAdcChannel<'static, T>;
+
+                fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl core::future::Future<Output = u16> {
+                    // Long sample time: the thermistor inputs are high impedance (4.7K pull-up + RC)
+                    let mut sum = 0u32;
+                    for _ in 0..AVERAGED_SAMPLES {
+                        sum += self.adc.blocking_read(pin, embassy_stm32::adc::SampleTime::CYCLES480) as u32;
+                    }
+                    let sample = (sum / AVERAGED_SAMPLES) as u16;
+                    async move { sample }
+                }
+            }
+        }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-extra-1")] {
+        /// On/off output with the PWM interface, for outputs without a timer channel (FAN1 is on
+        /// PC14, which has no timer). Any duty greater than zero turns the output on.
+        pub struct OnOffPwm {
+            pin: embassy_stm32::gpio::Output<'static>,
+            duty: u32,
+            enabled: bool,
+        }
+
+        impl OnOffPwm {
+            pub fn new(pin: embassy_stm32::gpio::Output<'static>) -> Self {
+                Self { pin, duty: 0, enabled: false }
+            }
+
+            fn apply(&mut self) {
+                if self.enabled && self.duty > 0 {
+                    self.pin.set_high();
+                } else {
+                    self.pin.set_low();
+                }
+            }
+        }
+
+        impl printhor_hwa_common::traits::Pwm for OnOffPwm {
+            type Channel = ();
+            type Time = u32;
+            type Duty = u32;
+
+            fn disable(&mut self, _channel: Self::Channel) {
+                self.enabled = false;
+                self.apply();
+            }
+
+            fn enable(&mut self, _channel: Self::Channel) {
+                self.enabled = true;
+                self.apply();
+            }
+
+            fn get_period(&self) -> Self::Time {
+                0
+            }
+
+            fn get_duty(&self, _channel: Self::Channel) -> Self::Duty {
+                self.duty
+            }
+
+            fn get_max_duty(&self) -> Self::Duty {
+                100
+            }
+
+            fn set_duty(&mut self, _channel: Self::Channel, duty: Self::Duty) {
+                self.duty = duty.min(100);
+                self.apply();
+            }
+
+            fn set_period<P>(&mut self, _period: P)
+            where
+                P: Into<Self::Time>,
+            {
+            }
         }
     }
 }

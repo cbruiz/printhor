@@ -51,6 +51,13 @@ cfg_if::cfg_if! {
 #[cfg(feature = "with-trinamic")]
 mod mocked_trinamic;
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        mod mocked_eeprom;
+        pub use mocked_eeprom::MockedEeprom;
+    }
+}
+
 mod mocked_wdt;
 
 #[allow(unused)]

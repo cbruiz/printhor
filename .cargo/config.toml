@@ -24,7 +24,6 @@ HOT_BED_THERM_BETA = "3950.0"
 
 #DEFMT_LOG = "INFO"
 #RUST_LOG = "INFO"
-ASYNC_STD_THREAD_COUNT = "1"
 EMBASSY_USB_MAX_INTERFACE_COUNT = "2"
 
 ###########################
@@ -62,7 +61,9 @@ runner = "probe-rs echo PLEASE DON'T run --chip STM32F407VETx --disable-progress
 runner = "elf2uf2-rs --deploy --serial --verbose"
 
 [build]
-rustdocflags = [ "--html-in-header", "doc/doc.header.html" ]
+# NOTE: Do not set `rustdocflags` here. This config is also inherited by nested independent
+# cargo projects (libs/*, hwi-boards/*) where `doc/doc.header.html` does not exist, breaking their
+# doctests. The MathJax header is set in printhor/.cargo/config.toml and in CI (RUSTDOCFLAGS).
 
 [profile.dev.package."*"]
 codegen-units = 1

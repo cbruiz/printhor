@@ -127,7 +127,6 @@ where
 mod test {
     use crate as hwa;
     use hwa::SyncMutexStrategy;
-    use printhor_hwa_common_macros::make_static_sync_controller;
     use std::ops::Deref;
 
     struct DummyDevice {
@@ -182,8 +181,12 @@ mod test {
         let controller =
             make_static_sync_controller!("DummyDevice", SyncMutexStrategy, DummyDevice::new());
 
+        let alloc_size = hwa::stack_allocation_get();
+
         let _c2 = controller.clone();
         hwa::info!("OK");
+
+        hwa::stack_allocation_decrement(alloc_size);
     }
 }
 //#endregion

@@ -1,28 +1,31 @@
 //! The Motion profile trait and its implementations
 //!
-use crate::hwa;
-pub mod profile;
+mod micro_segment_interpolation;
+#[cfg(feature = "with-motion-chaining")]
+mod motion_chaining;
+mod motion_profile_hybrid;
+mod motion_profile_traits;
+mod segment_sampling;
+#[cfg(all(test, feature = "perf-bench"))]
+mod perf_bench;
+// Re-exports
 
-/// The `MotionProfile` trait provides methods for evaluating motion_control profiles.
-pub trait MotionProfile {
-    /// Returns the end time of the motion_control profile.
-    fn end_time(&self) -> hwa::math::Real;
+pub use micro_segment_interpolation::*;
+#[cfg(feature = "with-motion-chaining")]
+pub use motion_chaining::*;
+pub use motion_profile_hybrid::*;
+pub use motion_profile_traits::*;
+pub use segment_sampling::*;
 
-    /// Returns the end position of the motion_control profile.
-    fn end_pos(&self) -> hwa::math::Real;
+#[cfg(test)]
+mod motion_test {
 
-    /// Evaluates the position at a given time `t` within the motion_control profile.
-    ///
-    /// # Parameters
-    ///
-    /// - `t`: The time at which to evaluate the position.
-    ///
-    /// # Returns
-    ///
-    /// An `Option` containing a tuple with:
-    /// - The evaluated position as `Real`.
-    /// - A status as `u8` (implementation-specific).
-    fn eval_position(&self, t: hwa::math::Real) -> Option<hwa::math::Real>;
+    #[test]
+    fn discrete_positioning_case_1() {}
+
+    #[test]
+    fn discrete_positioning_case_2() {}
+
+    #[test]
+    fn discrete_positioning_case_3() {}
 }
-
-pub use profile::*;

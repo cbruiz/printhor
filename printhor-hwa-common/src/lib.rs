@@ -56,6 +56,12 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        pub mod eeprom;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "sd-card-spi")] {
         pub mod sd_card_spi;
     }
@@ -217,8 +223,10 @@ impl CommChannel {
     /// #[cfg(feature = "with-serial-usb")]
     /// assert_eq!(channel, CommChannel::SerialUsb); // Example assuming `with-serial-usb` feature is enabled
     ///
-    /// let internal_channel = CommChannel::index(hwa::SERIAL_PORT2_OFFSET + 1);
+    /// let internal_channel = CommChannel::index(CommChannel::index_of(CommChannel::Internal));
     /// assert_eq!(internal_channel, CommChannel::Internal);
+    /// let sink_channel = CommChannel::index(CommChannel::index_of(CommChannel::Sink));
+    /// assert_eq!(sink_channel, CommChannel::Sink);
     /// ```
     pub const fn index_of(channel: CommChannel) -> usize {
         match channel {

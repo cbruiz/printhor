@@ -70,7 +70,7 @@ fn main() {
             println!("cargo:rustc-link-arg-bins=--nmagic");
             println!("cargo:rustc-link-arg-bins=-Tlink.x");
         }
-        else if #[cfg(feature="skr_mini_e3_v3")] {
+        else if #[cfg(any(feature="skr_mini_e3_v3", feature="skr_mini_e3_v3_fdm"))] {
             cfg_if::cfg_if! {
                 if #[cfg(feature="without-bootloader")] {
                 }

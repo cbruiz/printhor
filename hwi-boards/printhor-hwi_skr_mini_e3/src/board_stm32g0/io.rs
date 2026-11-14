@@ -88,8 +88,8 @@ pub(crate) mod serial_usb {
         pub fn spawn(&mut self, spawner: embassy_executor::Spawner) {
             self.builder
                 .take()
-                .map(|builder| match spawner.spawn(usb_task(builder.build())) {
-                    Ok(_) => (),
+                .map(|builder| match usb_task(builder.build()) {
+                    Ok(token) => spawner.spawn(token),
                     Err(_) => {
                         panic!("Unable to spawn USB task")
                     }
@@ -311,6 +311,62 @@ cfg_if::cfg_if! {
 
             async fn flush(&mut self) -> Result<(), hwa::uart::SerialError> {
                 Ok(self.tx.flush().await.map_err(|_| {hwa::uart::SerialError::Framing})?)
+            }
+        }
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        /// ADC for the thermistors (TH0: PA0, THB: PC4).
+        ///
+        /// The thermistors are sampled every few hundred milliseconds, so a blocking conversion
+        /// (a few microseconds, with 16x hardware oversampling) is simpler than DMA and has no
+        /// measurable cost.
+        pub mod adc {
+            use printhor_hwa_common as hwa;
+
+            /// Long sample time: the thermistor inputs are high impedance (4.7K pull-up + RC filter)
+            const SAMPLE_TIME: embassy_stm32::adc::SampleTime =
+                embassy_stm32::adc::SampleTime::CYCLES160_5;
+
+            pub struct AdcWrapper<T>
+            where
+                T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+            {
+                adc: embassy_stm32::adc::Adc<'static, T>,
+            }
+
+            impl<T> AdcWrapper<T>
+            where
+                T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+            {
+                pub fn new(adc_peripheral: embassy_stm32::Peri<'static, T>) -> Self {
+                    let mut config = embassy_stm32::adc::AdcConfig::default();
+                    // The ADC kernel clock must not exceed 35 MHz: PCLK (64 MHz) / 2
+                    config.clock = Some(embassy_stm32::adc::Clock::Sync {
+                        div: embassy_stm32::adc::CkModePclk::DIV2,
+                    });
+                    config.resolution = Some(embassy_stm32::adc::Resolution::BITS12);
+                    // 16x oversampling with 4 bits shift: 12 bits result with less noise
+                    config.averaging = Some(embassy_stm32::adc::Averaging::Samples16);
+                    Self {
+                        adc: embassy_stm32::adc::Adc::new_with_config(adc_peripheral, config),
+                    }
+                }
+            }
+
+            impl<T> hwa::traits::UnifiedAdc16 for AdcWrapper<T>
+            where
+                T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+            {
+                type VRefPin = ();
+                type SamplePin = embassy_stm32::adc::AnyAdcChannel<'static, T>;
+
+                fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl core::future::Future<Output = u16> {
+                    let sample = self.adc.blocking_read(pin, SAMPLE_TIME);
+                    async move { sample }
+                }
             }
         }
     }

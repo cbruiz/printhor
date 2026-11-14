@@ -163,6 +163,13 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        // Lock-free: the EEPROM is only used from the (single) executor of the GCode processing
+        pub type EepromMutexStrategy = hwa::AsyncStandardStrategy<hwa::AsyncNoopMutexType, super::device::Eeprom>;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-print-job")] {
         pub type PrinterControllerSignalMutexType = hwa::AsyncNoopMutexType;
     }

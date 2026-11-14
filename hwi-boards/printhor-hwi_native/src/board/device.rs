@@ -4,6 +4,8 @@ use printhor_hwa_common as hwa;
 use crate::board as board;
 #[allow(unused)]
 use hwa::HwiContract;
+#[allow(unused)]
+use crate::simulation;
 
 pub type WatchDog = board::mocked_peripherals::MockedWatchdog<'static, u8>;
 
@@ -120,37 +122,40 @@ impl hwa::traits::StepActuatorTrait for StepActuator {
         #[cfg(feature = "with-x-axis")]
         if _mask.contains(hwa::CoordSel::X) {
             if _channels.contains(hwa::CoordSel::X) {
-                self.x_enable_pin.set_low();
+                self.x_dir_pin.set_high();
             }
             else {
-                self.x_enable_pin.set_high();
+                self.x_dir_pin.set_low();
             }
+            simulation::set_direction(simulation::Axis::X, self.x_dir_pin.is_high());
         }
         #[cfg(feature = "with-y-axis")]
         if _mask.contains(hwa::CoordSel::Y) {
             if _channels.contains(hwa::CoordSel::Y) {
-                self.y_enable_pin.set_low();
+                self.y_dir_pin.set_high();
             }
             else {
-                self.y_enable_pin.set_high();
+                self.y_dir_pin.set_low();
             }
+            simulation::set_direction(simulation::Axis::Y, self.y_dir_pin.is_high());
         }
         #[cfg(feature = "with-z-axis")]
         if _mask.contains(hwa::CoordSel::Z) {
             if _channels.contains(hwa::CoordSel::Z) {
-                self.z_enable_pin.set_low();
+                self.z_dir_pin.set_high();
             }
             else {
-                self.z_enable_pin.set_high();
+                self.z_dir_pin.set_low();
             }
+            simulation::set_direction(simulation::Axis::Z, self.z_dir_pin.is_high());
         }
         #[cfg(feature = "with-e-axis")]
         if _mask.contains(hwa::CoordSel::E) {
             if _channels.contains(hwa::CoordSel::E) {
-                self.e_enable_pin.set_low();
+                self.e_dir_pin.set_high();
             }
             else {
-                self.e_enable_pin.set_high();
+                self.e_dir_pin.set_low();
             }
         }
     }
@@ -159,14 +164,17 @@ impl hwa::traits::StepActuatorTrait for StepActuator {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(hwa::CoordSel::X) {
             self.x_step_pin.toggle();
+            simulation::step(simulation::Axis::X);
         }
         #[cfg(feature = "with-y-axis")]
         if _channels.contains(hwa::CoordSel::Y) {
             self.y_step_pin.toggle();
+            simulation::step(simulation::Axis::Y);
         }
         #[cfg(feature = "with-z-axis")]
         if _channels.contains(hwa::CoordSel::Z) {
             self.z_step_pin.toggle();
+            simulation::step(simulation::Axis::Z);
         }
         #[cfg(feature = "with-e-axis")]
         if _channels.contains(hwa::CoordSel::E) {
@@ -177,14 +185,26 @@ impl hwa::traits::StepActuatorTrait for StepActuator {
     fn step_high(&mut self, _channels: hwa::CoordSel) {
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(hwa::CoordSel::X) {
+            // A step is the rising edge of the pulse
+            if self.x_step_pin.is_low() {
+                simulation::step(simulation::Axis::X);
+            }
             self.x_step_pin.set_high();
         }
         #[cfg(feature = "with-y-axis")]
         if _channels.contains(hwa::CoordSel::Y) {
+            // A step is the rising edge of the pulse
+            if self.y_step_pin.is_low() {
+                simulation::step(simulation::Axis::Y);
+            }
             self.y_step_pin.set_high();
         }
         #[cfg(feature = "with-z-axis")]
         if _channels.contains(hwa::CoordSel::Z) {
+            // A step is the rising edge of the pulse
+            if self.z_step_pin.is_low() {
+                simulation::step(simulation::Axis::Z);
+            }
             self.z_step_pin.set_high();
         }
         #[cfg(feature = "with-e-axis")]
@@ -217,14 +237,29 @@ impl hwa::traits::StepActuatorTrait for StepActuator {
         let mut triggered = false;
         #[cfg(feature = "with-x-axis")]
         if _channels.contains(hwa::CoordSel::X) {
+            if simulation::end_stop_active(simulation::Axis::X) {
+                self.x_endstop_pin.set_high();
+            } else {
+                self.x_endstop_pin.set_low();
+            }
             triggered |= self.x_endstop_pin.is_high();
         }
         #[cfg(feature = "with-y-axis")]
         if _channels.contains(hwa::CoordSel::Y) {
+            if simulation::end_stop_active(simulation::Axis::Y) {
+                self.y_endstop_pin.set_high();
+            } else {
+                self.y_endstop_pin.set_low();
+            }
             triggered |= self.y_endstop_pin.is_high();
         }
         #[cfg(feature = "with-z-axis")]
         if _channels.contains(hwa::CoordSel::Z) {
+            if simulation::end_stop_active(simulation::Axis::Z) {
+                self.z_endstop_pin.set_high();
+            } else {
+                self.z_endstop_pin.set_low();
+            }
             triggered |= self.z_endstop_pin.is_high();
         }
         #[cfg(feature = "with-e-axis")]
@@ -314,6 +349,9 @@ cfg_if::cfg_if! {
 
     }
 }
+
+#[cfg(feature = "with-eeprom")]
+pub type Eeprom = board::mocked_peripherals::MockedEeprom;
 
 #[cfg(feature = "with-trinamic")]
 pub type TrinamicUart = board::comm::SingleWireSoftwareUart;

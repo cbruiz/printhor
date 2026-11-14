@@ -71,6 +71,13 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        // Lock-free: the EEPROM is only used from the (single) executor of the GCode processing
+        pub type EepromMutexStrategy = hwa::AsyncStandardStrategy<hwa::AsyncNoopMutexType, super::device::Eeprom>;
+    }
+}
+
+cfg_if::cfg_if! {
     if #[cfg(feature = "with-ps-on")] {
         pub type PSOnLockType = hwa::SyncNoopMutexType;
         pub type PSOnMutexStrategy = hwa::SyncStandardStrategy<PSOnLockType, super::device::PsOnPin>;
@@ -127,25 +134,34 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(any(feature="with-hot-end", feature = "with-hot-bed"))] {
-        pub type HotEndHotBedAdcMutexType = hwa::SyncCsMutexType;
+        pub type HotEndHotBedAdcMutexType = hwa::AsyncCsMutexType;
         pub type HotEndHotBedAdcMutexStrategy = hwa::AsyncStandardStrategy<HotEndHotBedAdcMutexType, super::device::HotEndHotBedAdc>;
-
-        pub type HotEndHotBedPwmMutexType = hwa::SyncNoopMutexType;
-        pub type HotEndHotBedPwmMutexStrategy = hwa::SyncStandardStrategy<HotEndHotBedPwmMutexType, super::device::HotEndHotBedPwm>;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-end")] {
         pub type HotEndAdcMutexStrategy = HotEndHotBedAdcMutexStrategy;
-        pub type HotEndPwmMutexStrategy = HotEndHotBedPwmMutexStrategy;
+        pub type HotEndPwmMutexStrategy = hwa::SyncStandardStrategy<hwa::SyncCsMutexType, super::device::PwmHotEnd>;
     }
 }
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-hot-bed")] {
         pub type HotBedAdcMutexStrategy = HotEndHotBedAdcMutexStrategy;
-        pub type HotBedPwmMutexStrategy = HotEndHotBedPwmMutexStrategy;
+        pub type HotBedPwmMutexStrategy = hwa::SyncStandardStrategy<hwa::SyncCsMutexType, super::device::PwmHotBed>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-fan-layer")] {
+        pub type FanLayerPwmMutexStrategy = hwa::SyncStandardStrategy<hwa::SyncCsMutexType, super::device::PwmFanLayer>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature="with-fan-extra-1")] {
+        pub type FanExtra1PwmMutexStrategy = hwa::SyncStandardStrategy<hwa::SyncCsMutexType, super::device::PwmFanExtra1>;
     }
 }
 //#endregion

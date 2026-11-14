@@ -276,7 +276,7 @@ mod test {
 
         assert!(
             !controller.can_retain(),
-            "A AsyncStandardStrategy StaticAsyncController can NOT retain"
+            "A AsyncStandardStrategy can NOT retain"
         );
 
         let _r = controller.retain().await;
@@ -308,6 +308,8 @@ mod test {
             MUTEX_INSTANCE.init(hwa::AsyncMutex::new(DummyDevice::new())),
         ));
 
+        let alloc_size = hwa::stack_allocation_get();
+
         assert!(
             controller.can_retain(),
             "A Holdable StaticAsyncController can retain"
@@ -318,7 +320,7 @@ mod test {
         );
         assert!(
             controller.try_lock().is_err(),
-            "A retained Holdable cannot be lock until released"
+            "Retained Holdable cannot be lock until released"
         );
         assert!(
             controller.release().is_ok(),
@@ -338,6 +340,8 @@ mod test {
 
         let strategy = other_controller.deref();
         let _other_strategy = strategy.clone();
+
+        hwa::stack_allocation_decrement(alloc_size);
     }
 }
 

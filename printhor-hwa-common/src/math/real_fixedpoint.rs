@@ -58,15 +58,16 @@ impl Real {
     pub const fn one() -> Self {
         Real(dec!(1.0))
     }
+    /// Rounds half away from zero (as the float backends)
     pub fn round(&self) -> Self {
-        Real(self.0.round())
+        Real(self.0.round_dp_with_strategy(0, RoundingStrategy::MidpointAwayFromZero))
     }
     pub fn round_dp(&self, decimals: u32) -> Self {
-        Real(self.0.round_dp(decimals))
+        Real(self.0.round_dp_with_strategy(decimals, RoundingStrategy::MidpointAwayFromZero))
     }
     /// Round to decimal digits
     pub fn rdp(&self, digits: u32) -> Self {
-        Real(self.0.round_dp(digits))
+        Real(self.0.round_dp_with_strategy(digits, RoundingStrategy::MidpointAwayFromZero))
     }
     pub fn ceil(&self) -> Self {
         Real(self.0.ceil())
@@ -77,11 +78,13 @@ impl Real {
     pub fn to_f64(&self) -> f64 {
         self.0.to_f64().unwrap()
     }
+    /// Truncates toward zero (as the float backends and `int()`)
     pub fn to_i32(&self) -> Option<i32> {
-        self.0.round().to_i32()
+        self.0.trunc().to_i32()
     }
+    /// Truncates toward zero (as the float backends and `int()`)
     pub fn to_i64(&self) -> Option<i64> {
-        self.0.round().to_i64()
+        self.0.trunc().to_i64()
     }
     pub fn int(&self) -> i64 {
         self.0.trunc().to_i64().unwrap()
@@ -99,7 +102,15 @@ impl Real {
         (*self) * hwa::math::PI / hwa::make_real!(180.0)
     }
 
+    pub fn cbrt(self) -> Self {
+        Real::from_fixed(self.0.powd(math::THIRD.0))
+    }
+
     pub fn sqrt(self) -> Option<Self> {
+        if self.0.is_zero() {
+            // Also a negated zero, whose sign rust_decimal keeps
+            return Some(Real(Decimal::ZERO));
+        }
         match self.0.sqrt() {
             None => None,
             Some(v) => Some(Real(v)),
@@ -119,13 +130,80 @@ impl Real {
     }
 
     /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
-    pub fn atan2(self, _other: Real) -> Self {
-        Real::from_fixed(Decimal::from_f64(self.to_f64().atan2(_other.to_f64())).unwrap())
+    ///
+    /// Native Decimal implementation: `f64::atan2` is not available in `core` (no_std).
+    pub fn atan2(self, other: Real) -> Self {
+        let (y, x) = (self.0, other.0);
+        let r = if x.is_zero() {
+            if y.is_zero() {
+                Decimal::ZERO
+            } else if y.is_sign_negative() {
+                -Decimal::HALF_PI
+            } else {
+                Decimal::HALF_PI
+            }
+        } else {
+            let a = Self::decimal_atan(y / x);
+            if x.is_sign_positive() {
+                a
+            } else if y.is_sign_negative() {
+                a - Decimal::PI
+            } else {
+                a + Decimal::PI
+            }
+        };
+        Real(r)
     }
 
-    /// Computes the arccosine of a number. Return value is in radians in the range [0, pi] or NaN if the number is outside the range [-1, 1].
+    /// Computes the arccosine of a number. Return value is in radians in the range [0, pi].
+    /// The input is clamped to [-1, 1] (there is no NaN in fixed point).
+    ///
+    /// Native Decimal implementation: `f64::acos` is not available in `core` (no_std).
     pub fn acos(self) -> Self {
-        Real::from_fixed(Decimal::from_f64(self.to_f64().acos()).unwrap())
+        let x = self.0.max(-Decimal::ONE).min(Decimal::ONE);
+        let s = (Decimal::ONE - x * x).sqrt().unwrap_or(Decimal::ZERO);
+        Real(s).atan2(Real(x))
+    }
+
+    /// Arctangent of a Decimal in radians, in the range [-pi/2, pi/2].
+    fn decimal_atan(x: Decimal) -> Decimal {
+        let negative = x.is_sign_negative();
+        let mut a = x.abs();
+        // atan(a) = pi/2 - atan(1/a) for a > 1
+        let inverted = a > Decimal::ONE;
+        if inverted {
+            a = Decimal::ONE / a;
+        }
+        // Halve the angle 3 times: atan(a) = 2 * atan(a / (1 + sqrt(1 + a^2)))
+        // leaving |a| <= tan(pi/32) ~= 0.098 so the Taylor series converges fast.
+        const HALVINGS: u32 = 3;
+        for _ in 0..HALVINGS {
+            a = a / (Decimal::ONE + (Decimal::ONE + a * a).sqrt().unwrap_or(Decimal::ONE));
+        }
+        // Taylor series: a - a^3/3 + a^5/5 - ...
+        let a2 = a * a;
+        let mut power = a;
+        let mut sum = Decimal::ZERO;
+        let mut n = Decimal::ONE;
+        let two = Decimal::TWO;
+        for i in 0..40 {
+            let term = power / n;
+            if term.is_zero() {
+                break;
+            }
+            if i % 2 == 0 {
+                sum += term;
+            } else {
+                sum -= term;
+            }
+            power *= a2;
+            n += two;
+        }
+        let mut r = sum * Decimal::from(1u32 << HALVINGS);
+        if inverted {
+            r = Decimal::HALF_PI - r;
+        }
+        if negative { -r } else { r }
     }
 
     pub fn ln(self) -> Self {

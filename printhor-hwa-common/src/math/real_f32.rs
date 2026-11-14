@@ -19,8 +19,20 @@ impl Real {
         Self(num)
     }
 
+    /// Powers of ten that are exact in `f32` (`10^k = 2^k·5^k`, `5^10 < 2^24`): the same values
+    /// `powi` produces, without its loop.
+    const POW10: [f32; 11] = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10];
+
+    /// `num / 10^scale`. Hot path (G-code literals, loop counters, µs → s): `scale == 0` is a
+    /// plain conversion and small scales use an exact table, bit-identical to `powi`.
     pub fn from_lit(num: i64, scale: u32) -> Self {
-        let s = FloatCore::powi(10.0f32, scale as i32);
+        if scale == 0 {
+            return Self(num as f32);
+        }
+        let s = match Self::POW10.get(scale as usize) {
+            Some(p) => *p,
+            None => FloatCore::powi(10.0f32, scale as i32),
+        };
         Self((num as f32) / s)
     }
 
@@ -128,8 +140,20 @@ impl Real {
         } else if self == math::ZERO {
             Some(math::ZERO)
         } else {
-            // The famous inverse square root approximation of 'ID Software'
-            let r = math::ONE / Real::from_inner(Self::quake_isqrt(self.inner()));
+            // y ≈ 1/sqrt(x) (fast inverse square root + 3 Newton iterations).
+            // sqrt(x) = x·y avoids the costly division of the former `1/y`, and a final
+            // division-free Markstein/Heron correction `r += ½·y·(x - r²)` brings the
+            // result to ≤ 1 ulp (the uncorrected estimate drifts a few ulps).
+            // Subnormals defeat the exponent-based seed: scale them by an even power of two
+            // (exact) and undo it on the result (sqrt(x·4^k) = sqrt(x)·2^k)
+            let (x, unscale) = if self.0 < f32::MIN_POSITIVE {
+                (self.0 * 16777216.0f32, 1.0 / 4096.0f32)
+            } else {
+                (self.0, 1.0)
+            };
+            let y = Self::quake_isqrt(x);
+            let r0 = x * y;
+            let r = Real::from_inner((r0 + 0.5f32 * y * (x - r0 * r0)) * unscale);
             if self < math::EPSILON {
                 hwa::trace!("Very small sqrt calculation: sqrt({:?}) = {:?} ", self.0, r);
             }
@@ -147,6 +171,65 @@ impl Real {
         y = y * (1.5f32 - xhalf * y * y);
         y = y * (1.5f32 - xhalf * y * y);
         y
+    }
+
+    // cbrt implementation from rust libm
+    // Warning: This method deviates too much for large values
+    pub fn libm_cbrt(x: f32) -> f32 {
+        const B1: u32 = 709958130; /* B1 = (127-127.0/3-0.03306235651)*2**23 */
+        const B2: u32 = 642849266; /* B2 = (127-127.0/3-24/3-0.03306235651)*2**23 */
+
+        let x1p24 = f32::from_bits(0x4b800000); // 0x1p24f === 2 ^ 24
+
+        let mut ui: u32 = x.to_bits();
+        let mut hx: u32 = ui & 0x7fffffff;
+
+        if hx >= 0x7f800000 {
+            /* cbrt(NaN,INF) is itself */
+            return x + x;
+        }
+
+        /* rough cbrt to 5 bits */
+        if hx < 0x00800000 {
+            /* zero or subnormal? */
+            if hx == 0 {
+                return x; /* cbrt(+-0) is itself */
+            }
+            ui = (x * x1p24).to_bits();
+            hx = ui & 0x7fffffff;
+            hx = hx / 3 + B2;
+        } else {
+            hx = hx / 3 + B1;
+        }
+        ui &= 0x80000000;
+        ui |= hx;
+
+        /*
+         * First step Newton iteration
+         */
+        // The Newton steps are performed in f64 (as libm's cbrtf does): in f32, `t³` and `2x + t³`
+        // under/overflow for very small/large magnitudes
+        let xd = x as f64;
+        let mut t = f32::from_bits(ui) as f64;
+        let mut r = t * t * t;
+        t = t * (xd + xd + r) / (xd + r + r);
+
+        /*
+         * Second step Newton iteration
+         */
+        r = t * t * t;
+        t = t * (xd + xd + r) / (xd + r + r);
+
+        t as f32
+    }
+
+    /// Computes the cube root of the argument.
+    pub fn cbrt(self) -> Self {
+        let r = Real::from_inner(Real::libm_cbrt(self.0));
+        //let r = Real::from_inner(self.0.cbrt())
+        //let r = Real::from_inner(micromath::F32::powf(self.0.into(), micromath::F32::from(1.0f32/3.0f32)).into());
+        //hwa::info!("cbrt calculation: cbrt({:?}) = {}", self, r.0);
+        r
     }
 
     pub fn sin(self) -> Self {

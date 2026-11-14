@@ -26,6 +26,7 @@ impl hwa::traits::Pwm for MockedPwm {
     type Duty = u32;
     fn disable(&mut self, channel: <Self as hwa::traits::Pwm>::Channel) {
         self.duty_map.insert(channel, 0);
+        crate::simulation::set_pwm_power(channel, 0.0);
     }
     fn enable(&mut self, _: <Self as hwa::traits::Pwm>::Channel) {
 
@@ -45,6 +46,7 @@ impl hwa::traits::Pwm for MockedPwm {
             clamped_duty,
         );
         self.duty_map.insert(channel, clamped_duty);
+        crate::simulation::set_pwm_power(channel, clamped_duty as f32 / self.get_max_duty() as f32);
     }
     fn set_period<P>(&mut self, _: P) where P: Into<u16> {  }
 }

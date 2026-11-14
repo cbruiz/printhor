@@ -175,6 +175,30 @@ impl MotionConfig {
         );
     }
 
+    /// Sets the home offsets (M206) of the given axis (E is ignored)
+    pub fn update_home_offset(&self, offset: &TVector<Real>) {
+        let mut offset = *offset;
+        offset.set_coord(CoordSel::motion_relevant_axis().complement(), None);
+        self.cfg.apply_mut(|m| {
+            m.home_offset_wu
+                .assign_if_set(CoordSel::motion_relevant_axis(), &offset);
+        });
+    }
+
+    /// The home offsets (M206) in world units
+    pub fn get_home_offset(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.home_offset_wu)
+    }
+
+    /// The logical position of the machine right after homing: the homing point shifted by the
+    /// home offsets (M206)
+    pub fn get_logical_homing_point(&self) -> TVector<Real> {
+        let offset = self.get_home_offset();
+        let mut point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
+        point.apply_values(|coord, v| Some(*v + offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
+        point
+    }
+
     pub fn get_units_per_space_magnitude(&self) -> TVector<Real> {
         self.cfg.apply(|m| m.units_per_space_magnitude)
     }
@@ -192,12 +216,72 @@ impl MotionConfig {
         self.get_units_per_space_magnitude() * self.get_micro_steps_as_vector()
     }
 
-    fn get_flow_rate(&self) -> u8 {
+    pub fn get_flow_rate(&self) -> u8 {
         self.cfg.apply(|m| m.flow_rate)
     }
 
-    fn get_speed_rate(&self) -> u8 {
+    pub fn get_speed_rate(&self) -> u8 {
         self.cfg.apply(|m| m.speed_rate)
+    }
+
+    /// Updates the max speed (space units/s) only for the given coordinates (M203)
+    pub fn update_max_speed(&self, speed: &TVector<Real>) {
+        self.cfg.apply_mut(|m| {
+            m.max_speed_su.assign_if_set(CoordSel::all_axis(), speed);
+        });
+    }
+
+    /// Updates the max acceleration (space units/s²) only for the given coordinates (M201)
+    pub fn update_max_accel(&self, accel: &TVector<Real>) {
+        self.cfg.apply_mut(|m| {
+            m.max_accel_su.assign_if_set(CoordSel::all_axis(), accel);
+        });
+    }
+
+    /// Updates the steps per space unit only for the given coordinates (M92).
+    ///
+    /// The value includes micro-stepping, so the full-step scale is derived from the current micro-steps.
+    pub fn update_steps_per_space_unit(&self, steps: &TVector<Real>) {
+        let micro_steps = self.get_micro_steps_as_vector();
+        let units = steps.map(|coord, value| match value {
+            Some(v) if v.is_defined_positive() => match micro_steps.get_coord(coord) {
+                Some(ms) if ms.is_defined_positive() => Some(*v / ms),
+                _ => None,
+            },
+            _ => None,
+        });
+        self.cfg.apply_mut(|m| {
+            m.units_per_space_magnitude
+                .assign_if_set(CoordSel::all_axis(), &units);
+        });
+        self.compute_min_speed();
+    }
+
+    /// Sets the acceleration limit (space units/s² along the path) for extruding moves (M204 P/S)
+    pub fn set_print_accel(&self, accel: Option<Real>) {
+        self.cfg.apply_mut(|m| m.print_accel_su = accel);
+    }
+
+    /// Sets the acceleration limit (space units/s² along the path) for travel moves (M204 T/S)
+    pub fn set_travel_accel(&self, accel: Option<Real>) {
+        self.cfg.apply_mut(|m| m.travel_accel_su = accel);
+    }
+
+    pub fn get_print_accel(&self) -> Option<Real> {
+        self.cfg.apply(|m| m.print_accel_su)
+    }
+
+    pub fn get_travel_accel(&self) -> Option<Real> {
+        self.cfg.apply(|m| m.travel_accel_su)
+    }
+
+    /// Firmware retraction settings (M207/M208)
+    pub fn get_retraction(&self) -> RetractionConfig {
+        self.cfg.apply(|m| m.retraction)
+    }
+
+    pub fn set_retraction(&self, retraction: RetractionConfig) {
+        self.cfg.apply_mut(|m| m.retraction = retraction);
     }
 
     pub fn get_flow_rate_as_real(&self) -> Real {
@@ -234,6 +318,30 @@ impl MotionConfig {
 
     pub fn get_machine_bounds(&self) -> TVector<Real> {
         self.cfg.apply(|m| m.world_size_wu)
+    }
+
+    /// Applies the machine defaults from the [Contract] (boot and M502)
+    pub fn apply_defaults(&self) {
+        self.set_max_speed(Contract::DEFAULT_MAX_SPEED_PS);
+        self.set_max_accel(Contract::DEFAULT_MAX_ACCEL_PS);
+        self.set_max_jerk(Contract::DEFAULT_MAX_JERK_PS);
+        self.set_default_travel_speed(Contract::DEFAULT_TRAVEL_SPEED_PS);
+        self.set_space_units_per_world_unit(Contract::DEFAULT_UNITS_PER_WU);
+        self.set_micro_steps_per_axis(Contract::DEFAULT_MICRO_STEPS_PER_AXIS);
+        self.set_world_center(Contract::DEFAULT_WORLD_CENTER_WU);
+        self.set_world_size(Contract::DEFAULT_WORLD_SIZE_WU);
+        self.set_nozzle_offset(TVector::new_with_const_value(hwa::math::ZERO));
+        self.set_probe_offset(TVector::new_with_const_value(hwa::math::ZERO));
+        self.cfg.apply_mut(|m| {
+            m.home_offset_wu = TVector::new_with_coord(CoordSel::motion_relevant_axis(), Some(hwa::math::ZERO))
+        });
+        self.set_flow_rate(100);
+        self.set_speed_rate(100);
+        self.set_print_accel(None);
+        self.set_travel_accel(None);
+        self.set_retraction(RetractionConfig::defaults());
+        // Compute min speed. Really useful because of discretion effects
+        self.compute_min_speed();
     }
 
     pub fn compute_min_speed(&self) {
@@ -279,7 +387,7 @@ impl MotionConfig {
         );
         if hwa::Contract::CLAMP_MIN_SPEED {
             hwa::info!(
-                "[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is space: {:?} {}/s",
+                "[MotionConfig:ComputedConf] Min speed (1 step at center of `SegmentSampling`) is space: {:?} {}/s",
                 v_min,
                 Contract::SPACE_UNIT_MAGNITUDE
             );
@@ -366,11 +474,59 @@ pub struct MotionConfigContent {
     nozzle_offset_wu: TVector<Real>,
     /// The machine's probe offset respect to homing end-stops or logical 0
     probe_offset_wu: TVector<Real>,
+    /// The home offsets (M206): logical position = native position + offset
+    home_offset_wu: TVector<Real>,
 
     /// The flow rate for the motion, represented as a percentage.
     flow_rate: u8,
     /// The speed rate for the motion, represented as a percentage.
     pub speed_rate: u8,
+
+    /// Acceleration limit along the path for extruding moves (M204 P)
+    print_accel_su: Option<Real>,
+    /// Acceleration limit along the path for travel moves (M204 T)
+    travel_accel_su: Option<Real>,
+
+    /// Firmware retraction settings
+    retraction: RetractionConfig,
+}
+
+/// Firmware retraction settings (G10/G11, M207/M208)
+#[derive(Clone, Copy, Debug)]
+pub struct RetractionConfig {
+    /// Retract length in world units
+    pub length: Real,
+    /// Retract feed rate in world units/s
+    pub feed_rate: Real,
+    /// Z lift on retraction in world units
+    pub z_hop: Real,
+    /// Extra length added on recover in world units
+    pub recover_extra: Real,
+    /// Recover feed rate in world units/s
+    pub recover_feed_rate: Real,
+}
+
+impl RetractionConfig {
+    pub const fn new() -> Self {
+        Self {
+            length: hwa::math::ZERO,
+            feed_rate: hwa::math::ONE,
+            z_hop: hwa::math::ZERO,
+            recover_extra: hwa::math::ZERO,
+            recover_feed_rate: hwa::math::ONE,
+        }
+    }
+
+    /// Marlin-like defaults: 3 mm at 45 mm/s, recover at 25 mm/s
+    pub fn defaults() -> Self {
+        Self {
+            length: Real::from_lit(3, 0),
+            feed_rate: Real::from_lit(45, 0),
+            z_hop: hwa::math::ZERO,
+            recover_extra: hwa::math::ZERO,
+            recover_feed_rate: Real::from_lit(25, 0),
+        }
+    }
 }
 
 impl MotionConfigContent {
@@ -393,9 +549,15 @@ impl MotionConfigContent {
 
             nozzle_offset_wu: TVector::new_with_const_value(hwa::math::ZERO),
             probe_offset_wu: TVector::new_with_const_value(hwa::math::ZERO),
+            home_offset_wu: TVector::new_with_coord(CoordSel::motion_relevant_axis(), Some(hwa::math::ZERO)),
 
             flow_rate: 100,
             speed_rate: 100,
+
+            print_accel_su: None,
+            travel_accel_su: None,
+
+            retraction: RetractionConfig::new(),
         }
     }
 }

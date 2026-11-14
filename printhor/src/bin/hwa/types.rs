@@ -1,5 +1,6 @@
 //! This module contains the peripheral and devices export required for ALL HWI boards
 use crate::hwa;
+#[allow(unused)]
 use crate::processing;
 #[allow(unused)]
 use crate::tasks;
@@ -100,6 +101,14 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-i2c")] {
         pub type I2CMotionMutexStrategy = <hwa::Contract as HwiContract>::I2cMotionMutexStrategy;
         pub type I2CMotionController = hwa::StaticSyncController<I2CMotionMutexStrategy>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        pub type EepromController = hwa::StaticAsyncController<
+            <hwa::Contract as HwiContract>::EepromMutexStrategy
+        >;
     }
 }
 

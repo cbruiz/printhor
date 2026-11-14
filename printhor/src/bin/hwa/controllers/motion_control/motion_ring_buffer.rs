@@ -68,6 +68,9 @@ impl RingBuffer {
     ///
     /// * `Option<&PlanEntry>` - The reference to the entry from the tail.
     pub fn entry_from_tail(&self, offset: u8) -> Option<&PlanEntry> {
+        if offset > self.used {
+            return None;
+        }
         let absolute_offset = self.head as u16 + self.used as u16 - offset as u16;
         let len = self.data.len() as u16;
 
