@@ -224,9 +224,7 @@ async fn perf_bench_chaining() {
                 speed_exit_constrained_su_s: Real::from_f32(200.0),
                 accel_enter_su_s: hwa::math::ZERO,
                 accel_exit_su_s: hwa::math::ZERO,
-                t_1: hwa::math::ZERO,
-                t_2: hwa::math::ZERO,
-                t_3: hwa::math::ZERO,
+                speed_rest_su_s: Real::from_f32(7.0),
                 proj_prev: Real::from_f32(if k == 0 { 1.0 } else { 0.05f32.cos() }),
                 proj_next: Real::from_f32(0.05f32.cos()),
                 unit_vector_dir: hwa::make_vector_real!(x = 1.0)
@@ -236,6 +234,7 @@ async fn perf_bench_chaining() {
                 dest_pos: Default::default(),
                 dest_world_pos: Default::default(),
                 tool_power: Default::default(),
+                speed_programmed_su_s: Default::default(),
                 constraints: constraints(),
                 speed_target_su_s: Real::from_f32(200.0),
             };
@@ -260,5 +259,18 @@ async fn perf_bench_chaining() {
         &format!("perform_motion_chaining ({} segments)", n),
         total.as_nanos() as f64 / reps as f64,
     );
+    // Cost breakdown of one call (counted calls: what costs milliseconds on a Cortex-M0+)
+    {
+        use motion::motion_chaining_counters as c;
+        c::reset();
+        let mutex = embassy_sync::mutex::Mutex::<hwa::AsyncNoopMutexType, _>::new(make_rb());
+        let mut guard = mutex.lock().await;
+        let _ = motion::perform_motion_chaining(&mut guard, tol);
+        let [msp, bf, adm, cmes, newton, _floors, _infeasible] = c::get();
+        println!(
+            "PERF chaining calls: ramp_peak={} ramp_floor+ramp_state={} segment_admissible={} (exact={}) newton_iters={}",
+            msp, bf, adm, cmes, newton
+        );
+    }
 }
 

@@ -12,10 +12,13 @@ use crate::processing::GCodeCmd;
 use crate::processing::GCodeValue;
 #[allow(unused)]
 use crate::processing::N;
+use crate::processing::PR;
 #[allow(unused)]
 use crate::processing::S;
+#[cfg(feature = "with-motion")]
+use crate::processing::SJ;
 #[allow(unused)]
-use crate::processing::{ESC, PID, SFZ, SP, SPT, SR};
+use crate::processing::{ESC, PID, SBR, SFZ, SP, SPT, SR, ST};
 #[cfg(feature = "with-arcs")]
 use crate::processing::ARC;
 #[cfg(feature = "with-beziers")]
@@ -78,7 +81,9 @@ where
                 let n = arg
                     .n
                     .and_then(|v| v.to_i32())
-                    .map(|v| v.max(0) as u32)
+                    // Negative numbers wrap around: `M110 N-1` expects N0 next (as the
+                    // `N-1 M110` prefix form)
+                    .map(|v| v as u32)
                     .or(cmd.line_tag);
                 if n.is_some() {
                     self.last_line_num = n;
@@ -124,7 +129,7 @@ where
                                 Some(rgs) => {
                                     return Err(GCodeLineParserError::GCodeNotImplemented(
                                         self.raw_parser.get_current_line(),
-                                        alloc::format!("{:?}", rgs),
+                                        rgs.name(),
                                     ));
                                 }
                             }
@@ -180,6 +185,7 @@ where
 
                                         let has_text_argument = match (ch, frx) {
                                             ('m', Some((23, 0)))
+                                            | ('m', Some((28, 0)))
                                             | ('m', Some((117, 0)))
                                             | ('m', Some((118, 0))) => true,
                                             _ => false,
@@ -226,7 +232,7 @@ where
                                                     return Err(
                                                         GCodeLineParserError::GCodeNotImplemented(
                                                             self.current_line,
-                                                            alloc::format!("{:?}", rgs),
+                                                            rgs.name(),
                                                         ),
                                                     );
                                                 }
@@ -241,34 +247,104 @@ where
                                 _ => {
                                     return Err(GCodeLineParserError::GCodeNotImplemented(
                                         self.current_line,
-                                        alloc::string::String::from("N/A"),
+                                        GCodeName::from("N/A"),
                                     ));
                                 }
                             }
                         }
+                        // Not logged here: the consumer of the line reports it (once)
                         Err(error) => {
-                            match error {
-                                async_gcode::Error::UnexpectedByte(_b) => {
-                                    hwa::warn!("Unexpected byte: {} ({})", _b, char::from(_b));
-                                }
-                                async_gcode::Error::NumberOverflow => {
-                                    hwa::warn!("Number overflow");
-                                }
-                                async_gcode::Error::BadNumberFormat => {
-                                    hwa::warn!("Bad number format");
-                                }
-                                _e => {
-                                    #[cfg(feature = "native")]
-                                    hwa::error!("Parse error {:?}", _e);
-                                    hwa::error!("Parse error");
-                                }
-                            }
-                            return Err(GCodeLineParserError::ParseError(self.current_line));
+                            return Err(GCodeLineParserError::from_parser_error(
+                                self.current_line,
+                                error,
+                            ));
                         }
                     }
                 }
             }
         }
+    }
+
+    /// Reads the next line without executing it (a line to be written to a file, see M28) into
+    /// `buf`, and returns the range of its content: without the line number (`N<n>`) and the
+    /// checksum (`*<cs>`), which are checked as for any other line (a wrong checksum is a
+    /// [GCodeLineParserError::BadChecksum], an unexpected number a
+    /// [GCodeLineParserError::LineNumberMismatch]: the host resends the line). Surrounding spaces
+    /// are trimmed: an empty range is an empty line. A line longer than `buf` is a
+    /// [GCodeLineParserError::ParseError].
+    pub async fn next_raw_line(
+        &mut self,
+        buf: &mut [u8],
+    ) -> Result<core::ops::Range<usize>, GCodeLineParserError> {
+        self.current_line = self.raw_parser.get_current_line();
+        let len = match self.raw_parser.next_raw_line(buf).await {
+            None => return Err(GCodeLineParserError::EOF),
+            Some(Err(error)) => {
+                return Err(GCodeLineParserError::from_parser_error(self.current_line, error));
+            }
+            Some(Ok((_, true))) => {
+                return Err(GCodeLineParserError::ParseError(self.current_line, ParseFailure::TooLong));
+            }
+            Some(Ok((len, false))) => len,
+        };
+        let line = &buf[..len];
+        let trim = |r: core::ops::Range<usize>| {
+            let (mut a, mut b) = (r.start, r.end);
+            while a < b && line[a] == b' ' {
+                a += 1;
+            }
+            while b > a && line[b - 1] == b' ' {
+                b -= 1;
+            }
+            a..b
+        };
+        let mut content = trim(0..len);
+        // Checksum: the XOR of every byte before the '*'
+        if let Some(star) = line[content.clone()].iter().rposition(|b| *b == b'*') {
+            let star = content.start + star;
+            let digits = &line[star + 1..content.end];
+            let expected = (!digits.is_empty() && digits.iter().all(u8::is_ascii_digit))
+                .then(|| digits.iter().fold(0u32, |v, d| v * 10 + u32::from(d - b'0')));
+            let sum = line[..star].iter().fold(0u8, |s, b| s ^ b);
+            // As the G-code parser: a checksum that is not a number, or does not fit in a byte, is
+            // a parse error; otherwise it is a mismatch
+            let received = match expected {
+                None => {
+                    return Err(GCodeLineParserError::ParseError(
+                        self.current_line,
+                        ParseFailure::BadNumberFormat,
+                    ));
+                }
+                Some(n) => u8::try_from(n).map_err(|_| {
+                    GCodeLineParserError::ParseError(self.current_line, ParseFailure::NumberOverflow)
+                })?,
+            };
+            if received != sum {
+                return Err(GCodeLineParserError::BadChecksum(self.current_line, sum, received));
+            }
+            content = trim(content.start..star);
+        }
+        // Line number
+        if line[content.clone()].first().is_some_and(|b| b.eq_ignore_ascii_case(&b'n')) {
+            let digits_end = line[content.start + 1..content.end]
+                .iter()
+                .position(|b| !b.is_ascii_digit())
+                .map_or(content.end, |p| content.start + 1 + p);
+            if digits_end > content.start + 1 {
+                let n = line[content.start + 1..digits_end]
+                    .iter()
+                    .fold(0u32, |v, d| v.wrapping_mul(10).wrapping_add(u32::from(d - b'0')));
+                match self.last_line_num {
+                    Some(last) if self.check_line_numbers && n != last.wrapping_add(1) => {
+                        return Err(GCodeLineParserError::LineNumberMismatch(last));
+                    }
+                    _ => self.last_line_num = Some(n),
+                }
+                self.tagged_line_num = Some(n);
+                content = trim(digits_end..content.end);
+            }
+        }
+        Ok(content)
     }
 
     pub async fn reset(&mut self) {
@@ -334,6 +410,8 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('g', Some((291, 1))) => Some(GCodeValue::G29_1),
         #[cfg(feature = "with-motion")]
         ('g', Some((292, 1))) => Some(GCodeValue::G29_2),
+        #[cfg(all(feature = "with-probe", feature = "with-z-axis"))]
+        ('g', Some((30, 0))) => Some(GCodeValue::G30(FXYZ::new())),
         #[cfg(feature = "with-probe")]
         ('g', Some((31, 0))) => Some(GCodeValue::G31),
         #[cfg(feature = "with-probe")]
@@ -350,23 +428,34 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', None) => Some(GCodeValue::M),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((2, 0))) => Some(GCodeValue::M2),
-        ('m', Some((3, 0))) => Some(GCodeValue::M3),
-        ('m', Some((4, 0))) => Some(GCodeValue::M4),
+        ('m', Some((3, 0))) => Some(GCodeValue::M3(S::new())),
+        ('m', Some((4, 0))) => Some(GCodeValue::M4(S::new())),
         ('m', Some((5, 0))) => Some(GCodeValue::M5),
+        ('m', Some((7, 0))) => Some(GCodeValue::M7),
+        ('m', Some((8, 0))) => Some(GCodeValue::M8),
+        ('m', Some((9, 0))) => Some(GCodeValue::M9),
         #[cfg(feature = "with-sd-card")]
         ('m', Some((20, 0))) => Some(GCodeValue::M20(None)),
         #[cfg(feature = "with-sd-card")]
         ('m', Some((21, 0))) => Some(GCodeValue::M21),
+        #[cfg(feature = "with-sd-card")]
+        ('m', Some((22, 0))) => Some(GCodeValue::M22),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((23, 0))) => Some(GCodeValue::M23(None)),
+        #[cfg(feature = "with-sd-card")]
+        ('m', Some((28, 0))) => Some(GCodeValue::M28(None)),
+        #[cfg(feature = "with-sd-card")]
+        ('m', Some((29, 0))) => Some(GCodeValue::M29),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((24, 0))) => Some(GCodeValue::M24),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         ('m', Some((25, 0))) => Some(GCodeValue::M25),
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+        ('m', Some((27, 0))) => Some(GCodeValue::M27(S::new())),
         #[cfg(feature = "with-sd-card")]
         ('m', Some((524, 0))) => Some(GCodeValue::M524),
         ('m', Some((37, 0))) => Some(GCodeValue::M37(S::new())),
-        ('m', Some((73, 0))) => Some(GCodeValue::M73),
+        ('m', Some((73, 0))) => Some(GCodeValue::M73(PR::new())),
         ('m', Some((79, 0))) => Some(GCodeValue::M79),
         #[cfg(feature = "with-ps-on")]
         ('m', Some((80, 0))) => Some(GCodeValue::M80),
@@ -386,9 +475,9 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         #[cfg(feature = "with-hot-end")]
         ('m', Some((104, 0))) => Some(GCodeValue::M104(S::new())),
         ('m', Some((105, 0))) => Some(GCodeValue::M105),
-        #[cfg(feature = "with-fan-layer")]
+        #[cfg(any(feature = "with-fan-layer", feature = "with-fan-extra-1"))]
         ('m', Some((106, 0))) => Some(GCodeValue::M106(SP::new())),
-        #[cfg(feature = "with-fan-layer")]
+        #[cfg(any(feature = "with-fan-layer", feature = "with-fan-extra-1"))]
         ('m', Some((107, 0))) => Some(GCodeValue::M107),
         #[cfg(feature = "with-hot-end")]
         ('m', Some((109, 0))) => Some(GCodeValue::M109(SR::new())),
@@ -416,15 +505,18 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((203, 0))) => Some(GCodeValue::M203(EXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('m', Some((204, 0))) => Some(GCodeValue::M204(SPT::new())),
-        ('m', Some((205, 0))) => Some(GCodeValue::M205),
+        ('m', Some((205, 0))) => Some(GCodeValue::M205(EXYZ::new())),
         #[cfg(feature = "with-motion")]
         ('m', Some((206, 0))) => Some(GCodeValue::M206(EXYZ::new())),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((851, 0))) => Some(GCodeValue::M851(EXYZ::new())),
         #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
         ('m', Some((207, 0))) => Some(GCodeValue::M207(SFZ::new())),
         #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
         ('m', Some((208, 0))) => Some(GCodeValue::M208(SFZ::new())),
-        ('m', Some((220, 0))) => Some(GCodeValue::M220(S::new())),
-        ('m', Some((221, 0))) => Some(GCodeValue::M221(S::new())),
+        ('m', Some((211, 0))) => Some(GCodeValue::M211(S::new())),
+        ('m', Some((220, 0))) => Some(GCodeValue::M220(SBR::new())),
+        ('m', Some((221, 0))) => Some(GCodeValue::M221(ST::new())),
         #[cfg(feature = "with-hot-end")]
         ('m', Some((301, 0))) => Some(GCodeValue::M301(PID::new())),
         #[cfg(all(feature = "with-hot-end", feature = "with-e-axis"))]
@@ -443,6 +535,10 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((501, 0))) => Some(GCodeValue::M501),
         ('m', Some((502, 0))) => Some(GCodeValue::M502),
         ('m', Some((503, 0))) => Some(GCodeValue::M503(S::new())),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((800, 0))) => Some(GCodeValue::M800(SJ::new())),
+        #[cfg(feature = "with-motion")]
+        ('m', Some((801, 0))) => Some(GCodeValue::M801),
         #[cfg(feature = "with-motion")]
         ('m', Some((8621, 1))) => Some(GCodeValue::M862_1),
         #[cfg(feature = "with-motion")]
@@ -471,6 +567,19 @@ fn update_current(
             _ => {}
         },
         #[cfg(feature = "with-motion")]
+        #[cfg(all(feature = "with-probe", feature = "with-z-axis"))]
+        #[allow(unused_variables)] // Without X/Y axes: every word is ignored
+        GCodeValue::G30(coord) => match (ch, frx) {
+            #[cfg(feature = "with-x-axis")]
+            ('x', Some(val)) => {
+                coord.x.replace(helpers::to_fixed(val));
+            }
+            #[cfg(feature = "with-y-axis")]
+            ('y', Some(val)) => {
+                coord.y.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
         GCodeValue::G0(coord) => match (ch, frx) {
             ('f', Some(val)) => {
                 coord.f.replace(helpers::to_fixed(val));
@@ -561,7 +670,9 @@ fn update_current(
         GCodeValue::M92(coord)
         | GCodeValue::M201(coord)
         | GCodeValue::M203(coord)
-        | GCodeValue::M206(coord) => {
+        | GCodeValue::M205(coord)
+        | GCodeValue::M206(coord)
+        | GCodeValue::M851(coord) => {
             update_exyz(coord, ch, frx)
         }
         #[cfg(feature = "with-motion")]
@@ -581,11 +692,12 @@ fn update_current(
             set_word(&mut p.s, 's', ch, frx);
             set_word(&mut p.p, 'p', ch, frx);
         }
-        #[cfg(feature = "with-fan-layer")]
+        #[cfg(any(feature = "with-fan-layer", feature = "with-fan-extra-1"))]
         GCodeValue::M106(p) => {
             set_word(&mut p.s, 's', ch, frx);
             set_word(&mut p.p, 'p', ch, frx);
         }
+        GCodeValue::M3(p) | GCodeValue::M4(p) => set_word(&mut p.s, 's', ch, frx),
         #[cfg(all(feature = "with-hot-end", feature = "with-e-axis"))]
         GCodeValue::M302(p) => {
             set_word(&mut p.s, 's', ch, frx);
@@ -603,6 +715,12 @@ fn update_current(
             set_word(&mut p.i, 'i', ch, frx);
             set_word(&mut p.d, 'd', ch, frx);
         }
+        GCodeValue::M73(p) => {
+            set_word(&mut p.p, 'p', ch, frx);
+            set_word(&mut p.r, 'r', ch, frx);
+        }
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+        GCodeValue::M27(p) => set_word(&mut p.s, 's', ch, frx),
         #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
         GCodeValue::M303(p) => {
             set_word(&mut p.e, 'e', ch, frx);
@@ -610,6 +728,7 @@ fn update_current(
             set_word(&mut p.c, 'c', ch, frx);
         }
         #[cfg(feature = "with-motion")]
+        #[allow(unused_variables)] // No axes enabled: every word is ignored
         GCodeValue::G28(coord) => match (ch, frx) {
             #[cfg(feature = "with-e-axis")]
             ('e', Some(val)) => {
@@ -668,6 +787,7 @@ fn update_current(
             _ => {}
         },
         #[cfg(feature = "with-motion")]
+        #[allow(unused_variables)] // No axes enabled: every word is ignored
         GCodeValue::G92(coord) => match (ch, frx) {
             #[cfg(feature = "with-e-axis")]
             ('e', Some(val)) => {
@@ -741,6 +861,12 @@ fn update_current(
                 file.replace(mstr);
             }
         }
+        #[cfg(feature = "with-sd-card")]
+        GCodeValue::M28(file) => {
+            if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
+                file.replace(mstr);
+            }
+        }
         GCodeValue::M37(coord) => match (ch, frx) {
             ('s', Some(val)) => {
                 coord.s.replace(helpers::to_fixed(val));
@@ -776,9 +902,31 @@ fn update_current(
             }
             _ => {}
         },
-        GCodeValue::M220(coord) | GCodeValue::M221(coord) => match (ch, frx) {
+        GCodeValue::M211(coord) => match (ch, frx) {
             ('s', Some(val)) => {
                 coord.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
+        GCodeValue::M220(args) => match (ch, frx) {
+            ('s', Some(val)) => {
+                args.s.replace(helpers::to_fixed(val));
+            }
+            // Flags: `B`/`R` alone (no value) are the usual form
+            ('b', _) => {
+                args.b.replace(hwa::math::ONE);
+            }
+            ('r', _) => {
+                args.r.replace(hwa::math::ONE);
+            }
+            _ => {}
+        },
+        GCodeValue::M221(args) => match (ch, frx) {
+            ('s', Some(val)) => {
+                args.s.replace(helpers::to_fixed(val));
+            }
+            ('t', Some(val)) => {
+                args.t.replace(helpers::to_fixed(val));
             }
             _ => {}
         },
@@ -791,6 +939,16 @@ fn update_current(
         GCodeValue::M503(param) => match (ch, frx) {
             ('s', Some(val)) => {
                 param.s.replace(helpers::to_fixed(val));
+            }
+            _ => {}
+        },
+        #[cfg(feature = "with-motion")]
+        GCodeValue::M800(param) => match (ch, frx) {
+            ('s', Some(val)) => {
+                param.s.replace(helpers::to_fixed(val));
+            }
+            ('j', Some(val)) => {
+                param.j.replace(helpers::to_fixed(val));
             }
             _ => {}
         },
@@ -937,13 +1095,66 @@ fn set_word(slot: &mut Option<hwa::math::Real>, letter: char, ch: char, frx: Opt
     }
 }
 
+/// Name of an unsupported G-code (e.g. `M9999`), for the error reports
+pub type GCodeName = super::LineBuf<24>;
+
+/// Why a line could not be parsed (reported by the consumer of the line, with its line number)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ParseFailure {
+    /// A byte that is not valid where it was found (e.g. a second `.` in `X1.2.3`)
+    UnexpectedByte(u8),
+    /// A number too big to be represented
+    NumberOverflow,
+    /// A malformed number (e.g. without digits)
+    BadNumberFormat,
+    /// A text or a line longer than it can be
+    TooLong,
+    /// A text that is not valid UTF-8
+    InvalidUtf8,
+    /// The input stream failed, or another reason
+    Other,
+}
+
+impl core::fmt::Display for ParseFailure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ParseFailure::UnexpectedByte(b) if b.is_ascii_graphic() => {
+                write!(f, "unexpected '{}'", char::from(*b))
+            }
+            ParseFailure::UnexpectedByte(b) => write!(f, "unexpected byte {}", b),
+            ParseFailure::NumberOverflow => f.write_str("number overflow"),
+            ParseFailure::BadNumberFormat => f.write_str("bad number format"),
+            ParseFailure::TooLong => f.write_str("too long"),
+            ParseFailure::InvalidUtf8 => f.write_str("invalid UTF-8"),
+            ParseFailure::Other => f.write_str("unreadable"),
+        }
+    }
+}
+
+#[cfg(feature = "with-defmt")]
+impl defmt::Format for ParseFailure {
+    fn format(&self, fmt: defmt::Formatter) {
+        match self {
+            ParseFailure::UnexpectedByte(b) => defmt::write!(fmt, "unexpected byte {}", b),
+            ParseFailure::NumberOverflow => defmt::write!(fmt, "number overflow"),
+            ParseFailure::BadNumberFormat => defmt::write!(fmt, "bad number format"),
+            ParseFailure::TooLong => defmt::write!(fmt, "too long"),
+            ParseFailure::InvalidUtf8 => defmt::write!(fmt, "invalid UTF-8"),
+            ParseFailure::Other => defmt::write!(fmt, "unreadable"),
+        }
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq))]
 pub enum GCodeLineParserError {
-    /// There was an error parsing
-    ParseError(u32),
-    /// The Gcode was not implemented
-    GCodeNotImplemented(u32, alloc::string::String),
+    /// The line could not be parsed (line, why)
+    ParseError(u32, ParseFailure),
+    /// The checksum of the line (host protocol) is wrong (line, checksum computed from the line,
+    /// checksum received). The host has to resend it
+    BadChecksum(u32, u8, u8),
+    /// The Gcode was not implemented. Holds its name (no heap: a G/M code fits in 24 bytes)
+    GCodeNotImplemented(u32, GCodeName),
     /// EOF Reading from parser
     EOF,
     /// Unexpected fatal error
@@ -951,6 +1162,25 @@ pub enum GCodeLineParserError {
     FatalError,
     /// A numbered line is not the expected one (host protocol). Holds the last accepted line
     LineNumberMismatch(u32),
+}
+
+impl GCodeLineParserError {
+    /// The error of the line `line` the G-code parser reported
+    fn from_parser_error(line: u32, error: async_gcode::Error) -> Self {
+        let failure = match error {
+            async_gcode::Error::BadChecksum { computed, received } => {
+                return GCodeLineParserError::BadChecksum(line, computed, received);
+            }
+            async_gcode::Error::UnexpectedByte(b) => ParseFailure::UnexpectedByte(b),
+            async_gcode::Error::NumberOverflow => ParseFailure::NumberOverflow,
+            async_gcode::Error::BadNumberFormat => ParseFailure::BadNumberFormat,
+            async_gcode::Error::TextTooLong => ParseFailure::TooLong,
+            async_gcode::Error::InvalidUTF8String => ParseFailure::InvalidUtf8,
+            #[allow(unreachable_patterns)]
+            _ => ParseFailure::Other,
+        };
+        GCodeLineParserError::ParseError(line, failure)
+    }
 }
 
 #[cfg(feature = "debug-gcode")]
@@ -1065,8 +1295,11 @@ impl defmt::Format for FormatableGCode<'_> {
 impl defmt::Format for GCodeLineParserError {
     fn format(&self, fmt: defmt::Formatter) {
         match self {
-            GCodeLineParserError::ParseError(ln) => {
-                defmt::write!(fmt, "ParseError(line={})", ln);
+            GCodeLineParserError::ParseError(ln, failure) => {
+                defmt::write!(fmt, "ParseError(line={}, {})", ln, failure);
+            }
+            GCodeLineParserError::BadChecksum(ln, computed, received) => {
+                defmt::write!(fmt, "BadChecksum(line={}, computed={}, received={})", ln, computed, received);
             }
             GCodeLineParserError::GCodeNotImplemented(ln, string) => {
                 defmt::write!(
@@ -1142,22 +1375,29 @@ impl RawGCodeSpec {
             }
         }
     }
+
+    /// The name of the code, upper case (e.g. `G1`, `M862.2`).
+    ///
+    /// Written without `core::fmt` nor `char::to_uppercase` (whose Unicode table alone takes ~2 KB
+    /// of flash): the letter of a word is always ASCII (the parser only accepts `a`..=`z`).
+    pub fn name(&self) -> GCodeName {
+        let mut name = GCodeName::new();
+        let mut letter = [0u8; 4];
+        name.push_str(self.code.to_ascii_uppercase().encode_utf8(&mut letter));
+        if let Some(spec) = self.spec {
+            name.push_i32(spec);
+            if let Some(sub) = self.sub {
+                name.push_str(".");
+                name.push_i32(sub);
+            }
+        }
+        name
+    }
 }
+
 impl core::fmt::Debug for RawGCodeSpec {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::write!(f, "{}", self.code.to_uppercase())?;
-        match &self.spec {
-            Some(_spec) => {
-                core::write!(f, "{}", _spec)?;
-                match &self.sub {
-                    Some(_sub) => {
-                        core::write!(f, ".{}", _sub)
-                    }
-                    _ => Ok(()),
-                }
-            }
-            _ => Ok(()),
-        }
+        f.write_str(self.name().as_str())
     }
 }
 
@@ -1170,15 +1410,22 @@ trait FixedAdaptor {
     fn scale(&self) -> u8;
 }
 
+/// Fallback for a non patched async-gcode (plain `f64` numbers): fixed point with
+/// [F64_ADAPTOR_SCALE] decimals. Never panics: out of range values saturate (`as` cast)
+const F64_ADAPTOR_SCALE: u8 = 4;
+/// 10 ^ [F64_ADAPTOR_SCALE] (no `powi` in `no_std`)
+const F64_ADAPTOR_FACTOR: f64 = 10_000.0;
+
 impl FixedAdaptor for f64 {
     #[inline(always)]
     fn integer_part(&self) -> i32 {
-        panic!("Please, use patched async-gcode instead")
+        let scaled = *self * F64_ADAPTOR_FACTOR;
+        (if scaled < 0.0 { scaled - 0.5 } else { scaled + 0.5 }) as i32
     }
 
     #[inline(always)]
     fn scale(&self) -> u8 {
-        panic!("Please, use patched async-gcode instead")
+        F64_ADAPTOR_SCALE
     }
 }
 
@@ -1378,6 +1625,20 @@ mod tests {
         )
     }
 
+    #[cfg(feature = "with-motion")]
+    #[futures_test::test]
+    async fn test_m800() {
+        let stream = BufferStream::new("M800 S0 J50000\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let mut expected = SJ::new();
+        expected.s = Some(hwa::math::ZERO);
+        expected.j = Some(hwa::math::Real::from_lit(50000, 0));
+        assert_eq!(
+            parser.next_gcode(CommChannel::Internal).await,
+            Ok(GCodeCmd::new(0, None, GCodeValue::M800(expected)))
+        )
+    }
+
     #[futures_test::test]
     async fn test_m118() {
         let stream = BufferStream::new("M118 Hello World!".as_bytes().to_vec().into());
@@ -1491,6 +1752,50 @@ mod tests {
             .next_gcode(CommChannel::Internal)
             .await
             .expect("G31 OK");
+    }
+
+    /// [RawGCodeSpec::name] writes what its former `core::fmt` implementation wrote
+    /// (`to_uppercase` of the letter, then `{}` of the numbers), for every word letter
+    #[test]
+    fn test_raw_gcode_spec_name() {
+        let former = |code: char, spec: Option<(i32, u8)>| -> String {
+            let mut s = format!("{}", code.to_uppercase());
+            if let Some((num, scale)) = spec {
+                if scale == 0 {
+                    s.push_str(&format!("{}", num));
+                } else {
+                    let sc = 10_i32.pow(scale as u32);
+                    s.push_str(&format!("{}.{}", num / sc, num % sc));
+                }
+            }
+            s
+        };
+        let specs: [Option<(i32, u8)>; 10] = [
+            None,
+            Some((0, 0)),
+            Some((1, 0)),
+            Some((862_2, 1)),
+            Some((38_02, 2)),
+            Some((29_10, 2)),
+            Some((-5, 0)),
+            Some((-15, 1)),
+            Some((i32::MAX, 0)),
+            Some((i32::MIN, 0)),
+        ];
+        for code in 'a'..='z' {
+            for spec in specs {
+                let expected = former(code, spec);
+                let raw = RawGCodeSpec::from(code, spec);
+                assert_eq!(raw.name().as_str(), expected, "{:?} {:?}", code, spec);
+                assert_eq!(format!("{:?}", raw), expected);
+            }
+        }
+        assert_eq!(RawGCodeSpec::from('m', Some((862_2, 1))).name().as_str(), "M862.2");
+        // The longest name fits (a [GCodeName] truncates)
+        assert_eq!(
+            RawGCodeSpec::from('g', Some((i32::MIN, 0))).name().as_str(),
+            "G-2147483648"
+        );
     }
 
     #[futures_test::test]
@@ -1700,6 +2005,24 @@ mod tests {
         assert_eq!(parser.gcode_line(), Some(4));
     }
 
+    /// Pronterface starts every print with `N-1 M110`: the next line expected is N0, whatever the
+    /// former sequence was
+    #[futures_test::test]
+    async fn test_line_number_reset_to_minus_one() {
+        let stream = BufferStream::new(
+            "N5 M105*34\nN-1 M110*15\nN0 M80*27\nN1 G21*27\nM110 N-1\nN0 M80*27\n"
+                .as_bytes()
+                .to_vec()
+                .into(),
+        );
+        let mut parser = GCodeLineParser::new(stream).with_line_number_check();
+        for expected in [Some(5), Some(u32::MAX), Some(0), Some(1), Some(u32::MAX), Some(0)] {
+            let r = parser.next_gcode(CommChannel::Internal).await;
+            assert!(r.is_ok(), "{:?}: {:?}", expected, r.err().map(|e| alloc::format!("{:?}", e)));
+            assert_eq!(parser.gcode_line(), expected);
+        }
+    }
+
     #[futures_test::test]
     async fn test_g_variants() {
         let stream = BufferStream::new("G\nG0\nG1\nG2\nG4\nG10\nG17\nG21\nG28\nG29\nG29.1\nG29.2\nG31\nG32\nG80\nG90\nG91\nG92\nG94\n".as_bytes().to_vec().into());
@@ -1723,8 +2046,10 @@ mod tests {
             ('m', Some((24, 0))) => Some(GCodeValue::M24),
             #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
             ('m', Some((25, 0))) => Some(GCodeValue::M25),
+            #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+            ('m', Some((27, 0))) => Some(GCodeValue::M27(S::new())),
             ('m', Some((37, 0))) => Some(GCodeValue::M37(S::new())),
-            ('m', Some((73, 0))) => Some(GCodeValue::M73),
+            ('m', Some((73, 0))) => Some(GCodeValue::M73(PR::new())),
             ('m', Some((79, 0))) => Some(GCodeValue::M79),
             #[cfg(feature = "with-ps-on")]
             ('m', Some((80, 0))) => Some(GCodeValue::M80),
@@ -1762,8 +2087,8 @@ mod tests {
             ('m', Some((205, 0))) => Some(GCodeValue::M205),
             #[cfg(feature = "with-motion")]
             ('m', Some((206, 0))) => Some(GCodeValue::M206),
-            ('m', Some((220, 0))) => Some(GCodeValue::M220(S::new())),
-            ('m', Some((221, 0))) => Some(GCodeValue::M221(S::new())),
+            ('m', Some((220, 0))) => Some(GCodeValue::M220(SBR::new())),
+            ('m', Some((221, 0))) => Some(GCodeValue::M221(ST::new())),
             ('m', Some((502, 0))) => Some(GCodeValue::M502),
             ('m', Some((503, 0))) => Some(GCodeValue::M503(S::new())),
             #[cfg(feature = "with-motion")]
@@ -1800,7 +2125,7 @@ mod tests {
         #[cfg(not(feature = "with-arcs"))]
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,
-            Err(GCodeLineParserError::GCodeNotImplemented(3, alloc::string::String::from("G2")))
+            Err(GCodeLineParserError::GCodeNotImplemented(3, "G2".into()))
         );
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,
@@ -1897,14 +2222,66 @@ mod tests {
         let mut parser = GCodeLineParser::new(stream);
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,
-            Err(GCodeLineParserError::ParseError(0))
+            Err(GCodeLineParserError::ParseError(0, ParseFailure::UnexpectedByte(b'-')))
         );
 
         let stream = BufferStream::new("G999999999999999999999999999\n".as_bytes().to_vec().into());
         let mut parser = GCodeLineParser::new(stream);
         assert_eq!(
             parser.next_gcode(CommChannel::Internal).await,
-            Err(GCodeLineParserError::ParseError(0))
+            Err(GCodeLineParserError::ParseError(0, ParseFailure::NumberOverflow))
         );
+
+        let stream = BufferStream::new("G1 X1.2.3\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        assert_eq!(
+            parser.next_gcode(CommChannel::Internal).await,
+            Err(GCodeLineParserError::ParseError(0, ParseFailure::UnexpectedByte(b'.')))
+        );
+    }
+
+    /// A wrong checksum is told apart from the other parse errors (the host resends the line),
+    /// with the checksum computed from the line
+    #[futures_test::test]
+    async fn test_bad_checksum() {
+        let stream = BufferStream::new("N14 M105*1\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        // XOR of "N14 M105"
+        assert_eq!(
+            parser.next_gcode(CommChannel::Internal).await,
+            Err(GCodeLineParserError::BadChecksum(0, 18, 1))
+        );
+    }
+
+    /// The lines stored without being executed (M28) check their checksum too: a mismatch (with
+    /// both values), a checksum that is not a byte, and a valid one (stripped from the content)
+    #[futures_test::test]
+    async fn test_raw_line_checksum() {
+        let mut buf = [0u8; 64];
+        for (line, expected) in [
+            ("N14 M105*1\n", Err(GCodeLineParserError::BadChecksum(0, 18, 1))),
+            ("N14 M105*x\n", Err(GCodeLineParserError::ParseError(0, ParseFailure::BadNumberFormat))),
+            ("N14 M105*300\n", Err(GCodeLineParserError::ParseError(0, ParseFailure::NumberOverflow))),
+        ] {
+            let stream = BufferStream::new(line.as_bytes().to_vec().into());
+            let mut parser = GCodeLineParser::new(stream);
+            assert_eq!(parser.next_raw_line(&mut buf).await, expected, "{:?}", line);
+        }
+        let stream = BufferStream::new("N14 M105*18\n".as_bytes().to_vec().into());
+        let mut parser = GCodeLineParser::new(stream);
+        let range = parser.next_raw_line(&mut buf).await.expect("valid checksum");
+        assert_eq!(&buf[range], b"M105");
+    }
+
+    #[test]
+    fn parse_failures_are_described() {
+        use alloc::string::ToString;
+        assert_eq!(ParseFailure::UnexpectedByte(b'.').to_string(), "unexpected '.'");
+        assert_eq!(ParseFailure::UnexpectedByte(0).to_string(), "unexpected byte 0");
+        assert_eq!(ParseFailure::NumberOverflow.to_string(), "number overflow");
+        assert_eq!(ParseFailure::BadNumberFormat.to_string(), "bad number format");
+        assert_eq!(ParseFailure::TooLong.to_string(), "too long");
+        assert_eq!(ParseFailure::InvalidUtf8.to_string(), "invalid UTF-8");
+        assert_eq!(ParseFailure::Other.to_string(), "unreadable");
     }
 }

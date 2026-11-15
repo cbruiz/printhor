@@ -62,7 +62,9 @@ impl<UI: DisplayScreenUI> SimulatorDisplayScreen<UI>
 
     pub async fn update(&mut self) {
         #[cfg(feature = "with-lvgl")]
-        self.main_ui.context().as_mut().unwrap().refresh().await;
+        if let Some(ctx) = self.main_ui.context().as_mut() {
+            ctx.refresh().await;
+        }
         #[cfg(not(feature = "with-lvgl"))]
         self.main_ui.refresh(&mut self.raw_display).await;
         #[cfg(feature = "with-lvgl")]

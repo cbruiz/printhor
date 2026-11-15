@@ -163,7 +163,7 @@ impl WorldToSpaceTransformer for SingleActuator {
         let transformation_result = inverse_kinematics(&world_pos, self);
         match transformation_result {
             Err(_) => {
-                hwa::error!("Error computing inverse kinematics for leg");
+                hwa::error!("[i_kine] Leg [{:?}]: no inverse kinematics for the target", self.world_coords());
                 return Err(());
             }
             Ok(transformed_pos) => {
@@ -180,7 +180,7 @@ impl WorldToSpaceTransformer for SingleActuator {
         let transformation_result = direct_kinematics(&space_pos, self);
         match transformation_result {
             Err(()) => {
-                hwa::error!("Error computing direct kinematics for leg");
+                hwa::error!("[d_kine] Leg [{:?}]: no direct kinematics for the joint position", self.coords());
                 return Err(());
             }
             Ok(transformed_pos) => {
@@ -881,6 +881,7 @@ mod tests {
         let actuator = actuator_same_coords();
         // b = (0, 0, h=70)
         let at_base = hwa::make_vector_real!(x = 0.0, y = 0.0, z = 70.0);
+        hwa::info!("Expecting Err: a target at the base position is a singularity");
         let result = inverse_kinematics(&at_base, &actuator);
         assert!(result.is_err(), "target at base should return Err (singularity)");
     }

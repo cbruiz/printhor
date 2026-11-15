@@ -18,6 +18,19 @@ pub enum ExecPlan {
     Dwell(Option<u32>, hwa::CommChannel, u32),
     SetPosition(motion_control::Position, hwa::CommChannel, u32),
     Homing(hwa::CommChannel, u32),
+    /// Tool actions queued alone (see [PlanEntry::Tools]): applied once consumed
+    Tools(hwa::CommChannel, u32),
+}
+
+/// What [MotionPlanner::consume_current_plan] leaves to the executor of the plan
+pub struct ConsumedPlan {
+    /// The entries left in the queue
+    pub moves_left: u8,
+    /// Tool actions to apply right after the consumed entry (see
+    /// [MotionPlanner::schedule_tool_action])
+    pub tools: hwa::controllers::ToolActions,
+    /// The order number of the consumed entry
+    pub order_num: u32,
 }
 
 /// The `MotionPlanner` struct is responsible for handling the motion planning logic
@@ -45,6 +58,27 @@ pub struct MotionPlanner {
     motion_status: hwa::controllers::MotionStatus,
     motion_driver: hwa::types::MotionDriver,
 }
+
+/// Moves appended between two motion chainings. A chaining costs its window (the moves within
+/// braking distance of the end of the plan), so chaining every few moves divides its cost per
+/// move. The moves not chained yet keep their rest-to-rest plan, which is always valid; they are
+/// chained right away when the queue gets short (see `schedule_raw_move`).
+///
+/// 4 moves, or a fifth of a long queue (at most 8): the throughput slowdown keeps the queue about
+/// half full (see `motion::throughput_speed_cap`), so with a 40-move queue (SKR Mini E3) 8 still
+/// leaves 12 chained moves of look-ahead, and the chaining costs ~27% less per move (host
+/// op-count model of the pen-test circle, `motion/op_cost.rs`)
+#[cfg(feature = "with-motion-chaining")]
+const CHAIN_BATCH: u8 = {
+    let b = Contract::SEGMENT_QUEUE_SIZE / 5;
+    if b < 4 {
+        4
+    } else if b > 8 {
+        8
+    } else {
+        b
+    }
+};
 
 /// Max length of each linear segment approximating an arc (G2/G3) or a spline (G5), in world
 /// units. Shorter segments are used where the chordal tolerance requires it
@@ -250,6 +284,11 @@ impl MotionPlanner {
                             PlanEntry::Executing(MovType::Homing(channel), true, order_num);
                         return Homing(channel, order_num);
                     }
+                    PlanEntry::Tools(channel, order_num) => {
+                        rb.data[head] =
+                            PlanEntry::Executing(MovType::Tools(channel), false, order_num);
+                        return ExecPlan::Tools(channel, order_num);
+                    }
                     PlanEntry::Executing(_, _, _) => {
                         self.move_planned.reset();
                         hwa::error!("Unexpected error: RingBuffer Overrun");
@@ -279,7 +318,9 @@ impl MotionPlanner {
     ///
     /// # Returns
     ///
-    /// A `u8` value indicating the remaining used slots in the ring buffer after consuming the current segment data.
+    /// The remaining used slots in the ring buffer after consuming the current segment data, and
+    /// the tool actions to apply right after it (taken together with the entry, so that none
+    /// attached meanwhile is lost).
     ///
     /// # Usage
     ///
@@ -290,10 +331,15 @@ impl MotionPlanner {
     /// This function is typically called after the execution of a movement has been completed to update the state
     /// of the ring buffer and signal the availability of slots for new commands. It is an integral part of the system
     /// to ensure that the motion planner operates smoothly and consistently by managing the state of planned and executed movements.
-    pub async fn consume_current_plan(&self, event_bus: &hwa::types::EventBus) -> u8 {
+    pub async fn consume_current_plan(&self, event_bus: &hwa::types::EventBus) -> ConsumedPlan {
         let mut rb = self.ring_buffer.lock().await;
         let head = rb.head;
-        hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used - 1);
+        hwa::debug!("Movement completed @rq[{}] (ongoing={})", head, rb.used.saturating_sub(1));
+        let tools = core::mem::take(&mut rb.post_tools[head as usize]);
+        let order_num = match &rb.data[head as usize] {
+            PlanEntry::Executing(_, _, order_num) => *order_num,
+            _ => 0,
+        };
         match &rb.data[head as usize] {
             PlanEntry::Executing(MovType::Homing(channel), _is_defer, order_num) => {
                 event_bus
@@ -338,6 +384,8 @@ impl MotionPlanner {
                         .await;
                 }
             }
+            // Never deferred: answered when queued
+            PlanEntry::Executing(MovType::Tools(_), _, _) => {}
             _ => {
                 hwa::error!("consume_current_plan: unexpected PlanEntry at head={}", head);
             }
@@ -348,6 +396,18 @@ impl MotionPlanner {
             false => 0u8,
         };
         rb.used -= 1;
+        // A slot is free: the issuer that filled the queue may send more
+        if let Some((action, channel, order_num)) = rb.slot_waiter.take() {
+            self.defer_channel
+                .send(hwa::DeferEvent::Completed(action, channel, order_num))
+                .await;
+        }
+        // Moves still waiting for a batched chaining (end of the input): chained before the
+        // stepper reaches them
+        #[cfg(feature = "with-motion-chaining")]
+        if rb.unchained > 0 && rb.used <= CHAIN_BATCH + 2 {
+            self.chain(&mut rb);
+        }
         hwa::debug!("- used={}, h={} ", rb.used, head);
         let mut queue_status_event = EventStatus::not_containing(EventFlags::MOV_QUEUE_FULL);
         event_bus
@@ -357,7 +417,63 @@ impl MotionPlanner {
             })
             .await;
         self.available.signal(true);
-        rb.used
+        ConsumedPlan {
+            moves_left: rb.used,
+            tools,
+            order_num,
+        }
+    }
+
+    /// Queues tool actions (`M106`/`M107`, `M3`-`M5`, `M7`-`M9`) at the end of the motion queue:
+    /// they take effect right after the motion queued so far and right before the motion queued
+    /// after them, or right away when nothing is queued nor moving.
+    ///
+    /// They are attached to the newest entry of the queue (see `RingBuffer::post_tools`) instead
+    /// of taking a slot: the look-ahead is not shortened and the motion chaining is not broken
+    /// (the junction between the moves before and after them keeps its speed). So they are never
+    /// delayed by a full queue either. Only an empty queue takes a slot, with a [PlanEntry::Tools]
+    /// entry, as the executor still has to apply them after the steps already queued in the step
+    /// executor. Once the entry is executed, the stepper task hands them to the step executor,
+    /// which applies them between the last step window of the entry and the first one of the next
+    /// motion, without delaying it (see [hwa::controllers::StepPlan::marker]).
+    ///
+    /// Answered at once ([processing::CodeExecutionSuccess::QUEUED]), as a move.
+    pub async fn schedule_tool_action(
+        &self,
+        channel: hwa::CommChannel,
+        actions: hwa::controllers::ToolActions,
+        event_bus: &hwa::types::EventBus,
+        order_num: u32,
+    ) -> Result<processing::CodeExecutionSuccess, processing::CodeExecutionFailure> {
+        if actions.is_empty() {
+            return Ok(processing::CodeExecutionSuccess::OK);
+        }
+        let mut rb = self.ring_buffer.lock().await;
+        if rb.used > 0 {
+            // After the newest entry, whatever it is: a move (even being executed), a dwell, a
+            // homing...
+            let newest = rb
+                .index_from_tail(1)
+                .map_err(|_| processing::CodeExecutionFailure::ERR)?;
+            rb.post_tools[newest as usize].merge(&actions);
+            hwa::debug!("Tool actions queued after @rq[{}]", newest);
+        } else {
+            // An empty queue always has room
+            let insert = rb
+                .index_from_tail(0)
+                .map_err(|_| processing::CodeExecutionFailure::ERR)?;
+            rb.data[insert as usize] = PlanEntry::Tools(channel, order_num);
+            rb.post_tools[insert as usize] = actions;
+            rb.used += 1;
+            hwa::debug!("Tool actions queued alone @rq[{}]", insert);
+            event_bus
+                .publish_event(hwa::EventStatus::not_containing(
+                    hwa::EventFlags::MOV_QUEUE_EMPTY,
+                ))
+                .await;
+            self.move_planned.signal(true);
+        }
+        Ok(processing::CodeExecutionSuccess::QUEUED)
     }
 
     /// Schedules a raw movement operation for the motion planner.
@@ -424,19 +540,89 @@ impl MotionPlanner {
             self.available.wait().await;
             {
                 let mut rb = self.ring_buffer.lock().await;
-                let mut is_defer = rb.used == Contract::SEGMENT_QUEUE_SIZE - 1;
+                // Metrics: time with the ring buffer locked (the stepper can not take a segment)
+                let _t_plan = super::motion_metrics::now_us();
+                #[allow(unused_mut)]
+                let mut _chain_us: u64 = 0;
+                // The command that fills the queue: a blocking issuer (a print job) simply waits in
+                // this loop for a free slot with its next one. A non-blocking issuer (a host over a
+                // serial port) must not send more while the queue is full: it is answered as soon
+                // as a slot is freed (see `RingBuffer::slot_waiter`). If it finds the queue full
+                // anyway, it waits in this loop as well (never rejected). Answering it only when that
+                // (newest) move was executed, as before, drained the whole queue: the motion ran
+                // out of look-ahead every SEGMENT_QUEUE_SIZE moves (a stop on a curve)
+                let fills_queue = rb.used == Contract::SEGMENT_QUEUE_SIZE - 1;
+                // Answered when executed (homing, dwell)
+                let mut is_defer = false;
 
                 if rb.used < Contract::SEGMENT_QUEUE_SIZE {
                     #[cfg(feature = "with-motion-chaining")]
                     let mut do_adjust = false;
 
-                    let curr_insert_index = rb.index_from_tail(0).unwrap();
+                    // `used` < size, so the tail is always valid: the error is not expected
+                    let curr_insert_index = match rb.index_from_tail(0) {
+                        Ok(index) => index,
+                        Err(_) => return Err(processing::CodeExecutionFailure::ERR),
+                    };
 
                     let (curr_planned_entry, event) = match move_type {
                         ScheduledMove::Move(curr_segment_in, _order_num) => {
+                            // Created at rest with zero boundary accelerations: the chaining
+                            // (closed-form model) needs nothing else from it
+                            #[allow(unused_mut)]
                             let mut curr_segment = curr_segment_in;
+
+                            // Throughput slowdown (see `motion::throughput_speed_cap`)
                             #[cfg(feature = "with-motion-chaining")]
-                            motion::compute_maximum_enter_and_exit_speed(true, _order_num, &mut curr_segment);
+                            {
+                                rb.sample_move_period(
+                                    embassy_time::Instant::now().as_micros() as u32,
+                                    CHAIN_BATCH,
+                                );
+                                let period_s = Real::from_lit(rb.move_period_us as i64, 0)
+                                    * Real::from_f32(1.0e-6);
+                                let mut v = motion::throughput_speed_cap(
+                                    curr_segment.displacement_su,
+                                    curr_segment.speed_target_su_s,
+                                    rb.used,
+                                    Contract::SEGMENT_QUEUE_SIZE,
+                                    period_s,
+                                );
+                                // Along a run of short moves (those the slowdown may affect: they
+                                // last less than 1.5 production times at their target speed), the
+                                // speed rises by at most 2% per move; it may drop at once (the
+                                // queue is emptying). The production time goes up when the motion
+                                // is faster (the stepper task takes more CPU per second), which
+                                // made the speed oscillate between the slowed down and the target
+                                // speed
+                                let short = curr_segment.displacement_su
+                                    < curr_segment.speed_target_su_s
+                                        * period_s
+                                        * Real::from_f32(1.5);
+                                if short && rb.slowdown_speed > math::ZERO {
+                                    v = v.min(rb.slowdown_speed * Real::from_f32(1.02));
+                                }
+                                rb.slowdown_speed = match short
+                                    && v < curr_segment.speed_target_su_s
+                                {
+                                    true => v,
+                                    false => math::ZERO,
+                                };
+                                // TMPTRACE
+                                hwa::debug!(
+                                    "TMPTRACE P t={} n={} T={} v0={} v={}",
+                                    embassy_time::Instant::now().as_micros() as u32,
+                                    rb.used,
+                                    rb.move_period_us,
+                                    (curr_segment.speed_target_su_s * Real::from_f32(10.0)).int(),
+                                    (v * Real::from_f32(10.0)).int()
+                                );
+                                if v < curr_segment.speed_target_su_s {
+                                    curr_segment.cap_speed(v);
+                                    super::motion_metrics::record_slowdown();
+                                }
+                                super::motion_metrics::record_move_period(rb.move_period_us);
+                            }
 
                             if let Ok(prev_index) = rb.index_from_tail(1) {
                                 match &mut rb.data[prev_index as usize] {
@@ -447,6 +633,17 @@ impl MotionPlanner {
                                                 prev_segment.unit_vector_dir.scalar_projection(
                                                     curr_segment.unit_vector_dir,
                                                 );
+                                            // Always recorded: a reversal (proj <= 0) caps the
+                                            // junction to zero when the chaining runs over it.
+                                            // Further limited by the velocity jump the corner
+                                            // causes (see `motion::corner_speed_factor`)
+                                            curr_segment.proj_prev = motion::corner_speed_factor(
+                                                proj,
+                                                prev_segment
+                                                    .speed_target_su_s
+                                                    .min(curr_segment.speed_target_su_s),
+                                                self.motion_config.get_corner_speed_change(),
+                                            );
                                             if proj.is_defined_positive() {
                                                 hwa::debug!(
                                                     "RingBuffer [{:?}, {:?}] chained: ({:?}) proj ({:?}) = ({:?})",
@@ -468,11 +665,6 @@ impl MotionPlanner {
                                                 hwa::debug!("\t\tproj = {:?}", proj);
                                                 do_adjust = true;
                                                 prev_segment.proj_next = proj;
-                                                curr_segment.proj_prev = proj;
-                                                // This segment is no longer last; let it exit
-                                                // up to its target speed so the backward pass
-                                                // can find the optimal junction from v_max down.
-                                                prev_segment.speed_exit_su_s = prev_segment.speed_target_su_s;
                                             }
                                         }
                                     }
@@ -512,7 +704,7 @@ impl MotionPlanner {
                         ScheduledMove::Homing(order_num) => {
                             is_defer = true;
                             let pos = hwa::controllers::Position::new_with_world_projection(
-                                &self.motion_config.get_logical_homing_point(),
+                                &self.motion_config.get_post_homing_position(),
                             );
                             self.motion_status
                                 .update_last_planned_position(order_num, &pos);
@@ -546,25 +738,42 @@ impl MotionPlanner {
                         Contract::SEGMENT_QUEUE_SIZE
                     );
 
+                    #[cfg(feature = "with-motion-chaining")]
+                    let is_move = matches!(curr_planned_entry, PlanEntry::PlannedMove(..));
+                    // A non-move entry is a chain boundary: the moves before it are chained now
+                    #[cfg(feature = "with-motion-chaining")]
+                    if !is_move {
+                        rb.break_move_period();
+                    }
+                    #[cfg(feature = "with-motion-chaining")]
+                    if !is_move && rb.unchained > 0 {
+                        let t_chain = super::motion_metrics::now_us();
+                        self.chain(&mut rb);
+                        _chain_us = super::motion_metrics::now_us().saturating_sub(t_chain);
+                    }
                     rb.data[curr_insert_index as usize] = curr_planned_entry;
                     rb.used += 1;
+                    // Batched chaining: every CHAIN_BATCH appended moves (the cost of a chaining
+                    // is that of its window, see `perform_motion_chaining_after_append`), or right
+                    // away when the queue is short (the stepper is about to take them). Until then
+                    // the newest moves keep their rest-to-rest plan (always valid and continuous).
                     #[cfg(feature = "with-motion-chaining")]
-                    if do_adjust {
-                        // The stepper corrects the position deviation (a rounding residual of
-                        // whole steps, at most ~½ step per axis) by re-deriving each displacement
-                        // before executing it. One full step per axis bounds that change with a
-                        // 2x margin; the planner keeps every blend feasible within it.
-                        let displacement_tolerance = self
-                            .motion_config
-                            .get_steps_per_space_unit_as_vector()
-                            .map_values(|_, steps| match steps > math::ZERO {
-                                true => Some(steps.recip()),
-                                false => None,
-                            })
-                            .norm2()
-                            .unwrap_or(math::ZERO);
-                        let _ = motion::perform_motion_chaining(&mut rb, displacement_tolerance);
+                    {
+                        if do_adjust {
+                            rb.unchained = rb.unchained.saturating_add(1);
+                        }
+                        if rb.unchained > 0
+                            && (rb.unchained >= CHAIN_BATCH || rb.used <= CHAIN_BATCH + 2)
+                        {
+                            let t_chain = super::motion_metrics::now_us();
+                            self.chain(&mut rb);
+                            _chain_us += super::motion_metrics::now_us().saturating_sub(t_chain);
+                        }
                     }
+                    super::motion_metrics::record_plan(
+                        super::motion_metrics::now_us().saturating_sub(_t_plan),
+                        _chain_us,
+                    );
 
                     event_bus
                         .publish_event(hwa::EventStatus::not_containing(
@@ -572,7 +781,11 @@ impl MotionPlanner {
                         ))
                         .await;
                     self.move_planned.signal(true);
-                    return if is_defer {
+                    let wait_slot = fills_queue && !blocking && !is_defer;
+                    if wait_slot {
+                        rb.slot_waiter = Some((action, channel, num_order));
+                    }
+                    return if is_defer || wait_slot {
                         // Shall wait for one de-allocation in order to enqueue more
                         hwa::debug!("schedule_raw_move() - Finally deferred");
                         #[cfg(feature = "trace-commands")]
@@ -597,24 +810,49 @@ impl MotionPlanner {
                         Ok(processing::CodeExecutionSuccess::QUEUED)
                     };
                 } else {
+                    super::motion_metrics::record_queue_full_wait();
+                    #[cfg(feature = "with-motion-chaining")]
+                    rb.break_move_period();
                     self.available.reset();
                     event_bus
                         .publish_event(EventStatus::containing(EventFlags::MOV_QUEUE_FULL))
                         .await;
-                    if !blocking {
-                        hwa::warn!(
-                            "Mov rejected: {} / {} h={}",
-                            rb.used,
-                            Contract::SEGMENT_QUEUE_SIZE,
-                            rb.head
-                        );
-                        return Err(processing::CodeExecutionFailure::BUSY);
-                    } else {
-                        hwa::trace!("schedule_raw_move() Looping again");
-                    }
+                    // Never rejected: the issuer waits here for a free slot, so its answer is
+                    // deferred until the move is queued (and further, through `slot_waiter`, if it
+                    // fills the queue again). A non-blocking issuer only gets here when the queue
+                    // was filled by someone else (a print job, the inner segments of an arc or a
+                    // bezier, another channel) or when the host does not wait for the `ok`:
+                    // rejecting it with BUSY forced the host to resend it
+                    hwa::debug!(
+                        "schedule_raw_move() queue full: {} / {} h={}. Waiting for a slot",
+                        rb.used,
+                        Contract::SEGMENT_QUEUE_SIZE,
+                        rb.head
+                    );
                 }
             }
         }
+    }
+
+    /// Chains the newest moves (see [motion::perform_motion_chaining_after_append]) and clears
+    /// the pending count.
+    ///
+    /// The stepper corrects the position deviation (a rounding residual of whole steps, at most
+    /// ~½ step per axis) by re-deriving each displacement before executing it. One full step per
+    /// axis bounds that change with a 2x margin; the planner keeps every blend feasible within it.
+    #[cfg(feature = "with-motion-chaining")]
+    fn chain(&self, rb: &mut embassy_sync::mutex::MutexGuard<'_, <Contract as HwiContract>::MotionRingBufferMutexType, RingBuffer>) {
+        let displacement_tolerance = self
+            .motion_config
+            .get_steps_per_space_unit_as_vector()
+            .map_values(|_, steps| match steps > math::ZERO {
+                true => Some(steps.recip()),
+                false => None,
+            })
+            .norm2()
+            .unwrap_or(math::ZERO);
+        let _ = motion::perform_motion_chaining_after_append(rb, displacement_tolerance);
+        rb.unchained = 0;
     }
 
     pub fn motion_config(&self) -> &hwa::controllers::MotionConfig {
@@ -804,6 +1042,31 @@ impl MotionPlanner {
 
     /// Plans a linear move (G0/G1) to `p1_wu`, interpreted according to the positioning modes
     /// (G90/G91 and M82/M83). `f_wu_min` is the (optional) `F` word in world units per minute.
+    /// A rapid move (as `G0`) to `p1_wu` (the coordinates given, in the current G90/G91 mode), at
+    /// the default travel speed. Without building a G-code: lighter for internal moves (e.g. the
+    /// travel of `G30`)
+    pub async fn plan_rapid_move(
+        &self,
+        channel: hwa::CommChannel,
+        p1_wu: TVector<Real>,
+        event_bus: &hwa::types::EventBus,
+        order_num: u32,
+        line: Option<u32>,
+    ) -> Result<processing::CodeExecutionSuccess, processing::CodeExecutionFailure> {
+        self.schedule_move(
+            "G0",
+            channel,
+            hwa::DeferAction::RapidMove,
+            p1_wu,
+            None,
+            true,
+            event_bus,
+            order_num,
+            line,
+        )
+        .await
+    }
+
     async fn schedule_move(
         &self,
         mnemonic: &'static str,
@@ -848,7 +1111,7 @@ impl MotionPlanner {
 
         let result = self
             .schedule_displacement(
-                mnemonic, channel, action, &p0_pos, &target_wu, e_delta, feed_rate, blocking,
+                mnemonic, channel, action, &p0_pos, &target_wu, e_delta, feed_rate, true, blocking,
                 event_bus, order_num, line,
             )
             .await;
@@ -907,6 +1170,7 @@ impl MotionPlanner {
                 &target_wu,
                 e_delta,
                 Some(feed_rate),
+                false,
                 blocking,
                 event_bus,
                 order_num,
@@ -1107,6 +1371,7 @@ impl MotionPlanner {
                     &target_wu,
                     e_delta_total / n,
                     feed_rate,
+                    true,
                     // Intermediate segments must wait for room in the queue
                     true,
                     event_bus,
@@ -1252,6 +1517,7 @@ impl MotionPlanner {
                     &target_wu,
                     e_delta_total / n,
                     feed_rate,
+                    true,
                     // Intermediate segments must wait for room in the queue
                     true,
                     event_bus,
@@ -1270,12 +1536,47 @@ impl MotionPlanner {
         result
     }
 
+    /// Soft end-stops (Marlin's, M211): once homed, a target beyond the travel of an axis (see
+    /// [hwa::controllers::MotionConfig::get_logical_travel], which follows the home offsets of
+    /// M206) is clipped to it. Otherwise the axis would crash into its end-stop and lose steps:
+    /// the position drifts and the next moves hit the end-stops again. Z is only clipped at the
+    /// end of its travel (below the homing plane there is the bed, whose height depends on the
+    /// probe). Only for kinematics whose world coordinates are those of the head.
+    fn clip_to_travel(&self, target_wu: &TVector<Real>) -> TVector<Real> {
+        #[allow(unused_mut)]
+        let mut target = *target_wu;
+        #[cfg(not(any(
+            feature = "with-motion-anthropomorphic-kinematics",
+            feature = "with-motion-delta-kinematics"
+        )))]
+        if self.motion_status.soft_endstops() && self.motion_status.is_homed() {
+            let (min, max) = self.motion_config.get_logical_travel();
+            target.apply_values(|coord, v| {
+                let mut clipped = *v;
+                if coord != hwa::CoordSel::Z {
+                    if let Some(low) = min.get_coord(coord) {
+                        clipped = clipped.max(low);
+                    }
+                }
+                if let Some(high) = max.get_coord(coord) {
+                    clipped = clipped.min(high);
+                }
+                #[cfg(feature = "debug-motion")]
+                if clipped != *v {
+                    hwa::info!("[MotionPlanner] {:?} clipped to the travel: {:?} -> {:?}", coord, v, clipped);
+                }
+                Some(clipped)
+            });
+        }
+        target
+    }
+
     /// Schedules the displacement from `p0_pos` to `target_wu` (only the set coordinates are
     /// considered) plus an extruder displacement of `e_delta` world units.
     ///
     /// `feed_rate_wu_s` applies to the path length of the motion axis, or to the extruder when
     /// it's an extruder-only move (standard GCode semantics). When `None`, the default travel
-    /// speed is used.
+    /// speed is used. `apply_rates` applies the M220 speed and M221 flow percentages.
     async fn schedule_displacement(
         &self,
         mnemonic: &'static str,
@@ -1285,6 +1586,7 @@ impl MotionPlanner {
         target_wu: &TVector<Real>,
         e_delta: Real,
         feed_rate_wu_s: Option<Real>,
+        apply_rates: bool,
         blocking: bool,
         event_bus: &hwa::types::EventBus,
         _order_num: u32,
@@ -1292,6 +1594,7 @@ impl MotionPlanner {
     ) -> Result<processing::CodeExecutionSuccess, processing::CodeExecutionFailure> {
         #[allow(unused_mut)]
         let mut p0_pos = *p0_pos;
+        let target_wu = &self.clip_to_travel(target_wu);
         #[allow(unused_mut)]
         let mut p1_pos = p0_pos.complete_and_project(target_wu);
         #[allow(unused_mut)]
@@ -1334,9 +1637,15 @@ impl MotionPlanner {
         let max_accel = self.motion_config.get_max_accel();
         let max_jerk = self.motion_config.get_max_jerk();
 
-        // Multipliers
-        let flow_rate = self.motion_config.get_flow_rate_as_real();
-        let speed_rate = self.motion_config.get_speed_rate_as_real();
+        // Multipliers: the M221 flow rate (extruder) and the M220 speed rate. Not applied to the
+        // firmware retraction (G10/G11), as Marlin: its length and speeds are absolute
+        let (flow_rate, speed_rate) = match apply_rates {
+            true => (
+                self.motion_config.get_flow_rate_as_real(),
+                self.motion_config.get_speed_rate_as_real(),
+            ),
+            false => (math::ONE, math::ONE),
+        };
 
         // Compute distance and decompose as unit vector and module.
         // When dist is zero, value is map to None (NaN).
@@ -1399,11 +1708,13 @@ impl MotionPlanner {
             .unwrap_or(math::ZERO);
         // Clamp per-axis target speed to the physical restrictions
         let speed_vector = (speed_vector * speed_rate)
-            .clamp_higher_than(min_speed)
             .clamp_lower_than(max_speed)
             .clamp_lower_than(max_feed_rate);
 
-        let module_target_speed = speed_vector.norm2().unwrap_or(math::ZERO);
+        // Never slower than the minimum speed along the path. Not per axis: raising every slow axis
+        // to its own minimum turned the direction of the move and made it faster than its feed
+        // rate (a 12-axis move whose slow axes were raised to 10 º/s ran ~4% faster)
+        let module_target_speed = speed_vector.norm2().unwrap_or(math::ZERO).max(min_speed_module);
         let module_target_accel = (unit_vector_dir.abs() * max_accel)
             .norm2()
             .unwrap_or(math::ZERO);
@@ -1467,11 +1778,7 @@ impl MotionPlanner {
                 #[cfg(feature = "with-motion-chaining")]
                 accel_exit_su_s: math::ZERO,
                 #[cfg(feature = "with-motion-chaining")]
-                t_1: math::ZERO,
-                #[cfg(feature = "with-motion-chaining")]
-                t_2: math::ZERO,
-                #[cfg(feature = "with-motion-chaining")]
-                t_3: math::ZERO,
+                speed_rest_su_s: rest_speed,
                 speed_target_su_s: module_target_speed,
                 displacement_su: module_target_distance,
                 speed_enter_constrained_su_s: module_target_speed,
@@ -1483,6 +1790,12 @@ impl MotionPlanner {
                 dest_pos: p1_pos.space_pos.selecting(relevant_space_coords),
                 dest_world_pos: p1_pos.world_pos.selecting(relevant_world_coords),
                 tool_power: Real::zero(),
+                // The programmed speed along the path (before the M220 speed rate and the limits):
+                // the reference of the laser dynamic power. Zero for the rapids (G0): no cutting
+                speed_programmed_su_s: match action {
+                    hwa::DeferAction::RapidMove => math::ZERO,
+                    _ => speed_module,
+                },
                 constraints: motion::Constraints {
                     v_max: module_target_speed,
                     a_max: module_target_accel,
@@ -1529,11 +1842,12 @@ impl MotionPlanner {
         move_result
     }
 
+    /// Runs the homing. Returns the native (machine) position reached
     pub async fn do_homing(
         &self,
         order_num: u32,
         event_bus: &hwa::types::EventBus,
-    ) -> Result<(), ()> {
+    ) -> Result<TVector<Real>, ()> {
         #[cfg(feature = "trace-commands")]
         hwa::info!("[trace-commands] Locking for homming");
 
@@ -1546,7 +1860,7 @@ impl MotionPlanner {
         event_bus
             .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))
             .await;
-        result.map(|_| ()).map_err(|_| ())
+        result.map_err(|_| ())
     }
 }
 

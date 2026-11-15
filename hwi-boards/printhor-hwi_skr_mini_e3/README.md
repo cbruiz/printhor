@@ -20,7 +20,8 @@ The `firmware.bin` file, ready to be copied to the SD card, can be produced with
 DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
-The firmware size is about 233kB as of now with these settings.
+The firmware size is about 242kB as of now with these settings (the `skr_mini_e3_v3_fdm` profile,
+about 294kB).
 
 ### FDM printer (stock Creality Ender-3)
 
@@ -42,8 +43,20 @@ Add `with-fan-extra-1` to also drive FAN1. Wiring (from the board schematic):
 | Extra fan (FAN1)     | PC7 | TIM3_CH2 (100 Hz)  |
 
 Thermistors: 100K NTC B3950 with a 4.7K pull-up (`HOT_END_THERM_*`/`HOT_BED_THERM_*`, overridable
-in `.cargo/config.toml`). Default steps per mm are the stock Ender-3 ones (X/Y 80, Z 400, E 93);
-adjust them with `M92`. Tune the PID constants with `M303` before printing.
+in `.cargo/config.toml`). Tune the PID constants with `M303` before printing.
+
+The motion defaults (`board_stm32g0/mod.rs`):
+
+| Setting                     | Default                                                     | Marlin's equivalent                        |
+|-----------------------------|-------------------------------------------------------------|------------------------------------------|
+| Steps per mm (8 µsteps)     | X/Y 80, Z 400, E 400 (10, 50 and 50 full steps/mm)          | `DEFAULT_AXIS_STEPS_PER_UNIT`  |
+| Driver run current          | X/Y/Z 580 mA, E 800 mA RMS, hold ×0.5 (R_sense 0.11 Ω)      | `*_CURRENT`, `HOLD_MULTIPLIER` |
+| Probe offset (`M851`)       | X 33, Y -4, Z -3.9                                          | `NOZZLE_TO_PROBE_OFFSET`       |
+| Position after homing       | X -17.3, Y -21, Z 1 (bed plane); travel to X 220, Y 202     | `*_MIN_POS`, `X/Y_MAX_POS`     |
+| Homing feed rate            | 51, 51, 5 mm/s (slow approach: 25.5, 25.5, 1.25 mm/s)       | `HOMING_FEEDRATE_MM_M`         |
+
+Steps per mm are full steps per mm times the micro-steps (`M92` changes them). The settings stored
+in the EEPROM (`M500`) are restored at boot instead: `M502` and `M500` apply these defaults.
 
 ### Settings persistence (EEPROM)
 

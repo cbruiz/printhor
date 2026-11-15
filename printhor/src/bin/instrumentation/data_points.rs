@@ -63,7 +63,64 @@ impl DataPointsDimension {
     }
 }
 
+/// The motion in machine axes (X, Y, Z) at each sampling tick, and its vector magnitudes
+#[derive(Default)]
+pub(crate) struct AxesSeries {
+    pub times: Vec<f64>,
+    /// Per axis X, Y, Z
+    pub positions: [Vec<f64>; 3],
+    pub velocities: [Vec<f64>; 3],
+    /// Tangential acceleration projected on each axis (the profile of each segment)
+    pub accelerations: [Vec<f64>; 3],
+    /// |v| from the components
+    pub speed: Vec<f64>,
+    /// |dv/dt| of the velocity vector between ticks: the tangential acceleration plus the change
+    /// of direction at the junctions (a polyline turns instantly at its vertices)
+    pub total_acceleration: Vec<f64>,
+    last: Option<(f64, [f64; 3])>,
+}
+
+impl AxesSeries {
+    pub fn push(&mut self, time: f64, position: [f64; 3], velocity: [f64; 3], acceleration: [f64; 3]) {
+        self.times.push(time);
+        for k in 0..3 {
+            self.positions[k].push(position[k]);
+            self.velocities[k].push(velocity[k]);
+            self.accelerations[k].push(acceleration[k]);
+        }
+        let norm = |v: [f64; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+        self.speed.push(norm(velocity));
+        let total = match self.last {
+            Some((t0, v0)) if time > t0 => {
+                norm([velocity[0] - v0[0], velocity[1] - v0[1], velocity[2] - v0[2]]) / (time - t0)
+            }
+            _ => norm(acceleration),
+        };
+        self.total_acceleration.push(total);
+        self.last = Some((time, velocity));
+    }
+
+    pub fn write_csv(&self, path: &str) -> std::io::Result<()> {
+        use std::io::Write;
+        let mut file = std::fs::File::create(path)?;
+        writeln!(file, "time,x,y,z,vx,vy,vz,ax,ay,az,speed,total_acceleration")?;
+        for i in 0..self.times.len() {
+            writeln!(
+                file,
+                "{:.6},{:.5},{:.5},{:.5},{:.5},{:.5},{:.5},{:.4},{:.4},{:.4},{:.5},{:.4}",
+                self.times[i],
+                self.positions[0][i], self.positions[1][i], self.positions[2][i],
+                self.velocities[0][i], self.velocities[1][i], self.velocities[2][i],
+                self.accelerations[0][i], self.accelerations[1][i], self.accelerations[2][i],
+                self.speed[i], self.total_acceleration[i],
+            )?;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) struct DataPoints {
+    pub axes: AxesSeries,
     pub reference_time: f64,
     pub current_segment_id: usize,
     pub current_micro_segment_id: usize,
@@ -85,6 +142,7 @@ pub(crate) struct DataPoints {
 impl DataPoints {
     pub fn new() -> Self {
         Self {
+            axes: AxesSeries::default(),
             reference_time: 0.0,
             current_segment_id: 0,
             current_micro_segment_id: 0,

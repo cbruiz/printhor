@@ -127,11 +127,19 @@ cfg_if::cfg_if! {
         pub use embedded_sdmmc::BlockDevice as SDBlockDevice;
 
         pub trait AsyncSDBlockDevice: embedded_sdmmc::BlockDevice {
-            /// The returned future must not borrow `self`: since embedded-sdmmc 0.10 the device is
-            /// only reachable inside `VolumeManager::device(|d| ..)`, so the future is awaited
-            /// after that borrow ends.
-            fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<Self>;
+            /// What [Self::do_lock] yields and [Self::do_hold] keeps (e.g. the guard of the SPI bus)
+            type Lock;
+            /// Retains the device (e.g. its SPI bus) in two steps: since embedded-sdmmc 0.10 the
+            /// device is only reachable inside `VolumeManager::device(|d| ..)`, so this future
+            /// must not borrow `self` (it is awaited after that borrow ends), and the lock it
+            /// yields is then kept by the device itself with [Self::do_hold].
+            fn do_lock(&self) -> impl core::future::Future<Output = Option<Self::Lock>> + use<Self>;
+            /// Keeps the lock taken by [Self::do_lock] until [Self::do_release]
+            fn do_hold(&self, lock: Self::Lock) -> Result<(), ()>;
             fn do_release(&self) -> Result<(), ()>;
+            /// Forgets the card state, so that the next access initializes the card again (a card
+            /// inserted, replaced or not ready when the firmware started). No-op by default.
+            fn reset_card(&mut self) {}
         }
     }
 }

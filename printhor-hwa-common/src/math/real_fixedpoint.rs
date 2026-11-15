@@ -18,8 +18,14 @@ impl Real {
         Real(dec)
     }
 
+    /// Never panics: NaN is 0 and out of range values saturate
     pub fn from_f32(num: f32) -> Self {
-        Real(Decimal::from_f32_retain(num).unwrap())
+        match Decimal::from_f32_retain(num) {
+            Some(d) => Real(d),
+            None if num.is_nan() => Real(Decimal::ZERO),
+            None if num > 0.0 => Real(Decimal::MAX),
+            None => Real(Decimal::MIN),
+        }
     }
     pub fn from_lit(num: i64, scale: u32) -> Self {
         Real(Decimal::new(num, scale))
@@ -76,7 +82,8 @@ impl Real {
         Real(self.0.floor())
     }
     pub fn to_f64(&self) -> f64 {
-        self.0.to_f64().unwrap()
+        // Every Decimal fits in f64 (with rounding): the fallback is never expected
+        self.0.to_f64().unwrap_or(0.0)
     }
     /// Truncates toward zero (as the float backends and `int()`)
     pub fn to_i32(&self) -> Option<i32> {
@@ -86,8 +93,13 @@ impl Real {
     pub fn to_i64(&self) -> Option<i64> {
         self.0.trunc().to_i64()
     }
+    /// Truncated integer part. Never panics: saturates out of range
     pub fn int(&self) -> i64 {
-        self.0.trunc().to_i64().unwrap()
+        match self.0.trunc().to_i64() {
+            Some(v) => v,
+            None if self.0.is_sign_negative() => i64::MIN,
+            None => i64::MAX,
+        }
     }
 
     /// Radians to degrees

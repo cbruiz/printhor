@@ -15,8 +15,9 @@
 use crate::{hwa, motion};
 
 use embassy_time::Duration;
-use hwa::controllers::ExecPlan;
+use hwa::controllers::{ConsumedPlan, ExecPlan};
 use hwa::controllers::motion_control::STEP_DRIVER;
+use hwa::controllers::motion_control::motion_metrics as metrics;
 use hwa::math;
 use motion::MicroSegmentInterpolator;
 #[allow(unused)]
@@ -55,7 +56,16 @@ use hwa::{EventFlags, EventStatus};
 ///     // Disable steppers here
 /// }
 /// ```
+#[cfg(not(test))]
 const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(10);
+/// Shorter in the tests (native simulator), so that the park scenarios do not wait 10 s
+#[cfg(test)]
+const STEPPER_INACTIVITY_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Whether something consumes the step queue (the stepper ticker, or the motion broadcast). When
+/// not, the moves are planned and tracked, but executed virtually (see `task_stepper`)
+const HAS_STEP_ACTUATOR: bool =
+    cfg!(any(feature = "with-motion-stepper", feature = "with-motion-broadcast"));
 
 // This constant defines the period for generating the stepper planner micro segments.
 //
@@ -152,6 +162,12 @@ pub async fn task_stepper(
 
     motion_planner.start(&event_bus).await;
 
+    if !HAS_STEP_ACTUATOR {
+        hwa::warn!(
+            "[task_stepper] No step actuator (with-motion-stepper/with-motion-broadcast): moves are executed virtually"
+        );
+    }
+
     STEP_DRIVER.setup(
         motion_planner
             .motion_driver()
@@ -160,6 +176,8 @@ pub async fn task_stepper(
             .step_actuator()
             .clone(),
     );
+    // The tool outputs switched by the step executor (see `hwa::controllers::ToolActions`)
+    STEP_DRIVER.setup_tools(tool_outputs(&motion_planner).await);
 
     #[allow(unused_mut)]
     let mut _s = event_bus.subscriber().await;
@@ -186,8 +204,13 @@ pub async fn task_stepper(
         }
     }
 
+    // Metrics: when the previous segment ended, if nothing was queued behind it (the wait for the
+    // next one is a gap in the motion)
+    #[allow(unused_mut, unused_variables)]
+    let mut _starving_since: Option<u64> = None;
+
     loop {
-        let _moves_left = match embassy_time::with_timeout(
+        let consumed = match embassy_time::with_timeout(
             STEPPER_INACTIVITY_TIMEOUT,
             motion_planner.next_plan(&event_bus),
         )
@@ -210,7 +233,11 @@ pub async fn task_stepper(
                     hwa::info!("[task_stepper] Ending gracefully");
                     return ();
                 }
-                moves_left
+                ConsumedPlan {
+                    moves_left,
+                    tools: hwa::controllers::ToolActions::NONE,
+                    order_num: 0,
+                }
             }
             Ok(ExecPlan::Segment(_, _channel, _order_num))
                 if motion_aborted() || event_bus.has_flags(EventFlags::SYS_ALARM).await =>
@@ -218,17 +245,27 @@ pub async fn task_stepper(
                 hwa::debug!("[task_stepper] order_num:{:?} Segment discarded", _order_num);
                 motion_planner.consume_current_plan(&event_bus).await
             }
-            Ok(ExecPlan::Segment(mut segment, _channel, _order_num)) => {
-                // Process segment plan
-                #[cfg(feature = "with-ps-on")]
-                match _s
-                    .ft_wait_for(EventStatus::containing(EventFlags::ATX_ON))
-                    .await
-                {
-                    Ok(_) => {}
-                    Err(_) => {
-                        let _ = _s.ft_wait_while(EventFlags::SYS_ALARM).await;
+            Ok(ExecPlan::Segment(mut segment, _channel, _order_num)) => 'segment: {
+                #[cfg(all(test, feature = "native"))]
+                segment_trace::record(&segment, _order_num);
+                // Metrics: the gap since the previous segment ran out of queue (bounded: a longer
+                // wait is the machine being idle, not starving)
+                let _t_fetch = metrics::now_us();
+                if let Some(since) = _starving_since.take() {
+                    let gap = _t_fetch.saturating_sub(since);
+                    if gap < 1_000_000 {
+                        metrics::record_starved_gap(gap);
                     }
+                }
+                metrics::set_motion_active(true);
+                #[cfg(feature = "motion-metrics")]
+                metrics::record_lookahead(motion_planner.num_queued().await.saturating_sub(1));
+                // Process segment plan. Only when the machine is ready (power on, drivers
+                // configured): waited for, bounded
+                if !wait_motion_ready(&mut _s, &event_bus, &motion_planner).await {
+                    hwa::warn!("[task_stepper] order_num:{:?} Segment discarded (not ready)", _order_num);
+                    metrics::set_motion_active(false);
+                    break 'segment motion_planner.consume_current_plan(&event_bus).await;
                 }
 
                 #[cfg(feature = "verbose-timings")]
@@ -323,10 +360,7 @@ pub async fn task_stepper(
                         _ => None,
                     }
                 });
-                segment.fix_deviation(
-                    &whole_deviation,
-                    motion_planner.motion_config().get_flow_rate_as_real(),
-                );
+                segment.fix_deviation(&whole_deviation);
                 // In the direction of motion of each axis: (src - real) along the axis direction
                 let start_offset_steps = segment.unit_vector_dir.map_values(|coord, dir| {
                     let f = fraction_steps.get_coord(coord)?;
@@ -347,7 +381,8 @@ pub async fn task_stepper(
                 let t_calc = embassy_time::Instant::now();
 
                 // Compute the Motion Profile
-                match HybridMotionProfile::compute(
+                let _t_profile = metrics::now_us();
+                let _profile = HybridMotionProfile::compute(
                     segment.displacement_su,
                     segment.speed_enter_su_s,
                     segment.speed_exit_su_s,
@@ -357,7 +392,9 @@ pub async fn task_stepper(
                     segment.accel_exit_su_s,
                     &segment.constraints,
                     false,
-                ) {
+                );
+                metrics::record_profile(metrics::now_us().saturating_sub(_t_profile));
+                match _profile {
                     Ok(trajectory) => {
                         #[cfg(feature = "debug-motion")]
                         hwa::info!(
@@ -443,7 +480,11 @@ pub async fn task_stepper(
                         event_bus
                             .publish_event(EventStatus::containing(EventFlags::MOVING))
                             .await;
-                        let do_dry_run = event_bus.has_flags(EventFlags::DRY_RUN).await;
+                        // Without a step actuator (no stepper nor broadcast) nothing drains the
+                        // step queue: moves are executed virtually (as in dry run) so the system
+                        // keeps progressing instead of waiting forever
+                        let do_dry_run = !HAS_STEP_ACTUATOR
+                            || event_bus.has_flags(EventFlags::DRY_RUN).await;
                         if steppers_off {
                             #[cfg(feature = "trace-commands")]
                             hwa::info!("[trace-commands] Powering steppers on");
@@ -472,6 +513,20 @@ pub async fn task_stepper(
 
                         // Profile velocity at the start of the current window (second-order DDA)
                         let mut v_window_start = trajectory.eval_velocity(math::ZERO);
+
+                        // Laser dynamic power (M4): the mean speed of each window relative to the
+                        // programmed one, per mille (`(v_start + v_end) · 500 / v_programmed`).
+                        // None for the moves without a programmed cutting speed (G0)
+                        #[cfg(feature = "with-laser")]
+                        let laser_ratio_scale = match segment.speed_programmed_su_s.is_defined_positive() {
+                            true => Some(Real::from_lit(500, 0) / segment.speed_programmed_su_s),
+                            false => None,
+                        };
+
+                        // Metrics: interpolation CPU time of the segment (push waits excluded)
+                        let _t_interp = metrics::now_us();
+                        #[allow(unused_mut)]
+                        let mut _push_wait_us: u64 = 0;
 
                         // Micro-segments interpolation along segment
                         loop {
@@ -518,6 +573,14 @@ pub async fn task_stepper(
                                 // Step rate ramps linearly from the profile velocity at the start
                                 // of the window to the one at its end (continuous motor velocity).
                                 let v_window_end = segment_iterator.current_speed();
+                                #[cfg(feature = "with-laser")]
+                                let speed_ratio = laser_ratio_scale.map(|scale| {
+                                    ((v_window_start + v_window_end) * scale)
+                                        .int()
+                                        .clamp(0, u16::MAX as i64) as u16
+                                });
+                                #[cfg(not(feature = "with-laser"))]
+                                let speed_ratio = None;
                                 let _has_more = match micro_segment_interpolator
                                     .advance_to_with_velocity(
                                         estimated_position,
@@ -564,6 +627,7 @@ pub async fn task_stepper(
                                 #[cfg(feature = "verbose-timings")]
                                 let t1 = embassy_time::Instant::now();
 
+                                let _t_push = metrics::now_us();
                                 if !do_dry_run {
                                     STEP_DRIVER
                                         .push(
@@ -573,9 +637,11 @@ pub async fn task_stepper(
                                             micro_segment_interpolator.state().clone(),
                                             relevant_coords,
                                             relevant_coords_dir_fwd,
+                                            speed_ratio,
                                         )
                                         .await;
                                 }
+                                _push_wait_us += metrics::now_us().saturating_sub(_t_push);
                                 #[cfg(feature = "verbose-timings")]
                                 {
                                     tq += t1.elapsed().as_micros();
@@ -590,6 +656,13 @@ pub async fn task_stepper(
                             hwa::trace!("Micro-segment END");
                             // Microsegment end
                         }
+
+                        metrics::record_interp(
+                            metrics::now_us()
+                                .saturating_sub(_t_interp)
+                                .saturating_sub(_push_wait_us),
+                        );
+                        metrics::record_push_wait(_push_wait_us);
 
                         ////
                         //// TRAJECTORY INTERPOLATION END
@@ -672,7 +745,36 @@ pub async fn task_stepper(
                                 .update_current_position(_order_num, &pos);
                         }
 
-                        let moves_left = motion_planner.consume_current_plan(&event_bus).await;
+                        let consumed = motion_planner.consume_current_plan(&event_bus).await;
+                        #[allow(unused)]
+                        let moves_left = consumed.moves_left;
+                        #[cfg(feature = "motion-metrics")]
+                        {
+                            let t_end = metrics::now_us();
+                            // Integer conversions (no f64: soft-float on every board)
+                            // TMPTRACE
+                            hwa::debug!(
+                                "TMPTRACE S t={} plan={} wall={} left={} vi={} vo={} s={}",
+                                t_end as u32,
+                                (trajectory.end_time() * math::ONE_MILLION).int(),
+                                t_end.saturating_sub(_t_fetch) as u32,
+                                moves_left,
+                                (segment.speed_enter_su_s * Real::from_f32(10.0)).int(),
+                                (segment.speed_exit_su_s * Real::from_f32(10.0)).int(),
+                                (segment.displacement_su * math::ONE_THOUSAND).int()
+                            );
+                            metrics::record_segment(
+                                (trajectory.end_time() * math::ONE_MILLION).int().max(0) as u64,
+                                t_end.saturating_sub(_t_fetch),
+                                (segment.displacement_su * math::ONE_THOUSAND).int().max(0) as u64,
+                                segment.speed_exit_su_s.is_negligible(),
+                            );
+                            if moves_left == 0 {
+                                // The queue ran out: what follows is a gap (or the end of the job)
+                                metrics::set_motion_active(false);
+                                _starving_since = Some(t_end);
+                            }
+                        }
                         event_bus
                             .publish_event(EventStatus::not_containing(EventFlags::MOVING))
                             .await;
@@ -701,21 +803,27 @@ pub async fn task_stepper(
                         }
                         hwa::debug!("[task_stepper] MOTION_PLAN END ({} moves left)", moves_left);
 
-                        moves_left
+                        consumed
                         // segment end
                     }
                     Err(_e) => {
                         hwa::error!("Unable to compute motion plan. Discarding. err: {:?}. Segment: {:?}", _e, segment);
-                        let moves_left = motion_planner.consume_current_plan(&event_bus).await;
+                        let consumed = motion_planner.consume_current_plan(&event_bus).await;
                         event_bus
                             .publish_event(EventStatus::not_containing(EventFlags::MOVING))
                             .await;
-                        moves_left
+                        consumed
                     }
                 }
             }
             Ok(ExecPlan::Dwell(sleep_ms, _channel, _order_num)) => {
-                // Dwell
+                // Dwell. From the end of the motion queued before it (the steps still queued in
+                // the step executor, and the tool actions among them), so that a dwell (G4)
+                // lasts what was requested once the head is still, and M400 (a dwell of zero) is
+                // answered once the motion really ended
+                if !motion_aborted() {
+                    STEP_DRIVER.flush().await;
+                }
                 if motion_aborted() {
                     hwa::debug!("[task_stepper] Dwell discarded (motion aborted)");
                 } else if let Some(millis) = sleep_ms {
@@ -724,27 +832,39 @@ pub async fn task_stepper(
                 } else {
                     hwa::debug!("G4 Not sleeping");
                 }
-                let moves_left = motion_planner.consume_current_plan(&event_bus).await;
+                let consumed = motion_planner.consume_current_plan(&event_bus).await;
                 event_bus
                     .publish_event(EventStatus::not_containing(EventFlags::MOVING))
                     .await;
-                moves_left
+                consumed
             }
             Ok(ExecPlan::SetPosition(position, _channel, _order_num)) => {
                 // SetPosition
                 motion_planner
                     .motion_status()
                     .update_current_position(_order_num, &position);
-                let moves_left = motion_planner.consume_current_plan(&event_bus).await;
-                moves_left
+                motion_planner.consume_current_plan(&event_bus).await
+            }
+            Ok(ExecPlan::Tools(_channel, _order_num)) => {
+                // Tool actions queued alone: applied below, after the steps already queued
+                motion_planner.consume_current_plan(&event_bus).await
             }
             Ok(ExecPlan::Homing(_channel, _order_num)) => {
                 // Homing
                 hwa::debug!("Homing init");
 
                 let mut homing_failed = false;
+                // Where the homing ended (native): the expected point unless it ran (dry run and
+                // debug skip leave the machine where it is assumed to be)
+                #[allow(unused_mut)]
+                let mut homed_native = motion_planner
+                    .motion_config()
+                    .get_native_post_homing_position();
                 if motion_aborted() {
                     hwa::warn!("[task_stepper] Homing discarded (motion aborted)");
+                    homing_failed = true;
+                } else if !wait_motion_ready(&mut _s, &event_bus, &motion_planner).await {
+                    hwa::warn!("[task_stepper] Homing discarded (not ready)");
                     homing_failed = true;
                 } else if !event_bus.has_flags(EventFlags::DRY_RUN).await {
                     if steppers_off {
@@ -759,7 +879,9 @@ pub async fn task_stepper(
                             // Do nothing
                         }
                         else {
-                            if !motion_planner.do_homing(_order_num, &event_bus).await.is_ok() {
+                            match motion_planner.do_homing(_order_num, &event_bus).await {
+                                Ok(native) => homed_native = native,
+                                Err(_) => {
                                 homing_failed = true;
                                 if motion_aborted() {
                                     // Interrupted on purpose (M410/M112): not an end-stop failure
@@ -769,6 +891,7 @@ pub async fn task_stepper(
                                     event_bus
                                         .publish_event(EventStatus::containing(EventFlags::SYS_ALARM))
                                         .await;
+                                }
                                 }
                             }
                         }
@@ -782,10 +905,11 @@ pub async fn task_stepper(
                     steppers_off = true;
                     motion_planner.motion_status().invalidate_position();
                 } else {
-                    // The home offsets (M206) shift the coordinate system: right after homing, the
-                    // logical position is the homing point plus the offset
+                    // Right after homing, the logical position is where the homing ended (the safe
+                    // homing point, Z at the clearance above the bed plane) plus the home offsets
+                    // (M206)
                     let position = hwa::controllers::Position::new_with_world_projection(
-                        &motion_planner.motion_config().get_logical_homing_point(),
+                        &motion_planner.motion_config().logical_from_native(&homed_native),
                     );
                     motion_planner
                         .motion_status()
@@ -793,14 +917,136 @@ pub async fn task_stepper(
                     motion_planner
                         .motion_status()
                         .update_current_position(_order_num, &position);
+                    motion_planner.motion_status().set_homed(true);
                 }
 
-                let moves_left = motion_planner.consume_current_plan(&event_bus).await;
+                let consumed = motion_planner.consume_current_plan(&event_bus).await;
                 hwa::debug!("Homing done");
-                moves_left
+                consumed
             }
         };
-        hwa::trace!("Moves left: {}", _moves_left);
+        hwa::trace!("Moves left: {}", consumed.moves_left);
+        // The tool actions requested right after the consumed entry
+        if !consumed.tools.is_empty() {
+            deliver_tools(&event_bus, consumed.tools, consumed.order_num, steppers_off).await;
+        }
+    }
+}
+
+/// Hands the tool actions requested right after an executed entry to the step executor: they
+/// are applied right after the step windows already queued (those of the entry), and right
+/// before the windows of the next motion, which is not delayed (see
+/// [hwa::controllers::StepPlan::marker]). Applied at once when nothing moves (the steppers are
+/// parked: the step executor is idle and its ticker paused) or the motion is virtual (dry run, no
+/// step actuator), and discarded with the motion on abort (M410/M112) or alarm.
+async fn deliver_tools(
+    event_bus: &hwa::types::EventBus,
+    tools: hwa::controllers::ToolActions,
+    order_num: u32,
+    steppers_off: bool,
+) {
+    if motion_aborted() || event_bus.has_flags(EventFlags::SYS_ALARM).await {
+        hwa::debug!("[task_stepper] order_num:{:?} Tool actions discarded", order_num);
+        return;
+    }
+    let dry_run = event_bus.has_flags(EventFlags::DRY_RUN).await;
+    let tools = if dry_run { tools.for_dry_run() } else { tools };
+    if steppers_off || dry_run || !HAS_STEP_ACTUATOR {
+        STEP_DRIVER.apply_tools_now(&tools);
+    } else {
+        STEP_DRIVER.push_tools(order_num, tools).await;
+    }
+}
+
+/// The tool outputs the step executor switches: the PWM of the fans and the laser (shared with
+/// their controllers)
+async fn tool_outputs(
+    _motion_planner: &hwa::controllers::MotionPlanner,
+) -> hwa::controllers::ToolOutputs {
+    #[allow(unused)]
+    let driver = _motion_planner.motion_driver().lock().await;
+    hwa::controllers::ToolOutputs::new(
+        #[cfg(feature = "with-fan-layer")]
+        (*driver.fan_layer_controller.lock().await).clone(),
+        #[cfg(feature = "with-fan-extra-1")]
+        (*driver.fan_extra_1_controller.lock().await).clone(),
+        #[cfg(feature = "with-laser")]
+        (*driver._laser_controller.lock().await).clone(),
+    )
+}
+
+/// Waits until the machine is ready for motion ([crate::helpers::MOTION_READY_FLAGS]: power on,
+/// drivers configured), for [crate::helpers::MOTION_READY_TIMEOUT_MS] at most. Normally immediate:
+/// the commands are only planned when ready. Fails in alarm mode, and on timeout (e.g. the power
+/// went off with moves queued): then the alarm is raised (the queued moves are discarded) and the
+/// position is lost (homing is required). Never waits forever.
+async fn wait_motion_ready<M: hwa::AsyncRawMutex>(
+    subscriber: &mut hwa::EventBusSubscriber<'static, M>,
+    event_bus: &hwa::types::EventBus,
+    motion_planner: &hwa::controllers::MotionPlanner,
+) -> bool {
+    match embassy_time::with_timeout(
+        Duration::from_millis(crate::helpers::MOTION_READY_TIMEOUT_MS),
+        subscriber.ft_wait_for(EventStatus::containing(crate::helpers::MOTION_READY_FLAGS)),
+    )
+    .await
+    {
+        Ok(Ok(())) => true,
+        // SYS_ALARM: the queued moves are being discarded
+        Ok(Err(())) => false,
+        Err(_) => {
+            hwa::error!(
+                "[task_stepper] Not ready for motion (power / TMC drivers): {:?}. Raising SYS_ALARM",
+                event_bus.get_status().await
+            );
+            motion_planner.motion_status().invalidate_position();
+            event_bus
+                .publish_event(EventStatus::containing(EventFlags::SYS_ALARM))
+                .await;
+            false
+        }
+    }
+}
+
+/// Test instrumentation of the native simulator: the planned junction speeds of the segments, as
+/// the stepper executes them
+#[cfg(all(test, feature = "native"))]
+pub mod segment_trace {
+    use std::sync::Mutex;
+
+    /// A segment: order number, entry, exit and rest speeds (space units per second)
+    #[derive(Clone, Copy, Debug)]
+    pub struct Record {
+        pub order_num: u32,
+        pub v_enter: f64,
+        pub v_exit: f64,
+        pub v_rest: f64,
+    }
+
+    static LOG: Mutex<Option<std::vec::Vec<Record>>> = Mutex::new(None);
+
+    /// Starts recording
+    pub fn start() {
+        *LOG.lock().unwrap() = Some(std::vec::Vec::new());
+    }
+
+    /// Stops recording and returns the segments executed since [start], in order
+    pub fn stop() -> std::vec::Vec<Record> {
+        LOG.lock().unwrap().take().unwrap_or_default()
+    }
+
+    pub(crate) fn record(segment: &crate::hwa::controllers::Segment, order_num: u32) {
+        if let Some(log) = LOG.lock().unwrap().as_mut() {
+            log.push(Record {
+                order_num,
+                v_enter: segment.speed_enter_su_s.to_f64(),
+                v_exit: segment.speed_exit_su_s.to_f64(),
+                #[cfg(feature = "with-motion-chaining")]
+                v_rest: segment.speed_rest_su_s.to_f64(),
+                #[cfg(not(feature = "with-motion-chaining"))]
+                v_rest: 0.0,
+            });
+        }
     }
 }
 
@@ -833,11 +1079,11 @@ async fn park(motion_planner: &hwa::controllers::MotionPlanner) {
         .step_actuator()
         .disable_steppers(CoordSel::all_axis());
     STEP_DRIVER.reset();
-    Contract::pause_ticker();
+    hwa::controllers::motion_control::pause_ticker();
 }
 
 async fn unpark(motion_planner: &hwa::controllers::MotionPlanner, enable_steppers: bool) {
-    Contract::resume_ticker();
+    hwa::controllers::motion_control::resume_ticker();
     if enable_steppers {
         STEP_DRIVER.flush().await;
         motion_planner

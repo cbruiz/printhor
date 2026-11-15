@@ -38,13 +38,10 @@ pub struct Segment {
     pub accel_exit_su_s: Real,
 
     #[cfg(feature = "with-motion-chaining")]
-    pub t_1: Real,
-
-    #[cfg(feature = "with-motion-chaining")]
-    pub t_2: Real,
-
-    #[cfg(feature = "with-motion-chaining")]
-    pub t_3: Real,
+    /// Rest speed of the segment (the speed it can start and stop at instantly: the minimum
+    /// speeds of its moving axes) in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec).
+    /// No corner needs a lower junction speed.
+    pub speed_rest_su_s: Real,
     
     pub speed_target_su_s: Real,
     /// Total displacement to complete the movement in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]).
@@ -77,12 +74,46 @@ pub struct Segment {
     #[allow(unused)]
     /// Tool power utilized in the segment.
     pub tool_power: Real,
+    /// The speed programmed for the move (its `F`, before the M220 speed rate, the speed limits
+    /// and the throughput slowdown) in space units ([hwa::HwiContract::SPACE_UNIT_MAGNITUDE]/sec):
+    /// the reference of the laser dynamic power (`M4`), which scales the power by the speed
+    /// relative to it. Zero for the moves without a programmed cutting speed (`G0` rapids), where
+    /// the laser is off (`M3` and `M4`).
+    pub speed_programmed_su_s: Real,
     /// Motion constraints applicable to the segment.
     pub constraints: crate::motion::Constraints, // Should remove this?
 }
 
 impl Segment {
-    pub fn fix_deviation(&mut self, deviation: &TVector<Real>, _flow_rate: Real) {
+    /// Lowers the target speed of a segment still at rest (just created, not chained) to `v`, with
+    /// every speed bound derived from it (see `motion::throughput_speed_cap`)
+    #[cfg(feature = "with-motion-chaining")]
+    pub fn cap_speed(&mut self, v: Real) {
+        self.speed_target_su_s = self.speed_target_su_s.min(v);
+        self.constraints.v_max = self.constraints.v_max.min(v);
+        self.speed_enter_constrained_su_s = self.speed_enter_constrained_su_s.min(v);
+        self.speed_exit_constrained_su_s = self.speed_exit_constrained_su_s.min(v);
+        self.speed_enter_su_s = self.speed_enter_su_s.min(v);
+        self.speed_exit_su_s = self.speed_exit_su_s.min(v);
+        self.speed_rest_su_s = self.speed_rest_su_s.min(v);
+    }
+
+    pub fn fix_deviation(&mut self, deviation: &TVector<Real>) {
+        // The extruder factor the segment was planned with (the M221 flow rate, or 1 for the
+        // firmware retraction): its planned E displacement over its E position delta. Taken from
+        // the segment, not from the current config: M221 may have changed since it was planned
+        #[cfg(feature = "with-e-axis")]
+        let _flow_rate = {
+            let planned_e = self
+                .unit_vector_dir
+                .get_coord(hwa::CoordSel::E)
+                .map(|u| u * self.displacement_su);
+            let raw_e = (self.dest_pos - self.src_pos).get_coord(hwa::CoordSel::E);
+            match (planned_e, raw_e) {
+                (Some(p), Some(r)) if !r.is_zero() => p / r,
+                _ => hwa::math::ONE,
+            }
+        };
         self.src_pos -= *deviation;
         (self.unit_vector_dir, self.displacement_su) = (self.dest_pos - self.src_pos)
             .map_values(|coord, coord_value| match coord {
@@ -116,11 +147,7 @@ mod tests {
             #[cfg(feature = "with-motion-chaining")]
             accel_exit_su_s: math::ZERO,
             #[cfg(feature = "with-motion-chaining")]
-            t_1: math::ZERO,
-            #[cfg(feature = "with-motion-chaining")]
-            t_2: math::ZERO,
-            #[cfg(feature = "with-motion-chaining")]
-            t_3: math::ZERO,
+            speed_rest_su_s: math::ZERO,
             speed_target_su_s: hwa::make_real!(20.0),
             displacement_su: (TVector::one() * math::ONE_HUNDRED).norm2().unwrap(),
             speed_enter_constrained_su_s: hwa::make_real!(10.0),
@@ -132,6 +159,7 @@ mod tests {
             dest_pos: TVector::one() * math::ONE_HUNDRED,
             dest_world_pos: TVector::one() * math::ONE_HUNDRED,
             tool_power: hwa::make_real!(5.0),
+            speed_programmed_su_s: hwa::make_real!(0.0),
             constraints: Constraints {
                 v_max: math::ONE_HUNDRED,
                 a_max: math::ONE_THOUSAND,
@@ -158,7 +186,7 @@ mod tests {
         let expected_dist = (TVector::one() * math::ONE_HUNDRED).norm2().unwrap();
         segment.src_pos += deviation;
 
-        segment.fix_deviation(&deviation, hwa::make_real!(1.0));
+        segment.fix_deviation(&deviation);
 
         assert_eq!(segment.displacement_su, expected_dist);
         assert!(
@@ -178,11 +206,7 @@ mod tests {
             #[cfg(feature = "with-motion-chaining")]
             accel_exit_su_s: math::ZERO,
             #[cfg(feature = "with-motion-chaining")]
-            t_1: math::ZERO,
-            #[cfg(feature = "with-motion-chaining")]
-            t_2: math::ZERO,
-            #[cfg(feature = "with-motion-chaining")]
-            t_3: math::ZERO,
+            speed_rest_su_s: math::ZERO,
             speed_enter_su_s: hwa::make_real!(1.0),
             speed_exit_su_s: hwa::make_real!(1.0),
             speed_target_su_s: hwa::make_real!(10.0),
@@ -196,6 +220,7 @@ mod tests {
             dest_pos: hwa::make_vector_real!(x = 0.0, y = 1.0),
             dest_world_pos: hwa::make_vector_real!(x = 0.0, y = 1.0),
             tool_power: hwa::make_real!(0.0),
+            speed_programmed_su_s: hwa::make_real!(0.0),
             constraints: Constraints {
                 v_max: math::ONE_HUNDRED,
                 a_max: math::ONE_THOUSAND,
@@ -208,9 +233,58 @@ mod tests {
         let expected_dist = hwa::make_real!(1.0);
         segment.src_pos += deviation;
 
-        segment.fix_deviation(&deviation, hwa::make_real!(1.0));
+        segment.fix_deviation(&deviation);
 
         assert_eq!(segment.displacement_su.rdp(6), expected_dist.rdp(6));
+    }
+
+    /// The extruder factor a segment was planned with (M221 flow rate, or 1 for the firmware
+    /// retraction) is kept by the deviation correction, whatever the current M221 setting is
+    #[cfg(all(feature = "with-x-axis", feature = "with-e-axis"))]
+    #[test]
+    fn test_segment_deviation_correction_keeps_flow_factor() {
+        for factor in [0.5f32, 1.0, 1.5] {
+            let raw = hwa::make_vector_real!(x = 3.0, e = 4.0);
+            let mut planned = hwa::make_vector_real!(x = 3.0, e = 4.0);
+            planned.set_coord(hwa::CoordSel::E, Some(Real::from_f32(4.0 * factor)));
+            let (unit_vector_dir, displacement_su) = planned.decompose_normal();
+            let mut segment = Segment {
+                #[cfg(feature = "with-motion-chaining")]
+                accel_enter_su_s: math::ZERO,
+                #[cfg(feature = "with-motion-chaining")]
+                accel_exit_su_s: math::ZERO,
+                #[cfg(feature = "with-motion-chaining")]
+                speed_rest_su_s: math::ZERO,
+                speed_enter_su_s: math::ZERO,
+                speed_exit_su_s: math::ZERO,
+                speed_target_su_s: hwa::make_real!(10.0),
+                displacement_su,
+                speed_enter_constrained_su_s: math::ZERO,
+                speed_exit_constrained_su_s: math::ZERO,
+                #[cfg(feature = "with-motion-chaining")]
+                proj_prev: math::ZERO,
+                #[cfg(feature = "with-motion-chaining")]
+                proj_next: math::ZERO,
+                unit_vector_dir,
+                src_pos: TVector::zero(),
+                dest_pos: raw,
+                dest_world_pos: raw,
+                tool_power: math::ZERO,
+                speed_programmed_su_s: math::ZERO,
+                constraints: Constraints {
+                    v_max: math::ONE_HUNDRED,
+                    a_max: math::ONE_THOUSAND,
+                    j_max: math::ONE_THOUSAND,
+                },
+            };
+            // A deviation of 0.1 in X: the E displacement must keep its planned factor
+            let deviation = hwa::make_vector_real!(x = 0.1);
+            segment.fix_deviation(&deviation);
+            let e = segment.unit_vector_dir.get_coord(hwa::CoordSel::E).unwrap() * segment.displacement_su;
+            let x = segment.unit_vector_dir.get_coord(hwa::CoordSel::X).unwrap() * segment.displacement_su;
+            assert_eq!(e.rdp(4), Real::from_f32(4.0 * factor).rdp(4), "factor {}", factor);
+            assert_eq!(x.rdp(4), hwa::make_real!(3.1).rdp(4), "factor {}", factor);
+        }
     }
 
     #[test]

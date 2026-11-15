@@ -26,6 +26,10 @@ default = [
 nightly = ["embassy-executor/nightly", "printhor-hwa-common/nightly", "printhor-hwi_skr_mini_e3?/nightly", "printhor-hwi_mks_robin_nano?/nightly", "printhor-hwi_nucleo_64_arduino_cnc_hat?/nightly", "printhor-hwi_rp_2040?/nightly"]
 
 with-motion-chaining = []
+# Junctions limited by the velocity jump only (M205 X), without the corner projection (cos θ):
+# for machines whose moves are samples of a joint (or any non-geometric) trajectory. Always on
+# with the anthropomorphic kinematics. See `motion::corner_speed_factor`
+with-joint-space-corners = []
 # G2/G3 arc moves in the XY plane (segmented into linear moves). Incompatible with I/J axis
 with-arcs = []
 # G5 cubic Bézier spline moves in the XY plane (segmented into linear moves)
@@ -41,7 +45,7 @@ with-motion-anthropomorphic-kinematics = ["printhor-hwi_native?/with-motion-anth
 
 # Hardware device features
 
-with-defmt = ["defmt", "defmt-rtt", "panic-probe", "printhor-hwa-utils/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt", "printhor-hwi_skr_mini_e3?/with-defmt", "printhor-hwi_mks_robin_nano?/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "embedded-sdmmc?/defmt-log"]
+with-defmt = ["defmt", "defmt-rtt", "printhor-hwa-utils/with-defmt", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-defmt", "printhor-hwi_skr_mini_e3?/with-defmt", "printhor-hwi_mks_robin_nano?/with-defmt", "printhor-hwi_rp_2040?/with-defmt", "embedded-sdmmc?/defmt-log"]
 with-log = ["printhor-hwi_native?/with-log"]
 with-serial-usb = ["printhor-hwi_native?/with-serial-usb", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-usb", "printhor-hwi_skr_mini_e3?/with-serial-usb", "printhor-hwi_mks_robin_nano?/with-serial-usb", "printhor-hwi_rp_2040?/with-serial-usb"]
 with-serial-port-1 = ["printhor-hwi_native?/with-serial-port-1", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-serial-port-1", "printhor-hwi_skr_mini_e3?/with-serial-port-1", "printhor-hwi_mks_robin_nano?/with-serial-port-1", "printhor-hwi_rp_2040?/with-serial-port-1"]
@@ -63,7 +67,7 @@ with-sd-card = ["embedded-sdmmc", "printhor-hwi_native?/with-sd-card", "printhor
 with-print-job = ["printhor-hwi_native?/with-print-job", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-print-job", "printhor-hwi_skr_mini_e3?/with-print-job", "printhor-hwi_mks_robin_nano?/with-print-job", "printhor-hwi_rp_2040?/with-print-job"]
 
 with-endstops = []
-with-trinamic = ["tmc2209", "printhor-hwi_native?/with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-trinamic", "printhor-hwi_skr_mini_e3?/with-trinamic", "printhor-hwi_mks_robin_nano?/with-trinamic"]
+with-trinamic = ["tmc2209", "printhor-hwa-common/with-trinamic", "printhor-hwi_native?/with-trinamic", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-trinamic", "printhor-hwi_skr_mini_e3?/with-trinamic", "printhor-hwi_mks_robin_nano?/with-trinamic"]
 
 # Settings persistence (M500/M501) in a non-volatile memory (EEPROM). Only for boards having one
 with-eeprom = ["printhor-hwa-common/with-eeprom", "printhor-hwi_native?/with-eeprom", "printhor-hwi_skr_mini_e3?/with-eeprom", "printhor-hwi_mks_robin_nano?/with-eeprom"]
@@ -110,6 +114,13 @@ debug-gcode = []
 debug-position = []
 debug-position-deviation = []
 debug-motion = []
+# Motion execution metrics (step ticker load, stalls, profile/planner costs), reported by M800
+motion-metrics = []
+# On-target micro-benchmarks of the motion hot paths, run by M801 (a measuring tool: ~8 KB of flash
+# on the SKR Mini E3, the double precision soft-float routines it measures included)
+mcu-bench = []
+# Soft-float operation counters (host measuring aid, see `math::op_count`)
+op-count = ["printhor-hwa-common/op-count"]
 debug-motion-displacement = []
 debug-motion-planning = []
 debug-motion-broadcast = []
@@ -324,7 +335,8 @@ native = [
 mks_robin_nano = [
     #"nightly",
     "with-motion-chaining",
-    "without-bootloader", "printhor-hwi_mks_robin_nano/without-bootloader", # SHOULD NOT
+    "without-bootloader",
+    # "printhor-hwi_mks_robin_nano/without-bootloader", # SHOULD NOT
     "with-defmt",
     "with-trinamic",
     "cartessian-fdm-wip",
@@ -453,9 +465,16 @@ skr_mini_e3_v3 = [
     #"debug-motion-broadcast",
     #"debug-gcode",
     #"verbose-timings",
+    "with-serial-usb",
 
-    #"cartessian-fdm",
-    "cartessian-cnc-wip",
+    # The motion stack of the board (X, Y, Z and E, cartesian, without the heaters): the probe,
+    # the Trinamic drivers, the print job and the arcs need it. `skr_mini_e3_v3_fdm` adds the
+    # heaters and the layer fan (`cartessian-fdm`)
+    "cartessian-fdm-wip",
+    #"cartessian-cnc-wip",
+    # G5: curves are drawn as a few G-code lines instead of hundreds of short G1 moves
+    "with-beziers",
+    "with-arcs",
 
     "with-spi",
     "with-sd-card", "sd-card-uses-spi",
@@ -472,6 +491,9 @@ skr_mini_e3_v3 = [
     #"with-fan-layer",
     "with-ps-on",
 
+    # M500/M501: settings (probe offset included) in the on-board EEPROM
+    "with-eeprom",
+
     #"enable_vrefint-with-delay",
 
     "float-point-f32-impl",
@@ -481,25 +503,21 @@ skr_mini_e3_v3 = [
 ]
 # SKR Mini E3 V3 as a FDM printer (stock Creality Ender-3): hot-end, hot-bed and layer fan
 skr_mini_e3_v3_fdm = [
-    "with-defmt",
     "marlin-compat",
     "cartessian-fdm",
+    # Junction speeds between consecutive moves (no full stop at each vertex of a polyline)
+    "with-motion-chaining",
+    "with-serial-port-2",
+    # Motion execution metrics (M800). Adds two time reads per step ticker interrupt
+    #"motion-metrics",
+    "with-e-axis",
 
-    "with-spi",
-    "with-sd-card", "sd-card-uses-spi",
-    "with-print-job",
-    "with-serial-usb",
-    #"with-serial-port-2",
     "with-hot-end",
     "with-hot-bed",
-    "with-trinamic",
-    #"with-eeprom",
-    "with-probe",
-    "with-ps-on",
 
-    "float-point-f32-impl",
-    "skr_mini_e3", "printhor-hwi_skr_mini_e3/skr_mini_e3_v3",
+    "skr_mini_e3_v3",
 ]
+
 skr_mini_e3 = [
     "printhor-hwi_skr_mini_e3",
     "cortex-m-rt",
@@ -542,7 +560,7 @@ rp-2040 = [
 [dependencies]
 # Optional baremetal
 defmt = {version = "1.2.0", optional = true, default-features = false, features = []}
-panic-probe = { version = "1.0.0",  optional = true, default-features = false, features = ["print-rtt"]}
+panic-probe = { version = "1.0.0",  optional = true, default-features = false, features = ["print-defmt"]}
 defmt-rtt = { version = "1.3.1", optional = true, default-features = false, features = [] }
 
 cortex-m-rt = { version = "0.7.7", optional = true}

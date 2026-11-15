@@ -17,6 +17,9 @@ impl HwiContract for Contract {
 
     //#region "Board specific constants"
 
+    /// Machine name reported to hosts and displays (M115 `MACHINE_TYPE`). Overridable at build
+    /// time with the `MACHINE_TYPE` environment variable (see `.cargo/config.toml`)
+    #[const_env::env_item("MACHINE_TYPE")]
     const MACHINE_TYPE: &'static str = "ESP32-S3";
     const MACHINE_BOARD: &'static str = "ESP32-S3-WROOM";
     ///  Xtensa dual-core LX7 @240MHZ, 512kB SRAM, 8MB Program

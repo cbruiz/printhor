@@ -232,8 +232,11 @@ cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
         /// ADC for the thermistors (TH1: PC1, TB: PC0).
         ///
-        /// The thermistors are sampled every few hundred milliseconds, so blocking conversions
-        /// (a few microseconds each, averaged in software) are simpler than DMA.
+        /// The F4 ADC (v2) has no one-shot DMA read in embassy-stm32, only continuous ring-buffered
+        /// modes. Each conversion takes (480 + 12) cycles / 21 MHz ~= 23 us, so averaging the 8 of
+        /// them back to back would hold the CPU ~190 us per heater, delaying every other task of
+        /// the executor (e.g. the homing step train). The task yields after each conversion, so
+        /// the CPU is never held more than one conversion.
         pub mod adc {
             use printhor_hwa_common as hwa;
 
@@ -269,13 +272,15 @@ cfg_if::cfg_if! {
                 type SamplePin = embassy_stm32::adc::AnyAdcChannel<'static, T>;
 
                 fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl core::future::Future<Output = u16> {
-                    // Long sample time: the thermistor inputs are high impedance (4.7K pull-up + RC)
-                    let mut sum = 0u32;
-                    for _ in 0..AVERAGED_SAMPLES {
-                        sum += self.adc.blocking_read(pin, embassy_stm32::adc::SampleTime::CYCLES480) as u32;
+                    async move {
+                        // Long sample time: the thermistor inputs are high impedance (4.7K pull-up + RC)
+                        let mut sum = 0u32;
+                        for _ in 0..AVERAGED_SAMPLES {
+                            sum += self.adc.blocking_read(pin, embassy_stm32::adc::SampleTime::CYCLES480) as u32;
+                            hwa::yield_now().await;
+                        }
+                        (sum / AVERAGED_SAMPLES) as u16
                     }
-                    let sample = (sum / AVERAGED_SAMPLES) as u16;
-                    async move { sample }
                 }
             }
         }

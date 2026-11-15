@@ -229,7 +229,17 @@ fn default_travel() -> [i64; NUM_AXES] {
             use printhor_hwa_common::math::CoordSel;
             type C = crate::board::Contract;
             let mut travel = [i64::MAX; NUM_AXES];
-            for (i, coord) in [CoordSel::X, CoordSel::Y, CoordSel::Z].iter().enumerate() {
+            // Head axes in order (X, Y, Z): only the enabled ones are limited
+            let axes: [Option<CoordSel>; NUM_AXES] = [
+                #[cfg(feature = "with-x-axis")] Some(CoordSel::X),
+                #[cfg(not(feature = "with-x-axis"))] None,
+                #[cfg(feature = "with-y-axis")] Some(CoordSel::Y),
+                #[cfg(not(feature = "with-y-axis"))] None,
+                #[cfg(feature = "with-z-axis")] Some(CoordSel::Z),
+                #[cfg(not(feature = "with-z-axis"))] None,
+            ];
+            for (i, coord) in axes.iter().enumerate() {
+                let Some(coord) = coord else { continue };
                 let size = C::DEFAULT_WORLD_SIZE_WU.get_coord(*coord).map(|v| v.to_f64());
                 let units = C::DEFAULT_UNITS_PER_WU.get_coord(*coord).map(|v| v.to_f64());
                 let micro_steps = C::DEFAULT_MICRO_STEPS_PER_AXIS.get_coord(*coord);

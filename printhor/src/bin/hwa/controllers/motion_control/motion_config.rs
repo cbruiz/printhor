@@ -165,6 +165,21 @@ impl MotionConfig {
         );
     }
 
+    /// The probe position relative to the nozzle (world units)
+    pub fn get_probe_offset(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.probe_offset_wu)
+    }
+
+    /// Sets the probe offset (M851) of the given axis
+    pub fn update_probe_offset(&self, offset: &TVector<Real>) {
+        let mut offset = *offset;
+        offset.set_coord(CoordSel::motion_relevant_axis().complement(), None);
+        self.cfg.apply_mut(|m| {
+            m.probe_offset_wu
+                .assign_if_set(CoordSel::motion_relevant_axis(), &offset);
+        });
+    }
+
     pub fn set_probe_offset(&self, mut offset: TVector<Real>) {
         offset.set_coord(CoordSel::motion_relevant_axis().complement(), None);
         self.cfg.apply_mut(|m| m.probe_offset_wu = offset);
@@ -197,6 +212,94 @@ impl MotionConfig {
         let mut point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
         point.apply_values(|coord, v| Some(*v + offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
         point
+    }
+
+    /// The native (machine) position right after the homing (`G28`), as Marlin with
+    /// `Z_SAFE_HOMING`: X and Y at the safe homing point (the bed center, minus the probe XY
+    /// offset so that the probe is over it, within the machine bounds), and Z
+    /// [homing_z_clearance](hwa::drivers::motion_driver::homing_z_clearance) above the plane where
+    /// the Z end-stop (or the probe) triggered. With the probe the nozzle is `-probe_offset.z`
+    /// above the bed there (Marlin's convention: a negative offset is a probe below the nozzle),
+    /// so Z0 is the bed.
+    pub fn get_native_post_homing_position(&self) -> TVector<Real> {
+        #[allow(unused_mut)]
+        let mut point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
+        #[allow(unused)]
+        let bounds = self.get_machine_bounds();
+        #[allow(unused)]
+        let probe = self.get_probe_offset();
+        #[allow(unused)]
+        let probe_offset = |coord: CoordSel| {
+            if cfg!(feature = "with-probe") {
+                probe.get_coord(coord).unwrap_or(hwa::math::ZERO)
+            } else {
+                hwa::math::ZERO
+            }
+        };
+        // A Cartesian head parks over the centre of the bed, a clearance above it. Not a joint space
+        // machine (anthropomorphic legs): X/Y/Z are the coordinates of its first leg, whose homing
+        // point is the home pose, as for every other leg
+        #[cfg(all(
+            any(feature = "with-x-axis", feature = "with-y-axis"),
+            not(feature = "with-motion-anthropomorphic-kinematics")
+        ))]
+        for coord in [CoordSel::X, CoordSel::Y] {
+            if let (Some(home), Some(size)) = (point.get_coord(coord), bounds.get_coord(coord)) {
+                let safe = (size * hwa::math::HALF - probe_offset(coord))
+                    .max(hwa::math::ZERO)
+                    .min(size);
+                point.set_coord(coord, Some(home + safe));
+            }
+        }
+        #[cfg(all(feature = "with-z-axis", not(feature = "with-motion-anthropomorphic-kinematics")))]
+        if let Some(z) = point.z {
+            point.z = Some(
+                z - probe_offset(CoordSel::Z) + hwa::drivers::motion_driver::homing_z_clearance(),
+            );
+        }
+        point
+    }
+
+    /// The travel of the axes in logical coordinates `(min, max)`: from the end-stop (the homing
+    /// point) to the end of the frame (the machine bounds), shifted by the home offsets (M206), as
+    /// Marlin's soft end-stops. Only the axes with both a homing point and a size are set.
+    pub fn get_logical_travel(&self) -> (TVector<Real>, TVector<Real>) {
+        let offset = self.get_home_offset();
+        let size = self.get_machine_bounds();
+        let (mut min, mut max) = (TVector::new(), TVector::new());
+        Contract::DEFAULT_WORLD_HOMING_POINT_WU.foreach_values(|coord, home| {
+            if let Some(len) = size.get_coord(coord) {
+                let low = *home + offset.get_coord(coord).unwrap_or(hwa::math::ZERO);
+                min.set_coord(coord, Some(low));
+                max.set_coord(coord, Some(low + len));
+            }
+        });
+        (min, max)
+    }
+
+    /// The logical position of a native (machine) position: shifted by the home offsets (M206)
+    pub fn logical_from_native(&self, native: &TVector<Real>) -> TVector<Real> {
+        let offset = self.get_home_offset();
+        let mut point = *native;
+        point.apply_values(|coord, v| Some(*v + offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
+        point
+    }
+
+    /// The logical position right after the homing (`G28`): see
+    /// [Self::get_native_post_homing_position]
+    pub fn get_post_homing_position(&self) -> TVector<Real> {
+        self.logical_from_native(&self.get_native_post_homing_position())
+    }
+
+    /// The logical Z the nozzle is at when the probe (or the Z end-stop) triggers on the bed plane
+    /// of the homing: `-probe_offset.z` above it
+    pub fn get_logical_trigger_z(&self) -> Real {
+        let z = self.get_logical_homing_point().z.unwrap_or(hwa::math::ZERO);
+        if cfg!(feature = "with-probe") {
+            z - self.get_probe_offset().z.unwrap_or(hwa::math::ZERO)
+        } else {
+            z
+        }
     }
 
     pub fn get_units_per_space_magnitude(&self) -> TVector<Real> {
@@ -296,6 +399,22 @@ impl MotionConfig {
         self.cfg.apply(|m| m.default_travel_speed)
     }
 
+    /// Largest instantaneous velocity change at a junction (`space_units`/s, `0`: unlimited),
+    /// see [Contract::DEFAULT_CORNER_SPEED_CHANGE_PS]
+    pub fn set_corner_speed_change(&self, dv: Real) {
+        let dv = dv.max(hwa::math::ZERO);
+        self.cfg.apply_mut(|m| m.corner_speed_change_su_s = dv);
+        hwa::info!(
+            "[MotionConfig:UserConf] Corner speed change set to {:?} {}/s",
+            dv,
+            Contract::SPACE_UNIT_MAGNITUDE
+        );
+    }
+
+    pub fn get_corner_speed_change(&self) -> Real {
+        self.cfg.apply(|m| m.corner_speed_change_su_s)
+    }
+
     pub fn get_min_speed(&self) -> TVector<Real> {
         self.cfg.apply(|m| m.min_speed_su)
     }
@@ -326,12 +445,13 @@ impl MotionConfig {
         self.set_max_accel(Contract::DEFAULT_MAX_ACCEL_PS);
         self.set_max_jerk(Contract::DEFAULT_MAX_JERK_PS);
         self.set_default_travel_speed(Contract::DEFAULT_TRAVEL_SPEED_PS);
+        self.set_corner_speed_change(Contract::DEFAULT_CORNER_SPEED_CHANGE_PS);
         self.set_space_units_per_world_unit(Contract::DEFAULT_UNITS_PER_WU);
         self.set_micro_steps_per_axis(Contract::DEFAULT_MICRO_STEPS_PER_AXIS);
         self.set_world_center(Contract::DEFAULT_WORLD_CENTER_WU);
         self.set_world_size(Contract::DEFAULT_WORLD_SIZE_WU);
         self.set_nozzle_offset(TVector::new_with_const_value(hwa::math::ZERO));
-        self.set_probe_offset(TVector::new_with_const_value(hwa::math::ZERO));
+        self.set_probe_offset(Contract::DEFAULT_PROBE_OFFSET_WU);
         self.cfg.apply_mut(|m| {
             m.home_offset_wu = TVector::new_with_coord(CoordSel::motion_relevant_axis(), Some(hwa::math::ZERO))
         });
@@ -408,6 +528,27 @@ impl MotionConfig {
             );
         }
 
+        // The step plan executor does at most one step per tick and axis: whatever the planner
+        // plans faster is executed at that speed (the motion takes longer than planned)
+        let v_clock = one_step_space_displacement / dt;
+        let max_speed = self.get_max_speed();
+        let mut _clock_limited = false;
+        max_speed.foreach_values(|coord, v| {
+            if let Some(limit) = v_clock.get_coord(coord) {
+                _clock_limited |= limit < *v;
+            }
+        });
+        if _clock_limited {
+            hwa::warn!(
+                "[MotionConfig:ComputedConf] The step planner clock ({} Hz, one step per tick) limits the speed to {:?} {}/s, below the max speed {:?} {}/s: raise STEP_PLANNER_CLOCK_FREQUENCY",
+                Contract::STEP_PLANNER_CLOCK_FREQUENCY,
+                v_clock,
+                Contract::SPACE_UNIT_MAGNITUDE,
+                max_speed,
+                Contract::SPACE_UNIT_MAGNITUDE
+            );
+        }
+
         self.cfg.apply_mut(|m| {
             m.min_speed_su = v_min;
             m.max_feed_rate_su = v_max;
@@ -459,6 +600,9 @@ pub struct MotionConfigContent {
 
     /// The default travel speed in `space_units`/s.
     default_travel_speed: Real,
+
+    /// Largest instantaneous velocity change at a junction in `space_units`/s (`0`: unlimited)
+    corner_speed_change_su_s: Real,
 
     /// The scale of `space_unit` by `space_magnitude`, not considering micro-stepping
     units_per_space_magnitude: TVector<Real>,
@@ -542,6 +686,7 @@ impl MotionConfigContent {
             max_jerk_su: TVector::new(),
 
             default_travel_speed: hwa::math::ONE,
+            corner_speed_change_su_s: hwa::math::ZERO,
             units_per_space_magnitude: TVector::new_with_const_value(hwa::math::ONE),
             micro_steps_per_axis: TVector::new_with_const_value(1),
             world_center_wu: TVector::new_with_const_value(hwa::math::ZERO),

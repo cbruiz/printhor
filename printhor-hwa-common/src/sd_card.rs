@@ -32,6 +32,32 @@ pub enum SDCardError {
 
     /// Error indicating that the specified item was not found.
     NotFound,
+
+    /// The name is not a valid FAT 8.3 file name
+    InvalidName,
+
+    /// Writing to the card failed (or the file is not open for writing)
+    WriteError,
+
+    /// The resource is in use (an open file, or entries still open on the volume)
+    Busy,
+}
+
+/// Size of the text kept with the reason why the volume could not be opened
+pub const MOUNT_ERROR_LEN: usize = 64;
+
+/// A `core::fmt::Write` sink into a fixed buffer that keeps what fits (truncates, never fails)
+struct Truncating<'a, const N: usize>(&'a mut heapless::String<N>);
+
+impl<const N: usize> core::fmt::Write for Truncating<'_, N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            if self.0.push(c).is_err() {
+                break;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl core::fmt::Display for SDCardError {
@@ -98,6 +124,10 @@ pub struct SDStateManager<
 {
     mgr: VolumeManager<D, DummyTimeSource, MAX_DIRS, MAX_FILES>,
     vol: Option<RawVolume>,
+    /// The partition opened as the volume
+    partition: usize,
+    /// Why the volume could not be opened (empty when it is, or was not tried yet)
+    mount_error: heapless::String<MOUNT_ERROR_LEN>,
     opened_entries: heapless::Vec<Option<Entry>, MAX_OPENED_ENTRIES>,
     opened_entries_ref_counts: heapless::Vec<RefCounts, MAX_OPENED_ENTRIES>,
 }
@@ -112,30 +142,82 @@ where
         D: hwa::traits::AsyncSDBlockDevice,
     {
         let card = VolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
-        hwa::debug!("Locking device...");
-        let retain = card.device(|d| d.do_retain());
-        let _ = retain.await;
-        hwa::debug!("Opening volume...");
-        let vol = card.open_raw_volume(VolumeIdx(partition));
-        hwa::debug!("Unlocking device...");
-        let _ = card.device(|d| d.do_release());
         let mut opened_dirs = heapless::Vec::new();
         let mut opened_dirs_ref_counts = heapless::Vec::new();
         for _ in 0..MAX_OPENED_ENTRIES {
             let _ = opened_dirs.push(None);
             let _ = opened_dirs_ref_counts.push(RefCounts::empty());
         }
-        Self {
+        let mut manager = Self {
             mgr: card,
-            vol: vol.ok(),
+            vol: None,
+            partition,
+            mount_error: heapless::String::new(),
             opened_entries: opened_dirs,
             opened_entries_ref_counts: opened_dirs_ref_counts,
+        };
+        // A card not inserted (or not ready) is not an error here: it is mounted later on demand
+        let _ = manager.mount().await;
+        manager
+    }
+
+    /// Opens the volume when it is not open yet: the card is initialized again (it may have been
+    /// inserted or replaced after the start). On failure, [Self::mount_error] tells why.
+    pub async fn mount(&mut self) -> Result<(), SDCardError> {
+        if self.vol.is_some() {
+            return Ok(());
+        }
+        self.mgr.device(|d| d.reset_card());
+        let _ = self.retain_device().await;
+        hwa::debug!("Opening volume...");
+        let vol = self.mgr.open_raw_volume(VolumeIdx(self.partition));
+        let _ = self.mgr.device(|d| d.do_release());
+        self.mount_error.clear();
+        match vol {
+            Ok(vol) => {
+                hwa::info!("[sd_card] Volume {} opened", self.partition);
+                self.vol = Some(vol);
+                Ok(())
+            }
+            Err(_e) => {
+                use core::fmt::Write;
+                let _ = write!(Truncating(&mut self.mount_error), "{}", _e);
+                hwa::warn!("[sd_card] Unable to open the volume: {}", self.mount_error.as_str());
+                Err(SDCardError::NoSuchVolume)
+            }
         }
     }
 
+    /// Closes the volume (M22: the card can then be removed). Refused while entries are open.
+    pub fn unmount(&mut self) -> Result<(), SDCardError> {
+        match self.vol {
+            None => Ok(()),
+            Some(_) if self.opened_entries_count() > 0 => Err(SDCardError::Busy),
+            Some(vol) => {
+                let result = self.mgr.close_volume(vol).map_err(|_| SDCardError::InternalError);
+                self.vol = None;
+                self.mount_error.clear();
+                result
+            }
+        }
+    }
+
+    /// Whether the volume is open
+    pub fn is_mounted(&self) -> bool {
+        self.vol.is_some()
+    }
+
+    /// Why the volume could not be opened (empty when it is open, or it was not tried)
+    pub fn mount_error(&self) -> &str {
+        self.mount_error.as_str()
+    }
+
     pub async fn retain_device(&mut self) -> Result<(), ()> {
-        let retain = self.mgr.device(|d| d.do_retain());
-        retain.await
+        let lock = self.mgr.device(|d| d.do_lock());
+        match lock.await {
+            Some(lock) => self.mgr.device(|d| d.do_hold(lock)),
+            None => Err(()),
+        }
     }
 
     pub fn release_device(&mut self) -> Result<(), ()> {
@@ -234,7 +316,10 @@ where
                     }
                 },
                 None => {
-                    hwa::error!("Inconsistency error closing dir. Continuing anyway");
+                    hwa::error!(
+                        "[sd_card] Inconsistency closing entry #{}: it is not open. Continuing anyway",
+                        entry_ref.0
+                    );
                 }
             }
         }
@@ -405,6 +490,72 @@ where
         }
     }
 
+    /// Creates (or truncates) the file at `path` and opens it for writing. Returns the stack of
+    /// opened entries (parent directories, then the file), released with [Self::release_path]
+    /// (closing the file flushes it).
+    pub fn create_file(
+        &mut self,
+        path: &str,
+    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError> {
+        // rsplit_once: slicing (`&path[..i]`) links the str panic formatting (unicode tables)
+        let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
+        if name.is_empty() || name == "." || name == ".." {
+            return Err(SDCardError::InvalidName);
+        }
+        let mut path_stack = self.open_path(dir)?;
+        let parent = match path_stack.last() {
+            Some(parent) => *parent,
+            None => return Err(SDCardError::InconsistencyError),
+        };
+        let parent_dir = match &self.opened_entries[parent.0 as usize] {
+            Some(Entry::Directory(directory)) => *directory,
+            _ => {
+                self.release_path(&mut path_stack);
+                return Err(SDCardError::NotFound);
+            }
+        };
+        let Some(new_idx) = self.opened_entries.iter().position(|e| e.is_none()) else {
+            self.release_path(&mut path_stack);
+            return Err(SDCardError::MaxOpenDirs);
+        };
+        match self
+            .mgr
+            .open_file_in_dir(parent_dir, name, Mode::ReadWriteCreateOrTruncate)
+        {
+            Ok(file) => {
+                self.opened_entries[new_idx] = Some(Entry::File(file));
+                self.opened_entries_ref_counts[new_idx] =
+                    RefCounts::new(parent.0, alloc::string::String::from(name));
+                if let Err(entry) = path_stack.push(EntryRef(new_idx as u8)) {
+                    self.close_entry(entry);
+                    self.release_path(&mut path_stack);
+                    return Err(SDCardError::MaxOpenDirs);
+                }
+                Ok(path_stack)
+            }
+            Err(_e) => {
+                self.release_path(&mut path_stack);
+                Err(match _e {
+                    embedded_sdmmc::Error::FilenameError(_) => SDCardError::InvalidName,
+                    embedded_sdmmc::Error::FileAlreadyOpen => SDCardError::Busy,
+                    embedded_sdmmc::Error::TooManyOpenFiles => SDCardError::MaxOpenDirs,
+                    _ => SDCardError::WriteError,
+                })
+            }
+        }
+    }
+
+    /// Appends `data` to a file opened with [Self::create_file]
+    pub fn write(&mut self, entry_ref: EntryRef, data: &[u8]) -> Result<(), SDCardError> {
+        match &self.opened_entries[entry_ref.0 as usize] {
+            Some(Entry::File(file)) => self
+                .mgr
+                .write(*file, data)
+                .map_err(|_| SDCardError::WriteError),
+            _ => Err(SDCardError::InconsistencyError),
+        }
+    }
+
     pub fn open_file_path(
         &mut self,
         _path: &str,
@@ -412,6 +563,18 @@ where
         match self.open_path(_path) {
             Ok(_path_stack) => Ok(_path_stack),
             Err(_e) => Err(_e),
+        }
+    }
+
+    /// The size in bytes of an opened file
+    pub fn file_length(&self, entry_ref: EntryRef) -> Result<u32, SDCardError> {
+        match &self.opened_entries[entry_ref.0 as usize] {
+            Some(Entry::File(_file)) => self
+                .mgr
+                .file_length(*_file)
+                .map_err(|_e| SDCardError::InternalError),
+            Some(Entry::Directory(_)) => Err(SDCardError::InconsistencyError),
+            _ => Err(SDCardError::InconsistencyError),
         }
     }
 
@@ -487,9 +650,18 @@ mod test {
         <<H as hwa::AsyncMutexStrategy>::Resource as hwa::traits::SDBlockDevice>::Error:
             From<SDCardError>,
     {
-        fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<H> {
-            let dev = self.dev.clone();
-            async move { dev.retain().await }
+        type Lock = hwa::AsyncMutexGuard<
+            'static,
+            <H as hwa::AsyncMutexStrategy>::AsyncMutexType,
+            <H as hwa::AsyncMutexStrategy>::Resource,
+        >;
+
+        fn do_lock(&self) -> impl core::future::Future<Output = Option<Self::Lock>> + use<H> {
+            self.dev.lock_owned()
+        }
+
+        fn do_hold(&self, lock: Self::Lock) -> Result<(), ()> {
+            self.dev.hold(lock)
         }
 
         fn do_release(&self) -> Result<(), ()> {
@@ -529,6 +701,7 @@ mod test {
 
     #[futures_test::test]
     async fn test() {
+        hwa::info!("Expecting Err: the dummy device has no filesystem, it can not be mounted");
         type CardDev = DummyDevice;
         type MutexType = hwa::AsyncNoopMutexType;
         type MutexStrategyType = hwa::AsyncHoldableStrategy<MutexType, CardDev>;

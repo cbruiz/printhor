@@ -40,8 +40,11 @@ pub async fn printhor_main(spawner: embassy_executor::Spawner, keep_feeding: boo
     let wdt = match sys_start(spawner).await {
         Ok(wdt) => wdt,
         Err(_) => {
-            hwa::error!("Error starting system");
-            panic!("Unable to start");
+            // Never panics: the main task stays parked (on boards with an independent watchdog,
+            // not feeding it resets the board)
+            hwa::error!("Error starting system. Halted");
+            core::future::pending::<()>().await;
+            return;
         }
     };
 
@@ -173,10 +176,9 @@ async fn sys_start(
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion")] {
-                let mut event_suscriber = event_bus.subscriber().await;
-                if event_suscriber.ft_wait_until(hwa::EventFlags::MOV_QUEUE_EMPTY).await.is_err() {
-                    initialization_error()
-                }
+                // An alarm raised meanwhile (e.g. a heater fault at startup) does not stop the boot:
+                // the system starts in alarm mode, recoverable with M999
+                helpers::wait_for_flags(&event_bus, hwa::EventFlags::MOV_QUEUE_EMPTY, true).await;
             }
         }
 
@@ -238,6 +240,16 @@ async fn init_controllers_and_spawn_tasks(
                     _context.probe_pwm_channel.take(),
                 )
             );
+            // As Marlin does at start-up: without a servo signal the BLTouch stays in whatever
+            // state it powered up (or an alarm), so release any alarm and stow the pin
+            {
+                use hwa::controllers::ProbeTrait;
+                probe_controller
+                    .lock()
+                    .await
+                    .probe_pin_up(hwa::drivers::motion_driver::PROBE_SETTLE_US)
+                    .await;
+            }
         }
     }
 
@@ -547,6 +559,10 @@ async fn init_controllers_and_spawn_tasks(
         Ok((_size, _crc)) => {
             hwa::info!("Stored settings retrieved ({} bytes; crc {})", _size, _crc);
         }
+        // A blank EEPROM (nothing ever stored, e.g. the first boot) is not an anomaly
+        Err(processing::settings_store::SettingsError::Empty) => {
+            hwa::info!("Using the default settings: No stored settings");
+        }
         Err(_e) => {
             hwa::warn!("Using the default settings: {}", _e.description());
         }
@@ -598,6 +614,13 @@ async fn init_controllers_and_spawn_tasks(
             }
         }
     }
+
+    //#endregion
+
+    //#region "Spawn the Trinamic drivers task (if with-motion and with-trinamic are set)"
+
+    #[cfg(all(feature = "with-motion", feature = "with-trinamic"))]
+    spawner.spawn(tasks::task_trinamic::task_trinamic(processor.clone()).map_err(|_| ())?);
 
     //#endregion
 
@@ -671,12 +694,6 @@ async fn init_controllers_and_spawn_tasks(
     Ok(())
 }
 
-pub fn initialization_error() {
-    let msg = "Unable to start because SYS_ALARM raised at startup. Giving up...";
-    hwa::error!("{}", msg);
-    panic!("{}", msg);
-}
-
 //#region "Panic handling"
 
 cfg_if::cfg_if! {
@@ -685,8 +702,22 @@ cfg_if::cfg_if! {
             if #[cfg(feature = "with-defmt")] {
                 #[allow(unused)]
                 use defmt_rtt as _;
-                #[allow(unused)]
-                use panic_probe as _;
+
+                /// Reports only the panic location. Printing the message (as panic-probe's
+                /// `print-defmt` does) keeps `core::fmt` and the formatting of every panic
+                /// payload in the image (float/char/str Debug, unicode tables...): ~20 KB.
+                #[panic_handler]
+                fn panic(info: &core::panic::PanicInfo) -> ! {
+                    match info.location() {
+                        Some(l) => defmt::error!("panicked at {=str}:{=u32}", l.file(), l.line()),
+                        None => defmt::error!("panicked"),
+                    }
+                    // As panic-probe: a HardFault tells the debug probe (probe-rs) the program ended
+                    #[cfg(target_arch = "arm")]
+                    unsafe { core::arch::asm!("udf #0", options(noreturn)) }
+                    #[cfg(not(target_arch = "arm"))]
+                    loop {}
+                }
             }
             else {
                 #[panic_handler]

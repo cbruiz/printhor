@@ -196,6 +196,18 @@ pub struct StepPlan {
     pub stepper_enable_flags: CoordSel,
     /// Flags to set the direction forward for stepper channels.
     pub stepper_dir_fwd_flags: CoordSel,
+    /// Tool actions applied when the plan is dequeued, before its first tick (see
+    /// [StepPlan::marker])
+    pub tools: hwa::controllers::ToolActions,
+    /// Plans of the motion driver (homing, probing): `Some(end-stops)`, watched every tick (none
+    /// when empty). Their steps are counted by the executor, and they stop as soon as one of the
+    /// end-stops triggers (see `SoftTimer::begin_watch`). `None` for the regular motion.
+    pub watch: Option<CoordSel>,
+    /// The mean speed of the window relative to the speed programmed for its move, per mille: the
+    /// scale of the laser dynamic power (`M4`), applied when the window starts (see
+    /// [hwa::controllers::dynamic_power_permille]). `None` when there is no programmed cutting
+    /// speed (rapids, homing): the laser is off over the window (`M3` and `M4`).
+    pub speed_ratio: Option<u16>,
 }
 
 impl StepPlan {
@@ -215,7 +227,58 @@ impl StepPlan {
             remaining: [0; CoordSel::num_axis()],
             stepper_enable_flags: CoordSel::UNSET,
             stepper_dir_fwd_flags: CoordSel::UNSET,
+            tools: hwa::controllers::ToolActions::NONE,
+            watch: None,
+            speed_ratio: None,
         }
+    }
+
+    /// A plan without steps nor time that only carries tool actions: the executor applies them
+    /// when it reaches the plan, right after the windows queued before it, and goes on with the
+    /// next plan in the same tick (nothing is added to the motion time)
+    pub fn marker(_order_num: u32, tools: hwa::controllers::ToolActions) -> Self {
+        Self {
+            _order_num,
+            tools,
+            ..Self::new(
+                #[cfg(feature = "with-motion-broadcast")]
+                hwa::MotionDelta::new(),
+            )
+        }
+    }
+
+    /// A plan of the motion driver (homing, probing): see [StepPlan::watch]
+    pub fn watched(
+        _order_num: u32,
+        multi_timer: MultiTimer,
+        stepper_enable_flags: CoordSel,
+        stepper_dir_fwd_flags: CoordSel,
+        endstops: CoordSel,
+    ) -> Self {
+        Self {
+            watch: Some(endstops),
+            ..Self::from(
+                _order_num,
+                #[cfg(feature = "with-motion-broadcast")]
+                hwa::MotionDelta::new(),
+                multi_timer,
+                stepper_enable_flags,
+                stepper_dir_fwd_flags,
+            )
+        }
+    }
+
+    /// Whether the plan takes no time and emits no step (see [StepPlan::marker])
+    #[inline]
+    pub fn is_marker(&self) -> bool {
+        self.interval_width == 0 && !self.has_pending_steps()
+    }
+
+    /// Drops the steps still pending and closes the window now (an end-stop triggered)
+    #[inline]
+    pub fn cancel(&mut self) {
+        self.remaining = [0; CoordSel::num_axis()];
+        self.interval_width = 0;
     }
 
     /// Creates a StepPlanner from a MultiTimer, stepper enable flags, and stepper direction forward flags.
@@ -252,6 +315,9 @@ impl StepPlan {
             remaining,
             stepper_enable_flags,
             stepper_dir_fwd_flags,
+            tools: hwa::controllers::ToolActions::NONE,
+            watch: None,
+            speed_ratio: None,
         };
         instance.reset();
         instance
@@ -361,6 +427,45 @@ mod tests {
         }
         assert_eq!(fired, 15, "every step must be emitted");
         assert!(!plan.has_pending_steps());
+    }
+
+    /// A marker takes no time and emits no step; a window is not a marker
+    #[test]
+    fn a_marker_is_a_plan_without_time_nor_steps() {
+        let tools = hwa::controllers::ToolActions { fan_layer: Some(30), ..hwa::controllers::ToolActions::NONE };
+        let marker = StepPlan::marker(5, tools);
+        assert!(marker.is_marker());
+        assert!(!marker.has_pending_steps());
+        assert_eq!(marker.tools, tools);
+        assert_eq!(marker.watch, None);
+        assert_eq!(marker._order_num, 5);
+        let window = make_plan_x(100, 50, 2);
+        assert!(!window.is_marker());
+        assert!(window.tools.is_empty());
+        assert_eq!(window.watch, None);
+    }
+
+    /// A watched plan (homing, probing) keeps its end-stops; cancelling it drops its pending steps
+    /// and closes it at once
+    #[cfg(feature = "with-x-axis")]
+    #[test]
+    fn a_cancelled_watched_plan_emits_no_more_steps() {
+        let mut mt = MultiTimer::new();
+        mt.set_displace_width(100);
+        mt.set_channel_uniform(CoordSel::X, Some(10), 10);
+        let mut count: TVector<u32> = TVector::new();
+        count.set_coord(CoordSel::X, Some(10));
+        mt.set_max_count(&count);
+        let mut plan = StepPlan::watched(1, mt, CoordSel::X, CoordSel::empty(), CoordSel::X);
+        assert_eq!(plan.watch, Some(CoordSel::X));
+        assert!(plan.has_pending_steps());
+        let _ = plan.next(10);
+        plan.cancel();
+        assert!(!plan.has_pending_steps());
+        assert_eq!(plan.interval_width, 0, "closed at once");
+        for _ in 0..20 {
+            assert_eq!(plan.next(10), Some(CoordSel::empty()), "no more steps");
+        }
     }
 
     /// Normal feedrate: channel_width (50µs) ≥ step_width (10µs).

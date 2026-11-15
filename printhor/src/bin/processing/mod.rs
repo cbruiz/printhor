@@ -5,14 +5,24 @@ mod gcode_processor;
 #[cfg(feature = "with-eeprom")]
 pub mod settings_store;
 
-pub use gcode_parser::{GCodeLineParser, GCodeLineParserError};
+pub use gcode_parser::{GCodeLineParser, GCodeLineParserError, ParseFailure};
 pub use gcode_processor::GCodeProcessor;
+pub use gcode_processor::LineBuf;
 #[cfg(feature = "with-fan-extra-1")]
 pub use gcode_processor::FAN_EXTRA1_MANUAL_POWER;
 
-pub use gcode_multiplexed_io::GCodeMultiplexedInputStream;
+pub use gcode_multiplexed_io::{GCodeMultiplexedInputStream, InputEvent};
+#[cfg(any(
+    feature = "with-serial-usb",
+    feature = "with-serial-port-1",
+    feature = "with-serial-port-2",
+    feature = "with-print-job"
+))]
+pub use gcode_multiplexed_io::GCodeInputStream;
 use printhor_hwa_common::math::{Real, TVector};
-use printhor_hwa_common::{CoordSel, EventStatus};
+#[allow(unused_imports)] // Unused when no axis is enabled
+use printhor_hwa_common::CoordSel;
+use printhor_hwa_common::EventStatus;
 use strum::{AsRefStr, VariantNames};
 
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
@@ -62,6 +72,19 @@ impl S {
 
 #[derive(Clone, Debug)]
 #[cfg_attr(test, derive(PartialEq))]
+pub struct SJ {
+    pub s: Option<Real>,
+    pub j: Option<Real>,
+}
+
+impl SJ {
+    pub const fn new() -> Self {
+        Self { s: None, j: None }
+    }
+}
+
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct N {
     pub n: Option<Real>,
 }
@@ -97,8 +120,24 @@ gcode_args!(
 );
 
 gcode_args!(
+    /// M220 feed rate percentage: `S`=percentage, `B`=back up the current one, `R`=restore the
+    /// backed up one (`B` and `R` are flags: any value, or none, sets them)
+    SBR { s, b, r }
+);
+
+gcode_args!(
+    /// M221 flow percentage: `S`=percentage, `T`=extruder index
+    ST { s, t }
+);
+
+gcode_args!(
     /// `S` and `R` words. Used by M109/M190 (S=wait while heating, R=wait heating and cooling)
     SR { s, r }
+);
+
+gcode_args!(
+    /// `P` and `R` words. Used by M73 (P=progress percentage, R=remaining minutes)
+    PR { p, r }
 );
 
 gcode_args!(
@@ -733,9 +772,9 @@ pub enum GCodeValue {
     #[strum(serialize = "G29.2")]
     G29_2,
 
-    /// Single Z-Probe
-    #[cfg(feature = "with-motion")]
-    G30,
+    /// Single Z-Probe at the current position, or at `X Y` (where the probe goes)
+    #[cfg(all(feature = "with-probe", feature = "with-z-axis"))]
+    G30(FXYZ),
 
     /// Dock Sled
     #[cfg(feature = "with-probe")]
@@ -801,28 +840,34 @@ pub enum GCodeValue {
     #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
     M2,
 
-    /// Spindle On, Clockwise
+    /// Spindle On, Clockwise (S=power [0-255], full power by default)
     ///
-    /// In Laser Mode: Laser on
-    M3,
+    /// In Laser Mode: Laser on at constant power, off during the rapids (`G0`). Queued with the
+    /// motion (see `MotionPlanner::schedule_tool_action`)
+    M3(S),
 
-    /// Spindle On, Counter-Clockwise
+    /// Spindle On, Counter-Clockwise (S=power [0-255], full power by default)
     ///
-    /// In Laser Mode: Laser on
-    M4,
+    /// In Laser Mode: Laser on in dynamic power mode: along the motion, the power is scaled by the
+    /// speed relative to the programmed `F` (constant energy per unit of length), and the laser is
+    /// off while stopped and during the rapids (`G0`). Queued with the motion
+    M4(S),
 
     /// In CNC Mode: Spindle Off
     ///
-    /// In Laser Mode: Laser off
+    /// In Laser Mode: Laser off. Queued with the motion
     M5,
 
     /// Tool change
     M6,
 
+    /// Mist coolant on. Queued with the motion
     M7,
 
+    /// Flood coolant on. Queued with the motion
     M8,
 
+    /// Coolant off (mist and flood). Queued with the motion
     M9,
 
     M10,
@@ -845,6 +890,7 @@ pub enum GCodeValue {
     #[cfg(feature = "with-sd-card")]
     M21,
 
+    /// Release SD card
     #[cfg(feature = "with-sd-card")]
     M22,
 
@@ -862,7 +908,17 @@ pub enum GCodeValue {
 
     M26,
 
-    M27,
+    /// Report SD print status. `S`=auto-report interval in seconds (0 = off)
+    #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+    M27(S),
+
+    /// Start writing to an SD file: the next lines of the channel are written to it until M29
+    #[cfg(feature = "with-sd-card")]
+    M28(Option<alloc::string::String>),
+
+    /// Stop writing to an SD file (only meaningful while writing: see M28)
+    #[cfg(feature = "with-sd-card")]
+    M29,
 
     /// Program Stop
     M30,
@@ -876,8 +932,8 @@ pub enum GCodeValue {
 
     M37(S), // Simulation mode (Dry run mode)
 
-    /// Set Print Progress
-    M73,
+    /// Set Print Progress: `P`=percentage, `R`=remaining minutes. Without words: report
+    M73(PR),
 
     /// Soft reset
     M79,
@@ -916,12 +972,13 @@ pub enum GCodeValue {
     /// Get HotEnd and/or HotBed Temperature
     M105,
 
-    /// Fan On (S=power [0-255])
-    #[cfg(feature = "with-fan-layer")]
+    /// Fan On (S=power [0-255], P=fan index: 0 the layer fan, 1 the extra fan). Queued with the
+    /// motion
+    #[cfg(any(feature = "with-fan-layer", feature = "with-fan-extra-1"))]
     M106(SP),
 
-    /// Fan Off
-    #[cfg(feature = "with-fan-layer")]
+    /// Fan Off (the layer fan). Queued with the motion
+    #[cfg(any(feature = "with-fan-layer", feature = "with-fan-extra-1"))]
     M107,
 
     /// Wait for hotEnd temp
@@ -997,9 +1054,11 @@ pub enum GCodeValue {
     #[cfg(feature = "with-motion")]
     M204(SPT),
 
-    /// Set Advanced Settings (jerk). Accepted but ignored: Marlin semantics (instant speed change in
-    /// world units/s) differ from the jerk (world units/s³) used by the S-curve motion profile
-    M205,
+    /// Set Advanced Settings: `X` (or `Y`) is, as in Marlin, the largest instantaneous speed change
+    /// (world units/s), applied at the corners between moves (see
+    /// `HwiContract::DEFAULT_CORNER_SPEED_CHANGE_PS`; `0` disables it). The jerk of the S-curve
+    /// profile (world units/s³) is set with `M800 J`. Other words are ignored
+    M205(EXYZ),
 
     /// Set Home Offsets: shifts the coordinate system so that, after homing, the logical
     /// position is the homing point plus the offset (`logical = native + offset`, as Marlin)
@@ -1018,17 +1077,19 @@ pub enum GCodeValue {
 
     M210,
 
-    M211,
+    /// Software endstops: `S1`/`S0` enables/disables clipping the moves to the travel of the
+    /// axes. Always reports the state and the bounds (Marlin format)
+    M211(S),
 
     M212,
 
     M218, // Settings
 
-    /// Set Feedrate percentage
-    M220(S),
+    /// Feed rate percentage: set (`S`), back up (`B`), restore (`R`) or report it
+    M220(SBR),
 
-    /// Set Flow Percentage
-    M221(S),
+    /// Flow percentage of the extruder (`T`): set (`S`) or report it
+    M221(ST),
 
     #[cfg(feature = "with-motion")]
     M290, // Babystepping
@@ -1092,6 +1153,15 @@ pub enum GCodeValue {
     /// Report Current Settings
     M503(S),
 
+    /// Motion execution metrics (feature `motion-metrics`). `S0` resets them, `J<mm/s³>` sets the
+    /// S-curve jerk of the motion axes (tuning)
+    #[cfg(feature = "with-motion")]
+    M800(SJ),
+
+    /// On-target benchmarks of the motion hot paths (feature `mcu-bench`)
+    #[cfg(feature = "with-motion")]
+    M801,
+
     M504,
 
     M505, // EEProm/State
@@ -1112,7 +1182,9 @@ pub enum GCodeValue {
 
     M563,
 
-    M851,
+    /// Set (`X Y Z`) or report the probe offset (the probe position relative to the nozzle)
+    #[cfg(feature = "with-motion")]
+    M851(EXYZ),
 
     /// Report the status of position encoder modules.
     #[cfg(feature = "with-motion")]

@@ -7,6 +7,12 @@ pub mod simulation;
 /// Hooks for host-side tests of the firmware running on this simulator.
 #[cfg(feature = "with-serial-port-1")]
 pub mod test_hooks {
+    /// Fault injection on the simulated Trinamic drivers (see `MockedTrinamicUart`)
+    #[cfg(feature = "with-trinamic")]
+    pub use crate::board::mocked_peripherals::{
+        trinamic_clear_injections, trinamic_inject_reset, trinamic_resets_cleared, trinamic_set_fault,
+        trinamic_set_mute,
+    };
     use crate::board::mocked_peripherals::{SERIAL_PIPE, SERIAL_PORT_1_CAPTURE};
 
     /// Feeds bytes to serial port 1, as if they were typed on the standard input.
@@ -16,17 +22,17 @@ pub mod test_hooks {
 
     /// Starts (or restarts) capturing what the firmware writes to serial port 1.
     pub fn serial_port_1_capture_start() {
-        *SERIAL_PORT_1_CAPTURE.lock().unwrap() = Some(String::new());
+        *SERIAL_PORT_1_CAPTURE.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(String::new());
     }
 
     /// What the firmware wrote to serial port 1 since the capture started.
     pub fn serial_port_1_captured() -> String {
-        SERIAL_PORT_1_CAPTURE.lock().unwrap().clone().unwrap_or_default()
+        SERIAL_PORT_1_CAPTURE.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone().unwrap_or_default()
     }
 
     /// Stops capturing and returns what was captured.
     pub fn serial_port_1_capture_stop() -> String {
-        SERIAL_PORT_1_CAPTURE.lock().unwrap().take().unwrap_or_default()
+        SERIAL_PORT_1_CAPTURE.lock().unwrap_or_else(std::sync::PoisonError::into_inner).take().unwrap_or_default()
     }
 
     /// Makes the simulator of this process listen on a USB socket of its own,

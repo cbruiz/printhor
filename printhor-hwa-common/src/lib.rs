@@ -46,6 +46,8 @@ mod event_bus_channel;
 pub mod soft_uart;
 pub mod traits;
 pub mod uart;
+mod yield_now;
+pub use yield_now::yield_now;
 
 pub use contract::{HwiContext, HwiContract};
 
@@ -352,13 +354,13 @@ mod test {
     fn test_some_objects() {
         let _nd = hwa::NoDevice::new();
         let ch1 = hwa::CoordSel::X;
-        hwa::info!("{:?}", ch1);
+        hwa::debug!("{:?}", ch1);
         let mut ch2 = ch1.clone();
         assert_eq!(ch1, ch2);
         let ch3 = ch2;
         assert_eq!(ch2, ch3);
         ch2.set(hwa::CoordSel::Y, true);
-        hwa::info!("{:?}", ch2);
+        hwa::debug!("{:?}", ch2);
         assert_ne!(ch2, ch3);
 
         assert_eq!(hwa::CommChannel::count(), 5);

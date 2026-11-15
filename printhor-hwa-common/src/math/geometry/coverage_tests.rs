@@ -531,3 +531,25 @@ fn arithmetic_and_real_ops_of_real_coordinates() {
 }
 
 //#endregion
+
+/// The integer square root (no-FPU targets) is correctly rounded: it matches the hardware one
+#[cfg(feature = "float-point-f32-impl")]
+#[test]
+fn sqrt_bitwise_is_correctly_rounded() {
+    use crate::math::Real;
+    let mut x = 1.0e-30f32;
+    while x < 1.0e30 {
+        for k in 0..64u32 {
+            let v = f32::from_bits(x.to_bits() + k * 7919);
+            assert_eq!(Real::sqrt_bitwise(v).to_bits(), v.sqrt().to_bits(), "sqrt({:e})", v);
+        }
+        x *= 1.7;
+    }
+    // Subnormals
+    for bits in [1u32, 2, 3, 1000, 0x0040_0000, 0x007f_ffff] {
+        let v = f32::from_bits(bits);
+        assert_eq!(Real::sqrt_bitwise(v).to_bits(), v.sqrt().to_bits(), "sqrt({:e})", v);
+    }
+    assert_eq!(Real::sqrt_bitwise(4.0), 2.0);
+    assert_eq!(Real::sqrt_bitwise(0.0), 0.0);
+}

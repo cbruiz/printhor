@@ -86,7 +86,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _mask.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn step_toggle(&mut self, _channels: hwa::CoordSel) {
@@ -104,7 +104,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn step_high(&mut self, _channels: hwa::CoordSel) {
@@ -122,7 +122,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn step_low(&mut self, _channels: hwa::CoordSel) {
@@ -140,7 +140,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn endstop_triggered(&mut self, _channels: hwa::CoordSel) -> bool {
@@ -160,7 +160,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
                 triggered
             }

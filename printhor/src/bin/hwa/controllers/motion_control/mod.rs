@@ -22,6 +22,12 @@ mod motion_step_plan_executor;
 /// The module to drive the step pins.
 mod motion_step_actuator;
 
+/// Motion execution metrics (feature `motion-metrics`, reported by `M800`)
+pub mod motion_metrics;
+
+/// The tool actions (fans, laser/spindle, coolant) queued with the motion.
+mod tool_actions;
+
 use crate::hwa;
 pub use motion_config::*;
 pub use motion_planner::*;
@@ -30,6 +36,7 @@ pub use motion_status::*;
 pub use motion_step_actuator::*;
 pub use motion_step_plan::*;
 pub use motion_step_plan_executor::*;
+pub use tool_actions::*;
 
 pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
 
@@ -56,6 +63,8 @@ pub enum MovType {
     Dwell(hwa::CommChannel),
     /// A set-position action with a communication channel.
     SetPosition(hwa::CommChannel),
+    /// Tool actions queued alone (see [PlanEntry::Tools]).
+    Tools(hwa::CommChannel),
 }
 
 /// Represents an entry in the motion plan.
@@ -98,6 +107,15 @@ pub enum PlanEntry {
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
     SetPosition(hwa::CommChannel, Position, bool, u32),
+
+    /// Tool actions requested while the queue was empty: no motion. The actions themselves are
+    /// kept in `RingBuffer::post_tools`, as those requested after any other entry (see
+    /// `MotionPlanner::schedule_tool_action`).
+    ///
+    /// *_1: CommChannel* - The input channel requesting the action.
+    ///
+    /// *_2: u32* - The order number.
+    Tools(hwa::CommChannel, u32),
 
     /// An executing move.
     ///

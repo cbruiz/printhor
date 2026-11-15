@@ -82,3 +82,12 @@ strip = false
 opt-level = "z"
 lto = "fat"
 panic = "abort"
+
+# As release-opt, optimized for speed instead of size. Only the firmware's own code benefits: the
+# soft-float routines of the boards without FPU come precompiled (compiler-builtins). Measured with
+# M801 on the SKR Mini E3 it is slower than release-opt (its ~340 KB reach the second flash bank,
+# where the prefetch must stay off). Unmeasured on boards with FPU and flash to spare (MKS, L476);
+# the 128 KB of the Nucleo F410 only fit release-opt
+[profile.release-speed]
+inherits = "release-opt"
+opt-level = 3

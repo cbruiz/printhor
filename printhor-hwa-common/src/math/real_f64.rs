@@ -119,8 +119,9 @@ impl Real {
         self.0.to_i64()
     }
 
+    /// Truncated integer part. Never panics: saturates out of range and NaN is 0 (as `as` does)
     pub fn int(&self) -> i64 {
-        self.0.to_i64().unwrap()
+        self.0 as i64
     }
 
     /// Radians to degrees
@@ -464,7 +465,8 @@ impl core::cmp::Ord for Real {
         Self: Sized,
         Self: PartialOrd,
     {
-        Real(self.0.clamp(min.0, max.0))
+        // Not f32::clamp: its (formatted) assert links core's float formatting
+        Real(self.0.max(min.0).min(max.0))
     }
 }
 

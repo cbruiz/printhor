@@ -18,6 +18,9 @@ pub struct Contract;
 impl HwiContract for Contract {
     //#region "Board specific constants"
 
+    /// Machine name reported to hosts and displays (M115 `MACHINE_TYPE`). Overridable at build
+    /// time with the `MACHINE_TYPE` environment variable (see `.cargo/config.toml`)
+    #[const_env::env_item("MACHINE_TYPE")]
     const MACHINE_TYPE: &'static str = "MKS";
     const MACHINE_BOARD: &'static str = "SKR_ROBIN_NANO_V3.1";
     /// ARM Cortex M4F @168MHZ, 192kB SRAM, 512kB Program
@@ -642,6 +645,15 @@ impl HwiContract for Contract {
                         embassy_stm32::gpio::Level::High,
                         embassy_stm32::gpio::Speed::VeryHigh
                     )
+                )
+                // The card is initialized at <= 400 kHz (SD spec), then used at SPI_FREQUENCY
+                .with_frequency_control(
+                    |spi, hz| {
+                        let mut cfg = embassy_stm32::spi::Config::default();
+                        cfg.frequency = embassy_stm32::time::Hertz(hz);
+                        let _ = spi.set_config(&cfg);
+                    },
+                    Self::SPI_FREQUENCY,
                 );
             }
         }
@@ -858,7 +870,7 @@ impl HwiContract for Contract {
             #[cfg(feature = "with-spi")]
             spi: spi1,
             #[cfg(feature = "with-i2c")]
-            i2c: todo!("fill me"),
+            i2c: compile_error!("with-i2c is not (yet) supported on this board"),
             #[cfg(feature = "with-sd-card")]
             sd_card_block_device,
             #[cfg(feature = "with-ps-on")]
@@ -872,13 +884,13 @@ impl HwiContract for Contract {
             #[cfg(feature = "with-motion-broadcast")]
             motion_sender,
             #[cfg(feature = "with-probe")]
-            probe_pwm: todo!("fill me"),
+            probe_pwm: compile_error!("with-probe is not (yet) supported on this board"),
             #[cfg(feature = "with-probe")]
-            probe_pwm_channel: todo!("fill me"),
+            probe_pwm_channel: compile_error!("with-probe is not (yet) supported on this board"),
             #[cfg(feature = "with-laser")]
-            laser_pwm: todo!("fill me"),
+            laser_pwm: compile_error!("with-laser is not (yet) supported on this board"),
             #[cfg(feature = "with-laser")]
-            laser_pwm_channel: todo!("fill me"),
+            laser_pwm_channel: compile_error!("with-laser is not (yet) supported on this board"),
             #[cfg(feature = "with-fan-layer")]
             fan_layer_pwm,
             #[cfg(feature = "with-fan-layer")]

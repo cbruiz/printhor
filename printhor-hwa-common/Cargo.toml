@@ -53,8 +53,10 @@ with-eeprom = ["dep:embedded-hal-async"]
 sd-card-spi = []
 
 # Math backend (exactly one is meant to be selected; fixed-point-128-impl, then float-point-f64-impl, take precedence)
-float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl", "dep:micromath", "dep:ryu"]
+float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl", "dep:micromath"]
 float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl", "dep:micromath", "dep:ryu"]
+# Soft-float operation counters of `Real` (host measuring aid, see `math::op_count`)
+op-count = []
 fixed-point-128-impl = ["printhor-hwa-common-macros/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 with-all-axis = [
@@ -105,7 +107,7 @@ num-traits = { version = "0.2.19", default-features = false, features = [] }
 micromath = { version = "2.1.0", default-features = false, features = [], optional = true }
 rust_decimal = { optional = true, version = "1.43.0", default-features = false, features = ["maths"] }
 rust_decimal_macros = { optional = true, version = "1.40.0" }
-ryu = { version = "1.0.23", default-features = false, optional = true }
+ryu = { version = "1.0.23", default-features = false, features = ["small"], optional = true }
 
 [dev-dependencies]
 futures-test = { version = "0.3.34", default-features = false }

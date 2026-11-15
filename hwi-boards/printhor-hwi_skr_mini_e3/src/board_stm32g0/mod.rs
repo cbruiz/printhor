@@ -18,6 +18,9 @@ impl HwiContract for Contract {
 
     //#region "Board specific constants"
 
+    /// Machine name reported to hosts and displays (M115 `MACHINE_TYPE`). Overridable at build
+    /// time with the `MACHINE_TYPE` environment variable (see `.cargo/config.toml`)
+    #[const_env::env_item("MACHINE_TYPE")]
     const MACHINE_TYPE: &'static str = "SKR";
     const MACHINE_BOARD: &'static str = "SKR_MINI_E3_V3";
     /// ARM Cortex M0+ @64MHZ, 144kB SRAM, 512kB Program
@@ -30,7 +33,14 @@ impl HwiContract for Contract {
     const DISPLAY_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort2;
 
     /// The target [hwa::CommChannel] for M118 (host)
+    #[cfg(feature = "with-serial-usb")]
     const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialUsb;
+    /// The target [hwa::CommChannel] for M118 (host)
+    #[cfg(all(not(feature = "with-serial-usb"), feature = "with-serial-port-1"))]
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::SerialPort1;
+    /// The target [hwa::CommChannel] for M118 (host)
+    #[cfg(not(any(feature = "with-serial-usb", feature = "with-serial-port-1")))]
+    const HOST_CHANNEL: hwa::CommChannel = hwa::CommChannel::Internal;
 
     //#endregion
 
@@ -44,7 +54,7 @@ impl HwiContract for Contract {
     //#region "Memory management/tracking settings"
 
     #[const_env::env_item("MAX_HEAP_SIZE_BYTES")]
-    const MAX_HEAP_SIZE_BYTES: usize = 512;
+    const MAX_HEAP_SIZE_BYTES: usize = 1024;
 
     #[const_env::env_item("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 16384;
@@ -73,12 +83,14 @@ impl HwiContract for Contract {
                         hwa::make_vector_real!(x=600.0, y=600.0, z=100.0, e=300.0)
                     };
 
+                    /// X/Y sized to reach 600 mm/s: from rest it takes ~0.13 s and ~40 mm (smooth
+                    /// S-curve planned with ⅔·j_max), so it is reachable in moves longer than ~80 mm
                     const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=9800.0, y=9800.0, z=4800.0, e=9800.0)
+                        hwa::make_vector_real!(x=10000.0, y=10000.0, z=4800.0, e=9800.0)
                     };
 
                     const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=19600.0, y=19600.0, z=9600.0, e=19600.0)
+                        hwa::make_vector_real!(x=200000.0, y=200000.0, z=9600.0, e=19600.0)
                     };
 
                     const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
@@ -94,11 +106,22 @@ impl HwiContract for Contract {
                         hwa::make_vector!(x=8, y=8, z=8, e=8)
                     };
 
+                    /// 100 Hz (10 ms windows). The step rate ramps linearly inside each window, so the
+                    /// motor acceleration is a staircase that jumps at the window rate by ~j·T/2: at
+                    /// 50 Hz those steps fall in the frame resonances of an Ender-3 (25-100 Hz) and
+                    /// doubled their excitation on pen-test (s_plot). A window costs ~0.5 ms here (5%
+                    /// of the CPU at 100 Hz), and the step queue (`TIMER_QUEUE_SIZE` = 4 windows, 40 ms)
+                    /// covers the longest planner run (~17 ms, `M800`). If `M800` reports ticker
+                    /// stalls, raise `TIMER_QUEUE_SIZE` (or go back to 50 Hz)
                     #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
 
+                    /// One step (pin toggle, `dedge`) per tick at most: the max feed rate per motor is
+                    /// this frequency / 80 steps/mm = 625 mm/s. A 600 mm/s diagonal move drives one
+                    /// Core-XY motor at ~850 mm/s (~68 kHz): raise it to 100 kHz for that, at the cost of
+                    /// doubling the step ticker load (~47% of the CPU at 100 kHz on the 64 MHz M0+)
                     #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
-                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 10_000;
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 50_000;
 
                     #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 40;
@@ -112,44 +135,103 @@ impl HwiContract for Contract {
                 }
                 else {
                     // Assuming #[cfg(feature = "with-motion-cartessian-kinematics")]
+                    /// The travel of the axes from the end-stops, as the Marlin profile of the
+                    /// machine: X -17.3..220 and Y -21..202 (`X/Y_MIN_POS`..`X/Y_MAX_POS`, see
+                    /// [Self::DEFAULT_WORLD_HOMING_POINT_WU]). Z: 1..221
                      const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=220.0, y=220.0, z=220.0)
+                        hwa::make_vector_real!(x=237.3, y=223.0, z=220.0)
                     };
 
                     const DEFAULT_WORLD_CENTER_WU: hwa::math::TVector<hwa::math::Real> = const {
                         hwa::make_vector_real!(x=105.0, y=105.0, z=105.0)
                     };
 
-                    const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=600.0, y=600.0, z=100.0, e=300.0)
+                    /// The position after homing, as Marlin's `X_MIN_POS`, `Y_MIN_POS` and
+                    /// `Z_MIN_POS`: the bed origin is 17.3 mm (X) and 21 mm (Y) from the end-stops,
+                    /// and the Z of the bed plane is 1 (the probe triggers at Z 1 - probe Z offset)
+                    const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=-17.3, y=-21.0, z=1.0)
                     };
 
+                    /// BLTouch, as Marlin's `NOZZLE_TO_PROBE_OFFSET`
+                    const DEFAULT_PROBE_OFFSET_WU: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=33.0, y=-4.0, z=-3.9)
+                    };
+
+                    /// As Marlin's `HOMING_FEEDRATE_MM_M` (51, 51 and 5 mm/s; the slow approach
+                    /// at 25.5, 25.5 and 1.25 mm/s): 4080 steps/s on X/Y and 2000 steps/s on Z, with
+                    /// no acceleration ramp (the motors start at once at that rate)
+                    const HOMING_FEED_RATE_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=51.0, y=51.0, z=5.0)
+                    };
+
+                    /// Z: lead screw (50 full steps/mm), 20 mm/s is 1000 full steps/s. E: 100 mm/s
+                    /// is 40 kHz (400 steps/mm), within the 50 kHz step clock (125 mm/s)
+                    const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
+                        hwa::make_vector_real!(x=600.0, y=600.0, z=20.0, e=100.0)
+                    };
+
+                    /// X/Y tuned with s_plot on pen-test for smooth motion (frame vibrations) at a
+                    /// small cost in time: against 10000 mm/s² / 200000 mm/s³ (with 50 Hz windows and
+                    /// no corner limit), -63% of acceleration in the 25-100 Hz band, -51% of peak
+                    /// acceleration, +7.5% of time. The jerk dominates: short moves never reach
+                    /// a_max. 600 mm/s takes ~0.31 s and ~95 mm from rest (moves longer than ~190 mm).
+                    /// Step rate at 600 mm/s: 48 kHz, below the 50 kHz step clock (625 mm/s).
+                    /// Raising the X/Y jerk to 60000 saves ~5% of time on an FDM-like job (s_plot),
+                    /// at +17% of acceleration in the 25-100 Hz band: kept.
+                    ///
+                    /// Z: a 0.2-0.4 mm layer change or z-hop is jerk-limited (peak ~340-430 mm/s²,
+                    /// 70-90 ms, ideal S-curve); the acceleration bounds the longer moves. E: a 0.8 mm
+                    /// retraction takes ~50 ms, peak ~32 mm/s (it took ~0.17 s with 2400 mm/s² and
+                    /// 4800 mm/s³); the acceleration is 3000 mm/s²
                     const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=2400.0, y=2400.0, z=2400.0, e=2400.0)
+                        hwa::make_vector_real!(x=3000.0, y=3000.0, z=500.0, e=3000.0)
                     };
 
                     const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=4800.0, y=4800.0, z=4800.0, e=4800.0)
+                        hwa::make_vector_real!(x=40000.0, y=40000.0, z=20000.0, e=200000.0)
                     };
 
+                    /// The feed rate of the moves before the first `F` (then it is modal)
                     const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real = const {
-                        hwa::make_real!(600.0)
+                        hwa::make_real!(300.0)
                     };
 
-                    /// Stock Creality Ender-3 (with 8 micro-steps): X/Y 80, Z 400, E 93 steps/mm
+                    /// A 90° corner at ~5 mm/s (as Klipper's default `square_corner_velocity`), and
+                    /// the vertices of the curves (polylines) faster: ~50 mm/s with 8° per vertex (a
+                    /// 10 mm radius at slicer resolution) instead of ~35 mm/s. On an FDM-like job
+                    /// (s_plot): -8% of time, +18% of acceleration in the 25-100 Hz band. Settable
+                    /// with `M205 X`
+                    const DEFAULT_CORNER_SPEED_CHANGE_PS: hwa::math::Real = const {
+                        hwa::make_real!(7.0)
+                    };
+
+                    /// Full steps per mm (independent of the micro-stepping): X/Y 10 and Z 50.
+                    /// Not a stock Ender-3 (1.8° motors: 5, 25 and ~5.8): 0.9° motors (or other
+                    /// pulleys and lead screw). E 50 800 steps/mm at 16 micro-steps
+                    /// (400 steps/mm at the 8 micro-steps here)
                     const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=11.625)
+                        hwa::make_vector_real!(x=10.0, y=10.0, z=50.0, e=50.0)
                     };
 
                     const DEFAULT_MICRO_STEPS_PER_AXIS: hwa::math::TVector<u16> = const {
                         hwa::make_vector!(x=8, y=8, z=8, e=8)
                     };
 
+                    /// 100 Hz (10 ms windows). The step rate ramps linearly inside each window, so the
+                    /// motor acceleration is a staircase that jumps at the window rate by ~j·T/2: at
+                    /// 50 Hz those steps fall in the frame resonances of an Ender-3 (25-100 Hz) and
+                    /// doubled their excitation on pen-test (s_plot). A window costs ~0.5 ms here (5%
+                    /// of the CPU at 100 Hz), and the step queue (`TIMER_QUEUE_SIZE` = 4 windows, 40 ms)
+                    /// covers the longest planner run (~17 ms, `M800`). If `M800` reports ticker
+                    /// stalls, raise `TIMER_QUEUE_SIZE` (or go back to 50 Hz)
                     #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
 
+                    /// One step (pin toggle, `dedge`) per tick at most: 50 kHz / 80 steps/mm = 625 mm/s
+                    /// per motor. At 100 kHz the step ticker took ~47% of the CPU (64 MHz M0+)
                     #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
-                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 50_000;
 
                     #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 40;
@@ -382,6 +464,18 @@ impl HwiContract for Contract {
             const TRINAMIC_UART_BAUD_RATE: u32 = 4096;
             type TrinamicUartDevice = types::TrinamicUartDevice;
 
+            /// The on-board TMC2209 (0R11), as Marlin's `X_RSENSE`...
+            const TRINAMIC_RSENSE_OHMS: f32 = 0.11;
+
+            /// As the Marlin profile of the machine (`X_CURRENT`... `E0_CURRENT`, mA RMS):
+            /// IRUN 17 (~551 mA) and 25 (~789 mA), with the high sensitivity range (vsense)
+            const TRINAMIC_RUN_CURRENT_MA: hwa::math::TVector<u16> = const {
+                hwa::make_vector!(x=580, y=580, z=580, e=800)
+            };
+
+            /// As Marlin's `HOLD_MULTIPLIER`
+            const TRINAMIC_HOLD_MULTIPLIER: f32 = 0.5;
+
         }
     }
 
@@ -488,6 +582,25 @@ impl HwiContract for Contract {
         config.rcc.ahb_pre = embassy_stm32::rcc::AHBPrescaler::DIV1;
         config.rcc.low_power_run = false;
         let p = embassy_stm32::init(config);
+
+        // Flash prefetch. embassy-stm32 0.6 leaves it off (reset value): with 2 wait states at
+        // 64 MHz every sequential fetch stalls, which slows down all the code (the soft-float
+        // library above all). The G0B1RE runs in dual-bank mode, where a prefetch can fail on a
+        // branch across the banks (errata ES0548 2.2.10, no fix): it is only turned on when the
+        // whole code sits in bank 1 (release-opt: up to ~0x0803_5800 of 0x0804_0000)
+        {
+            unsafe extern "C" {
+                static __etext: u8;
+            }
+            const FLASH_BANK2_BASE: usize = 0x0804_0000;
+            let etext = core::ptr::addr_of!(__etext) as usize;
+            if etext <= FLASH_BANK2_BASE {
+                embassy_stm32::pac::FLASH.acr().modify(|w| w.set_prften(true));
+                hwa::info!("Flash prefetch on (code ends at {:#x})", etext);
+            } else {
+                hwa::warn!("Flash prefetch off: the code reaches flash bank 2 ({:#x})", etext);
+            }
+        }
 
         // embassy-stm32 >= 0.5 requires binding the DMA channel interrupts too. On the G0B1 most
         // DMA channels share a single interrupt line, and an interrupt can only be bound once, so
@@ -661,13 +774,13 @@ impl HwiContract for Contract {
                     #[cfg(feature = "with-e-axis")]
                     e_enable_pin: embassy_stm32::gpio::Output::new(p.PD1, embassy_stm32::gpio::Level::High, embassy_stm32::gpio::Speed::VeryHigh),
                     #[cfg(feature = "with-x-axis")]
-                    x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC0, embassy_stm32::gpio::Pull::Down),
+                    x_endstop_pin: embassy_stm32::gpio::Input::new(p.PC0, embassy_stm32::gpio::Pull::Up),
                     #[cfg(feature = "with-y-axis")]
-                    y_endstop_pin: embassy_stm32::gpio::Input::new(p.PC1, embassy_stm32::gpio::Pull::Down),
+                    y_endstop_pin: embassy_stm32::gpio::Input::new(p.PC1, embassy_stm32::gpio::Pull::Up),
                     #[cfg(feature = "with-z-axis")]
-                    z_endstop_pin: embassy_stm32::gpio::Input::new(p.PC14, embassy_stm32::gpio::Pull::Up),
+                    z_endstop_pin: embassy_stm32::gpio::Input::new(p.PC2, embassy_stm32::gpio::Pull::Up),
                     #[cfg(feature = "with-e-axis")]
-                    e_endstop_pin: embassy_stm32::gpio::Input::new(p.PC15, embassy_stm32::gpio::Pull::Down),
+                    e_endstop_pin: embassy_stm32::gpio::Input::new(p.PC15, embassy_stm32::gpio::Pull::Up),
                     #[cfg(feature = "with-x-axis")]
                     x_step_pin: embassy_stm32::gpio::Output::new(p.PB13, embassy_stm32::gpio::Level::Low, embassy_stm32::gpio::Speed::VeryHigh),
                     #[cfg(feature = "with-y-axis")]
@@ -722,6 +835,15 @@ impl HwiContract for Contract {
                         embassy_stm32::gpio::Level::High,
                         embassy_stm32::gpio::Speed::VeryHigh
                     )
+                )
+                // The card is initialized at <= 400 kHz (SD spec), then used at SPI_FREQUENCY
+                .with_frequency_control(
+                    |spi, hz| {
+                        let mut cfg = embassy_stm32::spi::Config::default();
+                        cfg.frequency = embassy_stm32::time::Hertz(hz);
+                        let _ = spi.set_config(&cfg);
+                    },
+                    Self::SPI_FREQUENCY,
                 );
             }
         }
@@ -849,7 +971,7 @@ impl HwiContract for Contract {
                 let hotend_hotbed_adc = hwa::make_static_async_controller!(
                     "AdcHotendHotbedController",
                     types::HotEndHotBedAdcMutexStrategy,
-                    device::HotEndHotBedAdc::new(p.ADC1)
+                    device::HotEndHotBedAdc::new(p.ADC1, p.DMA1_CH1)
                 );
             }
         }

@@ -20,6 +20,36 @@ HOT_BED_THERM_NOMINAL_RESISTANCE = "100000.0"
 # BETA value of hot-bed NTC thermistor
 HOT_BED_THERM_BETA = "3950.0"
 
+## Machine identity ##
+
+# Machine name reported to hosts and displays (M115 MACHINE_TYPE), for every board.
+# Defaults to the board name (SKR, MKS, NUCLEO64, RP2040...)
+#MACHINE_TYPE = "MyMachine"
+
+## Homing (G28) and probing, in mm (as Marlin's) ##
+
+# Z raise before homing X and Y (Z_HOMING_HEIGHT)
+#HOMING_Z_RAISE_MM = "10.0"
+# Z raise before deploying the probe to take the Z sample (Z_CLEARANCE_DEPLOY_PROBE)
+#PROBE_DEPLOY_CLEARANCE_MM = "10.0"
+# Minimum Z travel searching the bed (the machine Z size if larger)
+#HOMING_Z_MAX_TRAVEL_MM = "100.0"
+# Back-off before the slow approach of X and Y (HOMING_BUMP_MM)
+#HOMING_XY_BUMP_MM = "5.0"
+# Back-off before the slow (fine) Z approach (Z_HOME_BUMP_MM)
+#HOMING_Z_BUMP_MM = "2.0"
+# Z raise after homing (Z_AFTER_HOMING)
+#Z_AFTER_HOMING_MM = "10.0"
+# The probe offset (M851 X Y Z) defaults to the board's DEFAULT_PROBE_OFFSET_WU, can be changed at
+# runtime and is stored with M500. The homing feed rates are the board's HOMING_FEED_RATE_PS
+
+## Power supply and drivers ##
+
+# Wait after M80 turns the power supply on, before configuring the drivers (PSU_POWERUP_DELAY)
+#PSU_POWERUP_DELAY_MS = "500"
+# Read back the configuration of each TMC driver at M80 (false: only the UART writes must succeed)
+#TMC_INIT_VERIFY = "true"
+
 ## Pure technical stuff ##
 
 #DEFMT_LOG = "INFO"

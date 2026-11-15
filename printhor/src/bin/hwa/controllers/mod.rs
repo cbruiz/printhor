@@ -41,7 +41,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-trinamic")]
-pub use trinamic_controller::TrinamicController;
+pub use trinamic_controller::{TrinamicController, TrinamicError, TrinamicHealth};
 
 #[cfg(feature = "with-motion")]
 pub use motion_control::*;

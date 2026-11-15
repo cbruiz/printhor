@@ -267,7 +267,26 @@ impl MotionStatus {
         self.cfg.apply_mut(|m| {
             m.last_planned_position.is_set = false;
             m.current_position.is_set = false;
+            m.homed = false;
         });
+    }
+
+    /// The position comes from a homing (the end-stops are where the machine bounds say)
+    pub fn set_homed(&self, homed: bool) {
+        self.cfg.apply_mut(|m| m.homed = homed);
+    }
+
+    pub fn is_homed(&self) -> bool {
+        self.cfg.apply(|m| m.homed)
+    }
+
+    /// Soft end-stops (M211 S): moves are clipped to the travel of the axes once homed
+    pub fn set_soft_endstops(&self, enabled: bool) {
+        self.cfg.apply_mut(|m| m.soft_endstops = enabled);
+    }
+
+    pub fn soft_endstops(&self) -> bool {
+        self.cfg.apply(|m| m.soft_endstops)
     }
 }
 
@@ -294,6 +313,10 @@ pub struct MotionStatusContent {
     pub feed_rate_wu_s: Option<Real>,
     /// Firmware retraction state
     pub retracted: bool,
+    /// The position comes from a homing
+    pub homed: bool,
+    /// Soft end-stops enabled (M211)
+    pub soft_endstops: bool,
     /// Flag indicating if the laser is enabled (only present when the `with-laser` feature is enabled).
     #[cfg(feature = "with-laser")]
     #[allow(unused)]
@@ -316,6 +339,8 @@ impl MotionStatusContent {
             logical_e_wu: Real::zero(),
             feed_rate_wu_s: None,
             retracted: false,
+            homed: false,
+            soft_endstops: true,
             #[cfg(feature = "with-laser")]
             laser: false,
         }

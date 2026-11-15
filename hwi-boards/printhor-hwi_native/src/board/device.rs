@@ -354,7 +354,5 @@ cfg_if::cfg_if! {
 pub type Eeprom = board::mocked_peripherals::MockedEeprom;
 
 #[cfg(feature = "with-trinamic")]
-pub type TrinamicUart = board::comm::SingleWireSoftwareUart;
+pub type TrinamicUart = board::mocked_peripherals::MockedTrinamicUart;
 
-#[cfg(feature = "with-trinamic")]
-pub use board::mocked_peripherals::{MockedTrinamicDriver, trinamic_driver_simulator};

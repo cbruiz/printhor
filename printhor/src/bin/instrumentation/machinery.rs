@@ -10,6 +10,9 @@ pub(crate) struct SplotContext {
     #[allow(unused)]
     pub event_bus: hwa::types::EventBus,
     pub motion_planner: hwa::controllers::MotionPlanner,
+    /// The events of the deferred commands (the firmware drains it in `task_defer`): whoever
+    /// drives the planner must drain it, or the planner blocks once it is full
+    pub defer_channel: hwa::GenericDeferChannel<<hwa::Contract as HwiContract>::DeferChannelMutexType>,
 }
 
 pub(crate) async fn init_splot(spawner: embassy_executor::Spawner) -> SplotContext {
@@ -104,6 +107,20 @@ pub(crate) async fn init_splot(spawner: embassy_executor::Spawner) -> SplotConte
                     _defer_channel.clone(),
                     hwa::DeferAction::HotEndTemperature,
                     hwa::EventFlags::HOT_END_TEMP_OK,
+                    hwa::controllers::HeaterConfig {
+                        max_temp: <hwa::Contract as HwiContract>::HOT_END_MAX_TEMP,
+                        min_temp: <hwa::Contract as HwiContract>::HOT_END_MIN_TEMP,
+                        protection_hysteresis: <hwa::Contract as HwiContract>::HOT_END_THERMAL_PROTECTION_HYSTERESIS,
+                        protection_period_s: <hwa::Contract as HwiContract>::HOT_END_THERMAL_PROTECTION_PERIOD_S,
+                        watch_increase: <hwa::Contract as HwiContract>::HOT_END_WATCH_TEMP_INCREASE,
+                        watch_period_s: <hwa::Contract as HwiContract>::HOT_END_WATCH_TEMP_PERIOD_S,
+                        temp_window: <hwa::Contract as HwiContract>::HOT_END_TEMP_WINDOW,
+                        pid: (
+                            <hwa::Contract as HwiContract>::HOT_END_PID_KP,
+                            <hwa::Contract as HwiContract>::HOT_END_PID_KI,
+                            <hwa::Contract as HwiContract>::HOT_END_PID_KD,
+                        ),
+                    },
                 )
             );
             hot_end_controller.lock().await
@@ -136,6 +153,20 @@ pub(crate) async fn init_splot(spawner: embassy_executor::Spawner) -> SplotConte
                     _defer_channel.clone(),
                     hwa::DeferAction::HotBedTemperature,
                     hwa::EventFlags::HOT_BED_TEMP_OK,
+                    hwa::controllers::HeaterConfig {
+                        max_temp: <hwa::Contract as HwiContract>::HOT_BED_MAX_TEMP,
+                        min_temp: <hwa::Contract as HwiContract>::HOT_BED_MIN_TEMP,
+                        protection_hysteresis: <hwa::Contract as HwiContract>::HOT_BED_THERMAL_PROTECTION_HYSTERESIS,
+                        protection_period_s: <hwa::Contract as HwiContract>::HOT_BED_THERMAL_PROTECTION_PERIOD_S,
+                        watch_increase: <hwa::Contract as HwiContract>::HOT_BED_WATCH_TEMP_INCREASE,
+                        watch_period_s: <hwa::Contract as HwiContract>::HOT_BED_WATCH_TEMP_PERIOD_S,
+                        temp_window: <hwa::Contract as HwiContract>::HOT_BED_TEMP_WINDOW,
+                        pid: (
+                            <hwa::Contract as HwiContract>::HOT_BED_PID_KP,
+                            <hwa::Contract as HwiContract>::HOT_BED_PID_KI,
+                            <hwa::Contract as HwiContract>::HOT_BED_PID_KD,
+                        ),
+                    },
                 )
             );
             hot_bed_controller.lock().await
@@ -260,5 +291,6 @@ pub(crate) async fn init_splot(spawner: embassy_executor::Spawner) -> SplotConte
     SplotContext {
         event_bus,
         motion_planner,
+        defer_channel: _defer_channel,
     }
 }

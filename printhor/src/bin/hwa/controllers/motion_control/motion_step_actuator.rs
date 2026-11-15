@@ -127,6 +127,11 @@ pub mod step_trace {
         }
     }
 
+    /// The current step counts
+    pub fn current() -> Steps {
+        TRACE.lock().unwrap().steps
+    }
+
     /// Starts recording. Returns the current step counts (the origin of the recording)
     pub fn start() -> Steps {
         let mut t = TRACE.lock().unwrap();

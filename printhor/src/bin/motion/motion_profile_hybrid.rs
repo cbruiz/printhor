@@ -88,8 +88,19 @@ fn accel_bc_tol(a_max: Real) -> Real {
     a_max * Real::from_f32(1.0e-4)
 }
 
-/// Upper bound of iterations of the peak-velocity solver (safeguarded Newton converges in 3-8).
-const PEAK_VELOCITY_MAX_ITER: u32 = 48;
+/// Upper bound of iterations of the peak-velocity solver (Newton from above converges in 2-5).
+const PEAK_VELOCITY_MAX_ITER: u32 = 24;
+
+/// Relative tolerance of the peak velocity solver (distance, and the step of its variable). For a
+/// 0.5 mm segment it is 0.5 nm. The solution is then lowered by twice as much, so that the
+/// undershoot (absorbed in the cruise phase, the end position stays exact) is never an overshoot.
+const PEAK_VELOCITY_REL_TOL: Real = Real::from_f32(1.0e-6);
+
+#[cfg(test)]
+std::thread_local! {
+    /// Iterations run by the peak velocity solver (tests: cost regression)
+    static PEAK_SOLVER_ITERATIONS: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
 
 /// Number of intervals used to check that a polynomial blend never reverses its velocity.
 const BLEND_ADMISSIBILITY_SAMPLES: i64 = 16;
@@ -377,24 +388,150 @@ impl Ramp {
             dist: (v0 + v1) * math::HALF * t,
         }
     }
+}
 
-    /// `∂dist/∂v_peak` of a ramp between a fixed velocity `v_fix` and a peak `v_peak > v_fix`.
-    /// `None` when singular (`v_peak == v_fix`).
-    fn ddist_dpeak(v_fix: Real, v_peak: Real, a_max: Real, j: Real) -> Option<Real> {
-        let dv = v_peak - v_fix;
+/// The ramps of one profile computation: `a_max`, the (effective) jerk and the constants every
+/// ramp needs, computed once (each division is a soft-float call on a Cortex-M0+).
+struct RampK {
+    a: Real,
+    j: Real,
+    inv_a: Real,
+    inv_j: Real,
+    /// Duration of a jerk phase reaching `a_max`: `a/j`
+    tj: Real,
+    /// Smallest velocity change that reaches `a_max`: `a²/j`
+    dv_b: Real,
+}
+
+impl RampK {
+    fn new(a: Real, j: Real) -> Self {
+        let inv_j = j.recip();
+        let tj = a * inv_j;
+        Self { a, j, inv_a: a.recip(), inv_j, tj, dv_b: a * tj }
+    }
+
+    /// As [Ramp::new]
+    fn ramp(&self, v0: Real, v1: Real) -> Ramp {
+        let dv = (v1 - v0).abs();
         if !(dv > math::ZERO) {
-            return None;
+            return Ramp::NONE;
         }
-        if dv * j >= a_max * a_max {
-            Some(a_max * math::HALF / j + v_peak / a_max)
+        if dv >= self.dv_b {
+            self.ramp_capped(v0, v1, dv)
         } else {
-            let r = (dv / j).sqrt()?;
-            if !(r > math::ZERO) {
-                return None;
-            }
-            Some(r + (v_fix + v_peak) * math::HALF / (j * r))
+            self.ramp_jerk(v0, v1, (dv * self.inv_j).sqrt().unwrap_or(math::ZERO))
         }
     }
+
+    /// Ramp reaching `a_max` (`dv ≥ a²/j`)
+    #[inline]
+    fn ramp_capped(&self, v0: Real, v1: Real, dv: Real) -> Ramp {
+        let t = self.tj + dv * self.inv_a;
+        Ramp { t_j: self.tj, t, a_peak: self.a, dist: (v0 + v1) * math::HALF * t }
+    }
+
+    /// Ramp below `a_max`, given its jerk phase duration `t_j = √(dv/j)`
+    #[inline]
+    fn ramp_jerk(&self, v0: Real, v1: Real, t_j: Real) -> Ramp {
+        Ramp { t_j, t: t_j + t_j, a_peak: self.j * t_j, dist: (v0 + v1) * t_j }
+    }
+
+    /// Peak velocity `v ∈ [max(v_i, v_o), v_cap]` such that the ramps `v_i → v → v_o` cover exactly
+    /// `s` (it must exceed the direct transition and fall short of `v_cap`), and both ramps.
+    ///
+    /// Solved in `x`, the jerk phase duration of the ramp from the highest boundary speed `v_lo`
+    /// (`v = v_lo + j·x²`): its distance is `(2v_lo + j·x²)·x` (no square root) and the one of the
+    /// other ramp, from `v_mn`, needs `y = √(x² + (v_lo − v_mn)/j)` (none when both speeds are
+    /// equal: rest to rest, or a cruise). Both are convex and increasing in `x` (also when they
+    /// reach `a_max`), so Newton's method started above the root decreases monotonically to it.
+    /// It starts near the root of a lower bound of the distance, `2j·x³ + (3v_lo + v_mn)·x` (exact
+    /// for equal speeds below `a_max`): 2-4 iterations of a dozen operations, where the former
+    /// bracketed solver took ~5 iterations of two square roots and five divisions.
+    fn solve_peak(&self, s: Real, v_i: Real, v_o: Real, v_cap: Real) -> (Real, Ramp, Ramp) {
+        let (v_lo, v_mn) = if v_i > v_o { (v_i, v_o) } else { (v_o, v_i) };
+        let (j, tj) = (self.j, self.tj);
+        // y² = x² + c
+        let c = (v_lo - v_mn) * self.inv_j;
+        let symmetric = !(c > math::ZERO);
+        let p = math::THREE * v_lo + v_mn;
+        let q = s * self.inv_j * math::HALF;
+        // Root of x³ + p'·x = q (p' = p/2j): below q/p' = s/p and below ∛q (the smallest of both),
+        // and above q/(p' + x_up²). Started at the middle (a few % from that root at worst)
+        let mut x_up = if p > math::ZERO { s / p } else { Real::from_f32(f32::MAX) };
+        if !(x_up * x_up * x_up <= q) {
+            x_up = x_up.min(cbrt_approx(q) * Real::from_f32(1.001));
+        }
+        let x_lo = q / (p * self.inv_j * math::HALF + x_up * x_up);
+        let mut x = (x_up + x_lo) * math::HALF;
+        let tol_s = s * PEAK_VELOCITY_REL_TOL;
+        for _ in 0..PEAK_VELOCITY_MAX_ITER {
+            #[cfg(test)]
+            PEAK_SOLVER_ITERATIONS.with(|c| c.set(c.get() + 1));
+            let x2 = x * x;
+            let jx2 = j * x2;
+            let v = v_lo + jx2;
+            // Ramp from v_lo: distance and d/dx
+            let (d1, d1p) = if x < tj {
+                ((v_lo + v) * x, math::TWO * v_lo + math::THREE * jx2)
+            } else {
+                let t = tj + jx2 * self.inv_a;
+                ((v_lo + v) * math::HALF * t, j * x * (tj + math::TWO * v * self.inv_a))
+            };
+            // Ramp from v_mn. d/dx = d/dy · x/y: the step f/f' is scaled by y (one division)
+            let (f, num, den) = if symmetric {
+                let f = d1 + d1 - s;
+                (f, f, d1p + d1p)
+            } else {
+                let y2 = x2 + c;
+                let y = y2.sqrt().unwrap_or(math::ZERO);
+                if y < tj {
+                    let f = d1 + (v_mn + v) * y - s;
+                    (f, f * y, d1p * y + (math::TWO * v_mn + math::THREE * j * y2) * x)
+                } else {
+                    let t = tj + j * y2 * self.inv_a;
+                    let f = d1 + (v_mn + v) * math::HALF * t - s;
+                    (f, f, d1p + j * x * (tj + math::TWO * v * self.inv_a))
+                }
+            };
+            // Within the tolerance, or a negligible step (its error is quadratically small). From
+            // below the root, the first step lands above it (convexity), then it decreases
+            if !(f.abs() > tol_s) || !(den > math::ZERO) {
+                break;
+            }
+            let dx = num / den;
+            x = x - dx;
+            // Quadratic convergence (the relative error left is below the square of the relative
+            // step): a step under √tol leaves it under the tolerance
+            if !(dx.abs() > x * Real::from_f32(1.0e-3)) {
+                break;
+            }
+        }
+        // Just below the root: the undershoot (a few ppm of the distance) is absorbed in the
+        // cruise phase by the caller, so that the end position is exact
+        let x = (x * Real::from_f32(1.0 - 2.0e-6)).max(math::ZERO);
+        let jx2 = j * x * x;
+        let v = v_lo + jx2;
+        if !(v < v_cap) {
+            return (v_cap, self.ramp(v_i, v_cap), self.ramp(v_cap, v_o));
+        }
+        let r_lo = if jx2 >= self.dv_b { self.ramp_capped(v_lo, v, jx2) } else { self.ramp_jerk(v_lo, v, x) };
+        let r_mn = self.ramp(v_mn, v);
+        if v_i > v_o { (v, r_lo, r_mn) } else { (v, r_mn, r_lo) }
+    }
+}
+
+/// Cube root of a positive `x` to ~1e-6 relative (bit-level seed and three Newton steps): a dozen
+/// f32 operations, where `Real::cbrt` (f64 Newton) costs ~150 µs on a Cortex-M0+
+pub(crate) fn cbrt_approx(x: Real) -> Real {
+    if !(x > math::ZERO) {
+        return math::ZERO;
+    }
+    let xf = x.to_f64() as f32;
+    let mut t = Real::from_f32(f32::from_bits(xf.to_bits() / 3 + 709_921_077));
+    for _ in 0..3 {
+        t = t - (t * t * t - x) / (math::THREE * t * t);
+    }
+    t
 }
 
 // Normalised ramp shape functions (τ ∈ [0, 1]):
@@ -729,30 +866,35 @@ impl HybridMotionProfile {
         if !(v_cap > math::ZERO) {
             return Err(processing::CodeExecutionFailure::NumericalError);
         }
+        let k = RampK::new(a_max, j);
 
         // [1] §3.4: feasibility — the displacement must cover the direct transition v_i → v_o
-        let direct = Ramp::new(v_i, v_o, a_max, j);
+        let direct = k.ramp(v_i, v_o);
         if s_o < direct.dist * (math::ONE - rel_tol()) {
             return Ok(None);
         }
 
-        let (v_p, t_v) = {
-            let full = Ramp::new(v_i, v_cap, a_max, j).dist + Ramp::new(v_cap, v_o, a_max, j).dist;
+        let (v_p, t_v, r_a, r_d) = if s_o <= direct.dist {
+            // The direct transition alone (the peak is the highest boundary speed). Checked first:
+            // ramp-limited segments (short ones, chained) skip the ramps to v_cap
+            if v_o > v_i {
+                (v_lo, math::ZERO, direct, Ramp::NONE)
+            } else {
+                (v_lo, math::ZERO, Ramp::NONE, direct)
+            }
+        } else {
+            let ra_cap = k.ramp(v_i, v_cap);
+            let rd_cap = k.ramp(v_cap, v_o);
+            let full = ra_cap.dist + rd_cap.dist;
             if full <= s_o {
                 // v_cap is reached: cruise for the remaining distance
-                (v_cap, (s_o - full) / v_cap)
-            } else if s_o <= direct.dist {
-                (v_lo, math::ZERO)
+                (v_cap, (s_o - full) / v_cap, ra_cap, rd_cap)
             } else {
-                (
-                    Self::solve_peak_velocity(s_o, v_i, v_o, v_lo, v_cap, a_max, j),
-                    math::ZERO,
-                )
+                let (v_p, r_a, r_d) = k.solve_peak(s_o, v_i, v_o, v_cap);
+                (v_p, math::ZERO, r_a, r_d)
             }
         };
 
-        let r_a = Ramp::new(v_i, v_p, a_max, j);
-        let r_d = Ramp::new(v_p, v_o, a_max, j);
         let t_5 = r_a.t + t_v;
         let mut profile = HybridMotionProfile {
             kind: ProfileKind::SCurve,
@@ -788,56 +930,6 @@ impl HybridMotionProfile {
         Ok(Some(profile))
     }
 
-    /// Peak velocity `v ∈ [lo, hi]` such that the jerk-limited ramps `v_i → v → v_o` cover exactly
-    /// `s`. The covered distance is continuous and strictly increasing in `v`, so a safeguarded
-    /// Newton iteration (bisection fallback) always converges, typically in 3-8 iterations.
-    ///
-    /// This replaces the book's `a_max ← γ·a_max` loop, which could take ~100 iterations and was
-    /// sub-optimal whenever only one side of the profile could reach `a_max`.
-    fn solve_peak_velocity(
-        s: Real,
-        v_i: Real,
-        v_o: Real,
-        lo: Real,
-        hi: Real,
-        a_max: Real,
-        j: Real,
-    ) -> Real {
-        let mut lo = lo;
-        let mut hi = hi;
-        let tol_s = s * rel_tol() * math::TENTH;
-        let mut v = (lo + hi) * math::HALF;
-        for _ in 0..PEAK_VELOCITY_MAX_ITER {
-            let d = Ramp::new(v_i, v, a_max, j).dist + Ramp::new(v, v_o, a_max, j).dist;
-            let f = d - s;
-            if f.abs() <= tol_s {
-                return v;
-            }
-            if f > math::ZERO {
-                hi = v;
-            } else {
-                lo = v;
-            }
-            let mid = (lo + hi) * math::HALF;
-            let newton = match (
-                Ramp::ddist_dpeak(v_i, v, a_max, j),
-                Ramp::ddist_dpeak(v_o, v, a_max, j),
-            ) {
-                (Some(d1), Some(d2)) => Some(v - f / (d1 + d2)),
-                _ => None,
-            };
-            v = match newton {
-                Some(n) if n > lo && n < hi => n,
-                _ => mid,
-            };
-            if !(hi - lo > hi * math::EPSILON * math::FOUR) {
-                break;
-            }
-        }
-        // The lower bracket never overshoots the displacement
-        lo
-    }
-
     /// Polynomial Hermite blend. The entry state `(v_i, a_i)` is always preserved (it is the exit
     /// state of the segment being executed). If no blend exists for `a_o` (the planner should have
     /// prevented it, see `motion_chaining`), `a_o` is capped at the feasibility boundary.
@@ -864,6 +956,9 @@ impl HybridMotionProfile {
                 }
             }
         };
+        // Diagnostic only (the planner guarantees it, see `motion_chaining`): ~30 soft-float
+        // operations per segment on a Cortex-M0+, so only checked in debug builds
+        #[cfg(any(test, feature = "debug-motion-planning", feature = "assert-motion"))]
         if !blend_velocity_above(&b, -((v_i + v_o) * rel_tol())) {
             hwa::warn!(
                 "[HybridMotionProfile] Polynomial blend reverses velocity (s={:?} v_i={:?} v_o={:?} a_i={:?} a_o={:?})",
@@ -913,26 +1008,57 @@ impl HybridMotionProfile {
     }
 
     /// Velocity and position at every phase boundary of the S-Curve.
+    ///
+    /// Closed form per phase: a whole ramp changes the speed by `A·T/2` and covers
+    /// `v₀·T + A·T²·φ(1)` (rising acceleration) or `v₀·T + A·T²·(½ − φ(1))` (falling), with
+    /// `φ(1)` = 1/6 ([`JerkShape::Linear`]) or 3/20 ([`JerkShape::Smooth`]): a few operations per
+    /// phase instead of evaluating the ramp polynomials (soft-float calls on a Cortex-M0+).
     fn build_scurve_cache(&mut self) {
         let tj1 = self.times.t_j1();
         let tj2 = self.times.t_j2();
         self.cache.inv_tj1 = if tj1 > math::ZERO { tj1.recip() } else { math::ZERO };
         self.cache.inv_tj2 = if tj2 > math::ZERO { tj2.recip() } else { math::ZERO };
-        self.cache.v[0] = self.v_i;
-        self.cache.s[0] = math::ZERO;
-        for phase in 1..=7 {
-            let t0 = self.times.phase_start(phase);
-            let t1 = if phase == 7 {
-                self.times.t_8s
-            } else {
-                self.times.phase_start(phase + 1)
-            };
-            let dt = t1 - t0;
-            let v0 = self.cache.v[phase - 1];
-            let (ds, v, _) = self.phase_state(phase, dt, v0);
-            self.cache.v[phase] = v;
-            self.cache.s[phase] = self.cache.s[phase - 1] + ds;
-        }
+        let (phi_up, phi_down) = match self.jerk_shape {
+            JerkShape::Linear => (math::SIXTH, math::HALF - math::SIXTH),
+            JerkShape::Smooth => (Real::from_f32(0.15), Real::from_f32(0.35)),
+        };
+        let (aa, ad) = (self.a_lim_a, self.a_lim_d);
+        let d2 = self.times.t_3s - self.times.t_2s;
+        let d4 = self.times.t_5s - self.times.t_4s;
+        let d6 = self.times.t_7s - self.times.t_6s;
+        // Acceleration ramps (phases 1 and 3): A·T and A·T²
+        let h1 = aa * tj1;
+        let h1t = h1 * tj1;
+        let dv1 = h1 * math::HALF;
+        // Deceleration ramps (phases 5 and 7)
+        let h5 = ad * tj2;
+        let h5t = h5 * tj2;
+        let dv5 = h5 * math::HALF;
+        let c = &mut self.cache;
+        let v0 = self.v_i;
+        c.v[0] = v0;
+        c.s[0] = math::ZERO;
+        // 1: rising acceleration
+        c.v[1] = v0 + dv1;
+        c.s[1] = v0 * tj1 + h1t * phi_up;
+        // 2: constant acceleration
+        c.v[2] = c.v[1] + aa * d2;
+        c.s[2] = c.s[1] + (c.v[1] + aa * d2 * math::HALF) * d2;
+        // 3: falling acceleration
+        c.v[3] = c.v[2] + dv1;
+        c.s[3] = c.s[2] + c.v[2] * tj1 + h1t * phi_down;
+        // 4: cruise
+        c.v[4] = c.v[3];
+        c.s[4] = c.s[3] + c.v[3] * d4;
+        // 5: rising deceleration
+        c.v[5] = c.v[4] - dv5;
+        c.s[5] = c.s[4] + c.v[4] * tj2 - h5t * phi_up;
+        // 6: constant deceleration
+        c.v[6] = c.v[5] - ad * d6;
+        c.s[6] = c.s[5] + (c.v[5] - ad * d6 * math::HALF) * d6;
+        // 7: falling deceleration
+        c.v[7] = c.v[6] - dv5;
+        c.s[7] = c.s[6] + c.v[6] * tj2 - h5t * phi_down;
     }
 
     /// `(ds, v, a)` of an S-Curve phase `dt` seconds after its start, given its initial velocity.
@@ -1596,6 +1722,61 @@ pub mod test {
     }
 
     /// Rest residuals must be treated as rest (no endless cruise at ~1e-10 mm/s).
+    /// Iterations of the peak velocity solver over random segments (each costs two square roots)
+    #[test]
+    fn peak_solver_iterations_distribution() {
+        let c = Constraints {
+            v_max: Real::from_f32(200.0),
+            a_max: Real::from_f32(3000.0),
+            j_max: Real::from_f32(60000.0),
+        };
+        let mut seed = 7u64;
+        let mut rnd = || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((seed >> 40) as f32) / ((1u64 << 24) as f32)
+        };
+        let (mut total, mut max, mut n) = (0u32, 0u32, 0u32);
+        for _ in 0..2000 {
+            let s = 0.2 + 100.0 * rnd() * rnd();
+            let (vi, vo) = (150.0 * rnd(), 150.0 * rnd());
+            super::PEAK_SOLVER_ITERATIONS.with(|k| k.set(0));
+            let _ = HybridMotionProfile::compute_with_shape(Real::from_f32(s), Real::from_f32(vi), Real::from_f32(vo), math::ZERO, math::ZERO, &c, super::DEFAULT_JERK_SHAPE);
+            let it = super::PEAK_SOLVER_ITERATIONS.with(|k| k.get());
+            if it > 0 { total += it; n += 1; max = max.max(it); }
+        }
+        let mean = total as f32 / n as f32;
+        std::println!("SOLVER: {} solves, mean {:.2} iterations, max {}", n, mean, max);
+        assert!(mean <= 5.0 && max <= 12, "mean {} max {}", mean, max);
+    }
+
+    /// The peak velocity solver converges in a few iterations (each one costs two square roots:
+    /// milliseconds on a Cortex-M0+ when it ran its 48 iterations), and the end position is exact.
+    #[test]
+    fn peak_velocity_solver_converges_fast() {
+        let c = Constraints {
+            v_max: Real::from_f32(116.7),
+            a_max: Real::from_f32(2400.0),
+            j_max: Real::from_f32(50000.0),
+        };
+        for (s, v_i, v_o) in [(0.55f32, 0.0f32, 0.0f32), (0.55, 60.0, 60.0), (0.55, 20.0, 80.0), (5.0, 10.0, 30.0)] {
+            super::PEAK_SOLVER_ITERATIONS.with(|n| n.set(0));
+            let p = HybridMotionProfile::compute_with_shape(
+                Real::from_f32(s),
+                Real::from_f32(v_i),
+                Real::from_f32(v_o),
+                math::ZERO,
+                math::ZERO,
+                &c,
+                super::DEFAULT_JERK_SHAPE,
+            )
+            .unwrap();
+            let iterations = super::PEAK_SOLVER_ITERATIONS.with(|n| n.get());
+            std::println!("s={} {}->{}: {} iterations, end_pos={:?}", s, v_i, v_o, iterations, p.end_pos());
+            assert!(iterations <= 8, "s={} {}->{}: {} iterations", s, v_i, v_o, iterations);
+            assert!((p.end_pos() - Real::from_f32(s)).abs() < Real::from_f32(1.0e-5));
+        }
+    }
+
     #[test]
     fn test_rest_residual_speeds() {
         let c = Constraints {

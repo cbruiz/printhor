@@ -58,17 +58,19 @@ This means that the main short-term goal is not to develop a production firmware
 | I/O (serial, USB, SD card) | Functional | Host line-number protocol (`N`/`M110`); SD listing and print jobs |
 | GCode parsing | Functional | See [GCode compliance](#gcode-compliance) for the codes actually supported |
 | State and logic | Testing | Event bus, print job control (pause/resume/abort), alarms (`M112`/`M999`) |
-| Motion planner | Functional | Double S (jerk-limited) profile, look-ahead chaining, quick stop (`M410`) |
+| Motion planner | Functional | Double S (jerk-limited) profile, look-ahead chaining, quick stop (`M410`), soft end-stops (`M211`) |
+| Feed rate / flow overrides | Testing | `M220` (with `B`/`R` backup/restore) and `M221`, Marlin semantics; not applied to the firmware retraction |
 | Arcs (`G2`/`G3`) and Bézier splines (`G5`) | Testing | `with-arcs` / `with-beziers` features, segmented into linear moves |
 | Kinematics | Testing | Cartesian, Core-XY, anthropomorphic; Delta in Draft |
 | Homing | Testing | Abortable with `M410`/`M112`; home offsets (`M206`) |
 | Thermal control | Testing | PID, autotune (`M303`), thermal runaway / sensor fault protection |
 | Firmware retraction | Testing | `G10`/`G11`, `M207`/`M208` |
 | Settings persistence | Testing | `M500`/`M501` (`with-eeprom`), `M502`/`M503` |
-| Probing | Draft | `G31`/`G32` (sled dock/undock) only |
+| Probing | Testing | `G30` single probe, probe offset (`M851`), deploy/stow (`M401`/`M402`, servo `M280`), sled dock/undock (`G31`/`G32`) |
 | Bed leveling | TODO | `G29*` accepted without effect; `with-mesh-leveling` has no implementation yet |
 | Laser/CNC | Draft | `M3`/`M4`/`M5` accepted without effect |
-| Display | TODO | `M117` is echoed to the display channel |
+| Display (serial TFT) | Testing | BTT TFT (e.g. TFT35) on the display UART with `marlin-compat`: `M115` capabilities, `M503 S0`, `M211`, `M220`/`M221`, `M117` as a status notification. Directly driven LCDs: TODO |
+| Instrumentation | Testing | Motion execution metrics (`M800`, `motion-metrics`), MCU operation benchmark (`M801`, `mcu-bench`) |
 
 Assuming the following maturity convention:
  TODO -> Draft -> Incubation -> Testing -> Functional -> Done
@@ -214,7 +216,7 @@ We are keeping it because it is clear and useful for a high level understanding.
   * Remove unwrap/panic calls.
   * Remove unsafe code (a little bit, but there it is)
   * Remove trivial/redundant computation __but not compromising readability__.
-* Display
+* Display: directly driven LCDs (serial TFTs work in Marlin mode)
 * I/O control
   * xonxoff
 * exFAT support would be great.
@@ -263,7 +265,11 @@ Status:
 * Accepted: Acknowledged with `ok`. Only the default/only supported mode exists
 * Accepted, no effect: Acknowledged with `ok` for compatibility with slicers, but does nothing yet
 
-Any other code is rejected with an error (not implemented).
+Any other code is rejected with an error (not implemented), also when it belongs to a feature that is
+not enabled (e.g. `M109` without `with-hot-end`): the command never waits for something that can not
+happen, so every feature combination keeps progressing. In a print job, such lines are reported and
+skipped. A real fault of a supported command (e.g. a heater safeguard) raises the alarm state instead,
+recoverable with `M999`.
 
 | Code | Feature | Description | Status |
 |---|---|---|---|
@@ -276,23 +282,28 @@ Any other code is rejected with an error (not implemented).
 | G10 / G11 | `with-motion` | Firmware retract / recover (needs `with-e-axis`; otherwise accepted without effect) | DONE |
 | G17 | `with-motion` | XY plane selection (the only plane supported) | Accepted |
 | G21 | `with-motion` | Millimeter units (the only unit supported) | Accepted |
-| G28 | `with-motion` | Homing. Abortable with `M410`/`M112` | DONE |
+| G28 | `with-motion` | Homing. Z0 is the plane where the Z end-stop (or probe) triggers, the bed; the homing ends 10 mm above it, so `M114` reports `Z:10` (as Marlin's `Z_AFTER_HOMING`). Home offsets (`M206`) apply. Abortable with `M410`/`M112` | DONE |
 | G29 / G29.1 / G29.2 | `with-motion` | Bed leveling | Accepted, no effect |
+| G30 | `with-probe + with-z-axis` | Single Z probe at the current position, or at `X Y` (absolute, where the probe goes: the nozzle goes there minus the probe offset). Waits for the queued moves, requires homing. Deploys the probe, lowers Z until it triggers (down to the homing trigger plane plus 5 mm), raises back to the start height and stows it. Answers `Bed X: <x> Y: <y> Z: <z>` (nozzle Z at the trigger plus the probe Z offset, in the M114 coordinates: a flat bed probes at `Z: 0.00`). Not triggering raises the alarm (`Error:Probing failed`, recoverable with `M999` and `G28`) | DONE |
 | G31 / G32 | `with-probe` | Dock / undock the probe sled | DONE |
 | G80 | `with-motion` | Cancel canned cycle | Accepted |
 | G90 / G91 | `with-motion` | Absolute / relative positioning | DONE |
 | G92 | `with-motion` | Set position. Also declares the position as known (manual homing) | DONE |
 | G94 | `with-motion` | Units per minute feed rate mode (the only mode supported) | Accepted |
 | M | * | List the supported M-codes | DONE |
-| M2 | `with-sd-card + with-print-job` | Program end / abort the print job | DONE |
+| M2 | `with-sd-card + with-print-job` | Program end: ends the print job | DONE |
 | M3 / M4 / M5 | * | Spindle or laser on (CW/CCW) / off | Accepted, no effect |
+| M18 | `with-motion` | Disable steppers (alias of `M84`) | DONE |
 | M20 | `with-sd-card` | List SD files (files only, no directories) | DONE* |
 | M21 | `with-sd-card` | Init SD card | DONE |
-| M23 | `with-sd-card + with-print-job` | Select SD file | DONE |
-| M24 | `with-sd-card + with-print-job` | Start / resume SD print | DONE |
-| M25 | `with-sd-card + with-print-job` | Pause SD print | DONE |
+| M22 | `with-sd-card` | Release the SD card. Refused while it is in use (print job, file being written) | DONE |
+| M23 | `with-sd-card + with-print-job` | Select SD file. Answers `File opened: <name> Size: <bytes>` | DONE |
+| M24 | `with-sd-card + with-print-job` | Start / resume SD print. Error without a selected file; `ok` (no effect) when already printing | DONE |
+| M25 | `with-sd-card + with-print-job` | Pause SD print (effective once the planned moves are done). `ok` (no effect) when already paused | DONE |
+| M28 / M29 | `with-sd-card` | Write the next lines of the channel to a file (`M28 <name>`) until `M29`. Not allowed while printing | DONE |
+| M27 | `with-sd-card + with-print-job` | SD print status: `SD printing byte <pos>/<size>` or `Not SD printing`. `S<secs>` auto-reports periodically (`S0` off) | DONE* |
 | M37 | * | Dry run mode (`S1` on / `S0` off) | DONE |
-| M73 | * | Set print progress | Accepted, no effect |
+| M73 | * | Print progress: `P` percentage, `R` remaining minutes. Without words, reports it (the file percentage when the slicer gave none). Stored with `with-print-job` | DONE |
 | M79 | * | Software reset | DONE |
 | M80 / M81 | `with-ps-on` | ATX power on / off | DONE |
 | M82 / M83 | `with-motion` | Absolute / relative extruder mode | DONE |
@@ -300,39 +311,53 @@ Any other code is rejected with an error (not implemented).
 | M92 | `with-motion` | Set steps per unit | DONE |
 | M100 | * | Report memory usage | DONE |
 | M104 / M109 | `with-hot-end` | Set / wait for hot-end temperature | DONE |
-| M105 | * | Report temperatures | DONE |
+| M105 | * | Report temperatures (two decimals, built without heap) | DONE |
 | M106 / M107 | `with-fan-layer` | Layer fan on (`S` 0-255) / off | DONE |
 | M110 | * | Set current line number (host protocol) | DONE |
 | M112 | * | Emergency stop (heaters off, motion aborted, alarm until `M999`) | DONE |
-| M114 | `with-motion` | Report current position | DONE |
-| M115 | * | Firmware version and capabilities | DONE |
-| M117 | * | Display message | DONE |
+| M114 | `with-motion` | Report the position of the enabled axes (then `E`) and their step counts | DONE |
+| M115 | * | Firmware name (`PrinThor`) and compiled version. With `marlin-compat`, in the Marlin protocol format, plus the `Cap:` list, derived from the enabled features | DONE |
+| M117 | * | Display message, sent to the display channel: as a Marlin host notification (`//action:notification`) with `marlin-compat`, as `echo:` otherwise. Empty messages send nothing | DONE |
 | M118 | * | Echo message to the host | DONE |
-| M119 | `with-motion` | Report endstop status | DONE |
+| M119 | `with-motion` | Report endstop status (disabled axes report 0) | DONE |
 | M140 / M190 | `with-hot-bed` | Set / wait for bed temperature | DONE |
+| M280 | `with-probe` | Servo position (`P0 S<angle>`, 0-180). Without `S`, reports the PWM state | DONE |
 | M201 | `with-motion` | Max acceleration per axis | DONE |
 | M203 | `with-motion` | Max feed rate per axis | DONE |
 | M204 | `with-motion` | Starting acceleration (`P` print, `T` travel) | DONE |
 | M205 | * | Jerk settings: accepted but ignored (Marlin semantics differ from the S-curve jerk) | Accepted, no effect |
 | M206 | `with-motion` | Home offsets (applied on the next homing, as Marlin) | DONE |
 | M207 / M208 | `with-motion + with-e-axis` | Firmware retraction / recover settings | DONE |
-| M220 | * | Feed rate percentage | DONE |
-| M221 | * | Flow percentage | DONE |
+| M211 | * | Soft end-stops: `S1`/`S0` enables/disables clipping the moves to the travel of the axes (on by default). Reports the state and the bounds in the Marlin format | DONE |
+| M220 | `with-motion` | Feed rate percentage (`S`, 10-255 %), applied to the moves planned from then on (G0/G1, arcs, splines). `B` backs up the current one, `R` restores it (Marlin order: `R`, then `B`, then `S`). Without words, reports `FR:<n>%` | DONE |
+| M221 | `with-motion` | Flow percentage of the extruder (`S`, 10-255 %), applied to the E displacement of the moves planned from then on. Only `T0` (single extruder). Without `S`, reports `echo:E0 Flow: <n>%` | DONE |
 | M301 / M304 | `with-hot-end / with-hot-bed` | Hot-end / bed PID constants | DONE |
 | M302 | `with-hot-end + with-e-axis` | Cold extrusion prevention | DONE |
 | M303 | `with-hot-end or with-hot-bed` | PID autotune | DONE |
 | M400 | `with-motion` | Wait for the queued moves to finish | DONE |
+| M401 / M402 | `with-probe` | Deploy / stow the probe | DONE |
 | M410 | `with-motion` | Quick stop: abort the current move and discard the queue | DONE |
 | M500 / M501 | `with-eeprom` | Store / restore settings | DONE |
 | M502 | * | Restore default settings | DONE |
-| M503 | * | Report current settings | DONE |
-| M524 | `with-sd-card` | Abort SD print | DONE |
+| M503 | * | Report current settings, one whole line per setting (`S0`: settings only, as sent by the TFTs at boot) | DONE |
+| M524 | `with-sd-card` | Abort SD print (interrupts the waits of the job, e.g. heating). `ok` (no effect) when nothing is printing | DONE |
+| M800 | `with-motion` | Motion execution metrics (needs `motion-metrics`): ISR load, segments, planner and queue stats. `S0` resets them, `J<mm/s³>` sets the S-curve jerk of the motion axes | DONE |
+| M801 | `with-motion` | MCU operation cost benchmark (needs `mcu-bench`) | DONE |
+| M851 | `with-motion` | Probe offset (`X Y Z`). Without words, reports `Probe Offset X Y Z` | DONE |
 | M862.1 / M862.3 | `with-motion` | Prusa printer checks | Accepted, no effect |
 | M900 | `with-motion` | Linear advance factor | Accepted, no effect |
 | M907 | `with-motion` | Motor current | Accepted, no effect |
 | M999 | * | Clear the alarm state (homing required afterward) | DONE |
 
 With `grbl-compat`, the GRBL status query (`?`) and `$` commands are also accepted.
+
+Limitations:
+* `M27 S` auto-reports are sent between job commands: while a command waits (full motion queue,
+  heating) they are delayed. `M27 C` (current file name) is not implemented.
+* `M220`/`M221` do not change the moves already queued, nor the firmware retraction (`G10`/`G11`),
+  whose length and speeds are absolute (as Marlin).
+* Without a step actuator (`with-motion-stepper` or `with-motion-broadcast`), moves are planned and
+  tracked but executed virtually (as in dry run), so jobs keep progressing.
 
 ### 3D print GCode sample
 
@@ -420,6 +445,8 @@ With `grbl-compat`, the GRBL status query (`?`) and `$` commands are also accept
 brew install bloaty
 bloaty target/thumbv7em-none-eabihf/release/printhor -d sections,symbols -n 0 --csv | bloaty-metafile > meta.json
 ```
+
+Open meta.json with https://esbuild.github.io/analyze/ or any other tool
 
 # Appendix
 

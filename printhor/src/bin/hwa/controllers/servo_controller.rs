@@ -19,6 +19,21 @@ pub trait ProbeTrait {
     /// * `sleep_us` - Duration in microseconds to sleep after lowering the pin.
     fn probe_pin_down(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 
+    /// Deploys the probe and switches its output to latched mode (BLTouch V3 "SW mode").
+    ///
+    /// In its default mode a BLTouch signals the touch with a short pulse (a few ms), easily
+    /// missed by a polled end-stop. In SW mode the output stays high after the touch until the
+    /// probe is stowed, so polling it once per step is enough.
+    ///
+    /// # Parameters
+    /// * `deploy_sleep_us` - Duration in microseconds to wait after deploying the pin.
+    /// * `mode_sleep_us` - Duration in microseconds to wait after the SW mode command.
+    fn probe_deploy_latched(
+        &mut self,
+        deploy_sleep_us: u64,
+        mode_sleep_us: u64,
+    ) -> impl core::future::Future<Output = ()>;
+
     /// Raises the probe pin, moving it away from contact. The operation waits for a specified duration.
     ///
     /// # Parameters
@@ -37,7 +52,8 @@ pub trait ProbeTrait {
     /// * `sleep_us` - Duration in microseconds to sleep after releasing the alarm.
     fn probe_alarm_release(&mut self, sleep_us: u64) -> impl core::future::Future<Output = ()>;
 
-    /// Sets the probe into test mode. The operation waits for a specified duration.
+    /// Sets the probe into test mode (60º: the BLTouch V3 SW mode, latched output).
+    /// The operation waits for a specified duration.
     ///
     /// # Parameters
     /// * `sleep_us` - Duration in microseconds to sleep after entering test mode.
@@ -49,6 +65,9 @@ pub trait ProbeTrait {
     /// Diagnostic: (duty, max duty) currently applied to the servo channel
     fn probe_pwm_state(&mut self) -> (u32, u32);
 }
+
+/// Time for a BLTouch to decode a command before the next one (several 20 ms servo periods)
+const BLTOUCH_COMMAND_SETTLE_US: u64 = 200_000;
 
 /// The `GenericServoController` structure is responsible for managing a servo motor
 /// using an interrupt-controlled PWM (Pulse Width Modulation) channel.
@@ -161,7 +180,17 @@ where
         self.set_angle(10, sleep_us).await;
     }
 
+    async fn probe_deploy_latched(&mut self, deploy_sleep_us: u64, mode_sleep_us: u64) {
+        // An alarm left by a previous operation would make the BLTouch ignore the deploy
+        self.set_angle(160, BLTOUCH_COMMAND_SETTLE_US).await;
+        self.set_angle(10, deploy_sleep_us).await;
+        self.set_angle(60, mode_sleep_us).await;
+    }
+
+    /// Stows the pin. A BLTouch ignores the stow while in alarm (red led blinking, e.g. after a
+    /// deploy with the pin blocked or a missed touch), so the alarm is released first (160º).
     async fn probe_pin_up(&mut self, sleep_us: u64) {
+        self.set_angle(160, BLTOUCH_COMMAND_SETTLE_US).await;
         self.set_angle(90, sleep_us).await;
     }
     async fn probe_self_test(&mut self, sleep_us: u64) {

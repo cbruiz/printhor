@@ -30,8 +30,40 @@ use hwa::{Contract, HwiContract};
 const MAGIC: [u8; 4] = *b"PTHR";
 const VERSION: u8 = 1;
 const HEADER_LEN: usize = 12;
-/// Upper bound of the payload (sanity check of the stored length)
-const MAX_PAYLOAD_LEN: usize = 1024;
+/// Exact payload length of this firmware (enabled features). The image buffers are sized with
+/// it: no heap (the smaller boards have a tiny one) and no length to trust from the memory.
+const PAYLOAD_LEN: usize = {
+    #[allow(unused_mut)]
+    let mut len = 0usize;
+    #[cfg(feature = "with-motion")]
+    {
+        // steps per unit, max speed, max accel, max jerk, home offset; print and travel accel
+        len += 5 * CoordSel::num_axis() * 4 + 2 * 4;
+        // retraction: length, feed rate, z hop, recover extra, recover feed rate
+        #[cfg(feature = "with-e-axis")]
+        {
+            len += 5 * 4;
+        }
+        // probe offset (M851)
+        #[cfg(feature = "with-probe")]
+        {
+            len += CoordSel::num_axis() * 4;
+        }
+    }
+    #[cfg(feature = "with-hot-end")]
+    {
+        len += 3 * 4;
+    }
+    #[cfg(feature = "with-hot-bed")]
+    {
+        len += 3 * 4;
+    }
+    #[cfg(all(feature = "with-hot-end", feature = "with-e-axis"))]
+    {
+        len += 2 * 4;
+    }
+    len
+};
 
 #[allow(unused)]
 const LAYOUT_MOTION: u8 = 1 << 0;
@@ -41,6 +73,8 @@ const LAYOUT_E_AXIS: u8 = 1 << 1;
 const LAYOUT_HOT_END: u8 = 1 << 2;
 #[allow(unused)]
 const LAYOUT_HOT_BED: u8 = 1 << 3;
+#[allow(unused)]
+const LAYOUT_PROBE: u8 = 1 << 4;
 
 const fn layout_flags() -> u8 {
     #[allow(unused_mut)]
@@ -60,6 +94,10 @@ const fn layout_flags() -> u8 {
     #[cfg(feature = "with-hot-bed")]
     {
         flags |= LAYOUT_HOT_BED;
+    }
+    #[cfg(all(feature = "with-motion", feature = "with-probe"))]
+    {
+        flags |= LAYOUT_PROBE;
     }
     flags
 }
@@ -111,14 +149,20 @@ fn crc16(data: &[u8]) -> u16 {
     crc
 }
 
+/// Writes the payload into a fixed buffer. Writes beyond its end are dropped (they can not happen:
+/// [PAYLOAD_LEN] is the exact size, checked by the tests)
 struct Writer {
-    buf: alloc::vec::Vec<u8>,
+    buf: [u8; PAYLOAD_LEN],
+    len: usize,
 }
 
 #[allow(unused)]
 impl Writer {
     fn f32(&mut self, v: f32) {
-        self.buf.extend_from_slice(&v.to_le_bytes());
+        if let Some(dst) = self.buf.get_mut(self.len..self.len + 4) {
+            dst.copy_from_slice(&v.to_le_bytes());
+        }
+        self.len += 4;
     }
     fn real(&mut self, v: Option<Real>) {
         self.f32(v.map_or(f32::NAN, |x| x.to_f64() as f32));
@@ -182,14 +226,18 @@ struct MotionSettings {
     print_accel: Option<Real>,
     travel_accel: Option<Real>,
     home_offset: TVector<Real>,
+    #[cfg(feature = "with-probe")]
+    probe_offset: TVector<Real>,
     #[cfg(feature = "with-e-axis")]
     retraction: [Option<Real>; 5],
 }
 
-async fn encode(processor: &processing::GCodeProcessor) -> alloc::vec::Vec<u8> {
+/// Encodes the current settings. Returns the payload and the length written (`PAYLOAD_LEN`)
+async fn encode(processor: &processing::GCodeProcessor) -> ([u8; PAYLOAD_LEN], usize) {
     let _ = processor;
     let mut w = Writer {
-        buf: alloc::vec::Vec::with_capacity(256),
+        buf: [0u8; PAYLOAD_LEN],
+        len: 0,
     };
     #[cfg(feature = "with-motion")]
     {
@@ -201,6 +249,8 @@ async fn encode(processor: &processing::GCodeProcessor) -> alloc::vec::Vec<u8> {
         w.real(cfg.get_print_accel());
         w.real(cfg.get_travel_accel());
         w.vector(&cfg.get_home_offset());
+        #[cfg(feature = "with-probe")]
+        w.vector(&cfg.get_probe_offset());
         #[cfg(feature = "with-e-axis")]
         {
             let r = cfg.get_retraction();
@@ -229,7 +279,7 @@ async fn encode(processor: &processing::GCodeProcessor) -> alloc::vec::Vec<u8> {
         w.f32(min_temp);
         w.f32(allowed as u8 as f32);
     }
-    w.buf
+    (w.buf, w.len)
 }
 
 fn decode(payload: &[u8]) -> Settings {
@@ -247,6 +297,8 @@ fn decode(payload: &[u8]) -> Settings {
             print_accel: r.real(),
             travel_accel: r.real(),
             home_offset: r.vector(),
+            #[cfg(feature = "with-probe")]
+            probe_offset: r.vector(),
             #[cfg(feature = "with-e-axis")]
             retraction: [r.real(), r.real(), r.real(), r.real(), r.real()],
         });
@@ -281,6 +333,8 @@ async fn apply(processor: &processing::GCodeProcessor, s: Settings) {
         cfg.set_print_accel(m.print_accel.filter(|x| x.is_defined_positive()));
         cfg.set_travel_accel(m.travel_accel.filter(|x| x.is_defined_positive()));
         cfg.update_home_offset(&m.home_offset);
+        #[cfg(feature = "with-probe")]
+        cfg.update_probe_offset(&m.probe_offset);
         #[cfg(feature = "with-e-axis")]
         {
             let mut r = cfg.get_retraction();
@@ -314,14 +368,23 @@ async fn apply(processor: &processing::GCodeProcessor, s: Settings) {
 
 /// Stores the current settings (M500). Unchanged EEPROM pages are not rewritten.
 pub async fn store(processor: &processing::GCodeProcessor) -> Result<SettingsInfo, SettingsError> {
-    let payload = encode(processor).await;
-    let crc = crc16(&payload);
-    let mut image = alloc::vec::Vec::with_capacity(HEADER_LEN + payload.len());
-    image.extend_from_slice(&MAGIC);
-    image.extend_from_slice(&[VERSION, layout_flags(), CoordSel::num_axis() as u8, 0]);
-    image.extend_from_slice(&(payload.len() as u16).to_le_bytes());
-    image.extend_from_slice(&crc.to_le_bytes());
-    image.extend_from_slice(&payload);
+    let (payload, len) = encode(processor).await;
+    // Can not happen ([PAYLOAD_LEN] is computed from the same features): never store a bad image
+    if len != PAYLOAD_LEN {
+        hwa::error!("[settings] Encoded {} bytes, expected {}", len, PAYLOAD_LEN);
+        return Err(SettingsError::LayoutMismatch);
+    }
+    // Only the image stays alive across the EEPROM write (it is part of the future state)
+    let (image, crc) = {
+        let crc = crc16(&payload);
+        let mut image = [0u8; HEADER_LEN + PAYLOAD_LEN];
+        image[0..4].copy_from_slice(&MAGIC);
+        image[4..8].copy_from_slice(&[VERSION, layout_flags(), CoordSel::num_axis() as u8, 0]);
+        image[8..10].copy_from_slice(&(PAYLOAD_LEN as u16).to_le_bytes());
+        image[10..12].copy_from_slice(&crc.to_le_bytes());
+        image[HEADER_LEN..].copy_from_slice(&payload);
+        (image, crc)
+    };
 
     let offset = <Contract as HwiContract>::EEPROM_SETTINGS_OFFSET;
     let mut eeprom = processor.eeprom.lock().await;
@@ -340,7 +403,8 @@ pub async fn retrieve(
     processor: &processing::GCodeProcessor,
 ) -> Result<SettingsInfo, SettingsError> {
     let offset = <Contract as HwiContract>::EEPROM_SETTINGS_OFFSET;
-    let payload = {
+    let mut payload = [0u8; PAYLOAD_LEN];
+    {
         let mut eeprom = processor.eeprom.lock().await;
         let mut header = [0u8; HEADER_LEN];
         eeprom
@@ -350,18 +414,20 @@ pub async fn retrieve(
         if header[0..4] != MAGIC {
             return Err(SettingsError::Empty);
         }
+        // The same layout flags but a different length means a different (incompatible) set of
+        // settings: rejected before reading anything else
+        let len = u16::from_le_bytes([header[8], header[9]]) as usize;
         if header[4] != VERSION
             || header[5] != layout_flags()
             || header[6] as usize != CoordSel::num_axis()
+            || len != PAYLOAD_LEN
         {
             return Err(SettingsError::LayoutMismatch);
         }
-        let len = u16::from_le_bytes([header[8], header[9]]) as usize;
-        if len > MAX_PAYLOAD_LEN || offset + HEADER_LEN + len > eeprom.capacity() {
-            return Err(SettingsError::CrcMismatch);
+        if offset + HEADER_LEN + PAYLOAD_LEN > eeprom.capacity() {
+            return Err(SettingsError::TooBig);
         }
         let crc = u16::from_le_bytes([header[10], header[11]]);
-        let mut payload = alloc::vec![0u8; len];
         eeprom
             .read(offset + HEADER_LEN, &mut payload)
             .await
@@ -369,16 +435,10 @@ pub async fn retrieve(
         if crc16(&payload) != crc {
             return Err(SettingsError::CrcMismatch);
         }
-        payload
-    };
-    // The expected length for this firmware: same layout flags but a different length means a
-    // different (incompatible) set of settings
-    if payload.len() != encode(processor).await.len() {
-        return Err(SettingsError::LayoutMismatch);
     }
     let crc = crc16(&payload);
     apply(processor, decode(&payload)).await;
-    Ok((HEADER_LEN + payload.len(), crc))
+    Ok((HEADER_LEN + PAYLOAD_LEN, crc))
 }
 
 #[cfg(test)]

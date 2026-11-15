@@ -44,11 +44,11 @@ where
     M: hwa::AsyncRawMutex + 'static,
 {
     pub fn new(channel: &'static EventBusPubSubType<M>) -> Self {
-        let publisher = channel.publisher().unwrap();
+        let publisher = channel.immediate_publisher();
         EventBusChannelController {
             channel,
             publisher,
-            status: EventFlags::empty(),
+            status: EventFlags::INITIAL,
         }
     }
 

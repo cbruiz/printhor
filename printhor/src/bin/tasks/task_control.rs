@@ -33,6 +33,218 @@ const ERR_INTERNAL: &str = "Error:Internal error\n";
 #[cfg(not(feature = "marlin-compat"))]
 const ERR_INTERNAL: &str = "error; Internal error\n";
 
+/// Answers a line that could not be parsed: the host resends it when it numbers its lines
+async fn report_parse_error(
+    processor: &mut processing::GCodeProcessor,
+    channel: hwa::CommChannel,
+    gcode_input_stream: &processing::GCodeMultiplexedInputStream,
+) {
+    processor.write(channel, ERR_PARSER).await;
+    if let Some(last_line) = gcode_input_stream.get_gcode_line(channel) {
+        let s = processing::LineBuf::<32>::from_fmt(format_args!("Resend: {}\n", last_line.wrapping_add(1)));
+        processor.write(channel, s.as_str()).await;
+    }
+    processor.write_ok(channel).await;
+}
+
+/// Answers a line with a wrong checksum as Marlin: the host resends the line after the last one
+/// accepted
+async fn report_bad_checksum(
+    processor: &mut processing::GCodeProcessor,
+    channel: hwa::CommChannel,
+    gcode_input_stream: &processing::GCodeMultiplexedInputStream,
+) {
+    match gcode_input_stream.get_gcode_line(channel) {
+        Some(last_line) => {
+            let s = processing::LineBuf::<96>::from_fmt(format_args!(
+                "Error:checksum mismatch, Last Line: {}\nResend: {}\n",
+                last_line as i32,
+                last_line.wrapping_add(1)
+            ));
+            processor.write(channel, s.as_str()).await;
+        }
+        None => processor.write(channel, "Error:checksum mismatch\n").await,
+    }
+    processor.write_ok(channel).await;
+}
+
+/// Tracks, per channel, whether its stream already delivered something (a G-code or an error).
+///
+/// The first parser error of a channel that has not delivered anything yet is discarded silently:
+/// it is the line noise of a peer starting up (e.g. a BTT TFT emits a framing error and a NUL byte
+/// when it boots, and would show the `Error:` reply as an error popup).
+#[derive(Default)]
+struct StreamStartFilter {
+    started: u8,
+}
+
+impl StreamStartFilter {
+    const fn bit(channel: hwa::CommChannel) -> u8 {
+        match channel {
+            #[cfg(feature = "with-serial-usb")]
+            hwa::CommChannel::SerialUsb => 1 << 0,
+            #[cfg(feature = "with-serial-port-1")]
+            hwa::CommChannel::SerialPort1 => 1 << 1,
+            #[cfg(feature = "with-serial-port-2")]
+            hwa::CommChannel::SerialPort2 => 1 << 2,
+            hwa::CommChannel::Internal => 1 << 3,
+            hwa::CommChannel::Sink => 1 << 4,
+        }
+    }
+
+    /// Marks the channel as started. Returns whether it already was
+    fn start(&mut self, channel: hwa::CommChannel) -> bool {
+        let bit = Self::bit(channel);
+        let was_started = self.started & bit != 0;
+        self.started |= bit;
+        was_started
+    }
+}
+
+/// A file being written (M28): the lines of `channel` go to it until M29
+#[cfg(feature = "with-sd-card")]
+struct SDWriting {
+    path: hwa::types::SDCardPath,
+}
+
+#[cfg(feature = "with-sd-card")]
+impl SDWriting {
+    /// Flushes and closes the file
+    async fn close(mut self, card_controller: &mut hwa::types::SDCardController) {
+        card_controller.close_path(&mut self.path).await;
+    }
+}
+
+/// M28: creates the file and stores the next lines of the channel in it (see [handle_raw_line])
+#[cfg(feature = "with-sd-card")]
+async fn start_writing(
+    processor: &mut processing::GCodeProcessor,
+    channel: hwa::CommChannel,
+    file: Option<&str>,
+    gcode_input_stream: &mut processing::GCodeMultiplexedInputStream,
+    card_controller: &mut hwa::types::SDCardController,
+    #[cfg(feature = "with-print-job")] printer_controller: &mut hwa::controllers::PrinterController,
+    writing: &mut Option<SDWriting>,
+) -> processing::CodeExecutionResult {
+    let file = file.unwrap_or("").trim();
+    #[cfg(feature = "with-print-job")]
+    if printer_controller.is_printing().await {
+        processor.write(channel, "echo: M28: Not allowed while printing\n").await;
+        return Err(processing::CodeExecutionFailure::ERR);
+    }
+    if writing.is_some() || file.is_empty() {
+        processor.write(channel, "echo: M28: Already writing a file, or no file name\n").await;
+        return Err(processing::CodeExecutionFailure::ERR);
+    }
+    match card_controller.create_file(file).await {
+        Ok(path) => {
+            gcode_input_stream.start_capture(channel);
+            writing.replace(SDWriting { path });
+            let s = processing::LineBuf::<128>::from_fmt(format_args!("Writing to file: {}\n", file));
+            processor.write(channel, s.as_str()).await;
+            Ok(processing::CodeExecutionSuccess::OK)
+        }
+        Err(_e) => {
+            let s = processing::LineBuf::<128>::from_fmt(format_args!("open failed, File: {}. ({:?})\n", file, _e));
+            processor.write(channel, s.as_str()).await;
+            Err(processing::CodeExecutionFailure::ERR)
+        }
+    }
+}
+
+/// A line of the channel writing a file (M28): stored, or M29 (ends the file)
+#[cfg(feature = "with-sd-card")]
+async fn handle_raw_line(
+    processor: &mut processing::GCodeProcessor,
+    channel: hwa::CommChannel,
+    line: Result<core::ops::Range<usize>, processing::GCodeLineParserError>,
+    gcode_input_stream: &mut processing::GCodeMultiplexedInputStream,
+    card_controller: &mut hwa::types::SDCardController,
+    writing: &mut Option<SDWriting>,
+) {
+    let range = match line {
+        Ok(range) => range,
+        Err(processing::GCodeLineParserError::LineNumberMismatch(last_line)) => {
+            hwa::warn!("[{:?}] Line number out of sequence: line not stored", channel);
+            let s = processing::LineBuf::<128>::from_fmt(format_args!(
+                "Error:Line Number is not Last Line Number+1, Last Line: {}\nResend: {}\n",
+                last_line as i32,
+                last_line.wrapping_add(1)
+            ));
+            processor.write(channel, s.as_str()).await;
+            processor.write_ok(channel).await;
+            return;
+        }
+        Err(processing::GCodeLineParserError::EOF) => return,
+        Err(processing::GCodeLineParserError::BadChecksum(_ln, _computed, _received)) => {
+            hwa::warn!(
+                "[{:?}] Checksum mismatch (received {}, computed {}): line not stored",
+                channel,
+                _received,
+                _computed
+            );
+            report_bad_checksum(processor, channel, gcode_input_stream).await;
+            return;
+        }
+        Err(processing::GCodeLineParserError::ParseError(_ln, _why)) => {
+            // Longer than a line can be, or unreadable: the host resends it
+            hwa::warn!("[{:?}] Parse error: {}: line not stored", channel, _why);
+            report_parse_error(processor, channel, gcode_input_stream).await;
+            return;
+        }
+        Err(_other) => {
+            hwa::warn!("[{:?}] Unexpected error: line not stored", channel);
+            report_parse_error(processor, channel, gcode_input_stream).await;
+            return;
+        }
+    };
+    if range.is_empty() {
+        // An empty line: nothing to store, and no answer (as when executing)
+        return;
+    }
+    let raw = gcode_input_stream.raw_line(range);
+    // M29 (not M290..): the end of the file
+    let is_m29 = raw.len() >= 3
+        && raw[0].eq_ignore_ascii_case(&b'm')
+        && &raw[1..3] == b"29"
+        && raw.get(3).is_none_or(|b| !b.is_ascii_digit() && *b != b'.');
+    let Some(current) = writing.as_ref() else {
+        gcode_input_stream.stop_capture();
+        return;
+    };
+    if is_m29 {
+        gcode_input_stream.stop_capture();
+        if let Some(current) = writing.take() {
+            current.close(card_controller).await;
+        }
+        processor.write(channel, "Done saving file.\n").await;
+        processor.write_ok(channel).await;
+        return;
+    }
+    let file = match current.path.last() {
+        Some(file) => *file,
+        None => return,
+    };
+    // The line, then its end of line
+    let mut stored = card_controller.write(file, raw).await;
+    if stored.is_ok() {
+        stored = card_controller.write(file, b"\n").await;
+    }
+    match stored {
+        Ok(()) => processor.write_ok(channel).await,
+        Err(_e) => {
+            // The file is closed (what was written is kept) and the lines are executed again
+            gcode_input_stream.stop_capture();
+            if let Some(current) = writing.take() {
+                current.close(card_controller).await;
+            }
+            let s = processing::LineBuf::<64>::from_fmt(format_args!("{} SD write failed: {:?}\n", ERR_PREFIX, _e));
+            processor.write(channel, s.as_str()).await;
+            processor.write_ok(channel).await;
+        }
+    }
+}
+
 pub async fn do_with_timeout<F: core::future::Future>(
     _timeout: Duration,
     fut: F,
@@ -48,24 +260,37 @@ pub async fn task_control(
     #[cfg(feature = "with-print-job")] mut printer_controller: hwa::controllers::PrinterController,
     #[cfg(feature = "with-sd-card")] mut card_controller: hwa::types::SDCardController,
 ) {
-    let ev2 = processor.event_bus.clone();
-    let mut subscriber = ev2.subscriber().await;
-
-    // Initialize an event bus subscriber
+    // Event bus subscriber (only used to report its status on a host channel timeout)
+    #[cfg(any(
+        feature = "with-serial-usb",
+        feature = "with-serial-port-1",
+        feature = "with-serial-port-2"
+    ))]
+    let mut subscriber = processor.event_bus.clone().subscriber().await;
 
     hwa::info!("[task_control] Waiting for SYS_READY");
-    // Pauses this task until system is ready
-    match subscriber
-        .ft_wait_for(hwa::EventStatus::containing(hwa::EventFlags::SYS_READY))
-        .await
-    {
-        Ok(_) => hwa::info!("[task_control] Got SYS_READY. Continuing."),
-        Err(_) => crate::initialization_error(),
-    }
+    // Pauses this task until system is ready (also in alarm mode: M999 must be accepted)
+    crate::helpers::wait_for_flags(&processor.event_bus, hwa::EventFlags::SYS_READY, true).await;
+    hwa::info!("[task_control] Got SYS_READY. Continuing.");
+
+    let mut stream_start = StreamStartFilter::default();
+    #[cfg(feature = "with-sd-card")]
+    let mut writing: Option<SDWriting> = None;
 
     // The task loop
     loop {
-        match do_with_timeout(Duration::from_secs(30), gcode_input_stream.next_gcode()).await {
+        let input = match do_with_timeout(Duration::from_secs(30), gcode_input_stream.next_gcode()).await {
+            Err(e) => Err(e),
+            #[cfg(feature = "with-sd-card")]
+            Ok((processing::InputEvent::Raw(line), channel)) => {
+                stream_start.start(channel);
+                handle_raw_line(&mut processor, channel, line, &mut gcode_input_stream,
+                    &mut card_controller, &mut writing).await;
+                continue;
+            }
+            Ok((processing::InputEvent::GCode(result), channel)) => Ok((result, channel)),
+        };
+        match input {
             // Timeout
             Err(_) => {
                 cfg_if::cfg_if! {
@@ -92,23 +317,28 @@ pub async fn task_control(
                     return ();
                 }
             }
-            Ok((Err(processing::GCodeLineParserError::ParseError(_x)), channel)) => {
-                hwa::error!("[{:?}] GCode N/A ParserError", channel);
-                processor.write(channel, ERR_PARSER).await;
-                // Hosts sending numbered lines (with checksum) are asked to resend the line
-                if let Some(last_line) = gcode_input_stream.get_gcode_line(channel) {
-                    let s = alloc::format!("Resend: {}\n", last_line + 1);
-                    processor.write(channel, s.as_str()).await;
-                }
-                processor.write_ok(channel).await;
+            Ok((Err(processing::GCodeLineParserError::ParseError(_ln, _why)), channel))
+                if !stream_start.start(channel) =>
+            {
+                hwa::warn!("[{:?}] First stream error ignored (peer start-up noise)", channel);
+            }
+            Ok((Err(processing::GCodeLineParserError::ParseError(_ln, _why)), channel)) => {
+                hwa::warn!("[{:?}] Parse error: {}", channel, _why);
+                report_parse_error(&mut processor, channel, &gcode_input_stream).await;
+            }
+            Ok((Err(processing::GCodeLineParserError::BadChecksum(_ln, _computed, _received)), channel)) => {
+                stream_start.start(channel);
+                hwa::warn!("[{:?}] Checksum mismatch (received {}, computed {})", channel, _received, _computed);
+                report_bad_checksum(&mut processor, channel, &gcode_input_stream).await;
             }
             Ok((Err(processing::GCodeLineParserError::LineNumberMismatch(last_line)), channel)) => {
+                stream_start.start(channel);
                 hwa::warn!("[{:?}] Line number out of sequence", channel);
-                let s = alloc::format!(
+                let s = crate::processing::LineBuf::<192>::from_fmt(format_args!(
                     "Error:Line Number is not Last Line Number+1, Last Line: {}\nResend: {}\n",
-                    last_line,
+                    last_line as i32,
                     last_line.wrapping_add(1)
-                );
+                ));
                 processor.write(channel, s.as_str()).await;
                 processor.write_ok(channel).await;
             }
@@ -116,12 +346,13 @@ pub async fn task_control(
                 Err(processing::GCodeLineParserError::GCodeNotImplemented(_ln, _gcode_name)),
                 channel,
             )) => {
+                stream_start.start(channel);
                 hwa::error!("GCode {} (NotImplemented)", _gcode_name.as_str());
                 #[cfg(feature = "marlin-compat")]
-                let s = alloc::format!("echo:Unknown command: \"{}\"\n", _gcode_name);
+                let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo:Unknown command: \"{}\"\n", _gcode_name));
                 #[cfg(not(feature = "marlin-compat"))]
-                let s = alloc::format!("error; {} (NotImplemented)\n", _gcode_name);
-                processor.write(channel, &s).await;
+                let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("error; {} (NotImplemented)\n", _gcode_name));
+                processor.write(channel, s.as_str()).await;
                 processor.write_ok(channel).await;
             }
             Ok((Err(processing::GCodeLineParserError::FatalError), channel)) => {
@@ -134,7 +365,21 @@ pub async fn task_control(
                 hwa::warn!("{:?} Got EOF", _channel);
                 //embassy_time::Timer::after_secs(1).await; // Avoid respawn too fast
             }
+            #[cfg(feature = "with-sd-card")]
+            Ok((Ok(gc), channel)) if matches!(gc.value, processing::GCodeValue::M28(_)) => {
+                stream_start.start(channel);
+                let file = match &gc.value {
+                    processing::GCodeValue::M28(file) => file.as_deref(),
+                    _ => None,
+                };
+                let response = start_writing(&mut processor, channel, file, &mut gcode_input_stream,
+                    &mut card_controller,
+                    #[cfg(feature = "with-print-job")] &mut printer_controller,
+                    &mut writing).await;
+                report(response, &gc, channel, &mut processor).await;
+            }
             Ok((Ok(gc), channel)) => {
+                stream_start.start(channel);
                 hwa::debug!("{:?} got {:?}", channel, gc);
                 let response = execute(
                     &mut processor,
@@ -152,7 +397,9 @@ pub async fn task_control(
     }
 }
 
-#[allow(unused)]
+/// Without host channels it is not used. Only `dead_code` is allowed: the whole `unused` group
+/// would also silence `unused_must_use`, which reports a future not awaited (such as a `reset`)
+#[allow(dead_code)]
 async fn manage_timeout<M>(
     processor: &mut processing::GCodeProcessor,
     subscriber: &mut hwa::EventBusSubscriber<'static, M>,
@@ -167,7 +414,7 @@ async fn manage_timeout<M>(
     hwa::info!(
         "[trace-commands] [task_control] Timeout at {:?}: [State: {:?} Line: {} TaggedLine: {:?}]",
         comm_channel,
-        alloc::format!("{:?}", current_parser_state).as_str(),
+        crate::processing::LineBuf::<192>::from_fmt(format_args!("{:?}", current_parser_state)).as_str(),
         gcode_input_stream.get_line(comm_channel),
         gcode_input_stream.get_gcode_line(comm_channel),
     );
@@ -185,12 +432,17 @@ async fn manage_timeout<M>(
                 .write(hwa::CommChannel::Internal, "echo: Control timeout.\n")
                 .await;
             // Dumps the relevant status for a more easy troubleshooting
-            let z3 = alloc::format!("echo: EventBus status: {:?}", subscriber.get_status().await);
+            // Heap-free (truncated when too long)
+            use core::fmt::Write;
+            let mut z3 = processing::LineBuf::<192>::new();
+            let _ = write!(z3, "echo: EventBus status: {:?}\n", subscriber.get_status().await);
             processor
                 .write(hwa::CommChannel::Internal, z3.as_str())
                 .await;
 
-            let z = alloc::format!(
+            let mut z = processing::LineBuf::<192>::new();
+            let _ = write!(
+                z,
                 "echo: Will reset channel: {:?} state was: {:?}\n",
                 comm_channel,
                 current_parser_state
@@ -198,7 +450,7 @@ async fn manage_timeout<M>(
             processor
                 .write(hwa::CommChannel::Internal, z.as_str())
                 .await;
-            gcode_input_stream.reset(comm_channel);
+            gcode_input_stream.reset(comm_channel).await;
             // Submit an err to give up the intermediate state.
             processor.write(comm_channel, "err\n").await;
         }
@@ -251,8 +503,12 @@ pub async fn execute(
                         .await;
                     Ok(processing::CodeExecutionSuccess::OK)
                 }
+                // Idempotent: no print job (e.g. M2 at the end of a streamed file), answered ok
+                Err(hwa::controllers::PrinterControllerError::NoEffect) => {
+                    Ok(processing::CodeExecutionSuccess::OK)
+                }
                 Err(_e) => {
-                    let s = alloc::format!("echo: M2: Unable to terminate: {:?}\n", _e);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M2: Unable to terminate: {:?}\n", _e));
                     processor.write(channel, s.as_str()).await;
                     Err(processing::CodeExecutionFailure::ERR)
                 }
@@ -261,9 +517,10 @@ pub async fn execute(
         #[cfg(feature = "with-sd-card")]
         processing::GCodeValue::M20(_path) => {
             {
-                let path = _path.clone().unwrap_or(alloc::string::String::from("/"));
+                // Borrowed: no copy of the (up to 128 bytes) path in the heap
+                let path = _path.as_deref().unwrap_or("/");
                 let mut sent_first = false;
-                match _card_controller.dir_iterator(path.as_str()).await {
+                match _card_controller.dir_iterator(path).await {
                     Ok(mut it) => {
                         loop {
                             match it.next().await {
@@ -274,7 +531,7 @@ pub async fn execute(
                                             sent_first = true;
                                         }
                                         processor.write(channel, entry.name.as_str()).await;
-                                        let s = alloc::format!(" {}\n", entry.size);
+                                        let s = crate::processing::LineBuf::<16>::from_fmt(format_args!(" {}\n", entry.size));
                                         processor.write(channel, s.as_str()).await;
                                     }
                                     SDEntryType::DIRECTORY => {}
@@ -299,7 +556,8 @@ pub async fn execute(
                         Ok(processing::CodeExecutionSuccess::CONSUMED)
                     }
                     Err(_e) => {
-                        let s = alloc::format!("echo: M20: Unable to list: {:?}\n", _e);
+                        let reason = _card_controller.mount_error().await;
+                        let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M20: Unable to list: {:?} {}\n", _e, reason.as_str()));
                         processor.write(channel, s.as_str()).await;
                         Err(processing::CodeExecutionFailure::ERR)
                     }
@@ -307,7 +565,32 @@ pub async fn execute(
             }
         }
         #[cfg(feature = "with-sd-card")]
-        processing::GCodeValue::M21 => Ok(processing::CodeExecutionSuccess::OK),
+        processing::GCodeValue::M21 => match _card_controller.mount().await {
+            Ok(()) => {
+                processor.write(channel, "echo:SD card ok\n").await;
+                Ok(processing::CodeExecutionSuccess::OK)
+            }
+            Err(_e) => {
+                let reason = _card_controller.mount_error().await;
+                let s = crate::processing::LineBuf::<128>::from_fmt(format_args!("echo:SD init fail: {}\n", reason.as_str()));
+                processor.write(channel, s.as_str()).await;
+                Err(processing::CodeExecutionFailure::ERR)
+            }
+        },
+        #[cfg(feature = "with-sd-card")]
+        processing::GCodeValue::M22 => match _card_controller.unmount().await {
+            Ok(()) => {
+                processor.write(channel, "echo:SD card released\n").await;
+                Ok(processing::CodeExecutionSuccess::OK)
+            }
+            Err(_e) => {
+                processor.write(channel, "echo: M22: SD card in use\n").await;
+                Err(processing::CodeExecutionFailure::ERR)
+            }
+        },
+        // Outside a file being written (see M28) there is nothing to end
+        #[cfg(feature = "with-sd-card")]
+        processing::GCodeValue::M29 => Ok(processing::CodeExecutionSuccess::OK),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
         processing::GCodeValue::M524 => {
             match _printer_controller
@@ -315,6 +598,9 @@ pub async fn execute(
                 .await
             {
                 Ok(_) => {
+                    // Not printing any more from now on (M27/M73 reports), even before the print
+                    // job task closes the file
+                    hwa::controllers::JOB_PROGRESS.clear();
                     #[cfg(feature = "with-motion")]
                     processor.quick_stop().await;
                     processor.shutdown_heaters().await;
@@ -323,8 +609,13 @@ pub async fn execute(
                     processor.write(channel, "echo: Print job aborted\n").await;
                     Ok(processing::CodeExecutionSuccess::OK)
                 }
+                // Repeated (or nothing to do): no effect, answered ok as Marlin does
+                Err(hwa::controllers::PrinterControllerError::NoEffect) => {
+                    processor.write(channel, "echo: M524: No print job to abort\n").await;
+                    Ok(processing::CodeExecutionSuccess::OK)
+                }
                 Err(_e) => {
-                    let s = alloc::format!("echo: M524: Unable to abort: {:?}\n", _e);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M524: Unable to abort: {:?}\n", _e));
                     processor.write(channel, s.as_str()).await;
                     Err(processing::CodeExecutionFailure::ERR)
                 }
@@ -333,10 +624,16 @@ pub async fn execute(
         #[cfg(feature = "with-print-job")]
         processing::GCodeValue::M23(file) => {
             let file_name = file.clone().unwrap_or_default();
-            match _card_controller.new_stream(file_name.as_str()).await {
-                Ok(stream) => stream.close().await,
+            // Only checks that it can be opened. Reduced to its closer before awaiting, so the
+            // stream (~0.5 KB) is not part of the task state
+            let opened = _card_controller
+                .new_stream(file_name.as_str())
+                .await
+                .map(|stream| stream.into_closer());
+            match opened {
+                Ok(closer) => closer.close().await,
                 Err(_e) => {
-                    let s = alloc::format!("open failed, File: {}.\n", file_name);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("open failed, File: {}.\n", file_name));
                     processor.write(channel, s.as_str()).await;
                     return Err(processing::CodeExecutionFailure::ERR);
                 }
@@ -364,11 +661,23 @@ pub async fn execute(
                     Ok(processing::CodeExecutionSuccess::OK)
                 }
                 Err(_e) => {
-                    let s = alloc::format!("echo: M23: Unable to set: {:?}\n", _e);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M23: Unable to set: {:?}\n", _e));
                     processor.write(channel, s.as_str()).await;
                     Err(processing::CodeExecutionFailure::ERR)
                 }
             }
+        }
+        // SD print status. `S<secs>` sets the auto-report interval (0 = off), sent by the print
+        // job task to this channel
+        #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
+        processing::GCodeValue::M27(_s) => {
+            if let Some(secs) = _s.s {
+                let secs = secs.int().clamp(0, i64::from(u16::MAX)) as u16;
+                hwa::controllers::JOB_PROGRESS.set_autoreport(secs, channel);
+            } else {
+                processor.write_sd_status(channel).await;
+            }
+            Ok(processing::CodeExecutionSuccess::OK)
         }
         #[cfg(feature = "with-print-job")]
         processing::GCodeValue::M24 => {
@@ -381,8 +690,13 @@ pub async fn execute(
                     processor.write(channel, "echo: Print job resumed\n").await;
                     Ok(processing::CodeExecutionSuccess::CONSUMED)
                 }
+                // Repeated (or nothing to do): no effect, answered ok as Marlin does
+                Err(hwa::controllers::PrinterControllerError::NoEffect) => {
+                    processor.write(channel, "echo: M24: Print job already running\n").await;
+                    Ok(processing::CodeExecutionSuccess::OK)
+                }
                 Err(_e) => {
-                    let s = alloc::format!("echo: M24: Unable to start/resume: {:?}\n", _e);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M24: Unable to start/resume: {:?}\n", _e));
                     processor.write(channel, s.as_str()).await;
                     Err(processing::CodeExecutionFailure::ERR)
                 }
@@ -399,8 +713,13 @@ pub async fn execute(
                     processor.write(channel, "echo: Print job paused\n").await;
                     Ok(processing::CodeExecutionSuccess::CONSUMED)
                 }
+                // Repeated (or nothing to do): no effect, answered ok as Marlin does
+                Err(hwa::controllers::PrinterControllerError::NoEffect) => {
+                    processor.write(channel, "echo: M25: Print job already paused\n").await;
+                    Ok(processing::CodeExecutionSuccess::OK)
+                }
                 Err(_e) => {
-                    let s = alloc::format!("echo: M25: Unable to pause print job: {:?}\n", _e);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M25: Unable to pause print job: {:?}\n", _e));
                     processor.write(channel, s.as_str()).await;
                     Err(processing::CodeExecutionFailure::ERR)
                 }
@@ -421,7 +740,7 @@ async fn report(
         Ok(processing::CodeExecutionSuccess::OK) => {
             cfg_if::cfg_if! {
                 if #[cfg(feature="trace-commands")] {
-                    let s = alloc::format!("ok; [trace-commands] {}\n", gc);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("ok; [trace-commands] {}\n", gc));
                     processor.write(channel, s.as_str()).await;
                 }
                 else {
@@ -432,7 +751,7 @@ async fn report(
         Ok(processing::CodeExecutionSuccess::QUEUED) => {
             cfg_if::cfg_if! {
                 if #[cfg(feature="trace-commands")] {
-                    let s = alloc::format!("ok; [trace-commands] promised {}\n", gc);
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("ok; [trace-commands] promised {}\n", gc));
                     processor.write(channel, s.as_str()).await;
                 }
                 else {
@@ -444,21 +763,26 @@ async fn report(
             #[cfg(feature = "trace-commands")]
             {
                 hwa::debug!("Control not sending (deferred)");
-                let s = alloc::format!("echo; promised {}\n", gc);
+                let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo; promised {}\n", gc));
                 processor.write(channel, s.as_str()).await;
             }
         }
         Ok(processing::CodeExecutionSuccess::CONSUMED) => {
             #[cfg(feature = "trace-commands")]
             {
-                let s = alloc::format!("echo; already confirmed {}\n", gc);
+                let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo; already confirmed {}\n", gc));
                 processor.write(channel, s.as_str()).await;
             }
         }
         Err(_e) => {
             hwa::warn!("Control sending ERR for {} ({:?})", gc, _e);
-            let s = alloc::format!("{} {} ({:?})\n", ERR_PREFIX, gc, _e);
+            // Heap-free: the command may carry a text of up to MAX_TEXT_LENGTH (128) bytes,
+            // already in the heap. The report is truncated when too long
+            use core::fmt::Write;
+            let mut s = processing::LineBuf::<192>::new();
+            let _ = write!(s, "{} {} ({:?})", ERR_PREFIX, gc, _e);
             processor.write(channel, s.as_str()).await;
+            processor.write(channel, "\n").await;
             // Every command gets an `ok`, so that hosts (OctoPrint, Pronterface...) do not stall
             processor.write_ok(channel).await;
         }

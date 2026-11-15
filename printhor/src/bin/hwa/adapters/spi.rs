@@ -271,7 +271,10 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
             arg as u8,
             0,
         ];
-        buf[5] = crc7(&buf[0..5]);
+        // embedded-sdmmc >= 0.10 returns the raw 7-bit CRC: the byte is the CRC and the end bit
+        // (0.8 returned that byte). With the raw CRC every command but CMD0 (still in SD mode
+        // only for some cards) is rejected with a CRC error, e.g. CMD8: the card never opened
+        buf[5] = (crc7(&buf[0..5]) << 1) | 1;
 
         self.write_bytes(&buf)?;
 
@@ -385,8 +388,9 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PI
         })
     }
 
+    /// The card is only read: writing is reported as unsupported (never panics)
     fn write(&self, _blocks: &[Block], _start_block_idx: BlockIdx) -> Result<(), Self::Error> {
-        todo!()
+        Err(Error::WriteNotSupported)
     }
 
     fn num_blocks(&self) -> Result<BlockCount, Self::Error> {
@@ -402,6 +406,8 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PI
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[derive(Debug, Copy, Clone)]
 pub enum Error {
+    /// Writing blocks is not supported (the card is only read)
+    WriteNotSupported,
     /// We got an error from the SPI peripheral
     Transport,
     /// We failed to enable CRC checking on the SD card

@@ -119,6 +119,26 @@ pub trait HwiContract: Sized {
                 hwa::math::TVector::new_with_coord(hwa::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
             };
 
+            /// Default probe offset (`M851`) in World Units: the probe position relative to the
+            /// nozzle, as Marlin's `NOZZLE_TO_PROBE_OFFSET` (a negative Z is a probe that triggers
+            /// below the nozzle). Applied at boot and by `M502`; `M500` persists a changed one.
+            const DEFAULT_PROBE_OFFSET_WU: hwa::math::TVector<hwa::math::Real> = const {
+                hwa::math::TVector::new_with_coord(hwa::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
+            };
+
+            /// Homing feed rate of each axis (World Units / second), as Marlin's
+            /// `HOMING_FEEDRATE_MM_M` (divided by 60): the fast approach to the end-stop and the
+            /// other homing moves of the axis. The slow (fine) approach is this rate divided by
+            /// the bump divisor (2 for X and Y, 4 for Z, as Marlin's `HOMING_BUMP_DIVISOR`).
+            ///
+            /// A move with an axis without a rate (none by default) homes at fixed step rates
+            /// instead (whatever the steps per unit): 2000 steps/s, and 1000 steps/s the slow
+            /// approach of X and Y; 1000 steps/s the descent of Z and 250 steps/s its slow one.
+            ///
+            /// The homing moves have no acceleration ramp: the motors start (and stop) at once
+            /// at this rate, so it must be within their start-stop range.
+            const HOMING_FEED_RATE_PS: hwa::math::TVector<hwa::math::Real> = hwa::math::TVector::new();
+
             /// Speed-up of the step clock of the homing moves (1: the step frequencies of the homing
             /// sequence as they are).
             ///
@@ -194,6 +214,31 @@ pub trait HwiContract: Sized {
             /// Default max speed in physical units by second
             const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real;
 
+            /// Largest instantaneous change of the velocity vector at the junction of two moves
+            /// (Physical Units / second, as Marlin's `M205 X`/Klipper's square corner velocity):
+            /// a corner of angle θ is crossed at no more than `Δv / (2·sin(θ/2))`. The direction
+            /// changes at once at a junction, so the motors take that jump without any ramp: a
+            /// jolt that excites the frame. Collinear junctions are not limited. `0`: only the
+            /// projection limit (`v·cos θ`). Settable with `M205 X`.
+            const DEFAULT_CORNER_SPEED_CHANGE_PS: hwa::math::Real = hwa::make_real!(5.0);
+
+            /// Servo outputs (`with-motion-broadcast`): the direction of each axis, `1` or `-1` for
+            /// a servo mounted mirrored (e.g. the femur and tibia servos of two of the legs of a
+            /// quadruped with rotational symmetry). The servo is driven to
+            /// `SERVO_DIRECTION · angle + SERVO_OFFSET`.
+            const SERVO_DIRECTION: hwa::math::TVector<hwa::math::Real> = hwa::math::TVector::new_with_coord(
+                hwa::math::CoordSel::all_axis(),
+                hwa::make_optional_real!(1.0),
+            );
+
+            /// Servo outputs (`with-motion-broadcast`): the angle (degrees) to add to each axis, so
+            /// that the joint angle 0 (the home pose) is the centre position of a servo whose horn
+            /// is not mounted exactly there (its calibration). See [Self::SERVO_DIRECTION].
+            const SERVO_OFFSET: hwa::math::TVector<hwa::math::Real> = hwa::math::TVector::new_with_coord(
+                hwa::math::CoordSel::all_axis(),
+                hwa::make_optional_real!(0.0),
+            );
+
             /// Default units per workspace unit
             const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real>;
 
@@ -257,7 +302,7 @@ pub trait HwiContract: Sized {
 
             /// Max temperature (ºC) of the **HotEnd**. Reaching it shuts down every heater and raises
             /// `SYS_ALARM` (MAXTEMP). Targets above `HOT_END_MAX_TEMP - 15` are rejected.
-            const HOT_END_MAX_TEMP: f32 = 275.0;
+            const HOT_END_MAX_TEMP: f32 = 310.0;
 
             /// Min temperature (ºC) of the **HotEnd**. A lower reading while heating is considered a
             /// sensor failure (MINTEMP), as it is what an open/disconnected thermistor reads.
@@ -326,7 +371,7 @@ pub trait HwiContract: Sized {
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32;
 
             /// Max temperature (ºC) of the **HotBed** (MAXTEMP). See [HwiContract::HOT_END_MAX_TEMP]
-            const HOT_BED_MAX_TEMP: f32 = 125.0;
+            const HOT_BED_MAX_TEMP: f32 = 150.0;
 
             /// Min temperature (ºC) of the **HotBed** (MINTEMP). See [HwiContract::HOT_END_MIN_TEMP]
             const HOT_BED_MIN_TEMP: f32 = 5.0;
@@ -525,6 +570,21 @@ pub trait HwiContract: Sized {
         if #[cfg(feature = "with-trinamic")] {
             const TRINAMIC_UART_BAUD_RATE: u32;
             type TrinamicUartDevice: traits::TrinamicUartTrait;
+
+            /// Sense resistor of the drivers (ohms), as Marlin's `X_RSENSE`... Only used to
+            /// compute the current scale of [Self::TRINAMIC_RUN_CURRENT_MA]: a wrong value
+            /// drives a wrong current (check the schematic of the board).
+            const TRINAMIC_RSENSE_OHMS: f32 = 0.11;
+
+            /// RMS run current (mA) of the driver of each axis, as Marlin's `X_CURRENT`, ...,
+            /// `E0_CURRENT`: set through the UART (`IRUN` and `vsense`, as Marlin), with the
+            /// internal current reference. A driver without a value (none by default) keeps the
+            /// current it powers up with, scaled by the voltage of its `VREF` pin.
+            const TRINAMIC_RUN_CURRENT_MA: hwa::math::TVector<u16> = hwa::math::TVector::new();
+
+            /// Standstill (hold) current as a fraction of the run current, as Marlin's
+            /// `HOLD_MULTIPLIER`. Only for the drivers with a [Self::TRINAMIC_RUN_CURRENT_MA].
+            const TRINAMIC_HOLD_MULTIPLIER: f32 = 0.5;
         }
     }
 

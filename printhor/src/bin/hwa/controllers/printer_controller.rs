@@ -58,11 +58,21 @@ pub enum PrinterControllerError {
     /// The requested operation has no effect.
     /// For example, trying to start a job that is already started, or stop a job that is already stopped.
     NoEffect,
+
+    /// Too many job events pending to be consumed by the print job task: retry later.
+    Busy,
+
+    /// Attempted to start/resume (`M24`) with no file selected (`M23`).
+    NoFileSelected,
 }
 
-pub type PrinterControllerSignalType = embassy_sync::signal::Signal<
+/// Pending job events (e.g. `M23` immediately followed by `M24`) are queued, never overwritten.
+const PRINTER_CONTROLLER_QUEUE_LEN: usize = 4;
+
+pub type PrinterControllerSignalType = embassy_sync::channel::Channel<
     hwa::types::PrinterControllerSignalMutexType,
     PrinterControllerEvent,
+    PRINTER_CONTROLLER_QUEUE_LEN,
 >;
 
 /// The `PrinterController` struct represents the controller for managing printer operations.
@@ -118,6 +128,11 @@ impl PrinterController {
         &mut self,
         event: PrinterControllerEvent,
     ) -> Result<(), PrinterControllerError> {
+        // Checked before the state transition, so a full queue leaves everything untouched. Never
+        // waits for room: the print job task itself (the consumer) also sets events (e.g. `M2`)
+        if self.channel.is_full() {
+            return Err(PrinterControllerError::Busy);
+        }
         let update_result = match &event {
             PrinterControllerEvent::SetFile(_channel, _) => {
                 hwa::debug!(">> SetFile");
@@ -139,11 +154,9 @@ impl PrinterController {
             PrinterControllerEvent::Resume(_channel) => {
                 hwa::debug!(">> Resume");
                 match &self.status.wait().await {
-                    PrinterControllerStatus::Ready(channel) => {
-                        hwa::debug!("Ready -> Printing");
-                        self.status
-                            .signal(PrinterControllerStatus::Printing(*channel));
-                        Ok(())
+                    // Nothing selected: there is nothing to start
+                    PrinterControllerStatus::Ready(_channel) => {
+                        Err(PrinterControllerError::NoFileSelected)
                     }
                     PrinterControllerStatus::Printing(_channel) => {
                         Err(PrinterControllerError::NoEffect)
@@ -196,8 +209,10 @@ impl PrinterController {
         };
         match update_result {
             Ok(()) => {
-                self.channel.signal(event);
-                Ok(())
+                // Room was checked above and this is the only producer path
+                self.channel
+                    .try_send(event)
+                    .map_err(|_| PrinterControllerError::Busy)
             }
             Err(_any) => Err(_any),
         }
@@ -208,19 +223,29 @@ impl PrinterController {
         self.status.signal(PrinterControllerStatus::Ready(channel));
     }
 
+    /// The current status. It is updated synchronously by [Self::set] (before the print job task
+    /// consumes the event), so it is the reference for the print job task to react: e.g. a job
+    /// loop stops as soon as the status is not `Printing` any more.
+    pub async fn status(&self) -> PrinterControllerStatus {
+        self.status.wait().await
+    }
+
+    /// Whether the job is (still) meant to be running
+    pub async fn is_printing(&self) -> bool {
+        matches!(self.status.wait().await, PrinterControllerStatus::Printing(_))
+    }
+
     /// Whether a job is selected or running
     pub async fn is_busy(&self) -> bool {
         !matches!(self.status.wait().await, PrinterControllerStatus::Ready(_))
     }
 
     pub async fn consume(&self) -> PrinterControllerEvent {
-        let evt = self.channel.wait().await;
-        self.channel.reset();
-        evt
+        self.channel.receive().await
     }
 
     pub async fn signaled(&self) -> bool {
-        self.channel.signaled()
+        !self.channel.is_empty()
     }
 }
 
@@ -233,3 +258,128 @@ impl Clone for PrinterController {
         }
     }
 }
+
+//#region "Job progress"
+
+use core::sync::atomic::{AtomicU8, AtomicU16, AtomicU32, Ordering};
+
+/// No value set (percentage)
+const PERCENT_NONE: u8 = u8::MAX;
+/// No value set (remaining minutes)
+const REMAINING_NONE: u32 = u32::MAX;
+
+/// Progress of the SD print job (`M27`, `M73`), shared between the tasks without locks nor heap.
+///
+/// Only plain atomic loads/stores are used (no read-modify-write), which every target supports,
+/// Cortex-M0+ included. The fields are independent: a reader may combine a position and a size
+/// from slightly different instants, which is harmless for a progress report.
+pub struct JobProgress {
+    /// Size of the selected file in bytes (0 = no file selected)
+    size: AtomicU32,
+    /// Bytes of the file consumed by the job
+    position: AtomicU32,
+    /// Percentage set by the slicer (`M73 P`), or [PERCENT_NONE]
+    percent: AtomicU8,
+    /// Remaining minutes set by the slicer (`M73 R`), or [REMAINING_NONE]
+    remaining_min: AtomicU32,
+    /// `M27 S` auto-report interval in seconds (0 = off)
+    autoreport_s: AtomicU16,
+    /// Channel of the `M27 S` request, where the auto-reports go
+    autoreport_channel: critical_section::Mutex<core::cell::Cell<CommChannel>>,
+}
+
+impl JobProgress {
+    const fn new() -> Self {
+        Self {
+            size: AtomicU32::new(0),
+            position: AtomicU32::new(0),
+            percent: AtomicU8::new(PERCENT_NONE),
+            remaining_min: AtomicU32::new(REMAINING_NONE),
+            autoreport_s: AtomicU16::new(0),
+            autoreport_channel: critical_section::Mutex::new(core::cell::Cell::new(
+                CommChannel::Internal,
+            )),
+        }
+    }
+
+    /// A file of `size` bytes was selected: the progress starts from zero
+    pub fn start(&self, size: u32) {
+        self.position.store(0, Ordering::Relaxed);
+        self.percent.store(PERCENT_NONE, Ordering::Relaxed);
+        self.remaining_min.store(REMAINING_NONE, Ordering::Relaxed);
+        self.size.store(size, Ordering::Relaxed);
+    }
+
+    /// No file selected any more (job completed, aborted or replaced)
+    pub fn clear(&self) {
+        self.size.store(0, Ordering::Relaxed);
+        self.position.store(0, Ordering::Relaxed);
+        self.percent.store(PERCENT_NONE, Ordering::Relaxed);
+        self.remaining_min.store(REMAINING_NONE, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn set_position(&self, position: u32) {
+        self.position.store(position, Ordering::Relaxed);
+    }
+
+    /// `M73`: the values given by the slicer (each one only when present)
+    pub fn set_slicer_progress(&self, percent: Option<u8>, remaining_min: Option<u32>) {
+        if let Some(p) = percent {
+            self.percent.store(p.min(100), Ordering::Relaxed);
+        }
+        if let Some(r) = remaining_min {
+            self.remaining_min
+                .store(r.min(REMAINING_NONE - 1), Ordering::Relaxed);
+        }
+    }
+
+    /// `(position, size)` while a file is selected
+    pub fn sd_bytes(&self) -> Option<(u32, u32)> {
+        let size = self.size.load(Ordering::Relaxed);
+        match size {
+            0 => None,
+            _ => Some((self.position.load(Ordering::Relaxed).min(size), size)),
+        }
+    }
+
+    /// The percentage given by the slicer (`M73`), or else computed from the file position
+    pub fn percent(&self) -> Option<u8> {
+        match self.percent.load(Ordering::Relaxed) {
+            PERCENT_NONE => self
+                .sd_bytes()
+                .map(|(pos, size)| ((u64::from(pos) * 100) / u64::from(size)) as u8),
+            p => Some(p),
+        }
+    }
+
+    /// The remaining minutes given by the slicer (`M73 R`)
+    pub fn remaining_min(&self) -> Option<u32> {
+        match self.remaining_min.load(Ordering::Relaxed) {
+            REMAINING_NONE => None,
+            r => Some(r),
+        }
+    }
+
+    /// `M27 S<secs>` (0 = off): the reports go to `channel`
+    pub fn set_autoreport(&self, secs: u16, channel: CommChannel) {
+        critical_section::with(|cs| self.autoreport_channel.borrow(cs).set(channel));
+        self.autoreport_s.store(secs, Ordering::Relaxed);
+    }
+
+    /// The `M27 S` auto-report interval and channel, when enabled
+    pub fn autoreport(&self) -> Option<(u16, CommChannel)> {
+        match self.autoreport_s.load(Ordering::Relaxed) {
+            0 => None,
+            secs => Some((
+                secs,
+                critical_section::with(|cs| self.autoreport_channel.borrow(cs).get()),
+            )),
+        }
+    }
+}
+
+/// The progress of the SD print job
+pub static JOB_PROGRESS: JobProgress = JobProgress::new();
+
+//#endregion

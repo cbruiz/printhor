@@ -232,12 +232,13 @@ pub(crate) mod serial_port_2 {
 
         async fn next(&mut self) -> Option<Self::Item> {
             let mut buff: [u8; 1] = [0; 1];
-
-            match self.receiver.read_exact(&mut buff[..]).await {
-                Ok(_r) => {
-                    Some(Ok(buff[0]))
-                },
-                Err(_e) => None,
+            loop {
+                match self.receiver.read_exact(&mut buff[..]).await {
+                    Ok(_r) => return Some(Ok(buff[0])),
+                    // Line errors (framing/noise/overrun) are recoverable: embassy restarts
+                    // the ring-buffered RX on the next read. Drop the byte instead of EOF.
+                    Err(_e) => hwa::warn!("SerialPort2 rx error: {:?}", _e),
+                }
             }
         }
 
@@ -284,22 +285,22 @@ cfg_if::cfg_if! {
                 if _coord == hwa::CoordSel::E {
                     return Ok(3)
                 }
-                hwa::error!("Uknown TMC stepper axis activation requested: {:?}", _coord);
+                hwa::error!("[TrinamicUartWrapper] Uknown TMC stepper axis activation requested: {:?}", _coord);
                 return Err(())
             }
 
             async fn read_until_idle(&mut self, buffer: &mut [u8]) -> Result<usize, printhor_hwa_common::uart::SerialError> {
                 match embassy_time::with_timeout(embassy_time::Duration::from_secs(1), self.rx.read_until_idle(buffer)).await {
                     Ok(Ok(x)) => {
-                        hwa::info!("Ok read: {} bytes", x);
+                        hwa::debug!("[TrinamicUartWrapper] Ok read: {} bytes", x);
                         Ok(x)
                     },
                     Ok(Err(_error)) => {
-                        hwa::error!("Error: {}", _error);
+                        hwa::debug!("[TrinamicUartWrapper] Error: {}", _error);
                         Err(hwa::uart::SerialError::Framing)
                     },
                     Err(_) => {
-                        hwa::warn!("Timeout");
+                        hwa::debug!("[TrinamicUartWrapper] Timeout");
                         Err(hwa::uart::SerialError::Timeout)
                     }
                  }
@@ -320,11 +321,17 @@ cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
         /// ADC for the thermistors (TH0: PA0, THB: PC4).
         ///
-        /// The thermistors are sampled every few hundred milliseconds, so a blocking conversion
-        /// (a few microseconds, with 16x hardware oversampling) is simpler than DMA and has no
-        /// measurable cost.
+        /// Conversions go through DMA (DMA1_CH1, which has its own interrupt line): with the long
+        /// sample time and 16x hardware oversampling one conversion takes
+        /// 16 * (160.5 + 12.5) cycles / 32 MHz ~= 87 us, which a blocking read would busy-wait,
+        /// stalling every other task of the executor (e.g. the homing step train). With DMA the
+        /// task yields until the transfer completes.
         pub mod adc {
             use printhor_hwa_common as hwa;
+
+            embassy_stm32::bind_interrupts!(struct AdcDmaIrqs {
+                DMA1_CHANNEL1 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH1>;
+            });
 
             /// Long sample time: the thermistor inputs are high impedance (4.7K pull-up + RC filter)
             const SAMPLE_TIME: embassy_stm32::adc::SampleTime =
@@ -335,13 +342,17 @@ cfg_if::cfg_if! {
                 T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
             {
                 adc: embassy_stm32::adc::Adc<'static, T>,
+                dma: embassy_stm32::Peri<'static, embassy_stm32::peripherals::DMA1_CH1>,
             }
 
             impl<T> AdcWrapper<T>
             where
                 T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
             {
-                pub fn new(adc_peripheral: embassy_stm32::Peri<'static, T>) -> Self {
+                pub fn new(
+                    adc_peripheral: embassy_stm32::Peri<'static, T>,
+                    dma: embassy_stm32::Peri<'static, embassy_stm32::peripherals::DMA1_CH1>,
+                ) -> Self {
                     let mut config = embassy_stm32::adc::AdcConfig::default();
                     // The ADC kernel clock must not exceed 35 MHz: PCLK (64 MHz) / 2
                     config.clock = Some(embassy_stm32::adc::Clock::Sync {
@@ -352,6 +363,7 @@ cfg_if::cfg_if! {
                     config.averaging = Some(embassy_stm32::adc::Averaging::Samples16);
                     Self {
                         adc: embassy_stm32::adc::Adc::new_with_config(adc_peripheral, config),
+                        dma,
                     }
                 }
             }
@@ -359,13 +371,24 @@ cfg_if::cfg_if! {
             impl<T> hwa::traits::UnifiedAdc16 for AdcWrapper<T>
             where
                 T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+                embassy_stm32::peripherals::DMA1_CH1: embassy_stm32::adc::RxDma<T>,
             {
                 type VRefPin = ();
                 type SamplePin = embassy_stm32::adc::AnyAdcChannel<'static, T>;
 
                 fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl core::future::Future<Output = u16> {
-                    let sample = self.adc.blocking_read(pin, SAMPLE_TIME);
-                    async move { sample }
+                    async move {
+                        let mut reading = [0u16; 1];
+                        self.adc
+                            .read(
+                                self.dma.reborrow(),
+                                AdcDmaIrqs,
+                                [(pin, SAMPLE_TIME)].into_iter(),
+                                &mut reading,
+                            )
+                            .await;
+                        reading[0]
+                    }
                 }
             }
         }

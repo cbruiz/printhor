@@ -98,6 +98,7 @@ cfg_if::cfg_if! {
 }
 #[allow(unused)]
 pub use embassy_stm32::timer::GeneralInstance4Channel as PwmTrait;
+#[cfg(feature = "with-motion")]
 use hwa::CoordSel;
 #[cfg(feature = "with-trinamic")]
 use crate::board_stm32g0::io::TrinamicUartWrapper;
@@ -240,11 +241,12 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _mask.contains(CoordSel::E) {
+                    // Inverted: forward (extrusion) is DIR low with the stock extruder motor
                     if _channels.contains(CoordSel::E)  {
-                        let _ = self.e_dir_pin.set_high();
+                        let _ = self.e_dir_pin.set_low();
                     }
                     else {
-                        let _ = self.e_dir_pin.set_low();
+                        let _ = self.e_dir_pin.set_high();
                     }
                 }
             }

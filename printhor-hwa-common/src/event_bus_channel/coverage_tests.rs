@@ -45,6 +45,10 @@ fn controller_publishes_only_masked_changes() {
     );
     let mut controller = EventBusChannelController::new(channel);
     let mut sub = controller.subscriber().unwrap();
+    assert_eq!(controller.get_status(), EventFlags::INITIAL);
+    // Start from a known status, whatever the features
+    controller.publish_event(EventStatus::not_containing(EventFlags::all()));
+    let _ = sub.try_next_message_pure();
     assert_eq!(controller.get_status(), EventFlags::empty());
 
     controller.publish_event(EventStatus::containing(EventFlags::MOVING));
@@ -83,19 +87,19 @@ fn controller_publishes_only_masked_changes() {
 async fn subscriber_status_tracks_the_latest_published_state() {
     let bus = new_bus!("CoverageBusStatus");
     let mut sub = bus.subscriber().await;
-    assert_eq!(sub.get_status().await, EventFlags::empty());
+    assert_eq!(sub.get_status().await, EventFlags::INITIAL);
 
     // Several changes before the subscriber looks: it reports the last one
     bus.publish_event(EventStatus::containing(EventFlags::ATX_ON)).await;
     bus.publish_event(EventStatus::containing(EventFlags::SYS_READY)).await;
     assert_eq!(
         sub.get_status().await,
-        EventFlags::ATX_ON | EventFlags::SYS_READY
+        EventFlags::INITIAL | EventFlags::ATX_ON | EventFlags::SYS_READY
     );
     // And keeps reporting it while nothing changes
     assert_eq!(
         sub.get_status().await,
-        EventFlags::ATX_ON | EventFlags::SYS_READY
+        EventFlags::INITIAL | EventFlags::ATX_ON | EventFlags::SYS_READY
     );
     assert!(bus.has_flags(EventFlags::ATX_ON | EventFlags::SYS_READY).await);
     assert!(!bus.has_flags(EventFlags::ATX_ON | EventFlags::HOMING).await);

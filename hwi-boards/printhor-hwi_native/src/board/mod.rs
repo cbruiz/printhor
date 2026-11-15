@@ -29,17 +29,14 @@ pub(crate) fn set_usb_socket_path(path: String) -> &'static str {
 }
 mod types;
 
-cfg_if::cfg_if! {
-    if #[cfg(feature = "with-trinamic")] {
-        pub mod comm;
-    }
-}
-
 pub struct Contract;
 impl hwa::HwiContract for Contract {
 
     //#region "Board specific constants"
 
+    /// Machine name reported to hosts and displays (M115 `MACHINE_TYPE`). Overridable at build
+    /// time with the `MACHINE_TYPE` environment variable (see `.cargo/config.toml`)
+    #[const_env::env_item("MACHINE_TYPE")]
     const MACHINE_TYPE: &'static str = "Simulator/debugger";
     const MACHINE_BOARD: &'static str = "PC";
     const MACHINE_PROCESSOR: &'static str = std::env::consts::ARCH;
@@ -175,11 +172,22 @@ impl hwa::HwiContract for Contract {
                     #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 50;
 
+                    /// At most one step per tick and axis: the clock must allow the max speed
+                    /// (600 º/s · 10 steps/º). With 100 Hz every servo was limited to 10 º/s
                     #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
-                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100;
+                    const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 6_000;
 
                     #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 20;
+
+                    /// Freenove Quadruped Robot Kit (FNK0027/FNK0030): the femur and tibia servos of
+                    /// the front-right (A B C) and back-left (I J K) legs are mounted mirrored
+                    /// (jointDir = false in FNQR/src/FNQRBasic.cpp). The calibration of each servo
+                    /// goes in SERVO_OFFSET (degrees, default 0)
+                    const SERVO_DIRECTION: hwa::math::TVector<hwa::math::Real> = hwa::make_vector_real!(
+                        x=1.0, y=1.0, z=1.0, a=1.0, b=-1.0, c=-1.0,
+                        i=1.0, j=-1.0, k=-1.0, u=1.0, v=1.0, w=1.0
+                    );
 
                     #[const_env::env_item("U_SEGMENT_QUEUE_SIZE")]
                     const U_SEGMENT_QUEUE_SIZE: u8 = 10;
@@ -198,8 +206,10 @@ impl hwa::HwiContract for Contract {
                         hwa::make_vector_real!(x=110.0, y=110.0, z=110.0)
                     };
 
+                    /// Z and E: 250, the most the step planner clock allows them (100 kHz, one step per
+                    /// tick, at 400 steps/mm). Above it they were executed slower than planned
                     const DEFAULT_MAX_SPEED_PS: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=600.0, y=600.0, z=300.0, e=300.0)
+                        hwa::make_vector_real!(x=600.0, y=600.0, z=250.0, e=250.0)
                     };
 
                     const DEFAULT_MAX_ACCEL_PS: hwa::math::TVector<hwa::math::Real> = const {
@@ -525,41 +535,10 @@ impl hwa::HwiContract for Contract {
             }
         }
 
-        cfg_if::cfg_if! {
-            if #[cfg(all(feature = "with-trinamic"))] {
-                let trinamic_uart = {
-                    device::TrinamicUart::new(
-                        Self::TRINAMIC_UART_BAUD_RATE,
-                        #[cfg(feature="with-x-axis")]
-                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(0, _pin_state)),
-                        #[cfg(feature="with-y-axis")]
-                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(1, _pin_state)),
-                        #[cfg(feature="with-z-axis")]
-                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(2, _pin_state)),
-                        #[cfg(feature="with-e-axis")]
-                        comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(3, _pin_state)),
-                    )
-                };
+        #[cfg(feature = "with-trinamic")]
+        let trinamic_uart = device::TrinamicUart::new();
 
-                _spawner.spawn(
-                    device::trinamic_driver_simulator(
-                        device::MockedTrinamicDriver::new(
-                            Self::TRINAMIC_UART_BAUD_RATE,
-                            #[cfg(feature="with-x-axis")]
-                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(0, _pin_state)),
-                            #[cfg(feature="with-y-axis")]
-                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(1, _pin_state)),
-                            #[cfg(feature="with-z-axis")]
-                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(2, _pin_state)),
-                            #[cfg(feature="with-e-axis")]
-                            comm::AnyPinWrapper(mocked_peripherals::MockedIOPin::new(3, _pin_state)),
-                        )
-                    ).unwrap()
-                );
-            }
-        }
-
-        cfg_if::cfg_if! {
+                cfg_if::cfg_if! {
             if #[cfg(feature = "with-spi")] {
                 let spi = hwa::make_static_async_controller!(
                     "SPI1",
@@ -674,7 +653,7 @@ impl hwa::HwiContract for Contract {
                 let sd_card_block_device = {
                     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/sdcard.img");
                     hwa::info!("Loading sdcard.img from {}", path);
-                    device::SDCardBlockDevice::new(path).unwrap()
+                    device::SDCardBlockDevice::new(path)
                 };
             }
         }
@@ -824,7 +803,7 @@ impl hwa::HwiContract for Contract {
                                 next_frame = std::time::Instant::now();
                             }
                         }
-                    }).unwrap();
+                    }).map_err(|_e| hwa::error!("[task_stepper_ticker] Unable to start the ticker thread: {:?}", _e));
             }
 
             fn pause_ticker() {
@@ -863,11 +842,13 @@ impl hwa::HwiContract for Contract {
                         executor.run(move |_spawner: embassy_executor::Spawner| {
                             use std::ops::DerefMut;
                             let spawner = _spawner.make_send();
-                            let mut mg = tk.lock().unwrap();
-                            let t = mg.deref_mut().take().unwrap();
-                            spawner.spawn(t.inner);
+                            let mut mg = tk.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                            match mg.deref_mut().take() {
+                                Some(t) => spawner.spawn(t.inner),
+                                None => hwa::error!("[Broadcaster] No task to spawn"),
+                            }
                         });
-                    }).unwrap();
+                    }).map_err(|_e| hwa::error!("[Broadcaster] Unable to start the thread: {:?}", _e));
                 Ok(())
             }
         }

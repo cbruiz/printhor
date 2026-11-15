@@ -125,6 +125,7 @@ fn targets_on_the_shell_boundaries_are_not_clamped() {
 #[test]
 fn partial_targets_are_rejected_or_passed_through() {
     let a = leg(CoordSel::X, CoordSel::Y, CoordSel::Z);
+    hwa::info!("Expecting Err: a leg target without its three coordinates has no inverse kinematics");
     let full = point(&a, lit(60), lit(10), lit(0));
     for missing in [a.rel_x_coord, a.rel_y_coord, a.rel_z_coord] {
         let partial = full.with_coord(missing, None);
@@ -217,6 +218,7 @@ mod quadruped {
             assert_point("quadruped round trip", l, &world, (60.0, 10.0, 0.0), pos_tol());
         }
 
+        hwa::info!("Expecting Err: a quadruped target with an incomplete leg can not be projected");
         let broken = target.with_coord(CoordSel::K, None);
         assert!(robot().project_to_space(&broken).is_err());
     }

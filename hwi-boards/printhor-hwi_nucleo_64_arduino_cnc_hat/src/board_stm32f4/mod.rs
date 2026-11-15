@@ -20,6 +20,9 @@ impl HwiContract for Contract {
 
     //#region "Board specific constants"
 
+    /// Machine name reported to hosts and displays (M115 `MACHINE_TYPE`). Overridable at build
+    /// time with the `MACHINE_TYPE` environment variable (see `.cargo/config.toml`)
+    #[const_env::env_item("MACHINE_TYPE")]
     const MACHINE_TYPE: &'static str = "NUCLEO64";
     const MACHINE_BOARD: &'static str = "NUCLEO64_Arduino_CNC_Hat_v3.x";
     /// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
@@ -432,7 +435,7 @@ impl HwiContract for Contract {
 
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
-            todo!("Not implemented")
+            compile_error!("with-trinamic is not supported on this board")
         };
 
         cfg_if::cfg_if! {

@@ -11,9 +11,15 @@ use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
 #[cfg(feature = "with-sd-card")]
 use embedded_sdmmc::embedded_sdmmc_types::sdcard::{
-    DATA_START_BLOCK, ERROR_OK, R1_IDLE_STATE, R1_ILLEGAL_COMMAND, R1_READY_STATE, crc7, crc16,
+    DATA_RES_ACCEPTED, DATA_RES_MASK, DATA_START_BLOCK, ERROR_OK, R1_IDLE_STATE,
+    R1_ILLEGAL_COMMAND, R1_READY_STATE, STOP_TRAN_TOKEN, WRITE_MULTIPLE_TOKEN, crc7, crc16,
     csd::Csd,
 };
+
+/// Highest SPI clock allowed while the card is initialized (SD Physical Layer spec: 100-400 kHz
+/// until the end of the identification). Many cards do not answer at all at a higher one.
+#[cfg(feature = "with-sd-card")]
+pub const SD_INIT_FREQUENCY: u32 = 400_000;
 #[cfg(feature = "with-sd-card")]
 use sd_cmd::*;
 
@@ -33,6 +39,14 @@ mod sd_cmd {
     pub const CMD17: u8 = 0x11;
     /// READ_MULTIPLE_BLOCK - read a multiple data blocks from the card
     pub const CMD18: u8 = 0x12;
+    /// SEND_STATUS - read the card status register
+    pub const CMD13: u8 = 0x0D;
+    /// WRITE_BLOCK - write a single data block to the card
+    pub const CMD24: u8 = 0x18;
+    /// WRITE_MULTIPLE_BLOCK - write blocks of data until a STOP_TRANSMISSION
+    pub const CMD25: u8 = 0x19;
+    /// SET_WR_BLK_ERASE_COUNT - number of blocks to pre-erase before a multiple block write
+    pub const ACMD23: u8 = 0x17;
     /// APP_CMD - escape for application specific command
     pub const CMD55: u8 = 0x37;
     /// READ_OCR - read the OCR register of a card
@@ -57,6 +71,9 @@ where
     cs: RefCell<PIN>,
     card_type: RefCell<Option<CardType>>,
     options: AcquireOpts,
+    /// Sets the SPI clock (Hz) of the bus, and the clock to use once the card is initialized (see
+    /// [Self::with_frequency_control])
+    frequency: Option<(fn(&mut <H as hwa::AsyncMutexStrategy>::Resource, u32), u32)>,
 }
 
 impl<H, PIN> SPIAdapter<H, PIN>
@@ -72,6 +89,31 @@ where
             cs: RefCell::new(cs),
             card_type: RefCell::new(None),
             options: AcquireOpts::default(),
+            frequency: None,
+        }
+    }
+
+    /// The card is initialized at [SD_INIT_FREQUENCY] and then used at `frequency`: `set` changes
+    /// the clock of the SPI bus (a board function, e.g. `Spi::set_config`). Without it the card is
+    /// initialized at the clock the bus was configured with, which many cards do not accept.
+    pub fn with_frequency_control(
+        mut self,
+        set: fn(&mut <H as hwa::AsyncMutexStrategy>::Resource, u32),
+        frequency: u32,
+    ) -> Self {
+        self.frequency = Some((set, frequency));
+        self
+    }
+
+    fn set_frequency(&self, hz: u32) {
+        if let Some((set, _)) = self.frequency {
+            let _ = self.spi.apply_or_error(
+                |spi| {
+                    set(spi, hz);
+                    Ok(())
+                },
+                (),
+            );
         }
     }
 
@@ -243,10 +285,37 @@ where
             s.card_type.borrow_mut().replace(card_type);
             Ok(())
         };
+        // The identification runs at the low clock; the bus goes back to its working clock
+        // whatever the result (it is shared)
+        self.set_frequency(SD_INIT_FREQUENCY);
         let result = f(self);
-        self.cs_high()?;
+        let cs = self.cs_high();
         let _ = self.read_byte();
+        if let Some((_, hz)) = self.frequency {
+            self.set_frequency(hz);
+        }
+        cs?;
         result
+    }
+
+    /// Write an arbitrary number of bytes to the card using the SD protocol and an optional CRC
+    fn write_data(&self, token: u8, buffer: &[u8]) -> Result<(), Error> {
+        self.write_byte(token)?;
+        self.write_bytes(buffer)?;
+        let crc_bytes = if self.options.use_crc {
+            crc16(buffer).to_be_bytes()
+        } else {
+            [0xFF, 0xFF]
+        };
+        // These two bytes are always sent. They are either a valid CRC, or junk, depending on
+        // whether CRC mode was enabled.
+        self.write_bytes(&crc_bytes)?;
+        let status = self.read_byte()?;
+        if (status & DATA_RES_MASK) != DATA_RES_ACCEPTED {
+            Err(Error::WriteError)
+        } else {
+            Ok(())
+        }
     }
 
     /// Perform a function that might error with the chipselect low.
@@ -279,7 +348,10 @@ where
             arg as u8,
             0,
         ];
-        buf[5] = crc7(&buf[0..5]);
+        // embedded-sdmmc >= 0.10 returns the raw 7-bit CRC: the byte is the CRC and the end bit
+        // (0.8 returned that byte). With the raw CRC every command but CMD0 (still in SD mode
+        // only for some cards) is rejected with a CRC error, e.g. CMD8: the card never opened
+        buf[5] = (crc7(&buf[0..5]) << 1) | 1;
 
         self.write_bytes(&buf)?;
 
@@ -397,8 +469,40 @@ where
         })
     }
 
-    fn write(&self, _blocks: &[Block], _start_block_idx: BlockIdx) -> Result<(), Self::Error> {
-        todo!()
+    /// Writes the blocks (as embedded-sdmmc's `SdCard`): CMD24 for one block, ACMD23 + CMD25
+    /// for several
+    fn write(&self, blocks: &[Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {
+        self.check_init()?;
+        let start_idx = match *self.card_type.borrow() {
+            Some(CardType::SD1 | CardType::SD2) => start_block_idx.0 * 512,
+            Some(CardType::SDHC) => start_block_idx.0,
+            None => return Err(Error::CardNotFound),
+        };
+        self.with_chip_select(|s| {
+            if blocks.len() == 1 {
+                s.card_command(CMD24, start_idx)?;
+                s.write_data(DATA_START_BLOCK, &blocks[0].contents)?;
+                s.wait_not_busy(Delay::new_write())?;
+                if s.card_command(CMD13, 0)? != 0x00 {
+                    return Err(Error::WriteError);
+                }
+                if s.read_byte()? != 0x00 {
+                    return Err(Error::WriteError);
+                }
+            } else {
+                // Pre-erase (faster multiple block writes on some cards)
+                s.card_acmd(ACMD23, blocks.len() as u32)?;
+                s.wait_not_busy(Delay::new_write())?;
+                s.card_command(CMD25, start_idx)?;
+                for block in blocks.iter() {
+                    s.wait_not_busy(Delay::new_write())?;
+                    s.write_data(WRITE_MULTIPLE_TOKEN, &block.contents)?;
+                }
+                s.wait_not_busy(Delay::new_write())?;
+                s.write_byte(STOP_TRAN_TOKEN)?;
+            }
+            Ok(())
+        })
     }
 
     fn num_blocks(&self) -> Result<BlockCount, Self::Error> {
@@ -418,17 +522,30 @@ where
     <H as hwa::AsyncMutexStrategy>::Resource: embedded_hal_0::blocking::spi::Write<u8>,
     PIN: embedded_hal_0::digital::v2::OutputPin,
 {
-    fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<H, PIN> {
-        let spi = self.spi.clone();
-        async move {
-            let _ = spi.retain().await;
-            Ok(())
-        }
+    type Lock = hwa::AsyncMutexGuard<
+        'static,
+        <H as hwa::AsyncMutexStrategy>::AsyncMutexType,
+        <H as hwa::AsyncMutexStrategy>::Resource,
+    >;
+
+    /// Locks the SPI bus (its static mutex) without borrowing `self`. It used to retain a clone
+    /// of the controller, whose own holder dropped the guard right away: `self.spi` was never
+    /// retained and every transfer failed with [Error::Transport] (the volume never opened)
+    fn do_lock(&self) -> impl core::future::Future<Output = Option<Self::Lock>> + use<H, PIN> {
+        self.spi.lock_owned()
+    }
+
+    fn do_hold(&self, lock: Self::Lock) -> Result<(), ()> {
+        self.spi.hold(lock)
     }
 
     fn do_release(&self) -> Result<(), ()> {
         self.release();
         Ok(())
+    }
+
+    fn reset_card(&mut self) {
+        self.card_type.replace(None);
     }
 }
 
@@ -456,8 +573,7 @@ pub enum Error {
     /// Error reading from the card
     ReadError,
 
-    /// Error writing to the card
-    #[allow(unused)]
+    /// Error writing to the card (rejected data block or bad status after the write)
     WriteError,
 
     /// Can't perform this operation with the card in this state
@@ -516,7 +632,6 @@ impl Delay {
     /// At ~10us each this is ~500ms.
     ///
     /// See `Part1_Physical_Layer_Simplified_Specification_Ver9.00-1.pdf` Section 4.6.2.2
-    #[allow(unused)]
     pub const DEFAULT_WRITE_RETRIES: u32 = 50_000;
 
     /// The default number of retries for a control command.
@@ -539,7 +654,6 @@ impl Delay {
     }
 
     /// Create a new Delay object with the maximum number of retries for a write operation.
-    #[allow(unused)]
     fn new_write() -> Delay {
         Delay::new(Self::DEFAULT_WRITE_RETRIES)
     }

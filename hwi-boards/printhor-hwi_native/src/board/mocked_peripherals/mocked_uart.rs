@@ -109,9 +109,14 @@ impl MockedUartTx {
     pub async fn wrapped_flush(&mut self) {
     }
     pub async fn wrapped_write(&mut self, b: &[u8]) {
-        let s = std::str::from_utf8(b).unwrap();
-        if let Some(capture) = SERIAL_PORT_1_CAPTURE.lock().unwrap().as_mut() {
-            capture.push_str(s);
+        // Lossy: non UTF-8 output never panics
+        let s = String::from_utf8_lossy(b);
+        if let Some(capture) = SERIAL_PORT_1_CAPTURE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_mut()
+        {
+            capture.push_str(&s);
         }
         print!("{}", s);
         let _ = stdout().flush().ok();

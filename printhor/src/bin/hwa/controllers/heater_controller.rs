@@ -489,6 +489,13 @@ where
         &self.config
     }
 
+    /// Test hook: changes the configuration (e.g. a shorter heating watch period, so that a
+    /// protection scenario does not wait as long as on a real machine)
+    #[cfg(test)]
+    pub fn config_mut(&mut self) -> &mut HeaterConfig {
+        &mut self.config
+    }
+
     /// The latched fault, if any
     pub fn fault(&self) -> Option<HeaterFault> {
         self.fault
@@ -751,15 +758,7 @@ where
     }
 
     pub fn is_awaited(&self) -> bool {
-        match &self.current_channel {
-            CommChannel::Internal => false,
-            #[cfg(any(
-                feature = "with-serial-usb",
-                feature = "with-serial-port-1",
-                feature = "with-serial-port-2"
-            ))]
-            _ => true,
-        }
+        !matches!(self.current_channel, CommChannel::Internal)
     }
 
     // Checks if heater is enabled
@@ -1088,11 +1087,14 @@ mod tests {
 #[cfg(test)]
 mod safety_tests;
 
-/// Natural logarithm accurate to ~1 ulp in f32 (micromath's `ln` is a coarse approximation that
-/// yields several ºC of error in the thermistor conversion).
+/// Natural logarithm accurate to 1 ulp in f32 (micromath's `ln` is a coarse approximation that
+/// yields several ºC of error in the thermistor conversion). Pure f32 (fdlibm's `logf` scheme):
+/// f64 would link the soft-double routines (~3.5 KB) on the boards without double-precision FPU.
 ///
-/// `x = m·2^e` with `m ∈ [√½, √2)`, then `ln(m) = 2·atanh(s)`, `s = (m-1)/(m+1)`, `|s| < 0.172`,
-/// whose odd series converges below f32 precision with five terms.
+/// `x = m·2^e` with `m ∈ [√½, √2)`, `f = m-1` (exact), `s = f/(2+f)`, `|s| < 0.172`, and
+/// `ln(m) = f - f²/2 + s·(f²/2 + R(s²))` where `R` is the odd atanh series (four terms reach f32
+/// precision). `e·ln2` is split in hi/lo parts so that the sum keeps full precision.
+/// Verified exhaustively against f64 `ln` (1 ulp max; < 0.0001 ºC in the thermistor range).
 fn accurate_ln(x: f32) -> f32 {
     if x.is_nan() || x < 0.0 {
         return f32::NAN;
@@ -1110,13 +1112,19 @@ fn accurate_ln(x: f32) -> f32 {
         e -= 24;
     }
     e += ((bits >> 23) as i32) - 127;
-    let mut m = f32::from_bits((bits & 0x007F_FFFF) | 0x3F80_0000) as f64;
-    if m > core::f64::consts::SQRT_2 {
+    let mut m = f32::from_bits((bits & 0x007F_FFFF) | 0x3F80_0000);
+    if m > core::f32::consts::SQRT_2 {
         m *= 0.5;
         e += 1;
     }
-    let s = (m - 1.0) / (m + 1.0);
+    // ln2 = LN2_HI + LN2_LO, LN2_HI with trailing zero bits so that `e·LN2_HI` is exact
+    const LN2_HI: f32 = 6.931_381_225_6e-1;
+    const LN2_LO: f32 = 9.058_000_614_5e-6;
+    let f = m - 1.0;
+    let s = f / (2.0 + f);
     let s2 = s * s;
-    let ln_m = 2.0 * s * (1.0 + s2 * (1.0 / 3.0 + s2 * (1.0 / 5.0 + s2 * (1.0 / 7.0 + s2 / 9.0))));
-    (ln_m + e as f64 * core::f64::consts::LN_2) as f32
+    let r = s2 * (2.0 / 3.0 + s2 * (2.0 / 5.0 + s2 * (2.0 / 7.0 + s2 * (2.0 / 9.0))));
+    let hfsq = 0.5 * f * f;
+    let ef = e as f32;
+    ef * LN2_HI - ((hfsq - (s * (hfsq + r) + ef * LN2_LO)) - f)
 }

@@ -101,4 +101,17 @@ fn main() {
 
     #[cfg(feature = "with-defmt")]
     println!("cargo:rustc-link-arg-bins=-Tdefmt.x");
+
+    // Identical code folding (rust-lld) on the boards: the functions whose machine code is the
+    // same (e.g. `__aeabi_memcpy4`/`8`, empty functions, generic instances compiled to the same
+    // code) share a single copy. ~1 KB of flash on the SKR Mini E3, the executed code is unchanged.
+    // `all` and not `safe`: rustc emits no address-significance tables, so `safe` folds nothing.
+    // Rust does not guarantee distinct addresses for distinct functions anyway (it merges them
+    // itself). Not in unoptimized builds: a debugger would show a folded function by another name.
+    let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let opt_level = std::env::var("OPT_LEVEL").unwrap_or_default();
+    if target_arch == "arm" && target_os == "none" && opt_level != "0" {
+        println!("cargo:rustc-link-arg-bins=--icf=all");
+    }
 }

@@ -2,7 +2,6 @@
 use crate::hwa;
 use hwa::AsyncMutexStrategy;
 use hwa::StaticAsyncController;
-use hwa::math;
 use hwa::traits::UnifiedAdc16;
 
 /// A controller for managing ADCs.
@@ -46,7 +45,7 @@ where
             "ADC Initialized: ref_int_default = {:?}, vref_sample = {:?} | v_ratio = {:?} volts/adc_unit",
             v_ref_default,
             sample,
-            math::Real::from_f32(self.v_ratio),
+            hwa::math::Real::from_f32(self.v_ratio),
         );
     }
 

@@ -91,11 +91,10 @@ pub async fn task_temperature(processor: processing::GCodeProcessor) {
         }
 
         if let Some((heater_id, f)) = fault {
-            let reason = alloc::format!(
-                "{}, system stopped! Heater_ID: {}",
-                f.description(),
-                heater_id
-            );
+            // Heap-free: the emergency path must not depend on the heap
+            use core::fmt::Write;
+            let mut reason = processing::LineBuf::<96>::new();
+            let _ = write!(reason, "{}, system stopped! Heater_ID: {}", f.description(), heater_id);
             processor.emergency_stop(reason.as_str()).await;
         } else if event_bus.has_flags(hwa::EventFlags::SYS_ALARM).await {
             processor.shutdown_heaters().await;
@@ -109,18 +108,18 @@ async fn report_autotune(
     outcome: hwa::controllers::AutotuneOutcome,
 ) {
     let msg = match outcome {
-        hwa::controllers::AutotuneOutcome::Done(kp, ki, kd) => alloc::format!(
+        hwa::controllers::AutotuneOutcome::Done(kp, ki, kd) => crate::processing::LineBuf::<192>::from_fmt(format_args!(
             "echo: PID Autotune finished! Applied: {} P{:?} I{:?} D{:?}\n",
             _mnemonic,
             Real::from_f32(kp).rdp(2),
             Real::from_f32(ki).rdp(3),
             Real::from_f32(kd).rdp(2),
-        ),
+        )),
         hwa::controllers::AutotuneOutcome::Overshoot => {
-            alloc::string::String::from("echo: PID Autotune failed! Temperature too high\n")
+            crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: PID Autotune failed! Temperature too high\n"))
         }
         hwa::controllers::AutotuneOutcome::Timeout => {
-            alloc::string::String::from("echo: PID Autotune failed! timeout\n")
+            crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: PID Autotune failed! timeout\n"))
         }
     };
     processor.write_all(msg.as_str()).await;

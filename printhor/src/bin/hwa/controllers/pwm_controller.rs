@@ -25,6 +25,24 @@ where
     pwm_chan: <H::Resource as Pwm>::Channel,
 }
 
+/// Another controller of the same PWM channel (the PWM mutex is shared). Used by the step
+/// executor to switch the tool outputs from the ISR (see `ToolOutputs`)
+impl<H> Clone for GenericPwmController<H>
+where
+    H: hwa::SyncMutexStrategy + 'static,
+    H::Resource: Pwm + 'static,
+    <H::Resource as Pwm>::Channel: Copy,
+    <H::Resource as Pwm>::Duty:
+        core::fmt::Debug + Copy + Ord + Into<u32> + From<u16> + TryFrom<u32>,
+{
+    fn clone(&self) -> Self {
+        Self {
+            pwm: self.pwm.clone(),
+            pwm_chan: self.pwm_chan,
+        }
+    }
+}
+
 impl<H> GenericPwmController<H>
 where
     H: hwa::SyncMutexStrategy + 'static,
@@ -39,12 +57,19 @@ where
 
     // Sets the applied power in scale between 0 and 100
     pub fn set_power(&mut self, power: u8) {
+        self.set_power_permille(u16::from(power) * 10);
+    }
+
+    /// Sets the applied power in scale between 0 and 1000 (per mille): a finer resolution, for
+    /// the laser dynamic power (`M4`), updated by the step executor along the motion
+    pub fn set_power_permille(&mut self, permille: u16) {
+        let permille = permille.min(1000);
         self.pwm.apply_mut(|pwm| {
-            if power > 0 {
+            if permille > 0 {
                 let max_duty = pwm.get_max_duty();
                 let max_duty_u32: u32 = max_duty.into();
                 let duty_result: Result<u32, _> =
-                    (((power as u64) * (max_duty_u32 as u64)) / 100u64).try_into();
+                    (((permille as u64) * (max_duty_u32 as u64)) / 1000u64).try_into();
                 match duty_result {
                     Ok(duty) => {
                         let d: <H::Resource as Pwm>::Duty = duty.try_into().unwrap_or(max_duty);

@@ -19,3 +19,5 @@ pub mod task_print_job;
 pub mod task_stepper;
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub mod task_temperature;
+#[cfg(all(feature = "with-motion", feature = "with-trinamic"))]
+pub mod task_trinamic;

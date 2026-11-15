@@ -25,7 +25,11 @@ const BENCHY: &[u8] = b"G28\nG1 X10 Y10\n";
 const PART: &[u8] = b"M115\n";
 
 struct RamDisk {
-    blocks: BTreeMap<u32, [u8; 512]>,
+    blocks: core::cell::RefCell<BTreeMap<u32, [u8; 512]>>,
+    /// Whether the card is inserted: otherwise every access fails
+    present: Arc<core::sync::atomic::AtomicBool>,
+    /// Number of `reset_card` calls
+    resets: Arc<AtomicUsize>,
     bad_block: u32,
     retained: Arc<AtomicUsize>,
     released: Arc<AtomicUsize>,
@@ -35,12 +39,16 @@ impl BlockDevice for RamDisk {
     type Error = SDCardError;
 
     fn read(&self, blocks: &mut [Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {
+        if !self.present.load(Ordering::SeqCst) {
+            return Err(SDCardError::NotFound);
+        }
         for (i, b) in blocks.iter_mut().enumerate() {
             if start_block_idx.0 + i as u32 == self.bad_block {
                 return Err(SDCardError::InternalError);
             }
             b.contents = self
                 .blocks
+                .borrow()
                 .get(&(start_block_idx.0 + i as u32))
                 .copied()
                 .unwrap_or([0u8; 512]);
@@ -48,8 +56,15 @@ impl BlockDevice for RamDisk {
         Ok(())
     }
 
-    fn write(&self, _blocks: &[Block], _start_block_idx: BlockIdx) -> Result<(), Self::Error> {
-        Err(SDCardError::NotYetImplemented)
+    fn write(&self, blocks: &[Block], start_block_idx: BlockIdx) -> Result<(), Self::Error> {
+        if !self.present.load(Ordering::SeqCst) {
+            return Err(SDCardError::NotFound);
+        }
+        let mut disk = self.blocks.borrow_mut();
+        for (i, b) in blocks.iter().enumerate() {
+            disk.insert(start_block_idx.0 + i as u32, b.contents);
+        }
+        Ok(())
     }
 
     fn num_blocks(&self) -> Result<BlockCount, Self::Error> {
@@ -58,17 +73,24 @@ impl BlockDevice for RamDisk {
 }
 
 impl hwa::traits::AsyncSDBlockDevice for RamDisk {
-    fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>> + use<> {
-        let retained = self.retained.clone();
-        async move {
-            retained.fetch_add(1, Ordering::SeqCst);
-            Ok(())
-        }
+    type Lock = ();
+
+    fn do_lock(&self) -> impl core::future::Future<Output = Option<()>> + use<> {
+        async { Some(()) }
+    }
+
+    fn do_hold(&self, _lock: ()) -> Result<(), ()> {
+        self.retained.fetch_add(1, Ordering::SeqCst);
+        Ok(())
     }
 
     fn do_release(&self) -> Result<(), ()> {
         self.released.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+
+    fn reset_card(&mut self) {
+        self.resets.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -147,7 +169,9 @@ fn disk(with_mbr: bool) -> RamDisk {
         blocks.insert(cluster_block(4), part);
     }
     RamDisk {
-        blocks,
+        blocks: core::cell::RefCell::new(blocks),
+        present: Arc::new(core::sync::atomic::AtomicBool::new(true)),
+        resets: Arc::new(AtomicUsize::new(0)),
         bad_block: cluster_block(6),
         retained: Arc::new(AtomicUsize::new(0)),
         released: Arc::new(AtomicUsize::new(0)),
@@ -215,6 +239,7 @@ async fn device_retain_and_release_are_forwarded() {
 
 #[futures_test::test]
 async fn open_path_walks_directories_and_reads_files() {
+    crate::info!("Expecting Err: reading a directory and listing a file are rejected");
     let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(true), 0).await;
 
     let root_only = card.open_path("/").unwrap();
@@ -259,6 +284,7 @@ async fn open_path_walks_directories_and_reads_files() {
 
 #[futures_test::test]
 async fn entries_are_reference_counted_and_shared_between_paths() {
+    crate::info!("Expecting Err: closing an entry twice is reported as an inconsistency");
     let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(true), 0).await;
     let mut first = card.open_path("/GCODE").unwrap();
     let mut second = card.open_path("/GCODE").unwrap();
@@ -279,6 +305,7 @@ async fn entries_are_reference_counted_and_shared_between_paths() {
 
 #[futures_test::test]
 async fn failed_lookups_release_the_partial_path() {
+    crate::info!("Expecting Err: paths through missing directories or files are rejected");
     let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(true), 0).await;
     assert!(matches!(card.open_path("/MISSING.GCO"), Err(SDCardError::NotFound)));
     assert!(matches!(card.open_path("/GCODE/MISSING.GCO"), Err(SDCardError::NotFound)));
@@ -298,6 +325,7 @@ async fn failed_lookups_release_the_partial_path() {
 
 #[futures_test::test]
 async fn missing_volumes_are_reported() {
+    crate::info!("Expecting Err: the partitions without a filesystem can not be mounted");
     // Partition 2 is empty
     let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(true), 1).await;
     assert!(matches!(card.open_path("/"), Err(SDCardError::NoSuchVolume)));
@@ -308,6 +336,7 @@ async fn missing_volumes_are_reported() {
 
 #[futures_test::test]
 async fn capacity_limits_are_reported_without_leaking_entries() {
+    crate::info!("Expecting Err: the entries that do not fit in the tables are rejected");
     // Entry table of 2 slots: root + GCODE fill it, the file does not fit
     let mut small: SDStateManager<_, 2, 2, 2> = SDStateManager::new(disk(true), 0).await;
     assert!(matches!(small.open_path("/GCODE/PART.GCO"), Err(SDCardError::MaxOpenDirs)));
@@ -353,5 +382,121 @@ async fn entry_table_holds_max_opened_entries() {
     assert_eq!(card.opened_entries.len(), 4);
     let mut stack = card.open_path("/GCODE/PART.GCO").unwrap();
     assert_eq!(read_all(&mut card, stack[2]), PART);
+    card.release_path(&mut stack);
+}
+
+
+#[futures_test::test]
+async fn the_volume_is_mounted_on_demand_and_reports_why_it_is_not() {
+    crate::info!("Expecting Err: without a card (or a formatted one) the volume can not be mounted");
+    // No card when the firmware starts
+    let d = disk(true);
+    let (present, resets) = (d.present.clone(), d.resets.clone());
+    present.store(false, Ordering::SeqCst);
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(d, 0).await;
+    assert!(!card.is_mounted());
+    assert!(card.mount_error().contains("NotFound"), "{}", card.mount_error());
+    assert!(matches!(card.open_path("/"), Err(SDCardError::NoSuchVolume)));
+    assert!(matches!(card.mount().await, Err(SDCardError::NoSuchVolume)));
+
+    // Inserted later: the next mount initializes the card again and opens the volume
+    present.store(true, Ordering::SeqCst);
+    let before = resets.load(Ordering::SeqCst);
+    assert!(card.mount().await.is_ok());
+    assert_eq!(resets.load(Ordering::SeqCst), before + 1, "the card is initialized again");
+    assert!(card.is_mounted() && card.mount_error().is_empty());
+    let mut stack = card.open_file_path("/BENCHY.GCO").unwrap();
+    // Mounting an open volume does nothing; releasing it is refused while entries are open
+    assert!(card.mount().await.is_ok());
+    assert_eq!(resets.load(Ordering::SeqCst), before + 1);
+    assert!(matches!(card.unmount(), Err(SDCardError::Busy)));
+    card.release_path(&mut stack);
+    assert!(card.unmount().is_ok() && !card.is_mounted());
+    assert!(card.unmount().is_ok(), "releasing twice does nothing");
+    assert!(card.mount().await.is_ok());
+
+    // An unsupported format tells it (no MBR)
+    let blank: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(false), 0).await;
+    assert!(blank.mount_error().contains("MBR"), "{}", blank.mount_error());
+}
+
+#[test]
+fn the_mount_error_is_truncated_to_its_buffer() {
+    use core::fmt::Write;
+    let mut text: heapless::String<8> = heapless::String::new();
+    assert!(write!(Truncating(&mut text), "{}", "a long description").is_ok());
+    assert_eq!(text.as_str(), "a long d");
+}
+
+#[futures_test::test]
+async fn files_are_created_written_and_read_back() {
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(true), 0).await;
+    let content: Vec<u8> = (0..1300u32).map(|i| b"G1 X1\n"[(i % 6) as usize]).collect();
+    for (path, file_at) in [("/NEW.GCO", 1usize), ("GCODE/NEW2.GCO", 2)] {
+        let mut stack = card.create_file(path).unwrap();
+        assert_eq!(stack.len(), file_at + 1, "{}", path);
+        let file = *stack.last().unwrap();
+        // In pieces, across several blocks
+        for chunk in content.chunks(97) {
+            card.write(file, chunk).unwrap();
+        }
+        // Directories can not be written
+        assert!(matches!(card.write(stack[0], b"x"), Err(SDCardError::InconsistencyError)));
+        card.release_path(&mut stack);
+        assert_eq!(total_refs(&card), 0, "{}", path);
+
+        let mut stack = card.open_file_path(path).unwrap();
+        assert_eq!(read_all(&mut card, *stack.last().unwrap()), content, "{}", path);
+        card.release_path(&mut stack);
+    }
+    // Truncated when created again
+    let mut stack = card.create_file("/NEW.GCO").unwrap();
+    card.write(*stack.last().unwrap(), b"M115\n").unwrap();
+    card.release_path(&mut stack);
+    let mut stack = card.open_file_path("/NEW.GCO").unwrap();
+    assert_eq!(read_all(&mut card, stack[1]), b"M115\n");
+    card.release_path(&mut stack);
+    let root = card.open_path("/").unwrap();
+    assert!(names_in(&mut card, root[0]).contains(&"NEW.GCO".to_string()));
+    card.release_path(&mut root.clone());
+}
+
+#[futures_test::test]
+async fn invalid_file_creations_are_reported_without_leaking_entries() {
+    crate::info!("Expecting Err: invalid file creations are rejected");
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(true), 0).await;
+    for (path, expected) in [
+        ("/", "InvalidName"),
+        ("/GCODE/", "InvalidName"),
+        ("..", "InvalidName"),
+        ("/TOOLONGNAME.GCODE", "InvalidName"),
+        ("/MISSING/X.GCO", "NotFound"),
+        // A file used as a directory
+        ("/BENCHY.GCO/X.GCO", "NotFound"),
+    ] {
+        let r = card.create_file(path);
+        assert_eq!(r.err().map(|e| std::format!("{}", e)).as_deref(), Some(expected), "{}", path);
+        assert_eq!(total_refs(&card), 0, "{}", path);
+    }
+    // A file open for reading can not be created again
+    let mut benchy = card.open_file_path("/BENCHY.GCO").unwrap();
+    assert!(matches!(card.create_file("/BENCHY.GCO"), Err(SDCardError::Busy)));
+    card.release_path(&mut benchy);
+    assert_eq!(total_refs(&card), 0);
+    // Not mounted
+    let mut blank: SDStateManager<_, 4, 4, 8> = SDStateManager::new(disk(false), 0).await;
+    assert!(matches!(blank.create_file("/X.GCO"), Err(SDCardError::NoSuchVolume)));
+    // No free entry slot for the file: root + GCODE fill a table of 2
+    let mut small: SDStateManager<_, 2, 2, 2> = SDStateManager::new(disk(true), 0).await;
+    assert!(matches!(small.create_file("/GCODE/X.GCO"), Err(SDCardError::MaxOpenDirs)));
+    assert_eq!(total_refs(&small), 0);
+    // Device write errors (card removed)
+    let d = disk(true);
+    let present = d.present.clone();
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(d, 0).await;
+    let mut stack = card.create_file("/X.GCO").unwrap();
+    present.store(false, Ordering::SeqCst);
+    let big = [b'G'; 1024];
+    assert!(matches!(card.write(*stack.last().unwrap(), &big), Err(SDCardError::WriteError)));
     card.release_path(&mut stack);
 }
