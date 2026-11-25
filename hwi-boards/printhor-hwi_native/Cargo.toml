@@ -85,9 +85,9 @@ embassy-time = { version = "0.5.1", features = ["std", "generic-queue-64"] }
 smol = { version = "2.0.2", optional = true }
 sysinfo = { version = "0.40.1", default-features = false, features = ["default"]}
 env_logger = { version = "0.11.11", optional = true }
-printhor-hwa-common = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
-printhor-hwa-utils = { version = "0.0", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
-async-gcode = {version = "0.3.0", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value", "std"] }
+printhor-hwa-common = { version = "0.0.4", default-features = false, features = ["std"], path = "../../printhor-hwa-common"}
+printhor-hwa-utils = { version = "0.0.4", default-features = false, features = ["std"], path = "../../printhor-hwa-utils"}
+async-gcode = { package = "printhor-async-gcode", version = "0.4.0", path = "../../libs/async-gcode", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value", "std"] }
 embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven" ], optional = true }
 embedded-sdmmc = { version = "0.10.0", default-features = false, optional = true }
@@ -109,7 +109,6 @@ rust_decimal_macros = { optional = true, version = "1.40.0" }
 futures-test = { version = "0.3.34"}
 
 [patch.crates-io]
-async-gcode = { path = "../../libs/async-gcode" }
 #embassy-executor = { path = "../../libs/embassy/embassy-executor" }
 #embassy-sync = { path = "../../libs/embassy/embassy-sync" }
 #embassy-time = { path = "../../libs/embassy/embassy-time" }

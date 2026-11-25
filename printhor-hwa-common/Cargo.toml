@@ -23,7 +23,8 @@ std = ["futures-test/std", "embassy-executor/platform-std",
     "printhor-hwa-common-macros/std",
     "printhor-hwa-utils/std",
     "embassy-time/std"]
-default = ["std", "with-log"]
+# A math backend is required: f32 unless another one is selected (see the math backend features)
+default = ["std", "with-log", "float-point-f32-impl"]
 nightly = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
 with-defmt = ["defmt", "printhor-hwa-utils/with-defmt", "embedded-sdmmc/defmt-log"]
@@ -81,8 +82,8 @@ with-v-axis = []
 with-w-axis = []
 
 [dependencies]
-printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
-printhor-hwa-utils = { version = "0",  default-features = false, path = "../printhor-hwa-utils", features = [] }
+printhor-hwa-common-macros = { version = "0.0.4", default-features = false, path = "../printhor-hwa-common-macros" }
+printhor-hwa-utils = { version = "0.0.4",  default-features = false, path = "../printhor-hwa-utils", features = [] }
 const_env = { version = "0.1.5"}
 
 embassy-sync = { version = "0.8.0", features = [] }
@@ -93,7 +94,7 @@ embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unp
 embedded-sdmmc = { version = "0.10.0", default-features = false, features = [], optional = true }
 embedded-io-async = { version = "0.7.0", default-features = false, features = [], optional = true }
 embedded-hal-async = { version = "1.0.0", default-features = false, features = [], optional = true }
-async-gcode = { version = "0.3.0", default-features = false, features = [], optional = true}
+async-gcode = { package = "printhor-async-gcode", version = "0.4.0", path = "../libs/async-gcode", default-features = false, features = [], optional = true}
 
 heapless = { version = "0.9.3", default-features = false, features = [], optional = true }
 

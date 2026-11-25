@@ -145,7 +145,7 @@ cargo install probe-rs-tools --locked
 The framework with a set of mocked peripherals (most of them without any logic).
 It provides a command-line GCode prompt on the standard input.
 
-__Note__: The native simulator enables the `with-sd-card` feature by default, which needs the SD card image `data/sdcard.img`.
+__Note__: The native simulator enables the `with-sd-card` feature by default, which needs the SD card image `data/sdcard.img` (another image can be set with the `PRINTHOR_SDCARD_IMG` environment variable).
 
 ```shell
 RUST_LOG=info cargo run --bin printhor

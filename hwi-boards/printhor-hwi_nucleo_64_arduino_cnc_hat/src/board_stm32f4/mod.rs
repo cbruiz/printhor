@@ -485,13 +485,17 @@ impl HwiContract for Contract {
                     if #[cfg(feature = "with-i2c")] {
                         hwa::info!("with-i2c...");
 
+                        // embassy-stm32 0.6: the DMA channels bind their interrupts too
                         embassy_stm32::bind_interrupts!(struct I2C1Irqs {
                             I2C1_EV => embassy_stm32::i2c::EventInterruptHandler<embassy_stm32::peripherals::I2C1>;
                             I2C1_ER => embassy_stm32::i2c::ErrorInterruptHandler<embassy_stm32::peripherals::I2C1>;
+                            DMA1_STREAM1 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH1>;
+                            DMA1_STREAM0 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH0>;
                         });
 
-                        let i2c_freq = embassy_stm32::time::hz(Self::I2C_FREQUENCY);
-                        let i2c_conf = embassy_stm32::i2c::Config::default();
+                        // embassy-stm32 0.6: the frequency is part of the configuration
+                        let mut i2c_conf = embassy_stm32::i2c::Config::default();
+                        i2c_conf.frequency = embassy_stm32::time::hz(Self::I2C_FREQUENCY);
 
                         let i2c = hwa::make_static_async_controller!(
                             "I2C1",
@@ -503,10 +507,11 @@ impl HwiContract for Contract {
                                 p.PB8,
                                 // SDA
                                 p.PB9,
-                                I2C1Irqs,
+                                // TX (I2C1_TX: DMA1 stream 1, channel 0), RX (I2C1_RX: DMA1 stream 0,
+                                // channel 1). DMA1 streams 5/6 are taken by USART2
                                 p.DMA1_CH1,
                                 p.DMA1_CH0,
-                                i2c_freq,
+                                I2C1Irqs,
                                 i2c_conf,
                             )).await
                         );

@@ -533,7 +533,12 @@ fn arithmetic_and_real_ops_of_real_coordinates() {
 //#endregion
 
 /// The integer square root (no-FPU targets) is correctly rounded: it matches the hardware one
-#[cfg(feature = "float-point-f32-impl")]
+// The f32 backend only (`float-point-f32-impl` is a default feature: the others take precedence)
+#[cfg(all(
+    feature = "float-point-f32-impl",
+    not(feature = "float-point-f64-impl"),
+    not(feature = "fixed-point-128-impl")
+))]
 #[test]
 fn sqrt_bitwise_is_correctly_rounded() {
     use crate::math::Real;

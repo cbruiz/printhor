@@ -169,7 +169,10 @@ mod solver_test {
 
     /// The power-of-ten fast path of `from_lit` is bit-identical to the former `powi` division.
     #[test]
-    #[cfg(any(feature = "float-point-f32-impl", feature = "float-point-f64-impl"))]
+    #[cfg(all(
+        any(feature = "float-point-f32-impl", feature = "float-point-f64-impl"),
+        not(feature = "fixed-point-128-impl")
+    ))]
     fn from_lit_matches_powi() {
         use num_traits::float::FloatCore;
         type F = RealImpl;

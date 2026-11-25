@@ -297,7 +297,7 @@ pub trait HwiContract: Sized {
             /// Normally, thermistor is not connected directly to `AGND` and `ADC Pin`,
             /// so considering this variation is very important for accuracy.
             /// This value can be calculated based in the board schematics or physically measured.
-            #[doc = include_str!("../../doc/thermal_sensors.md")]
+            #[doc = include_str!("../doc/thermal_sensors.md")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32;
 
             /// Max temperature (ºC) of the **HotEnd**. Reaching it shuts down every heater and raises
@@ -367,7 +367,7 @@ pub trait HwiContract: Sized {
             /// Normally, thermistor is not connected directly to `AGND` and `ADC Pin`,
             /// so considering this variation is very important for accuracy.
             /// This value can be calculated based in the board schematics or physically measured.
-            #[doc = include_str!("../../doc/thermal_sensors.md")]
+            #[doc = include_str!("../doc/thermal_sensors.md")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32;
 
             /// Max temperature (ºC) of the **HotBed** (MAXTEMP). See [HwiContract::HOT_END_MAX_TEMP]

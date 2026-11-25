@@ -10,6 +10,10 @@ keywords = ["hardware", "abstraction"]
 license = "MIT"
 documentation = "https://docs.rs/printhor-hwi_nucleo_64_arduino_cnc_hat"
 
+# docs.rs builds the documentation for the MCU target (default features)
+[package.metadata.docs.rs]
+targets = ["thumbv7em-none-eabihf"]
+
 [lib]
 
 [features]
@@ -106,7 +110,7 @@ embassy-time = { version = "0.5.1", default-features = false, features = [] }
 
 printhor-hwa-common = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-utils" }
-async-gcode = {version = "0.3.0", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
+async-gcode = { package = "printhor-async-gcode", version = "0.4.0", path = "../../libs/async-gcode", default-features = false, features=["parse-trailing-comment", "optional-value", "string-value"] }
 embedded-io-async = { version = "0.7.0", default-features = false, optional = true, features = [] }
 
 pwm-pca9685 = { version = "1.0.0", default-features = false, optional = true}
@@ -118,7 +122,6 @@ rust_decimal = { optional = true, version = "1.43.0", default-features = false, 
 rust_decimal_macros = { optional = true, version = "1.40.0" }
 
 [patch.crates-io]
-async-gcode = { path = "../../libs/async-gcode" }
 #embassy-stm32 = { path = "../../libs/embassy/embassy-stm32" }
 #embassy-executor = { path = "../../libs/embassy/embassy-executor" }
 #embassy-sync = { path = "../../libs/embassy/embassy-sync" }

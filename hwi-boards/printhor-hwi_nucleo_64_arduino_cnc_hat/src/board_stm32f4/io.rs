@@ -95,13 +95,13 @@ pub mod serial_port_2 {
 
 #[cfg(feature = "with-i2c")]
 pub struct MotionI2c {
-    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>>,
+    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>>,
     state: [pwm_pca9685::ChannelOnOffControl; 16],
 }
 
 #[cfg(feature = "with-i2c")]
 impl MotionI2c {
-    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>) -> Self {
+    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>) -> Self {
 
         let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
         let pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();

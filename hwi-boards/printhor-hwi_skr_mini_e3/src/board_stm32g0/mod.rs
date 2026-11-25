@@ -485,7 +485,7 @@ impl HwiContract for Contract {
     fn init_heap() {
         hwa::info!("Initializing heap ({}) bytes", Contract::MAX_HEAP_SIZE_BYTES);
         use core::mem::MaybeUninit;
-        #[link_section = ".bss"]
+        #[unsafe(link_section = ".bss")]
         static mut HEAP_MEM: [MaybeUninit<u8>; Contract::MAX_HEAP_SIZE_BYTES] =
             [MaybeUninit::uninit(); Contract::MAX_HEAP_SIZE_BYTES];
         unsafe {
@@ -1174,7 +1174,7 @@ impl HwiContract for Contract {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-motion")] {
-        extern "Rust" {
+        unsafe extern "Rust" {
             fn do_tick();
         }
 

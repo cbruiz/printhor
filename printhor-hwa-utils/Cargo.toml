@@ -9,7 +9,7 @@ repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction", "library", "printhor"]
 categories = ["hardware-support"]
 license.workspace = true
-documentation = "https://docs.rs/prinThor"
+documentation = "https://docs.rs/printhor-hwa-utils"
 
 [lib]
 
@@ -20,7 +20,7 @@ with-log = ["log"]
 with-defmt = ["defmt"]
 
 [dependencies]
-printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
+printhor-hwa-common-macros = { version = "0.0.4", default-features = false, path = "../printhor-hwa-common-macros" }
 portable-atomic = { version = "1.15.0",  default-features = false, features = ["critical-section"] }
 static_cell = { version = "2.1.1",  default-features = false, features = [] }
 embassy-sync = { version = "0.8.0", features = [] }

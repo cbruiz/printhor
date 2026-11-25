@@ -651,8 +651,11 @@ impl hwa::HwiContract for Contract {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-sd-card")] {
                 let sd_card_block_device = {
-                    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/sdcard.img");
-                    hwa::info!("Loading sdcard.img from {}", path);
+                    // The image in `PRINTHOR_SDCARD_IMG`, or the one of the repository checkout
+                    let path = std::env::var("PRINTHOR_SDCARD_IMG").unwrap_or_else(|_| {
+                        concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/sdcard.img").to_string()
+                    });
+                    hwa::info!("Loading sdcard.img from {}", path.as_str());
                     device::SDCardBlockDevice::new(path)
                 };
             }

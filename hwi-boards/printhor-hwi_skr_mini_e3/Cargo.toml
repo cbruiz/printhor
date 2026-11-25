@@ -1,7 +1,7 @@
 [package]
 name = "printhor-hwi_skr_mini_e3"
 version = "0.0.4"
-edition = "2021"
+edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
 description = "Printhor Hardware Abstraction for SKR Mini E3 V3.0 board"
 readme = "README.md"
@@ -9,6 +9,12 @@ repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
 license = "MIT"
 documentation = "https://docs.rs/printhor-hwi_skr_mini_e3"
+# Exports the path of its memory.x to the firmware build script (see build.rs)
+links = "printhor-hwi_skr_mini_e3"
+
+# docs.rs builds the documentation for the MCU target (default features)
+[package.metadata.docs.rs]
+targets = ["thumbv6m-none-eabi"]
 
 [lib]
 
@@ -100,7 +106,7 @@ embedded-alloc = { version = "0.7.0", default-features = false, features = ["llf
 
 embedded-io-async = { version = "0.7.0", default-features = false, optional = true, features = [] }
 
-async-gcode = {version = "0.3.0", default-features = false, features = ["parse-trailing-comment", "parse-checksum", "optional-value", "string-value"] }
+async-gcode = { package = "printhor-async-gcode", version = "0.4.0", path = "../../libs/async-gcode", default-features = false, features = ["parse-trailing-comment", "parse-checksum", "optional-value", "string-value"] }
 
 cfg-if = { version = "1.0.0" }
 const_env = { version = "0.1.5" }
@@ -109,7 +115,6 @@ rust_decimal = { optional = true, version = "1.43.0", default-features = false, 
 rust_decimal_macros = { optional = true, version = "1.40.0" }
 
 [patch.crates-io]
-async-gcode = { path = "../../libs/async-gcode" }
 #embassy-stm32 = { path = "../../libs/embassy/embassy-stm32" }
 #embassy-executor = { path = "../../libs/embassy/embassy-executor" }
 #embassy-sync = { path = "../../libs/embassy/embassy-sync" }

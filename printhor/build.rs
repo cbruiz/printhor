@@ -1,17 +1,28 @@
 #[allow(unused)]
 use std::io::Write;
 
+/// The memory layout (`memory.x`) of a board crate: its build script exports the path (`links`
+/// metadata), so it is found wherever the board crate is (this repository or the crates.io registry)
+#[allow(unused)]
+fn board_memory_x(dep_env: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var_os(dep_env)
+            .unwrap_or_else(|| panic!("{} is not set: the board crate does not export its memory.x", dep_env)),
+    )
+}
+
 fn main() {
-    let doc_in = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-        .join("img")
-        .join("contract-class-diagram.png");
-    let out = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-        .join("..")
-        .join("target")
-        .join("doc")
-        .join("img");
-    std::fs::create_dir_all(&out).unwrap();
-    std::fs::copy(doc_in, out.join("contract-class-diagram.png")).unwrap();
+    // The class diagram of the documentation (design/architecture.md), where the rustdoc output
+    // expects it (`target/doc/img`). In the repository checkout only: built from the crates.io
+    // registry, `..` is the registry itself (and docs.rs does not document binary crates)
+    let manifest_dir = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+    let workspace_dir = manifest_dir.join("..");
+    if workspace_dir.join("printhor-hwa-common").join("Cargo.toml").is_file() {
+        let doc_in = manifest_dir.join("img").join("contract-class-diagram.png");
+        let out = workspace_dir.join("target").join("doc").join("img");
+        std::fs::create_dir_all(&out).unwrap();
+        std::fs::copy(doc_in, out.join("contract-class-diagram.png")).unwrap();
+    }
 
     cfg_if::cfg_if! {
         if #[cfg(feature="native")] {
@@ -27,12 +38,7 @@ fn main() {
         }
         else if #[cfg(feature="rp-2040")] {
             let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-            let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-                .join("..")
-                .join("hwi-boards")
-                .join("printhor-hwi_rp_2040")
-                .join("rpi-pico")
-                .join("memory.x");
+            let memory_x_path = board_memory_x("DEP_PRINTHOR_HWI_RP_2040_MEMORY_X");
             let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
             std::fs::File::create(out.join("memory.x"))
                 .unwrap()
@@ -51,12 +57,7 @@ fn main() {
                 }
                 else {
                     let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-                    let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-                        .join("..")
-                        .join("hwi-boards")
-                        .join("printhor-hwi_mks_robin_nano")
-                        .join("mks_robin_nano_3_1")
-                        .join("memory.x");
+                    let memory_x_path = board_memory_x("DEP_PRINTHOR_HWI_MKS_ROBIN_NANO_MEMORY_X");
                     let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
                     std::fs::File::create(out.join("memory.x"))
                         .unwrap()
@@ -76,12 +77,7 @@ fn main() {
                 }
                 else {
                     let out = &std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap());
-                    let memory_x_path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-                        .join("..")
-                        .join("hwi-boards")
-                        .join("printhor-hwi_skr_mini_e3")
-                        .join("skr_mini_e3_v3")
-                        .join("memory.x");
+                    let memory_x_path = board_memory_x("DEP_PRINTHOR_HWI_SKR_MINI_E3_MEMORY_X");
                     let memory_x_path_str = memory_x_path.as_path().to_str().unwrap();
                     std::fs::File::create(out.join("memory.x"))
                         .unwrap()
