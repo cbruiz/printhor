@@ -184,6 +184,47 @@ fn m503_comment(title: &str, value: core::fmt::Arguments<'_>) -> LineBuf<M503_SE
     out
 }
 
+/// The `M200` setting (`M200 S<enabled> D<diameter> L<flow limit>`), for its report and `M503`
+#[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+struct M200Setting(hwa::controllers::VolumetricConfig);
+
+#[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+impl core::fmt::Display for M200Setting {
+    /// As Marlin: two decimals (`M200 S0 D1.75 L0.00`)
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let fixed2 = |v: math::Real| {
+            let mut n = LineBuf::<FIXED2_LEN>::new();
+            n.push_fixed2(v.to_f64() as f32);
+            n
+        };
+        write!(
+            f,
+            "M200 S{} D{} L{}",
+            self.0.enabled as u8,
+            fixed2(self.0.diameter),
+            fixed2(self.0.limit)
+        )
+    }
+}
+
+/// An `M593` setting (`M593 X F<frequency> D<damping> T<type>`), for its report and `M503`
+#[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+struct M593Setting(&'static str, crate::motion::ShaperConfig);
+
+#[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+impl core::fmt::Display for M593Setting {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "M593 {} F{:?} D{:?} T{}",
+            self.0,
+            self.1.frequency.rdp(2),
+            self.1.damping.rdp(3),
+            self.1.kind.index()
+        )
+    }
+}
+
 #[derive(Clone)]
 pub struct GCodeProcessor {
     pub event_bus: hwa::types::EventBus,
@@ -566,6 +607,52 @@ impl GCodeProcessor {
         }
     }
 
+    /// The temperatures as `M105` reports them (` T:<temp> /<target> T@:<power> B:...`)
+    pub async fn push_temperatures<const N: usize>(&self, report: &mut LineBuf<N>) {
+        #[cfg(feature = "with-hot-end")]
+        {
+            let mut h = self.hot_end.lock().await;
+            let (temp, target, power) =
+                (h.get_current_temp(), h.get_target_temp(), h.get_current_power());
+            let _resistance = h.get_current_resistance();
+            drop(h);
+            report.push_str(" T:");
+            report.push_fixed2(temp);
+            report.push_str(" /");
+            report.push_fixed2(target);
+            report.push_str(" T@:");
+            report.push_fixed2(power);
+            #[cfg(not(feature = "marlin-compat"))]
+            {
+                report.push_str(" TZ:");
+                report.push_fixed2(_resistance);
+            }
+        }
+        #[cfg(not(feature = "with-hot-end"))]
+        report.push_str(" T:0 /0 T@:0");
+        #[cfg(feature = "with-hot-bed")]
+        {
+            let mut h = self.hot_bed.lock().await;
+            let (temp, target, power) =
+                (h.get_current_temp(), h.get_target_temp(), h.get_current_power());
+            let _resistance = h.get_current_resistance();
+            drop(h);
+            report.push_str(" B:");
+            report.push_fixed2(temp);
+            report.push_str(" /");
+            report.push_fixed2(target);
+            report.push_str(" B@:");
+            report.push_fixed2(power);
+            #[cfg(not(feature = "marlin-compat"))]
+            {
+                report.push_str(" BZ:");
+                report.push_fixed2(_resistance);
+            }
+        }
+        #[cfg(not(feature = "with-hot-bed"))]
+        report.push_str(" B:0 /0 B@:0");
+    }
+
     /// Writes `prefix`, `value` and `suffix` (no heap)
     #[cfg(feature = "with-print-job")]
     pub async fn write_u32(&self, channel: CommChannel, prefix: &str, value: u32, suffix: &str) {
@@ -600,7 +687,21 @@ impl GCodeProcessor {
     }
 
     /// `G30`: single probe at the current position, or at `x`, `y` (absolute, where the probe
-    /// goes). See [hwa::drivers::MotionDriver::probe_action].
+    /// goes), as the Z sample of the homing (see [hwa::drivers::MotionDriver::probe_action]):
+    ///
+    /// 1. Z is raised `PROBE_DEPLOY_CLEARANCE_MM` (from where it is, as the homing does before
+    ///    deploying the probe), so that neither the travel nor the probe deploy hit the bed or the
+    ///    part. At the speed the homing raises Z (see [hwa::drivers::motion_driver::z_probe_speed]),
+    ///    not at the modal feed rate (capped by the max Z speed only).
+    /// 2. The probe travels to `x`, `y` (when given).
+    /// 3. The probe is deployed, Z descends until it triggers (fast, then the fine approach), the
+    ///    probe is stowed and Z is raised `Z_AFTER_HOMING_MM` above where it triggered, where the
+    ///    nozzle is left (as after the homing).
+    ///
+    /// The reported Z is the height of the bed at the probed point above the bed plane the homing
+    /// found (where the nozzle triggered then, see [hwa::controllers::MotionConfig::get_logical_trigger_z]):
+    /// `0` on a flat bed, whatever the Z of the homing point (Marlin's `Z_MIN_POS`) and the home
+    /// offset (`M206`) are.
     ///
     /// Only scalars are kept across the awaits (positions and offsets are read again when needed):
     /// this future is part of the command execution of every task that runs commands.
@@ -622,8 +723,11 @@ impl GCodeProcessor {
         if !self.motion_planner.motion_status().get_last_planned_position().is_set {
             return Err(CodeExecutionFailure::HomingRequired);
         }
-        if x.is_some() || y.is_some() {
-            // The nozzle goes to the point minus the probe offset (in the current G90/G91 mode)
+        // The travel (in the current G90/G91 mode): Z up the deploy clearance, then the nozzle to
+        // the point minus the probe offset
+        let mut raise: hwa::math::TVector<math::Real> = hwa::math::TVector::new();
+        let mut travel: hwa::math::TVector<math::Real> = hwa::math::TVector::new();
+        {
             let status = self.motion_planner.motion_status();
             let offset = self.motion_planner.motion_config().get_probe_offset();
             let planned = status.get_last_planned_position().world_pos;
@@ -632,7 +736,6 @@ impl GCodeProcessor {
             // of probing elsewhere (the move would be clipped)
             let check_reach = status.soft_endstops() && status.is_homed();
             let (min, max) = self.motion_planner.motion_config().get_logical_travel();
-            let mut target: hwa::math::TVector<math::Real> = hwa::math::TVector::new();
             for (coord, value) in [(Self::PROBE_X, x), (Self::PROBE_Y, y)] {
                 if let (Some(coord), Some(v)) = (coord, value) {
                     let nozzle = v - offset.get_coord(coord).unwrap_or(math::ZERO);
@@ -643,14 +746,27 @@ impl GCodeProcessor {
                         return Err(CodeExecutionFailure::ERR);
                     }
                     let current = planned.get_coord(coord).unwrap_or(math::ZERO);
-                    target.set_coord(coord, Some(if absolute { nozzle } else { nozzle - current }));
+                    travel.set_coord(coord, Some(if absolute { nozzle } else { nozzle - current }));
                 }
             }
-            self.motion_planner
-                .plan_rapid_move(channel, target, &self.event_bus, order_num, line_tag)
-                .await?;
-            self.wait_for_motion_idle().await;
+            let clearance = hwa::drivers::motion_driver::probe_deploy_clearance();
+            let z = planned.z.unwrap_or(math::ZERO);
+            raise.z = Some(if absolute { z + clearance } else { clearance });
         }
+        // Planned moves (the soft end-stops clip the raise at the top of the Z travel): the raise at
+        // the probing speed, the travel at the modal feed rate
+        let raise_speed = hwa::drivers::motion_driver::z_probe_speed(
+            &self.motion_planner.motion_config().get_steps_per_space_unit_as_vector(),
+        );
+        self.motion_planner
+            .plan_rapid_move(channel, raise, Some(raise_speed), &self.event_bus, order_num, line_tag)
+            .await?;
+        if !travel.not_nan_coords().is_empty() {
+            self.motion_planner
+                .plan_rapid_move(channel, travel, None, &self.event_bus, order_num, line_tag)
+                .await?;
+        }
+        self.wait_for_motion_idle().await;
         // Down to the nozzle height where the probe triggered on the bed during the homing
         // (`-probe_offset.z` above the bed plane), plus some overtravel (the bed may be lower
         // elsewhere)
@@ -666,8 +782,13 @@ impl GCodeProcessor {
             .await;
         match result {
             Ok(descent) => {
-                // Marlin semantics: the nozzle height at the trigger plus the probe Z offset, at
-                // the probe XY. Same coordinates as M114 (the position is unchanged)
+                // The probe moves are not planned: the nozzle is now the clearance above where the
+                // probe triggered (the same coordinates as M114)
+                let trigger_z = start_z - descent;
+                self.set_nozzle_z(order_num, trigger_z + hwa::drivers::motion_driver::homing_z_clearance());
+                // At the probe XY, the height of the bed above the bed plane of the homing: where
+                // the nozzle triggered now minus where it triggered then (Marlin's measured Z, the
+                // nozzle height at the trigger plus the probe Z offset, with Z_MIN_POS 0)
                 let pos = self.motion_planner.motion_status().get_current_position().world_pos;
                 let offset = self.motion_planner.motion_config().get_probe_offset();
                 let at = |coord: Option<hwa::CoordSel>| match coord {
@@ -684,16 +805,17 @@ impl GCodeProcessor {
                 line.push_str(" Y: ");
                 line.push_fixed2(at(Self::PROBE_Y));
                 line.push_str(" Z: ");
-                line.push_fixed2(
-                    (start_z - descent + offset.get_coord(hwa::CoordSel::Z).unwrap_or(math::ZERO))
-                        .to_f64() as f32,
-                );
+                line.push_fixed2((trigger_z - trigger_plane).to_f64() as f32);
                 line.push_str("\n");
                 let _ = self.write(channel, line.as_str()).await;
                 Ok(CodeExecutionSuccess::OK)
             }
             Err(hwa::drivers::motion_driver::ProbeError::Aborted) => {
-                let _ = self.write(channel, "echo: G30: probing aborted\n").await;
+                // Interrupted somewhere along the probe moves: Z is not known any more
+                self.motion_planner.motion_status().invalidate_position();
+                let _ = self
+                    .write(channel, "echo: G30: probing aborted. Homing (G28) is required\n")
+                    .await;
                 Err(CodeExecutionFailure::ERR)
             }
             Err(hwa::drivers::motion_driver::ProbeError::NotTriggered) => {
@@ -704,6 +826,18 @@ impl GCodeProcessor {
                 Err(CodeExecutionFailure::ERR)
             }
         }
+    }
+
+    /// Sets the Z of the current and planned positions (`z`, logical): after the moves done out
+    /// of the planner (the probe)
+    #[cfg(all(feature = "with-probe", feature = "with-z-axis"))]
+    fn set_nozzle_z(&self, order_num: u32, z: math::Real) {
+        let status = self.motion_planner.motion_status();
+        let position = status
+            .get_current_position()
+            .complete_and_project(&hwa::math::TVector::new().with_coord(hwa::CoordSel::Z, Some(z)));
+        status.update_current_position(order_num, &position);
+        status.update_last_planned_position(order_num, &position);
     }
 
     /// The X axis of the probe report, when enabled
@@ -977,6 +1111,7 @@ impl GCodeProcessor {
                 "echo: Target temperature too high (max: {:?})\n",
                 math::Real::from_f32(max)
             ),
+            hwa::controllers::HeaterError::Busy => write!(msg, "echo: PID Autotune running\n"),
         };
         self.write_failure_reason(channel, msg.as_str()).await;
         CodeExecutionFailure::ERR
@@ -1115,6 +1250,10 @@ impl GCodeProcessor {
                         .plan(channel, &gc, _blocking, &self.event_bus)
                         .await;
                     hwa::debug!("Homing planned");
+                    // Z is homed at the safe homing point: X and Y must be known (Marlin's message)
+                    if let Err(CodeExecutionFailure::HomingRequired) = result {
+                        self.write(channel, "echo:Home XY first\n").await;
+                    }
                     result
                 }
             },
@@ -1514,48 +1653,7 @@ impl GCodeProcessor {
                 // machinery), which matters on FPU-less cores (e.g. the Cortex-M0+ of the SKR)
                 let mut report = LineBuf::<M105_CAPACITY>::new();
                 report.push_str("ok");
-                #[cfg(feature = "with-hot-end")]
-                {
-                    let mut h = self.hot_end.lock().await;
-                    let (temp, target, power) =
-                        (h.get_current_temp(), h.get_target_temp(), h.get_current_power());
-                    let _resistance = h.get_current_resistance();
-                    drop(h);
-                    report.push_str(" T:");
-                    report.push_fixed2(temp);
-                    report.push_str(" /");
-                    report.push_fixed2(target);
-                    report.push_str(" T@:");
-                    report.push_fixed2(power);
-                    #[cfg(not(feature = "marlin-compat"))]
-                    {
-                        report.push_str(" TZ:");
-                        report.push_fixed2(_resistance);
-                    }
-                }
-                #[cfg(not(feature = "with-hot-end"))]
-                report.push_str(" T:0 /0 T@:0");
-                #[cfg(feature = "with-hot-bed")]
-                {
-                    let mut h = self.hot_bed.lock().await;
-                    let (temp, target, power) =
-                        (h.get_current_temp(), h.get_target_temp(), h.get_current_power());
-                    let _resistance = h.get_current_resistance();
-                    drop(h);
-                    report.push_str(" B:");
-                    report.push_fixed2(temp);
-                    report.push_str(" /");
-                    report.push_fixed2(target);
-                    report.push_str(" B@:");
-                    report.push_fixed2(power);
-                    #[cfg(not(feature = "marlin-compat"))]
-                    {
-                        report.push_str(" BZ:");
-                        report.push_fixed2(_resistance);
-                    }
-                }
-                #[cfg(not(feature = "with-hot-bed"))]
-                report.push_str(" B:0 /0 B@:0");
+                self.push_temperatures(&mut report).await;
                 report.push_str("\n");
                 let _ = self.write(channel, report.as_str()).await;
                 Ok(CodeExecutionSuccess::CONSUMED)
@@ -1728,6 +1826,12 @@ impl GCodeProcessor {
                 }
                 // One line per capability, from the enabled features (no heap)
                 for (name, enabled) in M115_CAPABILITIES {
+                    // Volumetric extrusion: whether it is enabled now (M200), off by default
+                    #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+                    let enabled = &match *name {
+                        "VOLUMETRIC" => self.motion_planner.motion_config().get_volumetric().enabled,
+                        _ => *enabled,
+                    };
                     let mut line = LineBuf::<M115_CAP_LINE_CAPACITY>::new();
                     line.push_str("Cap:");
                     line.push_str(name);
@@ -1895,6 +1999,48 @@ impl GCodeProcessor {
                     Ok(false) => Ok(CodeExecutionSuccess::OK),
                     Err(e) => Err(self.report_heater_error(channel, e, max).await),
                 }
+            }
+            // Volumetric extrusion (Marlin semantics): `D` sets the filament diameter and enables
+            // it (`D0` disables it), `S` enables or disables it, `L` limits the volumetric flow.
+            // Without words, the settings are reported
+            #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+            GCodeValue::M200(p) => {
+                let cfg = self.motion_planner.motion_config();
+                if p.d.is_none() && p.s.is_none() && p.l.is_none() {
+                    self.write(channel, m503_section(false, "", format_args!("{}", M200Setting(cfg.get_volumetric()))).as_str())
+                        .await;
+                    return Ok(CodeExecutionSuccess::OK);
+                }
+                // A single extruder (E0): any other one is reported as invalid (as Marlin)
+                let t = p.t.and_then(|t| t.to_i32()).unwrap_or(0);
+                if t != 0 {
+                    let mut msg = LineBuf::<{ 27 + I32_LEN + 1 }>::new();
+                    msg.push_str("echo:M200 Invalid extruder ");
+                    msg.push_i32(t);
+                    msg.push_str("\n");
+                    self.write(channel, msg.as_str()).await;
+                    return Ok(CodeExecutionSuccess::OK);
+                }
+                let mut v = cfg.get_volumetric();
+                let (mut enable, mut can_enable) = (v.enabled, true);
+                if let Some(d) = p.d {
+                    if d.is_defined_positive() {
+                        v.diameter = d;
+                        enable = true;
+                    } else {
+                        can_enable = false;
+                    }
+                }
+                v.enabled = can_enable && p.s.map_or(enable, |s| !s.is_zero());
+                if let Some(l) = p.l {
+                    if l >= math::ZERO && l <= math::TWENTY {
+                        v.limit = l;
+                    } else {
+                        self.write(channel, "echo:?L value out of range (0-20).\n").await;
+                    }
+                }
+                cfg.set_volumetric(v);
+                Ok(CodeExecutionSuccess::OK)
             }
             #[cfg(feature = "with-motion")]
             GCodeValue::M201(accel) => {
@@ -2136,35 +2282,66 @@ impl GCodeProcessor {
                 }
                 Ok(CodeExecutionSuccess::OK)
             }
+            // PID autotune (see `heater_controller::autotune`), reported as Marlin does. It runs in
+            // the temperature control loop: a host gets the response (`ok`) once it ends, and can
+            // go on polling the temperatures meanwhile. A print job waits for it
             #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
             GCodeValue::M303(p) => {
                 self.require_power().await?;
                 let heater = p.e.and_then(|v| v.to_i32()).unwrap_or(0);
-                let cycles = p.c.and_then(|v| v.to_i32()).unwrap_or(5).clamp(3, 20) as u8;
+                let mut request = hwa::controllers::AutotuneRequest {
+                    target: 0.0,
+                    cycles: p.c.and_then(|v| v.to_i32()).unwrap_or(5).clamp(3, 20) as u8,
+                    rule: hwa::controllers::TuningRule::ClassicPid,
+                    apply: p.u.is_some_and(|u| !u.is_zero()),
+                    channel,
+                    order_num: gc.order_num,
+                    deferred: !_blocking && !matches!(channel, CommChannel::Internal | CommChannel::Sink),
+                };
+                let target = |default: f32| p.s.map_or(default, |v| v.to_f64() as f32);
+                // Waits (a print job) for the end of the autotune of the heater
+                macro_rules! run {
+                    ($heater:expr) => {{
+                        let mut h = $heater.lock().await;
+                        let max = h.max_target_temp();
+                        let started = h.start_autotune(request).await.map_err(|e| (e, max));
+                        drop(h);
+                        if started.is_ok() {
+                            self.write(channel, "PID Autotune start\n").await;
+                            if !request.deferred {
+                                while $heater.lock().await.is_autotuning() {
+                                    embassy_time::Timer::after_millis(500).await;
+                                }
+                            }
+                        }
+                        started
+                    }};
+                }
                 let result = match heater {
                     #[cfg(feature = "with-hot-bed")]
                     -1 => {
-                        let target = p.s.map(|v| v.to_f64() as f32).unwrap_or(70.0);
-                        let mut h = self.hot_bed.lock().await;
-                        let max = h.max_target_temp();
-                        h.start_autotune(target, cycles).map_err(|e| (e, max))
+                        request.target = target(70.0);
+                        request.rule = hwa::controllers::TuningRule::NoOvershoot;
+                        run!(self.hot_bed)
                     }
                     #[cfg(feature = "with-hot-end")]
                     0 => {
-                        let target = p.s.map(|v| v.to_f64() as f32).unwrap_or(150.0);
-                        let mut h = self.hot_end.lock().await;
-                        let max = h.max_target_temp();
-                        h.start_autotune(target, cycles).map_err(|e| (e, max))
+                        request.target = target(150.0);
+                        run!(self.hot_end)
                     }
                     _ => {
-                        self.write(channel, "echo: PID Autotune failed! Bad heater id\n").await;
+                        self.write(channel, "PID Autotune failed! Bad heater id\n").await;
                         return Err(CodeExecutionFailure::ERR);
                     }
                 };
                 match result {
-                    Ok(_) => {
-                        self.write(channel, "echo: PID Autotune start\n").await;
-                        Ok(CodeExecutionSuccess::OK)
+                    Ok(()) if request.deferred => Ok(CodeExecutionSuccess::DEFERRED(EventStatus::containing(
+                        EventFlags::NOTHING,
+                    ))),
+                    Ok(()) => Ok(CodeExecutionSuccess::OK),
+                    Err((hwa::controllers::HeaterError::TargetTooHigh, _)) => {
+                        self.write(channel, "PID Autotune failed! Temperature too high\n").await;
+                        Err(CodeExecutionFailure::ERR)
                     }
                     Err((e, max)) => Err(self.report_heater_error(channel, e, max).await),
                 }
@@ -2384,6 +2561,26 @@ impl GCodeProcessor {
                                 (r.recover_feed_rate * math::Real::from_lit(60, 0)).rdp(2)
                             ),
                         ).as_str()).await;
+                        let v = cfg.get_volumetric();
+                        self.write(channel, m503_section(detailed,
+                            match v.enabled {
+                                true => "Filament settings:",
+                                false => "Filament settings (Disabled):",
+                            },
+                            format_args!("{}", M200Setting(v)),
+                        ).as_str()).await;
+                        #[cfg(feature = "with-pressure-advance")]
+                        self.write(channel, m503_section(detailed,
+                            "Linear Advance:",
+                            format_args!("M900 K{:?}", cfg.get_pressure_advance().rdp(4)),
+                        ).as_str()).await;
+                    }
+                    #[cfg(feature = "with-input-shaping")]
+                    for (k, (axis, shaper)) in ["X", "Y"].into_iter().zip(cfg.get_input_shaping()).enumerate() {
+                        self.write(channel, m503_section(detailed && k == 0,
+                            "Input Shaping:",
+                            format_args!("{}", M593Setting(axis, shaper)),
+                        ).as_str()).await;
                     }
                 }
                 #[cfg(feature = "with-hot-end")]
@@ -2429,8 +2626,83 @@ impl GCodeProcessor {
             GCodeValue::M862_1 => Ok(CodeExecutionSuccess::OK),
             #[cfg(feature = "with-motion")]
             GCodeValue::M862_3 => Ok(CodeExecutionSuccess::OK),
-            #[cfg(feature = "with-motion")]
+            #[cfg(all(feature = "with-motion", not(feature = "with-pressure-advance")))]
             GCodeValue::M900 => Ok(CodeExecutionSuccess::OK),
+            // Input shaping (Marlin's semantics): `F` sets the frequency (0 disables it, else 20 Hz
+            // or above), `D` the damping ratio (0 to 0.5), `T` the type (0 ZV, 1 EI, 2 MZV, 3 ZVD),
+            // of the axes given (`X`, `Y`; both without them). Without values, they are reported.
+            // Applied from the next stop (see `motion::input_shaping`)
+            #[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+            GCodeValue::M593(p) => {
+                use crate::motion::{ShaperConfig, ShaperKind};
+                let cfg = self.motion_planner.motion_config();
+                let mut shapers = cfg.get_input_shaping();
+                if p.d.is_none() && p.f.is_none() && p.t.is_none() {
+                    for (k, axis) in ["X", "Y"].into_iter().enumerate() {
+                        let section = m503_section(k == 0, "Input Shaping:", format_args!("{}", M593Setting(axis, shapers[k])));
+                        self.write(channel, section.as_str()).await;
+                    }
+                    return Ok(CodeExecutionSuccess::OK);
+                }
+                let axes = match (p.x.is_some(), p.y.is_some()) {
+                    (false, false) => [true, true],
+                    (x, y) => [x, y],
+                };
+                let mut set = |apply: &dyn Fn(&mut ShaperConfig)| {
+                    for (k, shaper) in shapers.iter_mut().enumerate() {
+                        if axes[k] {
+                            apply(shaper);
+                        }
+                    }
+                };
+                if let Some(d) = p.d {
+                    match ShaperConfig::is_valid_damping(d) {
+                        true => set(&|s| s.damping = d),
+                        false => self.write(channel, "echo:?Zeta (D) value out of range (0-0.5)\n").await,
+                    }
+                }
+                if let Some(f) = p.f {
+                    match ShaperConfig::is_valid_frequency(f) {
+                        true => set(&|s| s.frequency = f),
+                        false => {
+                            self.write(channel, "echo:?Frequency (F) must be greater than 20.00 or 0 to disable\n")
+                                .await
+                        }
+                    }
+                }
+                if let Some(t) = p.t {
+                    match t.to_i32().and_then(ShaperKind::from_index) {
+                        Some(kind) => set(&|s| s.kind = kind),
+                        None => self.write(channel, "echo:?Type (T) value out of range (0-3)\n").await,
+                    }
+                }
+                cfg.set_input_shaping(shapers);
+                Ok(CodeExecutionSuccess::OK)
+            }
+            // Pressure advance (Marlin's linear advance): `K` sets the factor (seconds, 0 disables
+            // it, 0 to 10 as Marlin). Without `K`, it is reported. Applied from the next move
+            // executed: the change of lead is spread along it (see `motion::pressure_advance`)
+            #[cfg(all(feature = "with-motion", feature = "with-pressure-advance"))]
+            GCodeValue::M900(p) => {
+                let cfg = self.motion_planner.motion_config();
+                // A single extruder (E0)
+                if p.t.is_some_and(|t| !t.is_zero()) {
+                    self.write(channel, "echo:?T value out of range.\n").await;
+                    return Ok(CodeExecutionSuccess::OK);
+                }
+                match p.k {
+                    None => {
+                        let msg = LineBuf::<{ 15 + 24 + 1 }>::from_fmt(format_args!(
+                            "echo:Advance K={:?}\n",
+                            cfg.get_pressure_advance().rdp(4)
+                        ));
+                        self.write(channel, msg.as_str()).await;
+                    }
+                    Some(k) if k >= math::ZERO && k <= math::TEN => cfg.set_pressure_advance(k),
+                    Some(_) => self.write(channel, "echo:?K value out of range (0-10).\n").await,
+                }
+                Ok(CodeExecutionSuccess::OK)
+            }
             #[cfg(feature = "with-motion")]
             GCodeValue::M907 => Ok(CodeExecutionSuccess::OK),
             _ => Err(CodeExecutionFailure::NotYetImplemented),
@@ -2464,7 +2736,7 @@ const I32_LEN: usize = 11;
 
 /// `M105`: "ok" + hot-end + hot-bed + "\n". Per heater: " T:" + " /" + " T@:"
 /// (+ " TZ:" without marlin-compat) and their numbers
-const M105_CAPACITY: usize = {
+pub(crate) const M105_CAPACITY: usize = {
     let heater = if cfg!(feature = "marlin-compat") {
         3 + 2 + 4 + 3 * FIXED2_LEN
     } else {
@@ -2494,6 +2766,7 @@ const M115_CAPABILITIES: &[(&str, bool)] = &[
     ("PROMPT_SUPPORT", false),
     // M500/M501
     ("EEPROM", cfg!(feature = "with-eeprom")),
+    // M200: reported as enabled only while the volumetric extrusion is on (off by default)
     ("VOLUMETRIC", false),
     // No M154/M155
     ("AUTOREPORT_POS", false),
@@ -2520,8 +2793,9 @@ const M115_CAPABILITIES: &[(&str, bool)] = &[
     ("SD_WRITE", false),
     // M27 S
     ("AUTOREPORT_SD_STATUS", cfg!(feature = "with-print-job")),
-    // No M33
-    ("LONG_FILENAME", false),
+    // M20 L and M33 (and the long names in the paths)
+    ("LONG_FILENAME", cfg!(feature = "with-sd-card")),
+    ("EXTENDED_M20", cfg!(feature = "with-sd-card")),
     // Heater safeguards (thermal runaway, heating failed, MINTEMP/MAXTEMP)
     (
         "THERMAL_PROTECTION",
@@ -2608,14 +2882,14 @@ impl<const N: usize> LineBuf<N> {
     /// Out of range values saturate to +/-999999.99.
     #[allow(dead_code)]
     #[inline(always)]
-    fn push_fixed2(&mut self, v: f32) {
+    pub(crate) fn push_fixed2(&mut self, v: f32) {
         self.cursor().push_fixed2(v)
     }
 
     /// Appends `v` as a plain integer
     #[allow(dead_code)]
     #[inline(always)]
-    fn push_u32(&mut self, v: u32) {
+    pub(crate) fn push_u32(&mut self, v: u32) {
         self.cursor().push_digits(false, v, false)
     }
 
@@ -2641,6 +2915,20 @@ impl<const N: usize> LineBuf<N> {
     #[inline(always)]
     pub(crate) fn as_str(&self) -> &str {
         line_str(&self.buf, self.len)
+    }
+
+    /// The length of the text (bytes)
+    #[allow(dead_code)]
+    pub(crate) fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    /// Shortens the text to `len` bytes (a length it had: never at the middle of a char)
+    #[allow(dead_code)]
+    pub(crate) fn truncate(&mut self, len: usize) {
+        if len < self.len as usize && self.as_str().is_char_boundary(len) {
+            self.len = len as u16;
+        }
     }
 }
 

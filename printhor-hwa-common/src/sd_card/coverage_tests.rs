@@ -500,3 +500,191 @@ async fn invalid_file_creations_are_reported_without_leaking_entries() {
     assert!(matches!(card.write(*stack.last().unwrap(), &big), Err(SDCardError::WriteError)));
     card.release_path(&mut stack);
 }
+
+// ── Long file names (VFAT) ─────────────────────────────────────────────────────────────────────
+
+/// The VFAT entries of `long` (last segment first, as on disk) for the short name `short`
+fn lfn_entries(long: &str, short: &[u8; 11]) -> Vec<[u8; 32]> {
+    let checksum = short
+        .iter()
+        .fold(0u8, |sum, b| ((sum & 1) << 7).wrapping_add(sum >> 1).wrapping_add(*b));
+    let mut units: Vec<u16> = long.encode_utf16().collect();
+    if units.len() % 13 != 0 {
+        units.push(0);
+    }
+    while units.len() % 13 != 0 {
+        units.push(0xFFFF);
+    }
+    let count = units.len() / 13;
+    (0..count)
+        .rev()
+        .map(|i| {
+            let mut e = [0u8; 32];
+            e[0] = (i as u8 + 1) | if i + 1 == count { 0x40 } else { 0 };
+            e[11] = 0x0F;
+            e[13] = checksum;
+            let chunk = &units[i * 13..i * 13 + 13];
+            for (k, unit) in chunk.iter().enumerate() {
+                let at = match k {
+                    0..=4 => 1 + 2 * k,
+                    5..=10 => 14 + 2 * (k - 5),
+                    _ => 28 + 2 * (k - 11),
+                };
+                put_u16(&mut e, at, *unit);
+            }
+            e
+        })
+        .collect()
+}
+
+/// Writes the long name entries and the short one from `slot`. Returns the next free slot
+fn named_entry(b: &mut [u8], slot: usize, long: &str, short: &[u8; 11], attributes: u8, cluster: u16, size: u32) -> usize {
+    let mut slot = slot;
+    for e in lfn_entries(long, short) {
+        b[slot * 32..slot * 32 + 32].copy_from_slice(&e);
+        slot += 1;
+    }
+    dir_entry(b, slot, short, attributes, cluster, size);
+    slot + 1
+}
+
+const LONG_DIR: &str = "Long Folder Name";
+const LONG_FILE: &str = "A really long file name.gcode";
+const LONG_ROOT_FILE: &str = "My Benchy Print.gcode";
+const LONG_CONTENT: &[u8] = b"G28\nM117 long\n";
+
+/// The disk with long names: `/My Benchy Print.gcode` (`MYBENC~1.GCO`, the content of
+/// `BENCHY.GCO`) and `/Long Folder Name/` (`LONGFO~1`, cluster 7) holding
+/// `A really long file name.gcode` (`AREALL~1.GCO`, cluster 8)
+fn lfn_disk() -> RamDisk {
+    let d = disk(true);
+    {
+        let mut blocks = d.blocks.borrow_mut();
+        let root = blocks.get_mut(&ROOT_DIR_BLOCK).unwrap();
+        let slot = named_entry(root, 4, LONG_ROOT_FILE, b"MYBENC~1GCO", 0x20, 3, BENCHY.len() as u32);
+        named_entry(root, slot, LONG_DIR, b"LONGFO~1   ", 0x10, 7, 0);
+        let fat = blocks.get_mut(&(LBA_START + 1)).unwrap();
+        put_u16(fat, 7 * 2, 0xFFFF);
+        put_u16(fat, 8 * 2, 0xFFFF);
+        let mut dir = [0u8; 512];
+        dir_entry(&mut dir, 0, b".          ", 0x10, 7, 0);
+        dir_entry(&mut dir, 1, b"..         ", 0x10, 0, 0);
+        named_entry(&mut dir, 2, LONG_FILE, b"AREALL~1GCO", 0x20, 8, LONG_CONTENT.len() as u32);
+        blocks.insert(cluster_block(7), dir);
+        let mut content = [0u8; 512];
+        content[..LONG_CONTENT.len()].copy_from_slice(LONG_CONTENT);
+        blocks.insert(cluster_block(8), content);
+    }
+    d
+}
+
+fn long_names_in<const D: usize, const F: usize, const E: usize>(
+    card: &mut SDStateManager<RamDisk, D, F, E>,
+    dir: EntryRef,
+) -> Vec<(String, Option<String>)> {
+    let mut names = Vec::new();
+    card.list_dir_lfn(&dir, |e, long| {
+        names.push((short_name(&e.name).to_string(), long.map(String::from)));
+        core::ops::ControlFlow::Continue(())
+    });
+    names
+}
+
+#[futures_test::test]
+async fn long_names_are_listed() {
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(lfn_disk(), 0).await;
+    let mut root = card.open_path("/").unwrap();
+    let names = long_names_in(&mut card, root[0]);
+    assert!(names.contains(&("BENCHY.GCO".to_string(), None)), "{:?}", names);
+    assert!(names.contains(&("MYBENC~1.GCO".to_string(), Some(LONG_ROOT_FILE.to_string()))), "{:?}", names);
+    assert!(names.contains(&("LONGFO~1".to_string(), Some(LONG_DIR.to_string()))), "{:?}", names);
+    // The listing can stop early
+    let mut seen = 0;
+    card.list_dir_lfn(&root[0], |_, _| {
+        seen += 1;
+        core::ops::ControlFlow::Break(())
+    });
+    assert_eq!(seen, 1);
+    card.release_path(&mut root);
+    assert_eq!(total_refs(&card), 0);
+}
+
+#[futures_test::test]
+async fn paths_are_resolved_by_short_or_long_names() {
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(lfn_disk(), 0).await;
+    for path in [
+        "/LONGFO~1/AREALL~1.GCO",
+        "/Long Folder Name/A really long file name.gcode",
+        // Case-insensitive, as FAT
+        "/long folder name/a REALLY long FILE name.GCODE",
+        "/longfo~1/A really long file name.gcode",
+        "Long Folder Name/./AREALL~1.GCO",
+    ] {
+        let mut stack = card.open_file_path(path).unwrap_or_else(|e| panic!("{}: {}", path, e));
+        assert_eq!(stack.len(), 3, "{}", path);
+        assert_eq!(read_all(&mut card, *stack.last().unwrap()), LONG_CONTENT, "{}", path);
+        card.release_path(&mut stack);
+        assert_eq!(total_refs(&card), 0, "{}", path);
+    }
+    // The same entry, named both ways, is opened once (shared)
+    let mut by_long = card.open_path("/Long Folder Name").unwrap();
+    let mut by_short = card.open_path("/LONGFO~1").unwrap();
+    assert_eq!(by_long[1].0, by_short[1].0);
+    card.release_path(&mut by_long);
+    card.release_path(&mut by_short);
+    assert_eq!(total_refs(&card), 0);
+    // A root file by its long name
+    let mut stack = card.open_file_path("/my benchy print.gcode").unwrap();
+    assert_eq!(read_all(&mut card, stack[1]), BENCHY);
+    card.release_path(&mut stack);
+    // Unknown names
+    crate::info!("Expecting Err: unknown long names are not found");
+    for path in ["/Long Folder/A really long file name.gcode", "/Long Folder Name/missing file.gcode"] {
+        assert!(matches!(card.open_file_path(path), Err(SDCardError::NotFound)), "{}", path);
+        assert_eq!(total_refs(&card), 0, "{}", path);
+    }
+}
+
+#[futures_test::test]
+async fn the_long_path_of_a_path() {
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(lfn_disk(), 0).await;
+    let long = |card: &mut SDStateManager<_, 4, 4, 8>, path: &str| {
+        let mut out = heapless::String::<256>::new();
+        card.long_path(path, &mut out).map(|_| out.to_string())
+    };
+    let expected = std::format!("/{}/{}", LONG_DIR, LONG_FILE);
+    assert_eq!(long(&mut card, "/LONGFO~1/AREALL~1.GCO").unwrap(), expected);
+    assert_eq!(long(&mut card, "LONGFO~1/AREALL~1.GCO").unwrap(), expected);
+    assert_eq!(long(&mut card, "/Long Folder Name/AREALL~1.GCO").unwrap(), expected);
+    // Entries without a long name keep their short one
+    assert_eq!(long(&mut card, "/GCODE/PART.GCO").unwrap(), "/GCODE/PART.GCO");
+    assert_eq!(long(&mut card, "/BENCHY.GCO").unwrap(), "/BENCHY.GCO");
+    assert_eq!(long(&mut card, "/MYBENC~1.GCO").unwrap(), std::format!("/{}", LONG_ROOT_FILE));
+    assert_eq!(long(&mut card, "/LONGFO~1/").unwrap(), std::format!("/{}", LONG_DIR));
+    assert_eq!(long(&mut card, "/").unwrap(), "/");
+    assert_eq!(total_refs(&card), 0);
+    crate::info!("Expecting Err: the long path of a missing entry, or of a file used as a directory");
+    assert!(matches!(long(&mut card, "/LONGFO~1/MISSING.GCO"), Err(SDCardError::NotFound)));
+    assert!(matches!(long(&mut card, "/BENCHY.GCO/X.GCO"), Err(SDCardError::NotFound)));
+    assert_eq!(total_refs(&card), 0);
+    // Truncated when it does not fit
+    let mut out = heapless::String::<8>::new();
+    assert!(card.long_path("/MYBENC~1.GCO", &mut out).is_ok());
+    assert_eq!(out.as_str(), "/My Benc");
+}
+
+#[futures_test::test]
+async fn an_existing_file_named_by_its_long_name_is_truncated() {
+    let mut card: SDStateManager<_, 4, 4, 8> = SDStateManager::new(lfn_disk(), 0).await;
+    let path = std::format!("/{}/{}", LONG_DIR, LONG_FILE);
+    let mut stack = card.create_file(&path).unwrap();
+    card.write(*stack.last().unwrap(), b"M115\n").unwrap();
+    card.release_path(&mut stack);
+    let mut stack = card.open_file_path("/LONGFO~1/AREALL~1.GCO").unwrap();
+    assert_eq!(read_all(&mut card, *stack.last().unwrap()), b"M115\n");
+    card.release_path(&mut stack);
+    // A new file needs a short name
+    crate::info!("Expecting Err: a new long name can not be created");
+    assert!(matches!(card.create_file("/Another long name.gcode"), Err(SDCardError::InvalidName)));
+    assert_eq!(total_refs(&card), 0);
+}

@@ -78,7 +78,8 @@ impl StepActuatorController {
 
 /// Test instrumentation of the native simulator: keeps the signed step count of every motor
 /// (according to the last applied direction) and, while recording, the lattice position reached
-/// after each step pulse (simultaneous pulses of several motors make a single position).
+/// after each step pulse (simultaneous pulses of several motors make a single position). The
+/// extruder is counted apart (see [step_trace::extruder]): it is not part of the positions.
 #[cfg(all(test, feature = "native"))]
 pub mod step_trace {
     use crate::hwa;
@@ -91,12 +92,25 @@ pub mod step_trace {
         forward: [bool; 3],
         steps: Steps,
         recording: Option<std::vec::Vec<Steps>>,
+        /// Extruder: direction, signed step count and steps done backwards
+        #[cfg(feature = "with-e-axis")]
+        e_forward: bool,
+        #[cfg(feature = "with-e-axis")]
+        e_steps: i64,
+        #[cfg(feature = "with-e-axis")]
+        e_backwards: i64,
     }
 
     static TRACE: Mutex<Trace> = Mutex::new(Trace {
         forward: [true; 3],
         steps: [0; 3],
         recording: None,
+        #[cfg(feature = "with-e-axis")]
+        e_forward: true,
+        #[cfg(feature = "with-e-axis")]
+        e_steps: 0,
+        #[cfg(feature = "with-e-axis")]
+        e_backwards: 0,
     });
 
     const AXES: [hwa::CoordSel; 3] = [hwa::CoordSel::X, hwa::CoordSel::Y, hwa::CoordSel::Z];
@@ -107,6 +121,10 @@ pub mod step_trace {
             if mask.contains(*axis) {
                 t.forward[i] = channels.contains(*axis);
             }
+        }
+        #[cfg(feature = "with-e-axis")]
+        if mask.contains(hwa::CoordSel::E) {
+            t.e_forward = channels.contains(hwa::CoordSel::E);
         }
     }
 
@@ -125,6 +143,23 @@ pub mod step_trace {
                 r.push(steps);
             }
         }
+        #[cfg(feature = "with-e-axis")]
+        if channels.contains(hwa::CoordSel::E) {
+            match t.e_forward {
+                true => t.e_steps += 1,
+                false => {
+                    t.e_steps -= 1;
+                    t.e_backwards += 1;
+                }
+            }
+        }
+    }
+
+    /// The signed step count of the extruder motor, and the steps it did backwards
+    #[cfg(feature = "with-e-axis")]
+    pub fn extruder() -> (i64, i64) {
+        let t = TRACE.lock().unwrap();
+        (t.e_steps, t.e_backwards)
     }
 
     /// The current step counts

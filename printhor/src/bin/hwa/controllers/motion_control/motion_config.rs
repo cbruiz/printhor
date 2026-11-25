@@ -220,7 +220,7 @@ impl MotionConfig {
     /// [homing_z_clearance](hwa::drivers::motion_driver::homing_z_clearance) above the plane where
     /// the Z end-stop (or the probe) triggered. With the probe the nozzle is `-probe_offset.z`
     /// above the bed there (Marlin's convention: a negative offset is a probe below the nozzle),
-    /// so Z0 is the bed.
+    /// so the bed plane is at the Z of the homing point (Z0 when it is 0, Marlin's `Z_MIN_POS`).
     pub fn get_native_post_homing_position(&self) -> TVector<Real> {
         #[allow(unused_mut)]
         let mut point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
@@ -282,6 +282,15 @@ impl MotionConfig {
         let offset = self.get_home_offset();
         let mut point = *native;
         point.apply_values(|coord, v| Some(*v + offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
+        point
+    }
+
+    /// The native (machine) position of a logical position: the inverse of
+    /// [Self::logical_from_native]
+    pub fn native_from_logical(&self, logical: &TVector<Real>) -> TVector<Real> {
+        let offset = self.get_home_offset();
+        let mut point = *logical;
+        point.apply_values(|coord, v| Some(*v - offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
         point
     }
 
@@ -387,6 +396,54 @@ impl MotionConfig {
         self.cfg.apply_mut(|m| m.retraction = retraction);
     }
 
+    /// Volumetric extrusion settings (M200)
+    #[cfg(feature = "with-e-axis")]
+    pub fn get_volumetric(&self) -> VolumetricConfig {
+        self.cfg.apply(|m| m.volumetric)
+    }
+
+    #[cfg(feature = "with-e-axis")]
+    pub fn set_volumetric(&self, volumetric: VolumetricConfig) {
+        self.cfg.apply_mut(|m| m.volumetric = volumetric);
+    }
+
+    /// The factor from the E words of the moves to the filament length to feed: the M221 flow
+    /// percentage and, with volumetric extrusion (M200), the inverse of the filament
+    /// cross-section (E words are volumes). Marlin's `e_factor`
+    /// The pressure advance factor `K` (seconds): the extruder leads its nominal position by `K`
+    /// times its speed (`M900 K`). Zero disables it
+    #[cfg(feature = "with-pressure-advance")]
+    pub fn get_pressure_advance(&self) -> Real {
+        self.cfg.apply(|m| m.pressure_advance_k)
+    }
+
+    #[cfg(feature = "with-pressure-advance")]
+    pub fn set_pressure_advance(&self, k: Real) {
+        self.cfg.apply_mut(|m| m.pressure_advance_k = k);
+    }
+
+    /// The input shapers of X and Y (`M593`), applied from the next stop
+    #[cfg(feature = "with-input-shaping")]
+    pub fn get_input_shaping(&self) -> [crate::motion::ShaperConfig; 2] {
+        self.cfg.apply(|m| m.input_shaping)
+    }
+
+    #[cfg(feature = "with-input-shaping")]
+    pub fn set_input_shaping(&self, shapers: [crate::motion::ShaperConfig; 2]) {
+        self.cfg.apply_mut(|m| m.input_shaping = shapers);
+    }
+
+    pub fn get_e_factor(&self) -> Real {
+        #[cfg(feature = "with-e-axis")]
+        {
+            self.get_flow_rate_as_real() * self.get_volumetric().volumetric_multiplier()
+        }
+        #[cfg(not(feature = "with-e-axis"))]
+        {
+            self.get_flow_rate_as_real()
+        }
+    }
+
     pub fn get_flow_rate_as_real(&self) -> Real {
         Real::new(self.get_flow_rate() as i64, 0) / hwa::math::ONE_HUNDRED
     }
@@ -460,6 +517,15 @@ impl MotionConfig {
         self.set_print_accel(None);
         self.set_travel_accel(None);
         self.set_retraction(RetractionConfig::defaults());
+        #[cfg(feature = "with-e-axis")]
+        self.set_volumetric(VolumetricConfig::defaults());
+        #[cfg(feature = "with-pressure-advance")]
+        self.set_pressure_advance(Real::from_f32(DEFAULT_PRESSURE_ADVANCE_K));
+        #[cfg(feature = "with-input-shaping")]
+        self.set_input_shaping([
+            default_shaper(DEFAULT_INPUT_SHAPING_FREQ_X, DEFAULT_INPUT_SHAPING_DAMPING_X),
+            default_shaper(DEFAULT_INPUT_SHAPING_FREQ_Y, DEFAULT_INPUT_SHAPING_DAMPING_Y),
+        ]);
         // Compute min speed. Really useful because of discretion effects
         self.compute_min_speed();
     }
@@ -633,6 +699,16 @@ pub struct MotionConfigContent {
 
     /// Firmware retraction settings
     retraction: RetractionConfig,
+
+    /// Volumetric extrusion settings (M200)
+    #[cfg(feature = "with-e-axis")]
+    volumetric: VolumetricConfig,
+
+    #[cfg(feature = "with-pressure-advance")]
+    pressure_advance_k: Real,
+
+    #[cfg(feature = "with-input-shaping")]
+    input_shaping: [crate::motion::ShaperConfig; 2],
 }
 
 /// Firmware retraction settings (G10/G11, M207/M208)
@@ -673,6 +749,113 @@ impl RetractionConfig {
     }
 }
 
+/// Nominal filament diameter (world units) of the volumetric extrusion until `M200 D` sets it
+/// (Marlin's `DEFAULT_NOMINAL_FILAMENT_DIA`). Overridable at build time
+#[cfg(feature = "with-e-axis")]
+#[const_env::env_item("DEFAULT_FILAMENT_DIAMETER_MM")]
+const DEFAULT_FILAMENT_DIAMETER_MM: f32 = 1.75;
+
+/// The default pressure advance factor `K` (seconds, `M900 K`, restored by `M502`): off
+#[cfg(feature = "with-pressure-advance")]
+#[const_env::env_item("DEFAULT_PRESSURE_ADVANCE_K")]
+const DEFAULT_PRESSURE_ADVANCE_K: f32 = 0.0;
+
+/// The default input shapers (`M593`, restored by `M502`): the one `s_plot` tunes on `pen-test.gcode`
+/// with the motion of the SKR Mini E3 V3 (`skr_mini_e3_v3_fdm`), on its frame model (Ender-3 like:
+/// 40 Hz, damping 0.15, Marlin's defaults): resonance identified at 40.01 Hz and damping 0.150, ZVD
+/// chosen by Klipper's score (0.7% of vibration left over ±10% of the frequency, ZV 7.4%). Marlin's
+/// are ZV, 40 Hz, 0.15. A frequency of 0 disables the shaper of that axis; the type is `M593 T`
+/// (0 ZV, 1 EI, 2 MZV, 3 ZVD)
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_TYPE")]
+const DEFAULT_INPUT_SHAPING_TYPE: u8 = 3;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_FREQ_X")]
+const DEFAULT_INPUT_SHAPING_FREQ_X: f32 = 40.01;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_FREQ_Y")]
+const DEFAULT_INPUT_SHAPING_FREQ_Y: f32 = 40.01;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_DAMPING_X")]
+const DEFAULT_INPUT_SHAPING_DAMPING_X: f32 = 0.15;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_DAMPING_Y")]
+const DEFAULT_INPUT_SHAPING_DAMPING_Y: f32 = 0.15;
+
+#[cfg(feature = "with-input-shaping")]
+fn default_shaper(frequency: f32, damping: f32) -> crate::motion::ShaperConfig {
+    crate::motion::ShaperConfig {
+        kind: crate::motion::ShaperKind::from_index(DEFAULT_INPUT_SHAPING_TYPE as i32)
+            .unwrap_or(crate::motion::ShaperKind::Zv),
+        frequency: Real::from_f32(frequency),
+        damping: Real::from_f32(damping),
+    }
+}
+
+/// Volumetric extrusion settings (M200), as Marlin's `VOLUMETRIC_EXTRUSION`. Disabled by
+/// default: the E words are filament lengths.
+///
+/// Enabled, the E words are volumes (world units³) and the extruder feeds `E / A` of filament,
+/// `A` being the cross-section of the filament (the M221 flow percentage still applies). The
+/// logical extruder position (G92 E, M114) stays in the units of the E words. The firmware
+/// retraction (G10/G11) is a filament length in both modes.
+#[cfg(feature = "with-e-axis")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VolumetricConfig {
+    /// The E words are volumes
+    pub enabled: bool,
+    /// Filament diameter (world units). Zero: no conversion, even when enabled
+    pub diameter: Real,
+    /// Max volumetric flow (world units³/s) of the extruding moves, `0`: unlimited (Marlin's
+    /// `VOLUMETRIC_EXTRUDER_LIMIT`, `M200 L`). It applies in both modes
+    pub limit: Real,
+}
+
+#[cfg(feature = "with-e-axis")]
+impl VolumetricConfig {
+    /// Disabled, without a diameter and no flow limit (until [Self::defaults] are applied)
+    pub const fn new() -> Self {
+        Self {
+            enabled: false,
+            diameter: hwa::math::ZERO,
+            limit: hwa::math::ZERO,
+        }
+    }
+
+    /// Marlin's defaults: disabled, nominal diameter and no flow limit
+    pub fn defaults() -> Self {
+        Self {
+            diameter: Real::from_f32(DEFAULT_FILAMENT_DIAMETER_MM),
+            ..Self::new()
+        }
+    }
+
+    /// Cross-section of the filament (world units²), `None` without a diameter
+    pub fn area(&self) -> Option<Real> {
+        self.diameter.is_defined_positive().then(|| {
+            let radius = self.diameter * hwa::math::HALF;
+            hwa::math::PI * radius * radius
+        })
+    }
+
+    /// From the E words to filament length: `1 / A` when enabled (with a diameter), `1` otherwise
+    pub fn volumetric_multiplier(&self) -> Real {
+        match (self.enabled, self.area()) {
+            (true, Some(area)) => area.recip(),
+            _ => hwa::math::ONE,
+        }
+    }
+
+    /// The max filament feed rate (world units/s) that the volumetric flow limit allows, `None`
+    /// when unlimited
+    pub fn max_filament_speed(&self) -> Option<Real> {
+        match (self.limit.is_defined_positive(), self.area()) {
+            (true, Some(area)) => Some(self.limit / area),
+            _ => None,
+        }
+    }
+}
+
 impl MotionConfigContent {
     /// Creates a new `MotionConfig` instance with default values.
     /// See [MotionConfigContent]
@@ -703,6 +886,15 @@ impl MotionConfigContent {
             travel_accel_su: None,
 
             retraction: RetractionConfig::new(),
+
+            #[cfg(feature = "with-e-axis")]
+            volumetric: VolumetricConfig::new(),
+
+            #[cfg(feature = "with-pressure-advance")]
+            pressure_advance_k: hwa::math::ZERO,
+
+            #[cfg(feature = "with-input-shaping")]
+            input_shaping: [crate::motion::ShaperConfig::disabled(); 2],
         }
     }
 }

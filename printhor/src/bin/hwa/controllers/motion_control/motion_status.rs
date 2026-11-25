@@ -267,17 +267,34 @@ impl MotionStatus {
         self.cfg.apply_mut(|m| {
             m.last_planned_position.is_set = false;
             m.current_position.is_set = false;
-            m.homed = false;
+            m.homed_axes = CoordSel::empty();
         });
     }
 
-    /// The position comes from a homing (the end-stops are where the machine bounds say)
-    pub fn set_homed(&self, homed: bool) {
-        self.cfg.apply_mut(|m| m.homed = homed);
+    /// Marks the position as not (completely) known, keeping the axes already homed: a homing of
+    /// some axes while others are still unknown (e.g. `G28 X Y` before Z is homed). Homing is
+    /// required before any move
+    pub fn set_position_unknown(&self) {
+        self.cfg.apply_mut(|m| {
+            m.last_planned_position.is_set = false;
+            m.current_position.is_set = false;
+        });
     }
 
+    /// The axes whose position comes from a homing (the end-stops are where the machine bounds
+    /// say), see [hwa::controllers::HomingPlan]
+    pub fn set_homed_axes(&self, axes: CoordSel) {
+        self.cfg.apply_mut(|m| m.homed_axes = axes);
+    }
+
+    pub fn homed_axes(&self) -> CoordSel {
+        self.cfg.apply(|m| m.homed_axes)
+    }
+
+    /// Every axis found by the homing is homed
     pub fn is_homed(&self) -> bool {
-        self.cfg.apply(|m| m.homed)
+        let axes = self.homed_axes();
+        !axes.is_empty() && axes.contains(hwa::controllers::HomingPlan::homing_axes())
     }
 
     /// Soft end-stops (M211 S): moves are clipped to the travel of the axes once homed
@@ -313,8 +330,8 @@ pub struct MotionStatusContent {
     pub feed_rate_wu_s: Option<Real>,
     /// Firmware retraction state
     pub retracted: bool,
-    /// The position comes from a homing
-    pub homed: bool,
+    /// The axes whose position comes from a homing
+    pub homed_axes: CoordSel,
     /// Soft end-stops enabled (M211)
     pub soft_endstops: bool,
     /// Flag indicating if the laser is enabled (only present when the `with-laser` feature is enabled).
@@ -339,7 +356,7 @@ impl MotionStatusContent {
             logical_e_wu: Real::zero(),
             feed_rate_wu_s: None,
             retracted: false,
-            homed: false,
+            homed_axes: CoordSel::empty(),
             soft_endstops: true,
             #[cfg(feature = "with-laser")]
             laser: false,

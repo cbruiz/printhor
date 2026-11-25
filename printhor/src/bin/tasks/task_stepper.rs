@@ -209,6 +209,21 @@ pub async fn task_stepper(
     #[allow(unused_mut, unused_variables)]
     let mut _starving_since: Option<u64> = None;
 
+    // The extruder lead carried across the segments (see `motion::pressure_advance`), its rounding
+    // residue included
+    #[cfg(feature = "with-pressure-advance")]
+    let mut pressure_advance = motion::PressureAdvance::new();
+    // Where the extruder motor is relative to its nominal position (steps, within ±½): the rounding
+    // residue, carried from segment to segment (the motion status restarts the extruder position
+    // from zero at every segment, so it can not be derived from the position as for the other
+    // axes). With pressure advance, it is its lead
+    #[cfg(all(feature = "with-e-axis", not(feature = "with-pressure-advance")))]
+    let mut extruder_residue = math::ZERO;
+
+    // The shaped motion of X and Y across the segments (see `motion::input_shaping`)
+    #[cfg(feature = "with-input-shaping")]
+    let mut input_shaper = motion::InputShaper::new(STEPPER_PLANNER_CLOCK_PERIOD_US);
+
     loop {
         let consumed = match embassy_time::with_timeout(
             STEPPER_INACTIVITY_TIMEOUT,
@@ -243,6 +258,9 @@ pub async fn task_stepper(
                 if motion_aborted() || event_bus.has_flags(EventFlags::SYS_ALARM).await =>
             {
                 hwa::debug!("[task_stepper] order_num:{:?} Segment discarded", _order_num);
+                // The motors stop where the shaped motion left them
+                #[cfg(feature = "with-input-shaping")]
+                abort_shaping(&mut input_shaper, &motion_planner);
                 motion_planner.consume_current_plan(&event_bus).await
             }
             Ok(ExecPlan::Segment(mut segment, _channel, _order_num)) => 'segment: {
@@ -265,6 +283,8 @@ pub async fn task_stepper(
                 if !wait_motion_ready(&mut _s, &event_bus, &motion_planner).await {
                     hwa::warn!("[task_stepper] order_num:{:?} Segment discarded (not ready)", _order_num);
                     metrics::set_motion_active(false);
+                    #[cfg(feature = "with-input-shaping")]
+                    abort_shaping(&mut input_shaper, &motion_planner);
                     break 'segment motion_planner.consume_current_plan(&event_bus).await;
                 }
 
@@ -452,19 +472,83 @@ pub async fn task_stepper(
                         #[cfg(feature = "with-motion-broadcast")]
                         let mut delta = hwa::MotionDelta::new();
 
+                        // Pressure advance: the extruder steps, when the segment carries a lead
+                        // (see `motion::pressure_advance`). The interpolator moves the other axes
+                        #[cfg(feature = "with-pressure-advance")]
+                        let mut extruder_advance = pressure_advance.begin(
+                            motion_planner.motion_config().get_pressure_advance(),
+                            &segment.unit_vector_dir,
+                            segment.displacement_su,
+                            steps_per_su.get_coord(CoordSel::E).unwrap_or(math::ZERO),
+                            trajectory.eval_velocity(math::ZERO),
+                            trajectory.eval_acceleration(math::ZERO),
+                            STEPPER_PLANNER_CLOCK_PERIOD_US,
+                        );
+                        // The axes moved by the interpolator, and the steppers enabled
+                        #[cfg(feature = "with-pressure-advance")]
+                        let (interpolated_coords, stepper_enable_flags) =
+                            match extruder_advance.is_some() {
+                                true => (
+                                    relevant_coords.difference(CoordSel::E),
+                                    relevant_coords.union(CoordSel::E),
+                                ),
+                                false => (relevant_coords, relevant_coords),
+                            };
+                        #[cfg(not(feature = "with-pressure-advance"))]
+                        let (interpolated_coords, stepper_enable_flags) =
+                            (relevant_coords, relevant_coords);
+
                         let mut segment_iterator =
                             SegmentSampler::new(&trajectory, micro_segment_period_secs);
+
+                        // The extruder moved by the interpolator starts where the previous segment
+                        // left it relative to its nominal position (in its direction of motion)
+                        #[cfg(feature = "with-e-axis")]
+                        let extruder_dir = match interpolated_coords.contains(CoordSel::E) {
+                            true => segment.unit_vector_dir.get_coord(CoordSel::E),
+                            false => None,
+                        };
+                        #[cfg(feature = "with-e-axis")]
+                        let start_offset_steps = match extruder_dir {
+                            Some(u) => {
+                                #[cfg(feature = "with-pressure-advance")]
+                                let residue = pressure_advance.lead_steps();
+                                #[cfg(not(feature = "with-pressure-advance"))]
+                                let residue = extruder_residue;
+                                start_offset_steps.with_coord(
+                                    CoordSel::E,
+                                    Some(if u < math::ZERO { residue } else { -residue }),
+                                )
+                            }
+                            None => start_offset_steps,
+                        };
 
                         let mut micro_segment_interpolator =
                             MicroSegmentInterpolator::new_with_start_offset(
                                 segment
                                     .unit_vector_dir
-                                    .with_coord(relevant_coords.complement(), None)
+                                    .with_coord(interpolated_coords.complement(), None)
                                     .abs(),
                                 segment.displacement_su,
-                                steps_per_su.with_coord(relevant_coords.complement(), None),
+                                steps_per_su.with_coord(interpolated_coords.complement(), None),
                                 start_offset_steps,
                             );
+
+                        // Input shaping: the X and Y steps of the interpolator (the commanded
+                        // motion) are replaced by the shaped ones (see `motion::input_shaping`)
+                        #[cfg(feature = "with-input-shaping")]
+                        let shaping = input_shaper.begin(
+                            &motion_planner.motion_config().get_input_shaping(),
+                            &segment.unit_vector_dir,
+                            &steps_per_su,
+                            &start_offset_steps,
+                            trajectory.eval_velocity(math::ZERO),
+                        );
+                        #[cfg(feature = "with-input-shaping")]
+                        let stepper_enable_flags = match shaping {
+                            true => stepper_enable_flags.union(CoordSel::X | CoordSel::Y),
+                            false => stepper_enable_flags,
+                        };
 
                         #[cfg(feature = "verbose-timings")]
                         hwa::info!(
@@ -603,6 +687,31 @@ pub async fn task_stepper(
                                         break;
                                     }
                                 };
+                                #[allow(unused_mut)]
+                                let mut multi_timer = *micro_segment_interpolator.state();
+                                #[allow(unused_mut)]
+                                let mut dir_fwd = relevant_coords_dir_fwd;
+                                #[cfg(feature = "with-pressure-advance")]
+                                if let Some(advance) = extruder_advance.as_mut() {
+                                    advance.advance(
+                                        &mut multi_timer,
+                                        estimated_position,
+                                        v_window_end,
+                                        segment_iterator.current_acceleration(),
+                                        segment_iterator.dt_us().max(1) as u32,
+                                    );
+                                    dir_fwd.set(CoordSel::E, advance.forward());
+                                }
+                                #[cfg(feature = "with-input-shaping")]
+                                if shaping {
+                                    input_shaper.advance(
+                                        &mut multi_timer,
+                                        &mut dir_fwd,
+                                        segment_iterator.dt_us().max(1) as u32,
+                                        estimated_position,
+                                        v_window_end,
+                                    );
+                                }
 
                                 #[cfg(feature = "verbose-timings")]
                                 hwa::info!(
@@ -620,7 +729,18 @@ pub async fn task_stepper(
 
                                 cfg_if::cfg_if! {
                                     if #[cfg(feature="assert-motion")] {
-                                        steps_to_advance += micro_segment_interpolator.delta;
+                                        // Not `delta`: it would shadow the broadcast MotionDelta
+                                        #[allow(unused_mut)]
+                                        let mut window_steps = micro_segment_interpolator.delta;
+                                        #[cfg(feature = "with-input-shaping")]
+                                        if shaping {
+                                            input_shaper.window_counts(&mut window_steps);
+                                        }
+                                        steps_to_advance += window_steps;
+                                        #[cfg(feature = "with-pressure-advance")]
+                                        if let Some(advance) = extruder_advance.as_ref() {
+                                            steps_to_advance.increment(CoordSel::E, advance.count);
+                                        }
                                     }
                                 }
 
@@ -634,9 +754,9 @@ pub async fn task_stepper(
                                             _order_num,
                                             #[cfg(feature = "with-motion-broadcast")]
                                             delta,
-                                            micro_segment_interpolator.state().clone(),
-                                            relevant_coords,
-                                            relevant_coords_dir_fwd,
+                                            multi_timer,
+                                            stepper_enable_flags,
+                                            dir_fwd,
                                             speed_ratio,
                                         )
                                         .await;
@@ -655,6 +775,28 @@ pub async fn task_stepper(
                             }
                             hwa::trace!("Micro-segment END");
                             // Microsegment end
+                        }
+
+                        // The lead the extruder ends the segment with (also when interrupted)
+                        #[cfg(feature = "with-pressure-advance")]
+                        if let Some(advance) = extruder_advance.as_ref() {
+                            pressure_advance.end(advance);
+                        }
+                        // The residue the interpolator leaves the extruder with (also when
+                        // interrupted: where its last window ended)
+                        #[cfg(feature = "with-e-axis")]
+                        if let Some(u) = extruder_dir {
+                            if let Some(ahead) = micro_segment_interpolator
+                                .deviation_steps(CoordSel::E, segment_iterator.current_position())
+                            {
+                                let residue = if u < math::ZERO { -ahead } else { ahead };
+                                #[cfg(feature = "with-pressure-advance")]
+                                pressure_advance.set_lead_steps(residue);
+                                #[cfg(not(feature = "with-pressure-advance"))]
+                                {
+                                    extruder_residue = residue;
+                                }
+                            }
                         }
 
                         metrics::record_interp(
@@ -744,10 +886,25 @@ pub async fn task_stepper(
                                 .motion_status()
                                 .update_current_position(_order_num, &pos);
                         }
+                        // Interrupted: the motors stop where the shaped motion left them
+                        #[cfg(feature = "with-input-shaping")]
+                        if motion_aborted() {
+                            abort_shaping(&mut input_shaper, &motion_planner);
+                        }
 
                         let consumed = motion_planner.consume_current_plan(&event_bus).await;
                         #[allow(unused)]
                         let moves_left = consumed.moves_left;
+                        // The motion stops (nothing queued behind): the shaped motion is completed
+                        #[cfg(feature = "with-input-shaping")]
+                        if moves_left == 0 {
+                            flush_shaping(&mut input_shaper, &motion_planner, &event_bus, _order_num, steppers_off).await;
+                        }
+                        // The motion stops (nothing queued behind): the extruder lead is released
+                        #[cfg(feature = "with-pressure-advance")]
+                        if moves_left == 0 {
+                            release_pressure(&mut pressure_advance, &event_bus, _order_num, steppers_off).await;
+                        }
                         #[cfg(feature = "motion-metrics")]
                         {
                             let t_end = metrics::now_us();
@@ -817,6 +974,12 @@ pub async fn task_stepper(
                 }
             }
             Ok(ExecPlan::Dwell(sleep_ms, _channel, _order_num)) => {
+                // The head stops: the shaped motion is completed first
+                #[cfg(feature = "with-input-shaping")]
+                flush_shaping(&mut input_shaper, &motion_planner, &event_bus, _order_num, steppers_off).await;
+                // The head stops: the extruder lead is released first
+                #[cfg(feature = "with-pressure-advance")]
+                release_pressure(&mut pressure_advance, &event_bus, _order_num, steppers_off).await;
                 // Dwell. From the end of the motion queued before it (the steps still queued in
                 // the step executor, and the tool actions among them), so that a dwell (G4)
                 // lasts what was requested once the head is still, and M400 (a dwell of zero) is
@@ -849,17 +1012,21 @@ pub async fn task_stepper(
                 // Tool actions queued alone: applied below, after the steps already queued
                 motion_planner.consume_current_plan(&event_bus).await
             }
-            Ok(ExecPlan::Homing(_channel, _order_num)) => {
+            Ok(ExecPlan::Homing(_channel, _order_num, plan)) => {
                 // Homing
                 hwa::debug!("Homing init");
+                // The head stops: the shaped motion is completed first
+                #[cfg(feature = "with-input-shaping")]
+                flush_shaping(&mut input_shaper, &motion_planner, &event_bus, _order_num, steppers_off).await;
+                // The head stops: the extruder lead is released first
+                #[cfg(feature = "with-pressure-advance")]
+                release_pressure(&mut pressure_advance, &event_bus, _order_num, steppers_off).await;
 
                 let mut homing_failed = false;
-                // Where the homing ended (native): the expected point unless it ran (dry run and
-                // debug skip leave the machine where it is assumed to be)
+                // Where the homing ended (native, its known coordinates): the expected point unless
+                // it ran (dry run and debug skip leave the machine where it is assumed to be)
                 #[allow(unused_mut)]
-                let mut homed_native = motion_planner
-                    .motion_config()
-                    .get_native_post_homing_position();
+                let mut homed_native = plan.end;
                 if motion_aborted() {
                     hwa::warn!("[task_stepper] Homing discarded (motion aborted)");
                     homing_failed = true;
@@ -879,7 +1046,7 @@ pub async fn task_stepper(
                             // Do nothing
                         }
                         else {
-                            match motion_planner.do_homing(_order_num, &event_bus).await {
+                            match motion_planner.do_homing(_order_num, &plan, &event_bus).await {
                                 Ok(native) => homed_native = native,
                                 Err(_) => {
                                 homing_failed = true;
@@ -906,18 +1073,19 @@ pub async fn task_stepper(
                     motion_planner.motion_status().invalidate_position();
                 } else {
                     // Right after homing, the logical position is where the homing ended (the safe
-                    // homing point, Z at the clearance above the bed plane) plus the home offsets
-                    // (M206)
-                    let position = hwa::controllers::Position::new_with_world_projection(
-                        &motion_planner.motion_config().logical_from_native(&homed_native),
-                    );
-                    motion_planner
-                        .motion_status()
-                        .update_last_planned_position(_order_num, &position);
-                    motion_planner
-                        .motion_status()
-                        .update_current_position(_order_num, &position);
-                    motion_planner.motion_status().set_homed(true);
+                    // homing point, Z at the clearance above the bed plane, or the end-stops of the
+                    // axes homed alone) plus the home offsets (M206)
+                    let status = motion_planner.motion_status();
+                    let plan = hwa::controllers::HomingPlan { end: homed_native, ..plan };
+                    let position = motion_planner
+                        .homing_end_position(&status.get_current_position(), &plan);
+                    status.update_last_planned_position(_order_num, &position);
+                    status.update_current_position(_order_num, &position);
+                    status.set_homed_axes(plan.homed);
+                    // Some axes are still unknown (e.g. `G28 X Y` before Z is homed)
+                    if !plan.position_known() {
+                        status.set_position_unknown();
+                    }
                 }
 
                 let consumed = motion_planner.consume_current_plan(&event_bus).await;
@@ -931,6 +1099,116 @@ pub async fn task_stepper(
             deliver_tools(&event_bus, consumed.tools, consumed.order_num, steppers_off).await;
         }
     }
+}
+
+/// Releases the extruder lead of the pressure advance when the motion stops (see
+/// [motion::PressureAdvance::release]): an extruder-only window queued after the motion, so that
+/// the extruder is at its nominal position while stopped. Not on abort (M410/M112), nor with the
+/// steppers parked, nor with the motion broadcast (a window without a position): the lead is then
+/// kept, and spread along the next move
+#[cfg(feature = "with-pressure-advance")]
+async fn release_pressure(
+    pressure_advance: &mut motion::PressureAdvance,
+    event_bus: &hwa::types::EventBus,
+    order_num: u32,
+    steppers_off: bool,
+) {
+    if cfg!(feature = "with-motion-broadcast")
+        || steppers_off
+        || motion_aborted()
+        || !pressure_advance.is_leading()
+    {
+        return;
+    }
+    let Some((multi_timer, forward)) = pressure_advance.release(
+        STEPPER_PLANNER_MICROSEGMENT_PERIOD_US,
+        STEPPER_PLANNER_CLOCK_PERIOD_US,
+    ) else {
+        return;
+    };
+    // Virtual motion (dry run, no step actuator): only the state is updated
+    if HAS_STEP_ACTUATOR && !event_bus.has_flags(EventFlags::DRY_RUN).await {
+        STEP_DRIVER
+            .push(
+                order_num,
+                #[cfg(feature = "with-motion-broadcast")]
+                hwa::MotionDelta::new(),
+                multi_timer,
+                CoordSel::E,
+                match forward {
+                    true => CoordSel::E,
+                    false => CoordSel::empty(),
+                },
+                None,
+            )
+            .await;
+        // Not part of the next segment (whose steps are checked by its own)
+        #[cfg(feature = "assert-motion")]
+        let _ = STEP_DRIVER.flush().await;
+    }
+}
+
+/// Completes the shaped motion of X and Y when the commanded motion stops (see
+/// [motion::InputShaper::flush_window]): windows of the shaped axes queued after the motion, the
+/// last one ending exactly at the commanded steps. Virtual motion (dry run, no step actuator): the
+/// state only. On abort (M410/M112) the motors stop where they are (see [abort_shaping])
+#[cfg(feature = "with-input-shaping")]
+async fn flush_shaping(
+    input_shaper: &mut motion::InputShaper,
+    motion_planner: &hwa::controllers::MotionPlanner,
+    event_bus: &hwa::types::EventBus,
+    order_num: u32,
+    steppers_off: bool,
+) {
+    if input_shaper.is_at_rest() {
+        return;
+    }
+    let virtual_motion = !HAS_STEP_ACTUATOR || event_bus.has_flags(EventFlags::DRY_RUN).await;
+    loop {
+        if steppers_off || motion_aborted() {
+            abort_shaping(input_shaper, motion_planner);
+            return;
+        }
+        let Some((multi_timer, dir_fwd)) =
+            input_shaper.flush_window(STEPPER_PLANNER_MICROSEGMENT_PERIOD_US)
+        else {
+            break;
+        };
+        if !virtual_motion {
+            STEP_DRIVER
+                .push(order_num, multi_timer, CoordSel::X | CoordSel::Y, dir_fwd, None)
+                .await;
+        }
+    }
+    // Not part of the next segment (whose steps are checked by its own)
+    #[cfg(feature = "assert-motion")]
+    if !virtual_motion {
+        let _ = STEP_DRIVER.flush().await;
+    }
+}
+
+/// Stops the shaped motion where the motors are (abort, alarm): the current position is corrected
+/// by what they lag the commanded one, so that it stays the real one
+#[cfg(feature = "with-input-shaping")]
+fn abort_shaping(input_shaper: &mut motion::InputShaper, motion_planner: &hwa::controllers::MotionPlanner) {
+    let lag = input_shaper.abort();
+    if lag == [0, 0] {
+        return;
+    }
+    hwa::debug!("[task_stepper] Shaped motion interrupted. Lag (steps): {:?}", lag);
+    let steps_per_su = motion_planner.motion_config().get_steps_per_space_unit_as_vector();
+    let status = motion_planner.motion_status();
+    let mut position = status.get_current_position();
+    let mut space = position.space_pos;
+    for (k, axis) in motion::SHAPED_AXES.iter().enumerate() {
+        if let (Some(p), Some(spu)) = (space.get_coord(*axis), steps_per_su.get_coord(*axis)) {
+            if spu.is_defined_positive() {
+                space.set_coord(*axis, Some(p + Real::from_lit(lag[k] as i64, 0) / spu));
+            }
+        }
+    }
+    position.update_from_space_coordinates(&space.rdp(6));
+    status.update_current_position(0, &position);
 }
 
 /// Hands the tool actions requested right after an executed entry to the step executor: they

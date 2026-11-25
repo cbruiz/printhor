@@ -51,8 +51,8 @@ The motion defaults (`board_stm32g0/mod.rs`):
 |-----------------------------|-------------------------------------------------------------|------------------------------------------|
 | Steps per mm (8 µsteps)     | X/Y 80, Z 400, E 400 (10, 50 and 50 full steps/mm)          | `DEFAULT_AXIS_STEPS_PER_UNIT`  |
 | Driver run current          | X/Y/Z 580 mA, E 800 mA RMS, hold ×0.5 (R_sense 0.11 Ω)      | `*_CURRENT`, `HOLD_MULTIPLIER` |
-| Probe offset (`M851`)       | X 33, Y -4, Z -3.9                                          | `NOZZLE_TO_PROBE_OFFSET`       |
-| Position after homing       | X -17.3, Y -21, Z 1 (bed plane); travel to X 220, Y 202     | `*_MIN_POS`, `X/Y_MAX_POS`     |
+| Probe offset (`M851`)       | X 33, Y -4, Z -4.8                                          | `NOZZLE_TO_PROBE_OFFSET`       |
+| Position after homing       | X -17.3, Y -21, Z 0 (bed plane); travel to X 220, Y 202     | `*_MIN_POS`, `X/Y_MAX_POS`     |
 | Homing feed rate            | 51, 51, 5 mm/s (slow approach: 25.5, 25.5, 1.25 mm/s)       | `HOMING_FEEDRATE_MM_M`         |
 
 Steps per mm are full steps per mm times the micro-steps (`M92` changes them). The settings stored

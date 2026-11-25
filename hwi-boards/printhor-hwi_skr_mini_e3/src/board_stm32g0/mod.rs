@@ -137,7 +137,7 @@ impl HwiContract for Contract {
                     // Assuming #[cfg(feature = "with-motion-cartessian-kinematics")]
                     /// The travel of the axes from the end-stops, as the Marlin profile of the
                     /// machine: X -17.3..220 and Y -21..202 (`X/Y_MIN_POS`..`X/Y_MAX_POS`, see
-                    /// [Self::DEFAULT_WORLD_HOMING_POINT_WU]). Z: 1..221
+                    /// [Self::DEFAULT_WORLD_HOMING_POINT_WU]). Z: 0..220
                      const DEFAULT_WORLD_SIZE_WU: hwa::math::TVector<hwa::math::Real> = const {
                         hwa::make_vector_real!(x=237.3, y=223.0, z=220.0)
                     };
@@ -148,14 +148,15 @@ impl HwiContract for Contract {
 
                     /// The position after homing, as Marlin's `X_MIN_POS`, `Y_MIN_POS` and
                     /// `Z_MIN_POS`: the bed origin is 17.3 mm (X) and 21 mm (Y) from the end-stops,
-                    /// and the Z of the bed plane is 1 (the probe triggers at Z 1 - probe Z offset)
+                    /// and the Z of the bed plane is 0 (the probe triggers at Z -probe Z offset: a flat
+                    /// bed probes at Z 0 with `G30`)
                     const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=-17.3, y=-21.0, z=1.0)
+                        hwa::make_vector_real!(x=-17.3, y=-21.0, z=0.0)
                     };
 
                     /// BLTouch, as Marlin's `NOZZLE_TO_PROBE_OFFSET`
                     const DEFAULT_PROBE_OFFSET_WU: hwa::math::TVector<hwa::math::Real> = const {
-                        hwa::make_vector_real!(x=33.0, y=-4.0, z=-3.9)
+                        hwa::make_vector_real!(x=33.0, y=-4.0, z=-4.8)
                     };
 
                     /// As Marlin's `HOMING_FEEDRATE_MM_M` (51, 51 and 5 mm/s; the slow approach

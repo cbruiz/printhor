@@ -515,52 +515,37 @@ pub async fn execute(
             }
         }
         #[cfg(feature = "with-sd-card")]
-        processing::GCodeValue::M20(_path) => {
-            {
-                // Borrowed: no copy of the (up to 128 bytes) path in the heap
-                let path = _path.as_deref().unwrap_or("/");
-                let mut sent_first = false;
-                match _card_controller.dir_iterator(path).await {
-                    Ok(mut it) => {
-                        loop {
-                            match it.next().await {
-                                Ok(Some(entry)) => match entry.entry_type {
-                                    SDEntryType::FILE => {
-                                        if !sent_first {
-                                            processor.write(channel, "Begin file list\n").await;
-                                            sent_first = true;
-                                        }
-                                        processor.write(channel, entry.name.as_str()).await;
-                                        let s = crate::processing::LineBuf::<16>::from_fmt(format_args!(" {}\n", entry.size));
-                                        processor.write(channel, s.as_str()).await;
-                                    }
-                                    SDEntryType::DIRECTORY => {}
-                                },
-                                Ok(None) => {
-                                    // EOF
-                                    processor.write(channel, "End file list\n").await;
-                                    break;
-                                }
-                                Err(_e) => {
-                                    if sent_first {
-                                        processor.write(channel, "End file list\n").await;
-                                    }
-                                    processor.write(channel, "err\n").await;
-                                    hwa::error!("Error listing files");
-                                    break;
-                                }
-                            }
-                        }
-                        it.close().await;
-                        processor.write(channel, "ok\n").await;
-                        Ok(processing::CodeExecutionSuccess::CONSUMED)
-                    }
-                    Err(_e) => {
-                        let reason = _card_controller.mount_error().await;
-                        let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M20: Unable to list: {:?} {}\n", _e, reason.as_str()));
-                        processor.write(channel, s.as_str()).await;
-                        Err(processing::CodeExecutionFailure::ERR)
-                    }
+        processing::GCodeValue::M20(_path, _long_names) => {
+            // Borrowed: no copy of the (up to 128 bytes) path in the heap
+            let path = _path.as_deref().unwrap_or("/");
+            match list_files(processor, channel, _card_controller, path, *_long_names).await {
+                Ok(()) => {
+                    processor.write(channel, "ok\n").await;
+                    Ok(processing::CodeExecutionSuccess::CONSUMED)
+                }
+                Err(_e) => {
+                    let reason = _card_controller.mount_error().await;
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M20: Unable to list: {:?} {}\n", _e, reason.as_str()));
+                    processor.write(channel, s.as_str()).await;
+                    Err(processing::CodeExecutionFailure::ERR)
+                }
+            }
+        }
+        // The long path of a file or directory (Marlin's format: `/<long name>/...`, each entry by
+        // its short name when it has no long one)
+        #[cfg(feature = "with-sd-card")]
+        processing::GCodeValue::M33(_path) => {
+            let path = _path.as_deref().unwrap_or("/");
+            match _card_controller.long_path(path).await {
+                Ok(long) => {
+                    processor.write(channel, long.as_str()).await;
+                    processor.write(channel, "\n").await;
+                    Ok(processing::CodeExecutionSuccess::OK)
+                }
+                Err(_e) => {
+                    let s = crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: M33: {} not found\n", path));
+                    processor.write(channel, s.as_str()).await;
+                    Err(processing::CodeExecutionFailure::ERR)
                 }
             }
         }
@@ -728,6 +713,122 @@ pub async fn execute(
         // Otherwise... delegate
         _ => processor.execute(channel, &gc, false).await,
     }
+}
+
+/// Max depth of the subdirectories listed by `M20` (each level keeps a directory open)
+#[cfg(feature = "with-sd-card")]
+const M20_MAX_DEPTH: usize = 4;
+
+/// `M20`: the directory listed (a G-code text, at most 128 bytes) and the short path of the
+/// subdirectory being listed below it
+#[cfg(feature = "with-sd-card")]
+const M20_DIR_LEN: usize = 192;
+
+/// `M20 L`: the long path of the subdirectory being listed
+#[cfg(feature = "with-sd-card")]
+const M20_LONG_DIR_LEN: usize = 192;
+
+/// `M20`: lists the files of `path` and of its subdirectories (up to [M20_MAX_DEPTH] levels; the
+/// hidden ones are not listed), as Marlin does: one per line, `<short path> <size>`, and with
+/// `long_names` also its long path (each entry by its long name, or by its short one when it has
+/// none): `LONGFO~1/AREALL~1.GCO 1234 Long Folder Name/A really long file name.gcode`.
+///
+/// A subdirectory whose path does not fit (or that can not be opened) is not listed.
+#[cfg(feature = "with-sd-card")]
+async fn list_files(
+    processor: &mut processing::GCodeProcessor,
+    channel: hwa::CommChannel,
+    card_controller: &mut hwa::types::SDCardController,
+    path: &str,
+    long_names: bool,
+) -> Result<(), hwa::sd_card::SDCardError> {
+    use processing::LineBuf;
+    // The directory being listed, from the root: `path` and the subdirectories below it
+    let mut dir = LineBuf::<M20_DIR_LEN>::from(path);
+    if !dir.as_str().ends_with('/') {
+        dir.push_str("/");
+    }
+    let base = dir.len();
+    if !dir.as_str().ends_with('/') {
+        return Err(hwa::sd_card::SDCardError::NotFound);
+    }
+    let mut long_dir = LineBuf::<M20_LONG_DIR_LEN>::new();
+    // The directories being listed, with the lengths of both paths before their names
+    let mut stack: heapless::Vec<_, { M20_MAX_DEPTH + 1 }> = heapless::Vec::new();
+    let _ = stack.push((card_controller.dir_iterator(dir.as_str()).await?, base, 0usize));
+    processor.write(channel, "Begin file list\n").await;
+    while let Some((it, _, _)) = stack.last_mut() {
+        match it.next().await {
+            Ok(Some(entry)) if entry.hidden => {}
+            Ok(Some(entry)) => match entry.entry_type {
+                SDEntryType::FILE => {
+                    let mut size = LineBuf::<12>::new();
+                    size.push_str(" ");
+                    size.push_u32(entry.size);
+                    processor.write(channel, dir.as_str().get(base..).unwrap_or("")).await;
+                    processor.write(channel, entry.name.as_str()).await;
+                    processor.write(channel, size.as_str()).await;
+                    if long_names {
+                        processor.write(channel, " ").await;
+                        processor.write(channel, long_dir.as_str()).await;
+                        processor.write(channel, match entry.long_name.as_str() {
+                            "" => entry.name.as_str(),
+                            long => long,
+                        }).await;
+                    }
+                    processor.write(channel, "\n").await;
+                }
+                SDEntryType::DIRECTORY if stack.len() <= M20_MAX_DEPTH => {
+                    let (dir_len, long_len) = (dir.len(), long_dir.len());
+                    let long_name = match entry.long_name.as_str() {
+                        "" => entry.name.as_str(),
+                        long => long,
+                    };
+                    dir.push_str(entry.name.as_str());
+                    dir.push_str("/");
+                    long_dir.push_str(long_name);
+                    long_dir.push_str("/");
+                    // Not listed when a path does not fit
+                    let fits = dir.as_str().ends_with('/')
+                        && long_dir.as_str().ends_with('/')
+                        && dir.len() == dir_len + entry.name.len() + 1;
+                    let sub_dir = match fits {
+                        true => card_controller.dir_iterator(dir.as_str()).await.ok(),
+                        false => None,
+                    };
+                    let pushed = match sub_dir {
+                        Some(sub_dir) => match stack.push((sub_dir, dir_len, long_len)) {
+                            Ok(()) => true,
+                            Err((mut sub_dir, _, _)) => {
+                                sub_dir.close().await;
+                                false
+                            }
+                        },
+                        None => false,
+                    };
+                    if !pushed {
+                        hwa::warn!("[M20] Directory not listed: {}", dir.as_str());
+                        dir.truncate(dir_len);
+                        long_dir.truncate(long_len);
+                    }
+                }
+                SDEntryType::DIRECTORY => {}
+            },
+            // The end of the directory (or a failure reading it): back to its parent
+            end => {
+                if end.is_err() {
+                    hwa::error!("[M20] Error listing {}", dir.as_str());
+                }
+                if let Some((mut it, dir_len, long_len)) = stack.pop() {
+                    it.close().await;
+                    dir.truncate(dir_len);
+                    long_dir.truncate(long_len);
+                }
+            }
+        }
+    }
+    processor.write(channel, "End file list\n").await;
+    Ok(())
 }
 
 async fn report(

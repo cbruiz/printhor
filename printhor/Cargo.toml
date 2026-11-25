@@ -36,6 +36,14 @@ with-arcs = []
 with-beziers = []
 # Bilinear mesh bed leveling (G29/M420). Requires a Z probe acting as Z endstop
 with-mesh-leveling = []
+# Pressure advance (Marlin's linear advance): the extruder leads its nominal position by K times
+# its speed (M900 K<seconds>, 0 by default: off). Requires with-e-axis. See motion::pressure_advance
+with-pressure-advance = []
+# Input shaping (Marlin's M593, Klipper's input shaper): the X and Y motion is convolved with a ZV,
+# EI, MZV or ZVD shaper to cancel the ringing of the frame resonance (M593 F<Hz> D<damping> T<type>).
+# Off by default; disabled, it adds no code. Requires with-x-axis and with-y-axis. See
+# motion::input_shaping
+with-input-shaping = []
 with-motion-stepper = ["printhor-hwi_native?/with-motion-stepper", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-stepper", "printhor-hwi_skr_mini_e3?/with-motion-stepper", "printhor-hwi_mks_robin_nano?/with-motion-stepper", "printhor-hwi_rp_2040?/with-motion-stepper"]
 with-motion-broadcast = ["printhor-hwi_native?/with-motion-broadcast", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-broadcast", "printhor-hwi_skr_mini_e3?/with-motion-broadcast", "printhor-hwi_mks_robin_nano?/with-motion-broadcast", "printhor-hwi_rp_2040?/with-motion-broadcast"]
 with-motion-cartessian-kinematics = ["printhor-hwi_native?/with-motion-cartessian-kinematics", "printhor-hwi_nucleo_64_arduino_cnc_hat?/with-motion-cartessian-kinematics", "printhor-hwi_skr_mini_e3?/with-motion-cartessian-kinematics", "printhor-hwi_mks_robin_nano?/with-motion-cartessian-kinematics", "printhor-hwi_rp_2040?/with-motion-cartessian-kinematics"]

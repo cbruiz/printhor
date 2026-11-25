@@ -153,6 +153,32 @@ where
         let _ = card.release_device();
     }
 
+    /// Lists a directory with the long names of its entries (see
+    /// [hwa::sd_card::SDStateManager::list_dir_lfn])
+    pub async fn list_dir_lfn<F>(&self, dir: &hwa::sd_card::EntryRef, func: F)
+    where
+        F: FnMut(&embedded_sdmmc::DirEntry, Option<&str>) -> core::ops::ControlFlow<()>,
+    {
+        let mut card = self.card.lock().await;
+        let _r = card.retain_device().await;
+        card.list_dir_lfn(dir, func);
+        let _ = card.release_device();
+    }
+
+    /// The long path of `path` (M33): see [hwa::sd_card::SDStateManager::long_path]
+    pub async fn long_path(
+        &self,
+        path: &str,
+    ) -> Result<heapless::String<LONG_PATH_LEN>, hwa::sd_card::SDCardError> {
+        let mut card = self.card.lock().await;
+        let _ = card.mount().await;
+        let _ = card.retain_device().await;
+        let mut out = heapless::String::new();
+        let result = card.long_path(path, &mut out);
+        let _ = card.release_device();
+        result.map(|_| out)
+    }
+
     #[allow(unused)]
     fn internal_close_dir(
         &self,
@@ -267,10 +293,8 @@ pub enum SDEntryType {
     DIRECTORY,
 }
 
-/// A FAT name part as text (FAT 8.3 names are ASCII)
-fn ascii(bytes: &[u8]) -> &str {
-    core::str::from_utf8(bytes).unwrap_or("?")
-}
+/// Max length of a long path (M33): a longer one is truncated
+pub const LONG_PATH_LEN: usize = 256;
 
 /// A structure representing an entry in the SD card directory.
 ///
@@ -279,6 +303,14 @@ fn ascii(bytes: &[u8]) -> &str {
 pub struct SDDirEntry {
     /// The name of the entry (file or directory): a FAT 8.3 name (no heap)
     pub name: crate::processing::LineBuf<12>,
+
+    /// The long name (VFAT) of the entry: empty when it has none (or it is longer than
+    /// [hwa::sd_card::LONG_NAME_LEN])
+    pub long_name: crate::processing::LineBuf<{ hwa::sd_card::LONG_NAME_LEN }>,
+
+    /// Hidden from the listings: hidden or system attribute, or a long name starting with `.`
+    /// (e.g. the metadata of macOS), or `.` and `..`
+    pub hidden: bool,
 
     /// The type of the entry, indicating whether it's a file or a directory.
     pub entry_type: SDEntryType,
@@ -342,25 +374,31 @@ where
                 let mut idx = 0;
                 let mut entry = None;
                 self.controller
-                    .list_dir(dir, |dir_entry| {
-                        if self.current_index == idx {
-                            // FAT 8.3 names are ASCII: 8 + '.' + 3 bytes
-                            let mut name = crate::processing::LineBuf::<12>::new();
-                            name.push_str(ascii(dir_entry.name.base_name()));
-                            if !dir_entry.name.extension().is_empty() {
-                                name.push_str(".");
-                                name.push_str(ascii(dir_entry.name.extension()));
-                            }
-                            entry = Some(SDDirEntry {
-                                name,
-                                entry_type: match dir_entry.attributes.is_directory() {
-                                    true => SDEntryType::DIRECTORY,
-                                    false => SDEntryType::FILE,
-                                },
-                                size: dir_entry.size,
-                            });
+                    .list_dir_lfn(dir, |dir_entry, long_name| {
+                        // Not files: the volume label
+                        if dir_entry.attributes.is_volume() {
+                            return core::ops::ControlFlow::Continue(());
                         }
-                        idx += 1;
+                        if self.current_index != idx {
+                            idx += 1;
+                            return core::ops::ControlFlow::Continue(());
+                        }
+                        let short = hwa::sd_card::short_name(&dir_entry.name);
+                        let attributes = dir_entry.attributes;
+                        entry = Some(SDDirEntry {
+                            name: crate::processing::LineBuf::from(short.as_str()),
+                            long_name: crate::processing::LineBuf::from(long_name.unwrap_or("")),
+                            hidden: attributes.is_hidden()
+                                || attributes.is_system()
+                                || short.starts_with('.')
+                                || long_name.is_some_and(|l| l.starts_with('.')),
+                            entry_type: match attributes.is_directory() {
+                                true => SDEntryType::DIRECTORY,
+                                false => SDEntryType::FILE,
+                            },
+                            size: dir_entry.size,
+                        });
+                        core::ops::ControlFlow::Break(())
                     })
                     .await;
                 if entry.is_some() {

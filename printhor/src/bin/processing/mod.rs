@@ -8,6 +8,8 @@ pub mod settings_store;
 pub use gcode_parser::{GCodeLineParser, GCodeLineParserError, ParseFailure};
 pub use gcode_processor::GCodeProcessor;
 pub use gcode_processor::LineBuf;
+#[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+pub(crate) use gcode_processor::M105_CAPACITY;
 #[cfg(feature = "with-fan-extra-1")]
 pub use gcode_processor::FAN_EXTRA1_MANUAL_POWER;
 
@@ -146,8 +148,9 @@ gcode_args!(
 );
 
 gcode_args!(
-    /// M303 PID autotune: `E`=heater index (-1 = bed), `S`=target temperature, `C`=cycles
-    ESC { e, s, c }
+    /// M303 PID autotune: `E`=heater index (-1 = bed), `S`=target temperature, `C`=cycles,
+    /// `U`=use (apply) the result (a flag: `U` alone is `U1`)
+    ESC { e, s, c, u }
 );
 
 gcode_args!(
@@ -158,6 +161,25 @@ gcode_args!(
 gcode_args!(
     /// M207/M208 firmware retraction: `S`=length, `F`=feed rate (world units/min), `Z`=z-hop
     SFZ { s, f, z }
+);
+
+gcode_args!(
+    /// M200 volumetric extrusion: `D`=filament diameter (`D0` disables), `S`=enable (1) or
+    /// disable (0), `L`=volumetric flow limit (world units³/s, 0 = unlimited), `T`=extruder index
+    DSLT { d, s, l, t }
+);
+
+#[cfg(feature = "with-pressure-advance")]
+gcode_args!(
+    /// M900 pressure advance: `K`=factor (seconds, 0 disables it), `T`=extruder index
+    KT { k, t }
+);
+
+#[cfg(feature = "with-input-shaping")]
+gcode_args!(
+    /// M593 input shaping: `F`=frequency (Hz, 0 disables it), `D`=damping ratio, `T`=type (0 ZV,
+    /// 1 EI, 2 MZV, 3 ZVD); `X`, `Y`: the axes set (flags: none means both)
+    DFTXY { d, f, t, x, y }
 );
 
 /// Arc move (G2/G3) in the XY plane.
@@ -883,9 +905,10 @@ pub enum GCodeValue {
     #[cfg(feature = "with-motion")]
     M18, // Stepper motors
 
-    /// List SD
+    /// List SD: (`F"<dir>"` the directory, `L` with the long names). The files of the
+    /// subdirectories are listed too, with their path
     #[cfg(feature = "with-sd-card")]
-    M20(Option<alloc::string::String>),
+    M20(Option<alloc::string::String>, bool),
 
     #[cfg(feature = "with-sd-card")]
     M21,
@@ -927,8 +950,9 @@ pub enum GCodeValue {
 
     M32,
 
+    /// The long path of a file or directory (named by its short or long names)
     #[cfg(feature = "with-sd-card")]
-    M33, // SD
+    M33(Option<alloc::string::String>),
 
     M37(S), // Simulation mode (Dry run mode)
 
@@ -1038,7 +1062,9 @@ pub enum GCodeValue {
     #[cfg(feature = "with-hot-bed")]
     M190(SR),
 
-    M200,
+    /// Volumetric extrusion (filament diameter, enable, flow limit)
+    #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+    M200(DSLT),
 
     /// Set max acceleration per axis (world units/s²)
     #[cfg(feature = "with-motion")]
@@ -1201,9 +1227,18 @@ pub enum GCodeValue {
     #[strum(serialize = "M862.3")]
     M862_3,
 
-    /// Set Lineal Advance Factor
-    #[cfg(feature = "with-motion")]
+    /// Set Lineal Advance Factor (accepted, without effect: see the `with-pressure-advance`
+    /// feature)
+    #[cfg(all(feature = "with-motion", not(feature = "with-pressure-advance")))]
     M900,
+
+    /// Pressure advance (Marlin's linear advance) factor: set (`K`) or report it
+    #[cfg(all(feature = "with-motion", feature = "with-pressure-advance"))]
+    M900(KT),
+
+    /// Input shaping: set (`F`, `D`, `T` of the axes `X`/`Y`, both by default) or report it
+    #[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+    M593(DFTXY),
 
     /// Set motor current
     #[cfg(feature = "with-motion")]

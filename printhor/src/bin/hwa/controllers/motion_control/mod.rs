@@ -40,12 +40,62 @@ pub use tool_actions::*;
 
 pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
 
+/// What a homing (`G28`) does, decided when it is planned (see [MotionPlanner::plan_homing]):
+/// the axes it homes and where it leaves the machine.
+///
+/// `G28` alone (or with every axis) is the full homing. With some axes (Marlin's semantics, with
+/// `Z_SAFE_HOMING`): Z is raised first (never lowered), the given X/Y axes are homed and left at
+/// their end-stops, and Z (when given) is sampled at the safe homing point, where the machine is
+/// left as after the full homing (the probe over the bed center).
+#[derive(Clone, Copy, Debug)]
+pub struct HomingPlan {
+    /// The axes homed. Every homing axis for the full homing
+    pub axes: hwa::CoordSel,
+    /// The full homing: `G28` without axes, or with all of them
+    pub full: bool,
+    /// The native (machine) position before the homing: only the known coordinates
+    pub start: hwa::math::TVector<hwa::math::Real>,
+    /// The native Z to raise to before homing X and Y (never lower), when Z is known. Otherwise
+    /// it is raised `HOMING_Z_RAISE_MM` from where it is (unknown)
+    pub z_clearance: Option<hwa::math::Real>,
+    /// The native position after the homing: only the known coordinates
+    pub end: hwa::math::TVector<hwa::math::Real>,
+    /// The axes whose position comes from a homing, afterwards
+    pub homed: hwa::CoordSel,
+}
+
+impl HomingPlan {
+    /// The axes the homing finds (by their end-stop, or the probe): X, Y and Z
+    pub const fn homing_axes() -> hwa::CoordSel {
+        #[allow(unused_mut)]
+        let mut axes = hwa::CoordSel::empty();
+        #[cfg(feature = "with-x-axis")]
+        {
+            axes = axes.union(hwa::CoordSel::X);
+        }
+        #[cfg(feature = "with-y-axis")]
+        {
+            axes = axes.union(hwa::CoordSel::Y);
+        }
+        #[cfg(feature = "with-z-axis")]
+        {
+            axes = axes.union(hwa::CoordSel::Z);
+        }
+        axes
+    }
+
+    /// Whether the whole position is known afterwards (the moves are allowed)
+    pub fn position_known(&self) -> bool {
+        self.full || self.homed.contains(Self::homing_axes())
+    }
+}
+
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
     /// A movement segment.
     Move(Segment, u32),
     /// A homing action.
-    Homing(u32),
+    Homing(u32, HomingPlan),
     /// A dwell action.
     Dwell(Option<u32>, u32),
     /// A set-position action.
@@ -89,7 +139,9 @@ pub enum PlanEntry {
     /// *_1: CommChannel* - The input channel requesting the move.
     ///
     /// *_2: bool* - Indicates if motion is deferred or not.
-    Homing(hwa::CommChannel, bool, u32),
+    ///
+    /// *_4: HomingPlan* - What the homing does.
+    Homing(hwa::CommChannel, bool, u32, HomingPlan),
     /// A Dwell action request.
     ///
     /// *_1: CommChannel* - The input channel requesting the action.

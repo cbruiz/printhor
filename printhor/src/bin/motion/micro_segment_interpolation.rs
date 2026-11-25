@@ -272,6 +272,19 @@ impl MicroSegmentInterpolator {
     pub fn width(&self) -> u32 {
         self.multi_timer.width()
     }
+
+    /// What the motor of an axis is ahead of the ideal segment at path position `s` (the position
+    /// of the last window advanced), in steps and in the direction of motion of the axis: within
+    /// ±½ step. `None` when the axis does not move. The start offset of the next segment, negated
+    /// (see [Self::new_with_start_offset]), for an axis whose position is not kept by the motion
+    /// status (the extruder)
+    #[cfg(feature = "with-e-axis")]
+    pub fn deviation_steps(&self, coord: CoordSel, s: Real) -> Option<Real> {
+        let advanced = self.axis_steps_advanced_precise.get_coord(coord)?;
+        let ideal = self.start_offset.get_coord(coord)?
+            + self.v_dir_abs.get_coord(coord)? * self.u_steps_per_space_magnitude.get_coord(coord)? * s;
+        Some(advanced - ideal)
+    }
 }
 
 /// `2^32` (`1.0` in Q0.32)
@@ -315,7 +328,7 @@ fn uniform_dda(n: u32, width_us: u32, tick_us: u32) -> (u32, u32, i32) {
 }
 
 /// Per-window constants of the second-order DDA (computed once per window, shared by all axes).
-struct RampWindow {
+pub(crate) struct RampWindow {
     /// Number of ticks `N`
     n: Real,
     /// `1/N`
@@ -327,7 +340,7 @@ struct RampWindow {
 }
 
 impl RampWindow {
-    fn new(n_ticks: u32) -> Self {
+    pub(crate) fn new(n_ticks: u32) -> Self {
         let n = Real::from_lit(n_ticks.max(1) as i64, 0);
         let n_1 = n - math::ONE;
         Self {
@@ -350,7 +363,7 @@ impl RampWindow {
     /// the number of half-step crossings, i.e. the step count of the window, and the steps happen
     /// when the (quadratically interpolated) position crosses them. If the ramp would need a
     /// negative rate (not physical) a uniform rate is used instead.
-    fn dda(&self, p0: Real, p1: Real, advanced_before: Real, r0: Real, r1: Real) -> (u32, u32, i32) {
+    pub(crate) fn dda(&self, p0: Real, p1: Real, advanced_before: Real, r0: Real, r1: Real) -> (u32, u32, i32) {
         let d = (p1 - p0).max(math::ZERO);
         let mut inc = (r1 - r0) * self.inv_n;
         let rate1 = (d - inc * self.half_nn1) * self.inv_n;
@@ -366,6 +379,112 @@ impl RampWindow {
         let phase_q = if frac0 >= math::ONE { u32::MAX } else { to_q32_u(frac0) };
         let _ = self.n;
         (phase_q, rate_q, inc_q)
+    }
+}
+
+/// A stepper channel that follows a continuous target (steps) which may reverse, unlike the axes
+/// of [MicroSegmentInterpolator] (one direction per segment): the extruder with pressure advance,
+/// the shaped axes with input shaping.
+///
+/// At the end of every window the motor is at the step closest to the target (half-step rule), so
+/// it never drifts from it. The direction is decided per window (the net steps of the window) and
+/// the step rate ramps between the target rates at the window ends (second-order DDA, see
+/// [RampWindow::dda]); a window whose target reverses inside it moves at a uniform rate. Its step
+/// count is exact either way (the step executor never drops steps).
+#[cfg(any(feature = "with-pressure-advance", feature = "with-input-shaping"))]
+#[derive(Clone, Copy)]
+pub(crate) struct SignedChannel {
+    /// Motor position (steps)
+    pub motor: i32,
+    /// Target (continuous, steps) at the end of the last window
+    pub target: Real,
+    /// Target step rate (steps per tick) at the end of the last window
+    pub rate: Real,
+    /// Direction of the last window that moved the motor
+    pub forward: bool,
+}
+
+#[cfg(any(feature = "with-pressure-advance", feature = "with-input-shaping"))]
+impl SignedChannel {
+    /// A channel at rest at `motor`, its target there
+    pub fn new(motor: i32, forward: bool) -> Self {
+        Self {
+            motor,
+            target: Real::from_lit(motor as i64, 0),
+            rate: math::ZERO,
+            forward,
+        }
+    }
+
+    /// Moves the motor to the step closest to `target` along the window ending now (`rate`: the
+    /// target rate at its end, steps per tick), setting the channel `coord` of `multi_timer`.
+    /// Returns the steps of the window (signed). `ramps` provides the DDA constants of the window
+    /// (only computed when the motor moves). A non-representable target (never expected) moves
+    /// nothing.
+    pub fn advance(
+        &mut self,
+        multi_timer: &mut MultiTimer,
+        coord: CoordSel,
+        target: Real,
+        rate: Real,
+        ramps: &mut RampWindowCache,
+    ) -> i32 {
+        let motor = (target + math::HALF).floor().to_i32().unwrap_or(self.motor);
+        let n = motor - self.motor;
+        if n != 0 {
+            self.forward = n > 0;
+            // In the direction of the motion: the DDA only counts forward
+            let m = Real::from_lit(self.motor as i64, 0);
+            let (q0, q1, r0, r1) = match self.forward {
+                true => (self.target - m, target - m, self.rate, rate),
+                false => (m - self.target, m - target, -self.rate, -rate),
+            };
+            let dda = ramps.window().dda(q0, q1, math::ZERO, r0.max(math::ZERO), r1.max(math::ZERO));
+            multi_timer.set_channel_dda(coord, Some(dda));
+        } else {
+            multi_timer.set_channel_dda(coord, None);
+        }
+        multi_timer.set_count(coord, n.unsigned_abs());
+        self.motor = motor;
+        self.target = target;
+        self.rate = rate;
+        n
+    }
+}
+
+/// The [RampWindow] of the current window, computed once per window width: all the windows of a
+/// segment but its last one have the same
+#[cfg(any(feature = "with-pressure-advance", feature = "with-input-shaping"))]
+pub(crate) struct RampWindowCache {
+    tick_us: u32,
+    width_ticks: u32,
+    ticks: u32,
+    window: RampWindow,
+}
+
+#[cfg(any(feature = "with-pressure-advance", feature = "with-input-shaping"))]
+impl RampWindowCache {
+    pub fn new(tick_us: u32) -> Self {
+        Self {
+            tick_us: tick_us.max(1),
+            width_ticks: 1,
+            ticks: 1,
+            window: RampWindow::new(1),
+        }
+    }
+
+    /// Sets the width of the window being generated (µs)
+    #[inline]
+    pub fn set_width(&mut self, width_us: u32) {
+        self.width_ticks = width_us.max(1).div_ceil(self.tick_us);
+    }
+
+    fn window(&mut self) -> &RampWindow {
+        if self.ticks != self.width_ticks {
+            self.ticks = self.width_ticks;
+            self.window = RampWindow::new(self.ticks);
+        }
+        &self.window
     }
 }
 
@@ -490,6 +609,43 @@ mod motion_interpolation_test {
             }
         }
         assert_eq!(fired, 5, "all 5 steps must fire at clamped max feedrate");
+    }
+
+    /// The extruder carried from segment to segment as the stepper task does: the rounding residue
+    /// a segment leaves (see `deviation_steps`) is the start offset of the next one, so segments of
+    /// a fraction of a step add up to the steps of their total, in both directions. Each one
+    /// rounded alone (the former behaviour) they emitted none (0.44 steps) or a whole step (0.52)
+    #[cfg(feature = "with-e-axis")]
+    #[test]
+    fn test_extruder_residue_is_carried_across_segments() {
+        use hwa::math::{CoordSel, Real};
+        let spm = 400.0f64;
+        let segments = core::iter::repeat_n(0.0011f64, 50).chain(core::iter::repeat_n(-0.0013f64, 30));
+        let (mut residue, mut motor, mut nominal, mut alone) = (0.0f64, 0i64, 0.0f64, 0i64);
+        for e in segments {
+            let forward = e > 0.0;
+            let offset = if forward { -residue } else { residue };
+            let mut lin = super::MicroSegmentInterpolator::new_with_start_offset(
+                hwa::make_vector_real!(e = 1.0),
+                Real::from_f32(e.abs() as f32),
+                hwa::make_vector_real!(e = 400.0),
+                hwa::math::TVector::new_with_coord(CoordSel::E, Some(Real::from_f32(offset as f32))),
+            );
+            // In two windows
+            for s in [e.abs() / 2.0, e.abs()] {
+                lin.advance_to(Real::from_f32(s as f32), Real::from_f32(2500.0)).unwrap();
+            }
+            let n = lin.advanced_steps().get_coord(CoordSel::E).unwrap_or(0) as i64;
+            motor += if forward { n } else { -n };
+            nominal += e * spm;
+            alone += if forward { 1 } else { -1 } * (e.abs() * spm).round() as i64;
+            let ahead = lin.deviation_steps(CoordSel::E, Real::from_f32(e.abs() as f32)).unwrap().to_f64();
+            residue = if forward { ahead } else { -ahead };
+            assert!(residue.abs() <= 0.5 + 1e-4, "residue {}", residue);
+            assert!((motor as f64 - nominal - residue).abs() < 1e-3, "the residue is where the motor is");
+        }
+        assert_eq!(motor, nominal.round() as i64, "nominal {} steps", nominal);
+        assert_ne!(alone, motor, "each segment rounded alone drifts");
     }
 
     /// Runs a constant-acceleration motion through the interpolator and the real `StepPlan`

@@ -24,7 +24,11 @@ TBD
 
 # The features core
 
-TBD
+* [Hybrid motion profile](MOTION_PROFILE.md): the double S-curve and the polynomial blend every move
+  is executed along, and how they chain.
+* [Input shaping](INPUT_SHAPING.md): `M593`, feature `with-input-shaping`.
+* [Pressure advance](PRESSURE_ADVANCE.md): `M900`, feature `with-pressure-advance`.
+* [PID autotune](PID_AUTOTUNE.md): `M303`, the relay experiment and the Ziegler–Nichols rules.
 
 ## Physics and mathematics
 

@@ -17,7 +17,7 @@ pub enum ExecPlan {
     Segment(motion_control::Segment, hwa::CommChannel, u32),
     Dwell(Option<u32>, hwa::CommChannel, u32),
     SetPosition(motion_control::Position, hwa::CommChannel, u32),
-    Homing(hwa::CommChannel, u32),
+    Homing(hwa::CommChannel, u32, motion_control::HomingPlan),
     /// Tool actions queued alone (see [PlanEntry::Tools]): applied once consumed
     Tools(hwa::CommChannel, u32),
 }
@@ -276,13 +276,13 @@ impl MotionPlanner {
                         );
                         return ExecPlan::Segment(planned_data, channel, order_num);
                     }
-                    PlanEntry::Homing(channel, _deferred, order_num) => {
+                    PlanEntry::Homing(channel, _deferred, order_num, plan) => {
                         event_bus
                             .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                             .await;
                         rb.data[head] =
                             PlanEntry::Executing(MovType::Homing(channel), true, order_num);
-                        return Homing(channel, order_num);
+                        return Homing(channel, order_num, plan);
                     }
                     PlanEntry::Tools(channel, order_num) => {
                         rb.data[head] =
@@ -701,15 +701,23 @@ impl MotionPlanner {
                                 hwa::EventStatus::containing(EventFlags::NOTHING),
                             )
                         }
-                        ScheduledMove::Homing(order_num) => {
+                        ScheduledMove::Homing(order_num, plan) => {
                             is_defer = true;
-                            let pos = hwa::controllers::Position::new_with_world_projection(
-                                &self.motion_config.get_post_homing_position(),
+                            // The position the moves queued after it start from
+                            let pos = self.homing_end_position(
+                                &self.motion_status.get_last_planned_position(),
+                                &plan,
                             );
                             self.motion_status
                                 .update_last_planned_position(order_num, &pos);
+                            // The axes are homed once it is executed (the soft end-stops apply
+                            // from then on, see the stepper task), not here: a virtual homing
+                            // (s-plot) does not home them
+                            if !plan.position_known() {
+                                self.motion_status.set_position_unknown();
+                            }
                             (
-                                PlanEntry::Homing(channel, is_defer, order_num),
+                                PlanEntry::Homing(channel, is_defer, order_num, plan),
                                 hwa::EventStatus::not_containing(hwa::EventFlags::HOMING),
                             )
                         }
@@ -906,6 +914,7 @@ impl MotionPlanner {
                     hwa::DeferAction::RapidMove,
                     t.into(),
                     t.f,
+                    None,
                     blocking,
                     event_bus,
                     gc.order_num,
@@ -919,6 +928,7 @@ impl MotionPlanner {
                     hwa::DeferAction::LinearMove,
                     t.as_vector(),
                     t.f,
+                    None,
                     blocking,
                     event_bus,
                     gc.order_num,
@@ -983,6 +993,11 @@ impl MotionPlanner {
             }
             #[cfg(feature = "with-motion")]
             processing::GCodeValue::G28(_x) => {
+                // The axes given (with or without a value, as Marlin): none means all of them
+                let requested = TVector::<Real>::from(_x.into()).not_nan_coords();
+                let plan = self
+                    .plan_homing(requested)
+                    .ok_or(processing::CodeExecutionFailure::HomingRequired)?;
                 event_bus
                     .publish_event(hwa::EventStatus::containing(hwa::EventFlags::HOMING))
                     .await;
@@ -991,7 +1006,7 @@ impl MotionPlanner {
                         "G28",
                         channel,
                         hwa::DeferAction::Homing,
-                        ScheduledMove::Homing(gc.order_num),
+                        ScheduledMove::Homing(gc.order_num, plan),
                         blocking,
                         event_bus,
                         gc.order_num,
@@ -1040,15 +1055,15 @@ impl MotionPlanner {
         self.motion_status.get_feed_rate()
     }
 
-    /// Plans a linear move (G0/G1) to `p1_wu`, interpreted according to the positioning modes
-    /// (G90/G91 and M82/M83). `f_wu_min` is the (optional) `F` word in world units per minute.
     /// A rapid move (as `G0`) to `p1_wu` (the coordinates given, in the current G90/G91 mode), at
-    /// the default travel speed. Without building a G-code: lighter for internal moves (e.g. the
-    /// travel of `G30`)
+    /// `speed_wu_s` (world units/s) when given, else at the modal feed rate (the last `F`, the
+    /// default travel speed before any). The modal feed rate is not changed. Without building a
+    /// G-code: lighter for internal moves (e.g. the raise and the travel of `G30`)
     pub async fn plan_rapid_move(
         &self,
         channel: hwa::CommChannel,
         p1_wu: TVector<Real>,
+        speed_wu_s: Option<Real>,
         event_bus: &hwa::types::EventBus,
         order_num: u32,
         line: Option<u32>,
@@ -1059,6 +1074,7 @@ impl MotionPlanner {
             hwa::DeferAction::RapidMove,
             p1_wu,
             None,
+            speed_wu_s,
             true,
             event_bus,
             order_num,
@@ -1067,6 +1083,10 @@ impl MotionPlanner {
         .await
     }
 
+    /// Plans a linear move (G0/G1) to `p1_wu`, interpreted according to the positioning modes
+    /// (G90/G91 and M82/M83). `f_wu_min` is the (optional) `F` word in world units per minute
+    /// (modal). `speed_wu_s` (world units/s), when given, is the speed of this move instead,
+    /// leaving the modal feed rate untouched (internal moves)
     async fn schedule_move(
         &self,
         mnemonic: &'static str,
@@ -1074,6 +1094,7 @@ impl MotionPlanner {
         action: hwa::DeferAction,
         p1_wu: TVector<Real>,
         f_wu_min: Option<Real>,
+        speed_wu_s: Option<Real>,
         blocking: bool,
         event_bus: &hwa::types::EventBus,
         order_num: u32,
@@ -1083,7 +1104,10 @@ impl MotionPlanner {
         if !p0_pos.is_set {
             return Err(processing::CodeExecutionFailure::HomingRequired);
         }
-        let feed_rate = self.update_feed_rate(f_wu_min);
+        let feed_rate = match speed_wu_s {
+            Some(speed) => Some(speed),
+            None => self.update_feed_rate(f_wu_min),
+        };
 
         // Motion axis (E is handled separately, as it's not a kinematic coordinate)
         let p1_axis = p1_wu.selecting(hwa::CoordSel::motion_relevant_axis());
@@ -1637,11 +1661,13 @@ impl MotionPlanner {
         let max_accel = self.motion_config.get_max_accel();
         let max_jerk = self.motion_config.get_max_jerk();
 
-        // Multipliers: the M221 flow rate (extruder) and the M220 speed rate. Not applied to the
-        // firmware retraction (G10/G11), as Marlin: its length and speeds are absolute
+        // Multipliers: the extruder factor (the M221 flow rate and, with volumetric extrusion, the
+        // inverse of the filament cross-section, see `MotionConfig::get_e_factor`) and the M220
+        // speed rate. Not applied to the firmware retraction (G10/G11), as Marlin: its length and
+        // speeds are absolute (filament length)
         let (flow_rate, speed_rate) = match apply_rates {
             true => (
-                self.motion_config.get_flow_rate_as_real(),
+                self.motion_config.get_e_factor(),
                 self.motion_config.get_speed_rate_as_real(),
             ),
             false => (math::ONE, math::ONE),
@@ -1734,6 +1760,16 @@ impl MotionPlanner {
             }
         };
         let module_target_speed = axis_cap(axis_cap(module_target_speed, max_speed), max_feed_rate);
+        // Volumetric flow limit (M200 L): the filament feed rate of the extruding moves (not of the
+        // retraction and recover, nor of the retracting moves: no melt flow) is capped
+        #[cfg(feature = "with-e-axis")]
+        let module_target_speed = match self.motion_config.get_volumetric().max_filament_speed() {
+            Some(limit) if apply_rates && e_delta.is_defined_positive() => axis_cap(
+                module_target_speed,
+                TVector::new().with_coord(hwa::CoordSel::E, Some(limit)),
+            ),
+            _ => module_target_speed,
+        };
         let module_target_accel = axis_cap(module_target_accel, max_accel);
         let module_target_jerk = axis_cap(module_target_jerk, max_jerk);
 
@@ -1842,10 +1878,101 @@ impl MotionPlanner {
         move_result
     }
 
+    /// What a homing of the `requested` axes does (see [motion_control::HomingPlan]), from the
+    /// last planned position. No axis, or every one: the full homing. `None` when Z is requested
+    /// while X or Y is neither homed nor requested: Z is homed at the safe homing point, so their
+    /// position must be known (Marlin's "Home XY first")
+    pub fn plan_homing(&self, requested: hwa::CoordSel) -> Option<motion_control::HomingPlan> {
+        use motion_control::HomingPlan;
+        use hwa::CoordSel;
+        let homing_axes = HomingPlan::homing_axes();
+        let requested = requested.intersection(homing_axes);
+        // A joint space machine (anthropomorphic legs) homes every joint at once
+        let full = requested.is_empty()
+            || requested == homing_axes
+            || cfg!(feature = "with-motion-anthropomorphic-kinematics");
+        let native_end = self.motion_config.get_native_post_homing_position();
+        if full {
+            return Some(HomingPlan {
+                axes: homing_axes,
+                full: true,
+                start: TVector::new(),
+                z_clearance: None,
+                end: native_end,
+                homed: CoordSel::all_axis(),
+            });
+        }
+        let homed = self.motion_status.homed_axes();
+        let known = homed.intersection(homing_axes);
+        let last = self.motion_status.get_last_planned_position();
+        let start = self
+            .motion_config
+            .native_from_logical(&last.world_pos)
+            .selecting(known);
+        let homing_point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
+        let xy = homing_axes.intersection(CoordSel::X.union(CoordSel::Y));
+        #[allow(unused_mut)]
+        let mut end = start;
+        // Z first: raised to the homing height above the bed (never lowered, nor beyond its
+        // travel) when it is known. Otherwise it is raised relatively: unknown afterwards
+        #[allow(unused_mut)]
+        let mut z_clearance = None;
+        #[cfg(feature = "with-z-axis")]
+        if let (Some(z), Some(bed)) = (start.z, homing_point.z) {
+            let mut clear = bed + hwa::drivers::motion_driver::homing_z_raise();
+            if let Some(size) = self.motion_config.get_machine_bounds().z {
+                clear = clear.min(bed + size);
+            }
+            let target = z.max(clear);
+            z_clearance = Some(target);
+            end.z = Some(target);
+        }
+        // The homed X/Y axes end at their end-stops (the homing point)
+        for coord in [CoordSel::X, CoordSel::Y] {
+            if requested.contains(coord) {
+                end.set_coord(coord, homing_point.get_coord(coord));
+            }
+        }
+        // Z is homed at the safe homing point: the machine ends as after the full homing
+        if requested.contains(CoordSel::Z) {
+            if !homed.union(requested).contains(xy) {
+                return None;
+            }
+            for coord in [CoordSel::X, CoordSel::Y, CoordSel::Z] {
+                if homing_axes.contains(coord) {
+                    end.set_coord(coord, native_end.get_coord(coord));
+                }
+            }
+        }
+        Some(HomingPlan {
+            axes: requested,
+            full: false,
+            start,
+            z_clearance,
+            end,
+            homed: homed.union(requested),
+        })
+    }
+
+    /// The (logical) position after the homing of `plan`, from `position`: only the coordinates
+    /// the homing makes known change
+    pub fn homing_end_position(
+        &self,
+        position: &hwa::controllers::Position,
+        plan: &motion_control::HomingPlan,
+    ) -> hwa::controllers::Position {
+        let logical = self.motion_config.logical_from_native(&plan.end);
+        match plan.full {
+            true => hwa::controllers::Position::new_with_world_projection(&logical),
+            false => position.complete_and_project(&logical),
+        }
+    }
+
     /// Runs the homing. Returns the native (machine) position reached
     pub async fn do_homing(
         &self,
         order_num: u32,
+        plan: &motion_control::HomingPlan,
         event_bus: &hwa::types::EventBus,
     ) -> Result<TVector<Real>, ()> {
         #[cfg(feature = "trace-commands")]
@@ -1855,7 +1982,7 @@ impl MotionPlanner {
             .motion_driver
             .lock()
             .await
-            .homing_action(&self.motion_config)
+            .homing_action(&self.motion_config, plan)
             .await;
         event_bus
             .publish_event(hwa::EventStatus::not_containing(hwa::EventFlags::HOMING))

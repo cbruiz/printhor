@@ -74,12 +74,35 @@ pub fn homing_z_clearance() -> Real {
     Real::from_f32(Z_AFTER_HOMING_MM)
 }
 
-/// Step rate of the raise after probing
-#[cfg(all(feature = "with-probe", feature = "with-z-axis"))]
-const PROBE_RAISE_STEP_FREQUENCY: u64 = 2000;
+/// Z raise (world units) before homing X and Y (see `HOMING_Z_RAISE_MM`): above the bed when the
+/// Z position is known
+pub fn homing_z_raise() -> Real {
+    Real::from_f32(HOMING_Z_RAISE_MM)
+}
 
-/// Why a single probe (`G30`) failed
+/// Z raise (world units) before deploying the probe (see `PROBE_DEPLOY_CLEARANCE_MM`)
+pub fn probe_deploy_clearance() -> Real {
+    Real::from_f32(PROBE_DEPLOY_CLEARANCE_MM)
+}
+
+/// Speed (world units/s) of the Z raises of the probing (`G30`), the one the homing raises Z at
+/// (Marlin's `Z_PROBE_FEEDRATE_FAST`, its Z homing feed rate): the Z homing feed rate
+/// ([HwiContract::HOMING_FEED_RATE_PS]), or the fast homing step rate without one. Not the max
+/// Z speed: a probing raise is not a print move (and a fast raise may lose steps, which would
+/// corrupt the probed height)
 #[cfg(all(feature = "with-probe", feature = "with-z-axis"))]
+pub fn z_probe_speed(steps_per_world_unit: &TVector<Real>) -> Real {
+    let up = TVector::new().with_coord(CoordSel::Z, Some(math::ONE));
+    let steps_per_s = MotionDriver::homing_rate(&up, steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY);
+    let spm = steps_per_world_unit
+        .z
+        .filter(|spm| spm.is_defined_positive())
+        .unwrap_or(math::ONE);
+    Real::from_lit(steps_per_s as i64, 0) / spm
+}
+
+/// Why a Z sample (homing, single probe `G30`) failed
+#[cfg(feature = "with-z-axis")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ProbeError {
     /// The probe did not trigger within the allowed descent (a safeguard: probe failure, or no
@@ -134,26 +157,33 @@ impl MotionDriver {
         &self.step_actuator
     }
 
-    /// Homing (`G28`), as Marlin with `Z_SAFE_HOMING` (and the probe as Z end-stop):
+    /// Homing (`G28`), as Marlin with `Z_SAFE_HOMING` (and the probe as Z end-stop). The full
+    /// homing:
     ///
     /// 1. Z is raised `HOMING_Z_RAISE_MM` (the position is still unknown: relative, no end-stop).
     /// 2. X, then Y: fast approach to the end-stop, back-off `HOMING_XY_BUMP_MM`, slow approach.
     /// 3. X and Y move together (straight line) to the safe homing point: the bed center minus the
     ///    probe XY offset, so that the *probe* is over the center (see
     ///    [MotionConfig::get_native_post_homing_position]).
-    /// 4. Z sample: raise `PROBE_DEPLOY_CLEARANCE_MM`, deploy the probe, fast descent (at most the
-    ///    larger of `HOMING_Z_MAX_TRAVEL_MM` and the machine Z size) until it triggers, back-off
-    ///    `HOMING_Z_BUMP_MM` and slow (fine) approach. The probe is stowed. There, the nozzle is
-    ///    at `-probe_offset.z` above the bed plane.
-    /// 5. Z is raised `Z_AFTER_HOMING_MM`.
+    /// 4. Z sample (see [Self::sample_z]): raise `PROBE_DEPLOY_CLEARANCE_MM`, deploy the probe,
+    ///    fast descent until it triggers, back-off and slow (fine) approach, stow the probe and
+    ///    raise `Z_AFTER_HOMING_MM`. There, the nozzle is `-probe_offset.z` above the bed plane,
+    ///    plus the raise.
     ///
-    /// Returns the native (machine) position reached, or the displacement done when it failed.
+    /// The homing of some axes ([hwa::controllers::HomingPlan], Marlin's `G28 X Y`...) does the
+    /// same steps for the given axes only: Z is raised (to `HOMING_Z_RAISE_MM` above the bed when
+    /// its position is known, never lower), the given X/Y axes are homed and left at their
+    /// end-stops, and only when Z is given, X and Y go to the safe homing point to sample it.
+    ///
+    /// Returns the native (machine) position reached (its known coordinates), or the displacement
+    /// done when it failed.
     pub async fn homing_action(
         &mut self,
         motion_config: &hwa::controllers::MotionConfig,
+        plan: &hwa::controllers::HomingPlan,
     ) -> Result<TVector<Real>, TVector<Real>> {
         #[cfg(feature = "trace-commands")]
-        hwa::info!("[trace-commands] [Homing]");
+        hwa::info!("[trace-commands] [Homing] {:?}", plan);
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-motion-broadcast")] {
@@ -181,18 +211,25 @@ impl MotionDriver {
         }
         let _machine_bounds = motion_config.get_machine_bounds();
         #[allow(unused)]
-        let target = motion_config.get_native_post_homing_position();
+        let target = plan.end;
+        #[allow(unused)]
+        let homing_point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
 
-        // 1. Raise Z before homing X and Y
+        // 1. Raise Z before homing X and Y: relative when its position is unknown, otherwise up
+        // to the clearance (never lower)
         #[cfg(feature = "with-z-axis")]
         {
             #[cfg(feature = "trace-commands")]
             hwa::info!("[trace-commands] [Homing] Raise Z");
             let up = TVector::new().with_coord(CoordSel::Z, Some(math::ONE));
+            let raise = match (plan.z_clearance, plan.start.z) {
+                (Some(clearance), Some(z)) => (clearance - z).max(math::ZERO),
+                _ => homing_z_raise(),
+            };
             homing_ok &= self
                 .shabbily_move_to(
                     up,
-                    Real::from_f32(HOMING_Z_RAISE_MM),
+                    raise,
                     _steps_per_world_unit,
                     Self::homing_rate(&up, &_steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY),
                     false,
@@ -203,94 +240,66 @@ impl MotionDriver {
 
         // 2. X, then Y
         #[cfg(feature = "with-x-axis")]
-        {
+        if homing_ok && plan.axes.contains(CoordSel::X) {
             homing_ok &= self
                 .home_axis(CoordSel::X, _machine_bounds.x.unwrap_or(math::ZERO), _steps_per_world_unit)
                 .await;
         }
         #[cfg(feature = "with-y-axis")]
-        {
+        if homing_ok && plan.axes.contains(CoordSel::Y) {
             homing_ok &= self
                 .home_axis(CoordSel::Y, _machine_bounds.y.unwrap_or(math::ZERO), _steps_per_world_unit)
                 .await;
         }
 
-        // 3. X and Y together to the safe homing point
-        #[cfg(any(feature = "with-x-axis", feature = "with-y-axis"))]
-        if homing_ok {
-            let homing_point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
-            let mut delta: TVector<Real> = TVector::new();
-            for coord in [CoordSel::X, CoordSel::Y] {
-                if let (Some(t), Some(h)) = (target.get_coord(coord), homing_point.get_coord(coord)) {
-                    delta.set_coord(coord, Some(t - h));
+        #[cfg(feature = "with-z-axis")]
+        if homing_ok && plan.axes.contains(CoordSel::Z) {
+            // 3. X and Y together to the safe homing point: from their end-stops when just homed,
+            // or from where they are (known: see `MotionPlanner::plan_homing`)
+            #[cfg(any(feature = "with-x-axis", feature = "with-y-axis"))]
+            {
+                let mut delta: TVector<Real> = TVector::new();
+                for coord in [CoordSel::X, CoordSel::Y] {
+                    let from = match plan.axes.contains(coord) {
+                        true => homing_point.get_coord(coord),
+                        false => plan.start.get_coord(coord),
+                    };
+                    if let (Some(t), Some(h)) = (target.get_coord(coord), from) {
+                        delta.set_coord(coord, Some(t - h));
+                    }
+                }
+                if let Some(module) = delta.norm2().filter(|m| m.is_defined_positive()) {
+                    #[cfg(feature = "trace-commands")]
+                    hwa::info!("[trace-commands] [Homing] To the safe homing point: {:?}", delta);
+                    let vdir = delta / module;
+                    homing_ok &= self
+                        .shabbily_move_to(
+                            vdir,
+                            module,
+                            _steps_per_world_unit,
+                            Self::homing_rate(&vdir, &_steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY),
+                            false,
+                            None,
+                        )
+                        .await;
                 }
             }
-            if let Some(module) = delta.norm2().filter(|m| m.is_defined_positive()) {
-                #[cfg(feature = "trace-commands")]
-                hwa::info!("[trace-commands] [Homing] To the safe homing point: {:?}", delta);
-                let vdir = delta / module;
-                homing_ok &= self
-                    .shabbily_move_to(
-                        vdir,
-                        module,
-                        _steps_per_world_unit,
-                        Self::homing_rate(&vdir, &_steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY),
-                        false,
-                        None,
-                    )
-                    .await;
-            }
-        }
-
-        // 4. Z sample (probe or end-stop), with the fine approach
-        #[cfg(feature = "with-z-axis")]
-        if homing_ok {
-            #[cfg(feature = "with-probe")]
-            {
-                let up = TVector::new().with_coord(CoordSel::Z, Some(math::ONE));
-                homing_ok &= self
-                    .shabbily_move_to(
-                        up,
-                        Real::from_f32(PROBE_DEPLOY_CLEARANCE_MM),
-                        _steps_per_world_unit,
-                        Self::homing_rate(&up, &_steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY),
-                        false,
-                        None,
-                    )
-                    .await;
-                self.probe_controller
-                    .lock()
-                    .await
-                    .probe_deploy_latched(PROBE_SETTLE_US, PROBE_SW_MODE_SETTLE_US)
-                    .await;
-            }
-            let max_travel = Real::from_f32(HOMING_Z_MAX_TRAVEL_MM)
-                .max(_machine_bounds.z.unwrap_or(math::ZERO)
-                    + Real::from_f32(HOMING_Z_RAISE_MM + PROBE_DEPLOY_CLEARANCE_MM));
-            #[cfg(feature = "trace-commands")]
-            hwa::info!("[trace-commands] [Homing] Z sample (max travel {:?})", max_travel);
-            homing_ok &= self
-                .touch_z(max_travel, _steps_per_world_unit, None)
-                .await;
-            #[cfg(feature = "with-probe")]
-            self.probe_controller
-                .lock()
-                .await
-                .probe_pin_up(PROBE_SETTLE_US)
-                .await;
-            // 5. Raise Z
+            // 4. Z sample (probe or end-stop), with the fine approach, and the raise after it
             if homing_ok {
-                let up = TVector::new().with_coord(CoordSel::Z, Some(math::ONE));
+                let max_travel = Real::from_f32(HOMING_Z_MAX_TRAVEL_MM)
+                    .max(_machine_bounds.z.unwrap_or(math::ZERO)
+                        + Real::from_f32(HOMING_Z_RAISE_MM + PROBE_DEPLOY_CLEARANCE_MM));
+                #[cfg(feature = "trace-commands")]
+                hwa::info!("[trace-commands] [Homing] Z sample (max travel {:?})", max_travel);
+                // With the probe, raised before deploying it
+                let raise = match cfg!(feature = "with-probe") {
+                    true => probe_deploy_clearance(),
+                    false => math::ZERO,
+                };
                 homing_ok &= self
-                    .shabbily_move_to(
-                        up,
-                        homing_z_clearance(),
-                        _steps_per_world_unit,
-                        Self::homing_rate(&up, &_steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY),
-                        false,
-                        None,
-                    )
-                    .await;
+                    .sample_z(raise, max_travel, _steps_per_world_unit)
+                    .await
+                    .is_ok();
             }
         }
 
@@ -366,9 +375,68 @@ impl MotionDriver {
                 .await
     }
 
-    /// Single probe (`G30`) at the current XY: deploys the probe, lowers Z until it triggers
-    /// (fast, then the fine approach, as the homing), raises Z back to the start height and stows
-    /// the probe. So the position is unchanged afterwards (also on failure).
+    /// The Z sample of the homing, also the single probe (`G30`): raises `raise` (the probe
+    /// deploy clearance, `PROBE_DEPLOY_CLEARANCE_MM` in the homing), deploys the probe, descends
+    /// (fast, at most `max_travel`) until the probe (or the Z end-stop) triggers, backs off
+    /// `HOMING_Z_BUMP_MM` and approaches again slowly (fine), stows the probe and raises
+    /// `Z_AFTER_HOMING_MM`.
+    ///
+    /// Returns the descent (world units) from the deploy height to where it triggered. Nothing is
+    /// raised after a failure.
+    #[cfg(feature = "with-z-axis")]
+    async fn sample_z(
+        &mut self,
+        raise: Real,
+        max_travel: Real,
+        steps_per_world_unit: TVector<Real>,
+    ) -> Result<Real, ProbeError> {
+        use crate::tasks::task_stepper::motion_aborted;
+        let up = TVector::new().with_coord(CoordSel::Z, Some(math::ONE));
+        let up_rate = Self::homing_rate(&up, &steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY);
+        if raise.is_defined_positive()
+            && !self
+                .shabbily_move_to(up, raise, steps_per_world_unit, up_rate, false, None)
+                .await
+        {
+            return Err(ProbeError::Aborted);
+        }
+        #[cfg(feature = "with-probe")]
+        self.probe_controller
+            .lock()
+            .await
+            .probe_deploy_latched(PROBE_SETTLE_US, PROBE_SW_MODE_SETTLE_US)
+            .await;
+        let mut displacement = TVector::zero();
+        let triggered = self
+            .touch_z(max_travel, steps_per_world_unit, Some(&mut displacement))
+            .await;
+        #[cfg(feature = "with-probe")]
+        self.probe_controller
+            .lock()
+            .await
+            .probe_pin_up(PROBE_SETTLE_US)
+            .await;
+        if motion_aborted() {
+            return Err(ProbeError::Aborted);
+        }
+        if !triggered {
+            return Err(ProbeError::NotTriggered);
+        }
+        if !self
+            .shabbily_move_to(up, homing_z_clearance(), steps_per_world_unit, up_rate, false, None)
+            .await
+        {
+            return Err(ProbeError::Aborted);
+        }
+        Ok(displacement.z.unwrap_or(math::ZERO).neg())
+    }
+
+    /// Single probe (`G30`) at the current XY, as the Z sample of the homing (see
+    /// [Self::sample_z]), from where Z is (the caller raised it the deploy clearance): deploys the
+    /// probe, descends until it triggers (fast, then the fine approach), stows the probe and
+    /// raises `Z_AFTER_HOMING_MM` (see [homing_z_clearance]) above where it triggered. When it
+    /// does not trigger, Z is raised as much from the end of the descent (the probe may be
+    /// pressing the bed).
     ///
     /// `max_descent` (world units) bounds the travel. Returns the descent until the trigger.
     ///
@@ -380,41 +448,17 @@ impl MotionDriver {
         max_descent: Real,
     ) -> Result<Real, ProbeError> {
         let steps_per_world_unit = motion_config.get_steps_per_space_unit_as_vector();
-        self.probe_controller
-            .lock()
-            .await
-            .probe_deploy_latched(PROBE_SETTLE_US, PROBE_SW_MODE_SETTLE_US)
+        let result = self
+            .sample_z(math::ZERO, max_descent, steps_per_world_unit)
             .await;
-        let mut displacement = TVector::zero();
-        let triggered = self
-            .touch_z(max_descent, steps_per_world_unit, Some(&mut displacement))
-            .await;
-        let aborted = crate::tasks::task_stepper::motion_aborted();
-        let descent = displacement.z.unwrap_or(math::ZERO).neg();
-        // Back to the start height, also after a failure (the position stays known). Not when
-        // aborted: the abort stops every motion
-        if !aborted && descent > math::ZERO {
+        if result == Err(ProbeError::NotTriggered) {
+            let up = TVector::new().with_coord(CoordSel::Z, Some(math::ONE));
+            let rate = Self::homing_rate(&up, &steps_per_world_unit, 1.0, HOMING_FAST_STEP_FREQUENCY);
             let _ = self
-                .shabbily_move_to(
-                    TVector::new().with_coord(CoordSel::Z, Some(math::ONE)),
-                    descent,
-                    steps_per_world_unit,
-                    PROBE_RAISE_STEP_FREQUENCY,
-                    false,
-                    None,
-                )
+                .shabbily_move_to(up, homing_z_clearance(), steps_per_world_unit, rate, false, None)
                 .await;
         }
-        self.probe_controller
-            .lock()
-            .await
-            .probe_pin_up(PROBE_SETTLE_US)
-            .await;
-        match (triggered, aborted) {
-            (_, true) => Err(ProbeError::Aborted),
-            (true, false) => Ok(descent),
-            (false, false) => Err(ProbeError::NotTriggered),
-        }
+        result
     }
 
     /// Translates a direction in world coordinates to motor (space) coordinates.

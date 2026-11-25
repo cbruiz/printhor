@@ -310,7 +310,9 @@ async fn autotune_suspends_the_runaway_detection_but_not_maxtemp() {
     let target = 200.0;
     let (mut h, _, _) = heater(0);
     h.set_current_temp(25.0);
-    assert_eq!(h.start_autotune(target, 5), Ok(()));
+    assert_eq!(h.start_autotune(AutotuneRequest::new(target, 5)).await, Ok(()));
+    // Not twice at once
+    assert_eq!(h.start_autotune(AutotuneRequest::new(target, 5)).await, Err(HeaterError::Busy));
     assert!(h.is_autotuning());
     assert!(h.is_on());
     assert_eq!(h.get_target_temp(), target);
@@ -322,10 +324,14 @@ async fn autotune_suspends_the_runaway_detection_but_not_maxtemp() {
     assert_eq!(h.check_safety(target - 50.0, far), None);
     assert_eq!(h.runaway_deadline, None);
     assert_eq!(h.check_safety(cfg.max_temp, far), Some(HeaterFault::MaxTemp));
-    assert!(h.take_autotune_outcome().is_none());
-    // A new target cancels the autotune
+    assert!(matches!(h.take_autotune_events(), (None, None)));
+    // A new target cancels the autotune: its end is reported (and its response completed)
     heat(&mut h, 25.0, 180.0).await;
     assert!(!h.is_autotuning());
+    assert!(matches!(
+        h.take_autotune_events(),
+        (None, Some(AutotuneEnd { outcome: AutotuneOutcome::Interrupted, .. }))
+    ));
 }
 
 #[futures_test::test]
@@ -340,7 +346,10 @@ async fn target_limits() {
     );
     assert!(!h.is_on());
     assert_eq!(h.get_target_temp(), 0.0);
-    assert_eq!(h.start_autotune(max_target + 0.1, 5), Err(HeaterError::TargetTooHigh));
+    assert_eq!(
+        h.start_autotune(AutotuneRequest::new(max_target + 0.1, 5)).await,
+        Err(HeaterError::TargetTooHigh)
+    );
     assert!(!h.is_autotuning());
     // The limit itself is accepted
     heat(&mut h, 25.0, max_target).await;
@@ -377,7 +386,7 @@ async fn a_fault_is_latched_until_cleared() {
     );
     assert!(!h.is_on());
     assert_eq!(
-        h.start_autotune(200.0, 5),
+        h.start_autotune(AutotuneRequest::new(200.0, 5)).await,
         Err(HeaterError::Faulted(HeaterFault::ThermalRunaway))
     );
     // Turning it off is always allowed

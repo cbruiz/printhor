@@ -27,7 +27,8 @@ cfg_if::cfg_if! {
         pub use adc_controller::GenericAdcController;
         pub mod heater_controller;
         pub use heater_controller::{
-            AutotuneOutcome, HeaterConfig, HeaterController, HeaterError, HeaterFault,
+            AutotuneCycle, AutotuneEnd, AutotuneOutcome, AutotuneRequest, HeaterConfig,
+            HeaterController, HeaterError, HeaterFault, TuningRule,
         };
     }
 }

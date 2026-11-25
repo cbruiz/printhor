@@ -142,6 +142,18 @@ impl MultiTimer {
         self.max_count = *max_count;
     }
 
+    /// Sets the number of steps of a single channel (see [Self::set_max_count])
+    #[cfg(any(feature = "with-pressure-advance", feature = "with-input-shaping"))]
+    pub fn set_count(&mut self, channel: CoordSel, count: u32) {
+        self.max_count.set_coord(channel, Some(count));
+    }
+
+    /// The number of steps of a single channel (see [Self::set_max_count])
+    #[cfg(feature = "with-input-shaping")]
+    pub fn count(&self, channel: CoordSel) -> u32 {
+        self.max_count.get_coord(channel).unwrap_or(0)
+    }
+
     /// Sets the width for the MultiTimer.
     ///
     /// # Arguments

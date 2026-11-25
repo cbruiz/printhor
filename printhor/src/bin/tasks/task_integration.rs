@@ -665,7 +665,7 @@ pub async fn task_integration(
     #[cfg(feature = "with-sd-card")]
     {
         let test_name = "T7 [M20 (List SDCard)]";
-        let gcode = processing::GCodeCmd::new(7, Some(7), processing::GCodeValue::M20(None));
+        let gcode = processing::GCodeCmd::new(7, Some(7), processing::GCodeValue::M20(None, false));
 
         begin_test(test_name);
         step_ok!(
@@ -695,7 +695,7 @@ pub async fn task_integration(
         let gcode = processing::GCodeCmd::new(
             8,
             Some(8),
-            processing::GCodeValue::M20(Some("/dir/".to_string())),
+            processing::GCodeValue::M20(Some("/dir/".to_string()), false),
         );
 
         begin_test(test_name);
@@ -718,7 +718,7 @@ pub async fn task_integration(
         let gcode = processing::GCodeCmd::new(
             8,
             Some(8),
-            processing::GCodeValue::M20(Some("/XXX/".to_string())),
+            processing::GCodeValue::M20(Some("/XXX/".to_string()), true),
         );
 
         expect_err("M20 lists a directory that does not exist");
@@ -1918,12 +1918,25 @@ pub async fn task_integration(
             check!("M140 S0\n", &["ok"]);
         }
 
-        // M303: PID autotune
-        check!("M303 E5\n", &["error", "Bad heater id"]);
-        check!("M303 E0 S999\n", &["error"]);
-        check!("M303 E0 S150 C3\n", &["PID Autotune start", "ok"]);
+        // M303: PID autotune (Marlin's messages)
+        check!("M303 E5\n", &["error", "PID Autotune failed! Bad heater id"]);
+        check!("M303 E0 S999\n", &["error", "PID Autotune failed! Temperature too high"]);
+        // Answered once it ends (the host can go on polling the temperatures meanwhile)
+        let out = serial_until("M303 E0 S150 C3\n", "PID Autotune start", embassy_time::Duration::from_secs(5)).await;
+        ensure!(
+            out.contains("PID Autotune start") && !out.lines().any(|l| l.starts_with("ok")),
+            "M303 did not start, or was answered at once"
+        );
         ensure!(processor.hot_end.lock().await.is_autotuning(), "M303 did not start the autotune");
-        check!("M104 S0\n", &["ok"]);
+        // Only one at once
+        check!("M303 E0 S150 C3\n", &["error", "PID Autotune running"]);
+        check!("M105\n", &["ok T:"]);
+        // A new target interrupts it: the failure is reported and both commands are answered
+        let out = serial_oks("M104 S0\n", 2, embassy_time::Duration::from_secs(5)).await;
+        ensure!(
+            out.contains("PID Autotune failed! Interrupted") && out.lines().filter(|l| l.starts_with("ok")).count() == 2,
+            "M104 S0 did not interrupt the autotune and answer M303"
+        );
         ensure!(!processor.hot_end.lock().await.is_autotuning(), "M104 S0 did not cancel the autotune");
 
         // M502: defaults restored
@@ -2380,6 +2393,12 @@ pub async fn task_integration(
             fail!("G28 failed: {:?}", out);
         }
         send!("G90\n");
+        // The path itself: input shaping smooths it by design (each axis follows a weighted sum of
+        // its delayed path), so it is measured without it. Applied from the next stop: at rest here
+        #[cfg(feature = "with-input-shaping")]
+        let shaping = processor.motion_planner.motion_config().get_input_shaping();
+        #[cfg(feature = "with-input-shaping")]
+        send!("M593 F0\n");
 
         // (description, start point, command, ideal curve)
         let pi = core::f64::consts::PI;
@@ -2474,6 +2493,8 @@ pub async fn task_integration(
         if !failed.is_empty() {
             fail!("deviation >= 1 step (or wrong end point) [case, Euclidean, per-axis, end]: {:?}", failed);
         }
+        #[cfg(feature = "with-input-shaping")]
+        processor.motion_planner.motion_config().set_input_shaping(shaping);
         end_test(test_name);
     }
 
@@ -2772,12 +2793,20 @@ pub async fn task_integration(
         check!("M201 X1234\n", &["ok"]);
         check!("M206 Z-0.5\n", &["ok"]);
         check!("M301 P11 I0.5 D33\n", &["ok"]);
+        #[cfg(feature = "with-e-axis")]
+        check!("M200 D2.85 L4\n", &["ok"]);
+        #[cfg(feature = "with-pressure-advance")]
+        check!("M900 K0.07\n", &["ok"]);
         check!("M500\n", &["Settings Stored"]);
         // Storing unchanged settings is cheap (no page is rewritten) and gives the same image
         let first = check!("M500\n", &["Settings Stored"]);
         check!("M502\n", &["ok"]);
         let out = check!("M503\n", &["M92"]);
         ensure!(!out.contains("X81.5") && !out.contains("P11"), "M502 did not reset the settings", out);
+        #[cfg(feature = "with-e-axis")]
+        ensure!(out.contains("M200 S0 D1.75 L0.00"), "M502 did not reset the volumetric extrusion", out);
+        #[cfg(feature = "with-pressure-advance")]
+        ensure!(out.contains("M900 K0.0\n"), "M502 did not reset the pressure advance", out);
         let out = check!("M501\n", &["Stored settings retrieved"]);
         let crc = |s: &str| s.split("crc").nth(1).map(|c| alloc::string::String::from(c.trim()));
         ensure!(crc(first.as_str()).is_some() && crc(first.as_str()) == crc(out.as_str()), "retrieved image differs from the stored one", out);
@@ -2788,6 +2817,15 @@ pub async fn task_integration(
             "M501 did not restore the stored settings",
             out
         );
+        #[cfg(feature = "with-e-axis")]
+        ensure!(out.contains("M200 S1 D2.85 L4.00"), "M501 did not restore the volumetric extrusion", out);
+        #[cfg(feature = "with-e-axis")]
+        check!("M200 S0 D1.75 L0\n", &["ok"]);
+        #[cfg(feature = "with-pressure-advance")]
+        {
+            ensure!(out.contains("M900 K0.07"), "M501 did not restore the pressure advance", out);
+            check!("M900 K0\n", &["ok"]);
+        }
 
         // M206: after homing, the logical position is the homing point plus the offset
         let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
@@ -3033,8 +3071,11 @@ pub async fn task_integration(
         // A PID autotune whose target is far below the current temperature fails at once: the
         // failure is reported and the heater is left off
         expect_err("an autotune whose target is below the current temperature fails");
-        let out = serial_until("M303 E0 S50 C3\n", "Autotune failed", Duration::from_secs(5)).await;
-        if !out.contains("PID Autotune start") || !out.contains("Temperature too high") {
+        // Answered (once) after the failure report
+        let out = serial_oks("M303 E0 S50 C3\n", 1, Duration::from_secs(5)).await;
+        let failed = out.find("PID Autotune failed! Temperature too high");
+        let answered = out.find("\nok");
+        if !out.contains("PID Autotune start") || failed.is_none() || answered.is_none() || answered < failed {
             fail!("the failed autotune was not reported", out);
         }
         {
@@ -3086,8 +3127,8 @@ pub async fn task_integration(
                 fail!("M190 S40 answered before reaching the target", (out, Real::from_f32(temp)));
             }
             expect_err("an autotune whose target is below the current temperature fails");
-            let out = serial_until("M303 E-1 S5 C3\n", "Autotune failed", Duration::from_secs(5)).await;
-            if !out.contains("Temperature too high") {
+            let out = serial_oks("M303 E-1 S5 C3\n", 1, Duration::from_secs(5)).await;
+            if !out.contains("PID Autotune failed! Temperature too high") {
                 fail!("the failed hot-bed autotune was not reported", out);
             }
             let _ = serial_until("M140 S0\n", "ok", Duration::from_secs(5)).await;
@@ -3504,16 +3545,86 @@ pub async fn task_integration(
             finish_task(Err(test_name));
             return;
         }
-        // The position does not change
+        // As after the homing: X and Y do not change, Z is left the clearance above where the
+        // probe triggered (the bed, Z0)
+        let xy = |s: &str| {
+            s.lines()
+                .find(|l| l.starts_with("X:"))
+                .map(|l| alloc::string::String::from(l.split(" Z:").next().unwrap_or("")))
+        };
+        let z_of = |s: &str| {
+            s.lines()
+                .find(|l| l.starts_with("X:"))
+                .and_then(|l| l.split("Z:").nth(1))
+                .and_then(|v| v.split_whitespace().next())
+                .and_then(|v| v.parse::<f32>().ok())
+        };
+        let clearance = hwa::drivers::motion_driver::homing_z_clearance().to_f64() as f32;
         let before = expect!("M114\n", "ok", ["X:"]);
         expect!("G30\n", "ok", ["Bed X: "]);
         let after = expect!("M114\n", "ok", ["X:"]);
-        let pos = |s: &str| s.lines().find(|l| l.starts_with("X:")).map(alloc::string::String::from);
-        if pos(&before) != pos(&after) {
-            hwa::error!("{}: G30 moved the position: {:?} -> {:?}", test_name, before, after);
+        if xy(&before) != xy(&after) || !z_of(&after).is_some_and(|z| (z - clearance).abs() < 0.05) {
+            hwa::error!("{}: G30 left the position at {:?} (from {:?})", test_name, after, before);
             finish_task(Err(test_name));
             return;
         }
+        // From low (as after printing a first layer): Z is raised before deploying the probe, and
+        // the bed is still found at Z0
+        expect!("G1 Z0.3 F600\n", "ok", ["ok"]);
+        let out = expect!("G30\n", "Bed X", ["Bed X: "]);
+        let z = out
+            .lines()
+            .find_map(|l| l.split("Z: ").nth(1))
+            .and_then(|v| v.trim().parse::<f32>().ok());
+        let after = expect!("M114\n", "ok", ["X:"]);
+        if !z.is_some_and(|z| z.abs() < 0.05) || !z_of(&after).is_some_and(|z| (z - clearance).abs() < 0.05) {
+            hwa::error!("{}: G30 from Z0.3: {:?} then {:?}", test_name, out, after);
+            finish_task(Err(test_name));
+            return;
+        }
+        // The raise before deploying the probe goes at the speed the homing raises Z (Marlin's
+        // Z_PROBE_FEEDRATE_FAST), not at the max Z speed: a fast raise may lose steps, which
+        // corrupts the probed height. Timed on the Z steps: from the first one up to the clearance
+        {
+            use embassy_time::{Instant, Timer};
+            use hwa::controllers::step_trace;
+            use printhor_hwi_native::test_hooks;
+            let cfg = processor.motion_planner.motion_config();
+            let spm = cfg.get_steps_per_space_unit_as_vector();
+            let spm_z = spm.z.map_or(0.0, |v| v.to_f64());
+            let speed = hwa::drivers::motion_driver::z_probe_speed(&spm).to_f64();
+            let raise = hwa::drivers::motion_driver::probe_deploy_clearance().to_f64();
+            let raise_steps = (raise * spm_z).round() as i64;
+            let z0 = step_trace::current()[2];
+            test_hooks::serial_port_1_capture_start();
+            test_hooks::serial_port_1_input(b"G30\n").await;
+            let deadline = Instant::now() + wait;
+            let (mut started, mut took) = (None, None);
+            while Instant::now() < deadline && took.is_none() {
+                let dz = step_trace::current()[2] - z0;
+                let now = Instant::now();
+                if started.is_none() && dz > 0 {
+                    started = Some(now);
+                }
+                if dz >= raise_steps {
+                    took = started.map(|t0: Instant| (now - t0).as_micros() as f64 / 1e6);
+                }
+                Timer::after(Duration::from_millis(2)).await;
+            }
+            while Instant::now() < deadline && !test_hooks::serial_port_1_captured().lines().any(|l| l.starts_with("ok")) {
+                Timer::after(Duration::from_millis(5)).await;
+            }
+            let out = test_hooks::serial_port_1_capture_stop();
+            // At the probing speed (the S-curve ramps add time): 80% of raise / speed at least
+            let at_least = 0.8 * raise / speed;
+            hwa::info!("{}: deploy raise of {} mm in {:?} s (probing speed {} mm/s)", test_name, raise, took, speed);
+            if !out.contains("Bed X: ") || !took.is_some_and(|t| t >= at_least) {
+                hwa::error!("{}: G30 raised {} mm in {:?} s (at least {} s at {} mm/s): {:?}", test_name, raise, took, at_least, speed, out);
+                finish_task(Err(test_name));
+                return;
+            }
+        }
+        let pos = |s: &str| s.lines().find(|l| l.starts_with("X:")).map(alloc::string::String::from);
         // At X Y (absolute, also in relative mode)
         expect!("G30 X10 Y20\n", "ok", ["Bed X: 10.00 Y: 20.00 Z: "]);
         expect!("G91\n", "ok", ["ok"]);
@@ -3579,6 +3690,21 @@ pub async fn task_integration(
             finish_task(Err(test_name));
             return;
         }
+        // The probed Z is the height above the bed plane of the homing, whatever its logical Z: with
+        // a home offset (M206, as a homing point above Z0 would, Marlin's Z_MIN_POS) a flat bed still
+        // probes at Z 0 (not at the offset)
+        expect!("M206 Z5\n", "ok", ["ok"]);
+        let out = expect!("G30\n", "Bed X", ["Bed X: "]);
+        let z = out
+            .lines()
+            .find_map(|l| l.split("Z: ").nth(1))
+            .and_then(|v| v.trim().parse::<f32>().ok());
+        if !z.map_or(false, |z| z.abs() < 0.05) {
+            hwa::error!("{}: unexpected probed Z with a home offset (M206 Z5): {:?}", test_name, out);
+            finish_task(Err(test_name));
+            return;
+        }
+        expect!("M206 Z0\n", "ok", ["ok"]);
         expect!("M851 X0 Y0 Z0\n", "ok", ["ok"]);
 
         end_test(test_name);
@@ -3749,6 +3875,13 @@ pub async fn task_integration(
         exchange!("G90\n");
         exchange!("G1 X10 Y10 F3000\n");
         exchange!("M400\n");
+        // The tool actions are synchronized with the commanded motion: with input shaping the
+        // shaped axes lag it (the time centroid of the shaper), so their positions are checked
+        // without it. Applied from the next stop: at rest here
+        #[cfg(feature = "with-input-shaping")]
+        let shaping = processor.motion_planner.motion_config().get_input_shaping();
+        #[cfg(feature = "with-input-shaping")]
+        exchange!("M593 F0\n");
         let spm_x = processor
             .motion_planner
             .motion_config()
@@ -3885,6 +4018,8 @@ pub async fn task_integration(
         if laser_power!() != 0.0 {
             fail!("M5 not applied with the steppers parked", laser_power!());
         }
+        #[cfg(feature = "with-input-shaping")]
+        processor.motion_planner.motion_config().set_input_shaping(shaping);
         end_test(test_name);
     }
 
@@ -3937,6 +4072,12 @@ pub async fn task_integration(
         run!("M80\n", 1);
         run!("G28\n", 1);
         run!("G90\nG1 X10 Y10 F3000\nM400\n", 3);
+        // The laser power follows the commanded motion: with input shaping the shaped axes lag it
+        // (the time centroid of the shaper), so the power is checked against the steps without it
+        #[cfg(feature = "with-input-shaping")]
+        let shaping = processor.motion_planner.motion_config().get_input_shaping();
+        #[cfg(feature = "with-input-shaping")]
+        run!("M593 F0\n", 1);
         let spm_x = processor
             .motion_planner
             .motion_config()
@@ -4004,6 +4145,621 @@ pub async fn task_integration(
         if laser_power!() != 0.0 {
             fail!("M5 did not turn the laser off", laser_power!());
         }
+        #[cfg(feature = "with-input-shaping")]
+        processor.motion_planner.motion_config().set_input_shaping(shaping);
+        end_test(test_name);
+    }
+
+    // Separator
+    hwa::info!("##");
+
+    // T35: selective homing (Marlin's, with Z_SAFE_HOMING): `G28 X Y` homes X and Y and leaves
+    // them at their end-stops (not at the safe homing point of the probe), raising Z first (up to
+    // the homing height above the bed when Z is known, never lower); `G28 Z` needs X and Y known
+    // and ends as the full homing; with the three axes it is the full homing
+    #[cfg(all(
+        test,
+        feature = "native",
+        feature = "with-serial-port-1",
+        feature = "with-motion",
+        not(feature = "with-motion-anthropomorphic-kinematics"),
+        feature = "with-x-axis",
+        feature = "with-y-axis",
+        feature = "with-z-axis"
+    ))]
+    {
+        let test_name = "T35 [Selective homing (G28 X Y, G28 Z)]";
+        begin_test(test_name);
+        use embassy_time::Duration;
+        let wait = Duration::from_secs(30);
+        macro_rules! fail {
+            ($what:expr, $out:expr) => {{
+                hwa::error!("{}: {}: {:?}", test_name, $what, $out);
+                finish_task(Err(test_name));
+                return;
+            }};
+        }
+        macro_rules! answered {
+            ($line:expr, $what:expr) => {{
+                let out = serial_exchange_timeout($line, wait).await;
+                if !out.lines().any(|l| l.starts_with("ok")) || out.contains("rror") {
+                    fail!($what, out);
+                }
+                out
+            }};
+        }
+        // The current logical position (X, Y, Z)
+        macro_rules! position {
+            () => {{
+                let p = processor.motion_planner.motion_status().get_current_position().world_pos;
+                let c = |v: Option<Real>| v.unwrap_or(math::ZERO).to_f64();
+                (c(p.x), c(p.y), c(p.z))
+            }};
+        }
+        let near = |a: f64, b: Option<Real>| b.is_some_and(|b| (a - b.to_f64()).abs() < 1e-2);
+        #[cfg(feature = "with-ps-on")]
+        let _ = serial_until("M80\n", "ok", wait).await;
+        let _ = serial_until("M206 X0 Y0 Z0\n", "ok", wait).await;
+        let cfg = processor.motion_planner.motion_config().clone();
+        let home = cfg.get_logical_homing_point();
+        let post = cfg.get_post_homing_position();
+        let raise = hwa::drivers::motion_driver::homing_z_raise();
+        // The position is unknown (as after power on)
+        processor.motion_planner.motion_status().invalidate_position();
+        expect_err("G28 Z with X and Y unknown: Home XY first");
+        let out = serial_exchange_timeout("G28 Z\n", wait).await;
+        if !out.contains("Home XY first") || !out.contains("rror") {
+            fail!("G28 Z was accepted with X and Y unknown", out);
+        }
+        // X and Y: homed and left at their end-stops. Z is still unknown: no moves
+        answered!("G28 X Y\n", "G28 X Y failed");
+        let head = printhor_hwi_native::simulation::head_position();
+        let (x, y, _) = position!();
+        if head[0] != 0 || head[1] != 0 || !near(x, home.x) || !near(y, home.y) {
+            fail!("G28 X Y did not leave X and Y at their end-stops", (head, x, y));
+        }
+        if processor.motion_planner.motion_status().get_last_planned_position().is_set {
+            fail!("the position is set with Z unknown", position!());
+        }
+        expect_err("G1 with Z unknown: homing required");
+        let out = serial_exchange("G1 X10 F3000\n").await;
+        if !out.contains("HomingRequired") {
+            fail!("a move was accepted with Z unknown", out);
+        }
+        // Z: at the safe homing point (the probe over the bed center), as the full homing
+        answered!("G28 Z\n", "G28 Z failed");
+        let (x, y, z) = position!();
+        if !near(x, post.x) || !near(y, post.y) || !near(z, post.z) {
+            fail!("G28 Z did not end as the full homing", ((x, y, z), post));
+        }
+        if !processor.motion_planner.motion_status().is_homed() {
+            fail!("not homed after G28 X Y and G28 Z", position!());
+        }
+        // Homed and low: Z up to the homing height above the bed, X and Y to their end-stops
+        answered!("G1 X40 Y40 Z0.5 F3000\n", "G1 failed");
+        answered!("G28 X Y\n", "G28 X Y failed");
+        let (x, y, z) = position!();
+        let bed = home.z.unwrap_or(math::ZERO);
+        if !near(x, home.x) || !near(y, home.y) || !near(z, Some(bed + raise)) {
+            fail!("G28 X Y (homed) did not raise Z to the homing height", (x, y, z));
+        }
+        // Never lowered
+        answered!("G1 Z50 F600\n", "G1 failed");
+        answered!("G28 X\n", "G28 X failed");
+        let (x, y, z) = position!();
+        if !near(x, home.x) || !near(y, home.y) || !near(z, Some(bed + Real::from_f32(50.0))) {
+            fail!("G28 X moved Z down (or Y)", (x, y, z));
+        }
+        // Still homed: moves are allowed
+        answered!("G1 X20 Y20 F3000\n", "G1 after a selective homing failed");
+        // The three axes: the full homing
+        answered!("G28 X Y Z\n", "G28 X Y Z failed");
+        let (x, y, z) = position!();
+        if !near(x, post.x) || !near(y, post.y) || !near(z, post.z) {
+            fail!("G28 X Y Z did not end as the full homing", ((x, y, z), post));
+        }
+        end_test(test_name);
+    }
+
+    // Separator
+    hwa::info!("##");
+
+    // T36: volumetric extrusion (M200, Marlin's semantics): off by default; `D` sets the filament
+    // diameter and enables it (`D0` disables it), `S` enables or disables it, `L` limits the
+    // volumetric flow; reported by M200 and M503, reset by M502
+    #[cfg(all(
+        test,
+        feature = "native",
+        feature = "with-serial-port-1",
+        feature = "with-motion",
+        feature = "with-e-axis"
+    ))]
+    {
+        let test_name = "T36 [Volumetric extrusion (M200)]";
+        begin_test(test_name);
+        let cfg = processor.motion_planner.motion_config().clone();
+        macro_rules! check {
+            ($line:expr, $must:expr) => {
+                expect_err_if($line, $must);
+                if let Err(e) = serial_expect($line, $must).await {
+                    hwa::error!("{}: {}", test_name, e.as_str());
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        macro_rules! ensure {
+            ($cond:expr, $what:expr) => {
+                if !$cond {
+                    hwa::error!("{}: {} ({:?})", test_name, $what, cfg.get_volumetric());
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        let area = |d: f64| core::f64::consts::PI * d * d / 4.0;
+        let e_factor = |expected: f64| (cfg.get_e_factor().to_f64() - expected).abs() < 1e-4 * expected;
+        check!("M221 S100\n", &["ok"]);
+        // Off by default
+        check!("M200\n", &["M200 S0 D1.75 L0.00", "ok"]);
+        ensure!(!cfg.get_volumetric().enabled && e_factor(1.0), "volumetric extrusion on by default");
+        // D: diameter, enabled
+        check!("M200 D2.85\n", &["ok"]);
+        ensure!(cfg.get_volumetric().enabled && e_factor(1.0 / area(2.85)), "M200 D2.85");
+        check!("M200\n", &["M200 S1 D2.85 L0.00"]);
+        // S0 / S1: the diameter is kept
+        check!("M200 S0\n", &["ok"]);
+        ensure!(!cfg.get_volumetric().enabled && e_factor(1.0), "M200 S0");
+        check!("M200 S1\n", &["ok"]);
+        ensure!(cfg.get_volumetric().enabled && e_factor(1.0 / area(2.85)), "M200 S1");
+        // D0 disables it (even with S1)
+        check!("M200 D0 S1\n", &["ok"]);
+        ensure!(!cfg.get_volumetric().enabled, "M200 D0 S1");
+        // L: the max volumetric flow, a max filament speed
+        check!("M200 S1 D1.75 L5\n", &["ok"]);
+        ensure!(
+            cfg.get_volumetric().max_filament_speed().is_some_and(|v| (v.to_f64() - 5.0 / area(1.75)).abs() < 1e-4),
+            "M200 L5"
+        );
+        check!("M200 L25\n", &["?L value out of range (0-20)."]);
+        ensure!(cfg.get_volumetric().limit == hwa::math::FIVE, "an out of range L changed the limit");
+        // A single extruder
+        check!("M200 T1 S0\n", &["M200 Invalid extruder 1"]);
+        ensure!(cfg.get_volumetric().enabled, "M200 T1 changed the extruder 0");
+        // The flow percentage still applies
+        check!("M221 S90\n", &["ok"]);
+        ensure!(e_factor(0.9 / area(1.75)), "M221 with volumetric extrusion");
+        check!("M503\n", &["Filament settings:", "M200 S1 D1.75 L5.00"]);
+        check!("M502\n", &["ok"]);
+        ensure!(
+            !cfg.get_volumetric().enabled && cfg.get_volumetric().limit.is_zero() && e_factor(1.0),
+            "M502 did not reset the volumetric extrusion"
+        );
+        check!("M503\n", &["Filament settings (Disabled):", "M200 S0 D1.75 L0.00"]);
+        end_test(test_name);
+    }
+
+    // Separator
+    hwa::info!("##");
+
+    // T37: a whole PID autotune (M303) on the simulated heaters: reported as Marlin does (cycles,
+    // temperatures, outcome), answered at its end; the constants are applied only with `U1`, and
+    // the heater is left off. Faster heaters than the default ones, so that it does not take long
+    #[cfg(all(
+        test,
+        feature = "native",
+        feature = "with-serial-port-1",
+        feature = "with-hot-end"
+    ))]
+    {
+        let test_name = "T37 [PID autotune (M303)]";
+        begin_test(test_name);
+        use embassy_time::Duration;
+        use printhor_hwi_native::simulation::{self, Heater, ThermalProfile};
+        macro_rules! fail {
+            ($what:expr, $out:expr) => {{
+                hwa::error!("{}: {}: {:?}", test_name, $what, $out);
+                finish_task(Err(test_name));
+                return;
+            }};
+        }
+        // The value of a `#define DEFAULT_<name> <value>` line
+        let reported = |out: &str, name: &str| {
+            let prefix = alloc::format!("#define DEFAULT_{} ", name);
+            out.lines()
+                .find_map(|l| l.strip_prefix(prefix.as_str()))
+                .and_then(|v| v.trim().parse::<f32>().ok())
+        };
+        #[cfg(feature = "with-ps-on")]
+        let _ = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
+        simulation::configure_heater(
+            Heater::HotEnd,
+            ThermalProfile {
+                initial_c: 95.0,
+                cooling_coefficient: 0.08,
+                ..ThermalProfile::HOT_END
+            },
+        );
+        let default_pid = processor.hot_end.lock().await.get_pid();
+        let out = serial_oks("M303 E0 S100 C3 U1\n", 1, Duration::from_secs(240)).await;
+        for must in [
+            "PID Autotune start\n",
+            " bias: ",
+            " d: ",
+            " min: ",
+            " max: ",
+            " Ku: ",
+            " Tu: ",
+            " Classic PID\n",
+            " Kp: ",
+            " Ki: ",
+            " Kd: ",
+            "PID Autotune finished! Put the last Kp, Ki and Kd constants from below into Configuration.h\n",
+            // The temperatures, every 2 s
+            " T:",
+        ] {
+            if !out.contains(must) {
+                fail!(alloc::format!("{:?} not reported", must), out);
+            }
+        }
+        let finished = out.find("PID Autotune finished!");
+        let answered = out.find("\nok");
+        if finished.is_none() || answered.is_none() || answered < finished {
+            fail!("M303 was answered before its end", out);
+        }
+        // U1: the constants reported are applied
+        let (kp, ki, kd) = processor.hot_end.lock().await.get_pid();
+        let close = |v: f32, name: &str| reported(&out, name).is_some_and(|r| (r - v).abs() <= 0.006 + 1e-4 * v.abs());
+        if !close(kp, "Kp") || !close(ki, "Ki") || !close(kd, "Kd") || (kp, ki, kd) == default_pid {
+            fail!("U1 did not apply the constants reported", ((kp, ki, kd), out));
+        }
+        {
+            let h = processor.hot_end.lock().await;
+            if h.is_on() || h.get_target_temp() != 0.0 {
+                fail!("the heater was left on", Real::from_f32(h.get_target_temp()));
+            }
+        }
+        processor.hot_end.lock().await.reset_pid();
+        simulation::configure_heater(Heater::HotEnd, ThermalProfile::HOT_END);
+
+        // Without U1 (Marlin's default), only reported. The bed: the "no overshoot" rule
+        #[cfg(feature = "with-hot-bed")]
+        {
+            simulation::configure_heater(
+                Heater::HotBed,
+                ThermalProfile {
+                    initial_c: 43.0,
+                    cooling_coefficient: 0.1,
+                    ..ThermalProfile::HOT_BED
+                },
+            );
+            let bed_pid = processor.hot_bed.lock().await.get_pid();
+            let out = serial_oks("M303 E-1 S45 C3\n", 1, Duration::from_secs(240)).await;
+            if !out.contains(" No overshoot\n") || reported(&out, "bedKp").is_none() || reported(&out, "bedKd").is_none() {
+                fail!("the bed autotune was not reported", out);
+            }
+            if processor.hot_bed.lock().await.get_pid() != bed_pid {
+                fail!("the constants were applied without U1", out);
+            }
+            simulation::configure_heater(Heater::HotBed, ThermalProfile::HOT_BED);
+        }
+        end_test(test_name);
+    }
+
+    // Separator
+    hwa::info!("##");
+
+    // T38: pressure advance (M900, Marlin's linear advance): off by default; `K` sets it (0-10),
+    // reported by M900 and M503, reset by M502. The same extrusions with and without K: with it,
+    // the extruder retracts while braking (the pressure relief); without it, never. Neither the
+    // other axes nor the extruder steps differ in the end: the head visits the same step lattice
+    // positions and, stopped, the extruder is at its nominal position (no step lost nor added)
+    #[cfg(all(
+        test,
+        feature = "native",
+        feature = "with-serial-port-1",
+        feature = "with-motion",
+        feature = "with-pressure-advance",
+        feature = "with-x-axis",
+        feature = "with-y-axis"
+    ))]
+    {
+        let test_name = "T38 [Pressure advance (M900)]";
+        begin_test(test_name);
+        use embassy_time::Duration;
+        use hwa::controllers::step_trace;
+        let cfg = processor.motion_planner.motion_config().clone();
+        macro_rules! check {
+            ($line:expr, $must:expr) => {
+                expect_err_if($line, $must);
+                if let Err(e) = serial_expect($line, $must).await {
+                    hwa::error!("{}: {}", test_name, e.as_str());
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        macro_rules! ensure {
+            ($cond:expr, $what:expr, $out:expr) => {
+                if !$cond {
+                    hwa::error!("{}: {}: {:?}", test_name, $what, $out);
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        let k_is = |k: f64| (cfg.get_pressure_advance().to_f64() - k).abs() < 1e-6;
+        // Off by default
+        check!("M900\n", &["echo:Advance K=0.0", "ok"]);
+        ensure!(k_is(0.0), "pressure advance on by default", cfg.get_pressure_advance());
+        check!("M900 K0.05\n", &["ok"]);
+        ensure!(k_is(0.05), "M900 K0.05", cfg.get_pressure_advance());
+        check!("M900\n", &["echo:Advance K=0.05"]);
+        // Out of range (Marlin's 0 to 10) or another extruder: nothing changes
+        check!("M900 K11\n", &["?K value out of range (0-10)."]);
+        check!("M900 K-0.1\n", &["?K value out of range (0-10)."]);
+        check!("M900 T1 K0.2\n", &["?T value out of range."]);
+        check!("M900 T0 K0.06\n", &["ok"]);
+        ensure!(k_is(0.06), "M900 T0 K0.06", cfg.get_pressure_advance());
+        check!("M503\n", &["Linear Advance:", "M900 K0.06"]);
+        check!("M502\n", &["ok"]);
+        ensure!(k_is(0.0), "M502 did not reset K", cfg.get_pressure_advance());
+        check!("M503 S0\n", &["M900 K0.0"]);
+
+        // The same extrusions without and with K, from the same point
+        #[cfg(feature = "with-ps-on")]
+        let _ = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
+        ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
+        #[cfg(feature = "with-hot-end")]
+        check!("M302 P1\n", &["ok"]);
+        check!("M83\n", &["ok"]);
+        check!("M221 S100\n", &["ok"]);
+        check!("G90\n", &["ok"]);
+        let out = serial_oks("G1 X20 Y20 F6000\nM400\n", 2, Duration::from_secs(20)).await;
+        ensure!(out.lines().filter(|l| l.starts_with("ok")).count() == 2, "move to the start", out);
+        // 5 mm of filament: 2000 steps at 400 steps/mm (a whole number of steps per move)
+        let spm_e = cfg
+            .get_steps_per_space_unit_as_vector()
+            .get_coord(hwa::CoordSel::E)
+            .map_or(0.0, |v| v.to_f64());
+        let nominal = (5.0 * spm_e).round() as i64;
+        let mut runs: alloc::vec::Vec<(i64, i64, alloc::vec::Vec<step_trace::Steps>)> = alloc::vec::Vec::new();
+        for k in ["0", "0.2"] {
+            check!(alloc::format!("M900 K{}\n", k).as_str(), &["ok"]);
+            let (e0, back0) = step_trace::extruder();
+            let _ = step_trace::start();
+            let out = serial_oks(
+                "G1 X60 E2 F3000\nG1 Y40 E1\nG1 X20 E2\nG1 Y20\nM400\n",
+                5,
+                Duration::from_secs(30),
+            )
+            .await;
+            let lattice = step_trace::stop();
+            ensure!(out.lines().filter(|l| l.starts_with("ok")).count() == 5, "the extrusions did not complete", out);
+            let (e1, back1) = step_trace::extruder();
+            runs.push((e1 - e0, back1 - back0, lattice));
+        }
+        check!("M900 K0\n", &["ok"]);
+        #[cfg(feature = "with-hot-end")]
+        check!("M302 P0\n", &["ok"]);
+        let (without, with) = (&runs[0], &runs[1]);
+        hwa::info!(
+            "{}: extruder steps (net, backwards): without K {:?}, with K {:?}; nominal {}",
+            test_name,
+            (without.0, without.1),
+            (with.0, with.1),
+            nominal
+        );
+        ensure!(without.0 == nominal && without.1 == 0, "extruder steps without K (net, backwards)", (without.0, without.1, nominal));
+        ensure!(with.0 == nominal, "the extruder is not at its nominal position after the stop (net steps)", (with.0, nominal));
+        ensure!(with.1 > 0, "the extruder never retracted while braking with K", with.1);
+        ensure!(without.2 == with.2, "the head moved differently with K", (without.2.len(), with.2.len()));
+        end_test(test_name);
+    }
+
+    // Separator
+    hwa::info!("##");
+
+    // T39: input shaping (M593, Marlin's semantics plus the type `T`): the defaults (ZVD, 40.01 Hz,
+    // damping 0.15: tuned with s_plot, see DEFAULT_INPUT_SHAPING_TYPE), validated, reported by M593
+    // and M503, reset by M502. The same square
+    // with sharp corners at speed with and without shaping: the shaped path differs (the corners
+    // are cut) but ends exactly on the same steps, the position being the one of the steps. Also
+    // when M410 stops a shaped move halfway (the motors lag the commanded motion)
+    #[cfg(all(
+        test,
+        feature = "native",
+        feature = "with-serial-port-1",
+        feature = "with-motion",
+        feature = "with-input-shaping",
+        not(feature = "with-motion-core-xy-kinematics"),
+        not(feature = "with-motion-delta-kinematics"),
+        not(feature = "with-motion-anthropomorphic-kinematics")
+    ))]
+    {
+        let test_name = "T39 [Input shaping (M593)]";
+        begin_test(test_name);
+        use crate::motion::{ShaperConfig, ShaperKind};
+        use embassy_time::{Duration, Timer};
+        use hwa::controllers::step_trace;
+        use printhor_hwi_native::test_hooks;
+        let cfg = processor.motion_planner.motion_config().clone();
+        let status = processor.motion_planner.motion_status().clone();
+        macro_rules! check {
+            ($line:expr, $must:expr) => {
+                expect_err_if($line, $must);
+                if let Err(e) = serial_expect($line, $must).await {
+                    hwa::error!("{}: {}", test_name, e.as_str());
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        macro_rules! ensure {
+            ($cond:expr, $what:expr, $out:expr) => {
+                if !$cond {
+                    hwa::error!("{}: {}: {:?}", test_name, $what, $out);
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        let is = |s: ShaperConfig, kind: ShaperKind, f: f64, d: f64| {
+            s.kind == kind && (s.frequency.to_f64() - f).abs() < 1e-4 && (s.damping.to_f64() - d).abs() < 1e-4
+        };
+        // The defaults
+        check!("M593\n", &["Input Shaping:", "M593 X F40.01 D0.15 T3", "M593 Y F40.01 D0.15 T3", "ok"]);
+        // The axes given only
+        check!("M593 Y F55.5 D0.1 T2\n", &["ok"]);
+        let [x, y] = cfg.get_input_shaping();
+        ensure!(is(x, ShaperKind::Zvd, 40.01, 0.15) && is(y, ShaperKind::Mzv, 55.5, 0.1), "M593 Y", (x, y));
+        // Out of range: nothing changes
+        check!("M593 F10\n", &["?Frequency (F) must be greater than 20.00 or 0 to disable"]);
+        check!("M593 D0.7\n", &["?Zeta (D) value out of range (0-0.5)"]);
+        check!("M593 T4\n", &["?Type (T) value out of range (0-3)"]);
+        ensure!(cfg.get_input_shaping() == [x, y], "out of range values changed the shapers", cfg.get_input_shaping());
+        check!("M593 X T1\n", &["ok"]);
+        check!("M503\n", &["Input Shaping:", "M593 X F40.01 D0.15 T1", "M593 Y F55.5 D0.1 T2"]);
+        check!("M502\n", &["ok"]);
+        let [x, y] = cfg.get_input_shaping();
+        ensure!(is(x, ShaperKind::Zvd, 40.01, 0.15) && is(y, ShaperKind::Zvd, 40.01, 0.15), "M502 did not reset the shapers", (x, y));
+
+        // The same square, shaped (the defaults) and not
+        #[cfg(feature = "with-ps-on")]
+        let _ = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
+        ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
+        check!("G90\n", &["ok"]);
+        let out = serial_oks("G1 X20 Y20 F6000\nM400\n", 2, Duration::from_secs(20)).await;
+        ensure!(out.lines().filter(|l| l.starts_with("ok")).count() == 2, "move to the start", out);
+        let spm = cfg.get_steps_per_space_unit_as_vector();
+        let spm_x = spm.get_coord(hwa::CoordSel::X).map_or(0.0, |v| v.to_f64());
+        let spm_y = spm.get_coord(hwa::CoordSel::Y).map_or(0.0, |v| v.to_f64());
+        let xy = || {
+            let p = status.get_current_position().space_pos;
+            [hwa::CoordSel::X, hwa::CoordSel::Y].map(|c| p.get_coord(c).map_or(f64::NAN, |v| v.to_f64()))
+        };
+        let mut paths: alloc::vec::Vec<alloc::vec::Vec<step_trace::Steps>> = alloc::vec::Vec::new();
+        for shaping in [true, false] {
+            if !shaping {
+                check!("M593 F0\n", &["ok"]);
+            }
+            let origin = step_trace::start();
+            let out = serial_oks("G1 X60 F12000\nG1 Y60\nG1 X20\nG1 Y20\nM400\n", 5, Duration::from_secs(30)).await;
+            let path = step_trace::stop();
+            ensure!(out.lines().filter(|l| l.starts_with("ok")).count() == 5, "the square did not complete", out);
+            let end = step_trace::current();
+            ensure!(end == origin, "not back on the same steps (shaping, end, origin)", (shaping, end, origin));
+            let [px, py] = xy();
+            ensure!((px - 20.0).abs() < 1e-3 && (py - 20.0).abs() < 1e-3, "the position is not the one of the steps", (shaping, px, py));
+            paths.push(path);
+        }
+        // Positions strictly inside the square (both axes away from its sides): the cut corners
+        let inside = |path: &[step_trace::Steps], origin: step_trace::Steps| {
+            let side = |v: i64, o: i64, spm: f64| {
+                let low = o;
+                let high = o + (40.0 * spm).round() as i64;
+                v != low && v != high
+            };
+            path.iter().filter(|p| side(p[0], origin[0], spm_x) && side(p[1], origin[1], spm_y)).count()
+        };
+        let origin = step_trace::current();
+        let (shaped, unshaped) = (inside(&paths[0], origin), inside(&paths[1], origin));
+        hwa::info!("{}: positions inside the square: shaped {}, unshaped {}", test_name, shaped, unshaped);
+        ensure!(unshaped == 0 && shaped > 0, "the shaped corners are not cut (inside the square: shaped, unshaped)", (shaped, unshaped));
+
+        // M410 halfway through a shaped move: the motors stop where they are, behind the commanded
+        // motion, and the position must be theirs
+        check!("M502\n", &["ok"]);
+        let (origin, start) = (step_trace::current(), xy());
+        test_hooks::serial_port_1_capture_start();
+        test_hooks::serial_port_1_input(b"G1 X150 F6000\n").await;
+        Timer::after(Duration::from_millis(400)).await;
+        expect_err("M410 stops the shaped move halfway");
+        let out = serial_until("M410\n", "ok", Duration::from_secs(10)).await;
+        ensure!(out.contains("ok"), "M410 failed", out);
+        Timer::after(Duration::from_millis(300)).await;
+        let moved = (step_trace::current()[0] - origin[0]) as f64 / spm_x;
+        let [px, _] = xy();
+        ensure!(moved > 1.0 && moved < 129.0, "M410 did not stop the move halfway", moved);
+        ensure!((px - start[0] - moved).abs() < 1e-3, "the position is not the one of the steps after M410", (px - start[0], moved));
+        end_test(test_name);
+    }
+
+    // Separator
+    hwa::info!("##");
+
+    // T40: the extruder steps add up to the extrusion of a run of moves, whatever each one is: its
+    // rounding residue is carried from move to move (each move rounded alone, those of a fraction
+    // of a step extruded nothing, and the chords of an arc ~30% more than programmed)
+    #[cfg(all(
+        test,
+        feature = "native",
+        feature = "with-serial-port-1",
+        feature = "with-motion",
+        feature = "with-e-axis",
+        feature = "with-x-axis",
+        feature = "with-y-axis"
+    ))]
+    {
+        let test_name = "T40 [Extruder steps carried across the moves]";
+        begin_test(test_name);
+        use embassy_time::Duration;
+        use hwa::controllers::step_trace;
+        macro_rules! ensure {
+            ($cond:expr, $what:expr, $out:expr) => {
+                if !$cond {
+                    hwa::error!("{}: {}: {:?}", test_name, $what, $out);
+                    finish_task(Err(test_name));
+                    return;
+                }
+            };
+        }
+        macro_rules! run {
+            ($lines:expr, $n:expr) => {{
+                let lines: &str = $lines;
+                let out = serial_oks(lines, $n, Duration::from_secs(60)).await;
+                ensure!(out.lines().filter(|l| l.starts_with("ok")).count() == $n, "not completed", (lines, out));
+            }};
+        }
+        #[cfg(feature = "with-ps-on")]
+        let _ = serial_until("M80\n", "ok", Duration::from_secs(5)).await;
+        let out = serial_until("G28\n", "ok", Duration::from_secs(30)).await;
+        ensure!(out.lines().any(|l| l.starts_with("ok")), "G28 failed", out);
+        #[cfg(feature = "with-hot-end")]
+        run!("M302 P1\n", 1);
+        run!("M83\nM221 S100\nG90\nG1 X20 Y20 F6000\nM400\n", 5);
+        let spm_e = processor
+            .motion_planner
+            .motion_config()
+            .get_steps_per_space_unit_as_vector()
+            .get_coord(hwa::CoordSel::E)
+            .map_or(0.0, |v| v.to_f64());
+        let (e0, _) = step_trace::extruder();
+        // 50 moves of 0.0011 mm of filament (0.44 steps at 400 steps/mm)
+        let mut lines = alloc::string::String::new();
+        for i in 1..=50 {
+            lines.push_str(alloc::format!("G1 X{:.1} E0.0011 F3000\n", 20.0 + 0.2 * i as f64).as_str());
+        }
+        lines.push_str("M400\n");
+        run!(lines.as_str(), 51);
+        let mut nominal = 50.0 * 0.0011 * spm_e;
+        // An arc: chords of a few steps each
+        #[cfg(feature = "with-arcs")]
+        {
+            run!("G2 X50 Y20 R10 E0.1234 F3000\nM400\n", 2);
+            nominal += 0.1234 * spm_e;
+        }
+        let (e1, _) = step_trace::extruder();
+        let steps = e1 - e0;
+        hwa::info!("{}: {} extruder steps, nominal {:.2}", test_name, steps, nominal);
+        // The extruder starts and ends within half a step of its nominal position (the residue
+        // carried from the moves before, and the one left): less than a step apart. Each move
+        // rounded alone, the 0.44 steps ones extruded nothing (22 steps short)
+        ensure!((steps as f64 - nominal).abs() < 1.0, "the extruder steps are not the nominal ones (steps, nominal)", (steps, nominal));
+        #[cfg(feature = "with-hot-end")]
+        run!("M302 P0\n", 1);
         end_test(test_name);
     }
 
@@ -4073,13 +4829,8 @@ const RESPONSE_GRACE: embassy_time::Duration = embassy_time::Duration::from_mill
 
 /// Sends `line` to serial port 1 and checks that it gets exactly one `ok` (also after an `error`
 /// line, as in T17) and that the response contains every text of `must`.
-#[cfg(all(
-    test,
-    feature = "native",
-    feature = "with-serial-port-1",
-    feature = "with-hot-end",
-    feature = "with-motion"
-))]
+#[cfg(all(test, feature = "native", feature = "with-serial-port-1"))]
+#[allow(unused)]
 async fn serial_expect(line: &str, must: &[&str]) -> Result<alloc::string::String, alloc::string::String> {
     let out = serial_exchange(line).await;
     let oks = out.lines().filter(|l| l.starts_with("ok")).count();
@@ -4092,13 +4843,7 @@ async fn serial_expect(line: &str, must: &[&str]) -> Result<alloc::string::Strin
 
 /// Sends several lines at once and waits until `n` of them are answered (`ok`), for `timeout` at
 /// most. Returns the output
-#[cfg(all(
-    test,
-    feature = "native",
-    feature = "with-serial-port-1",
-    feature = "with-motion",
-    not(feature = "with-motion-anthropomorphic-kinematics")
-))]
+#[cfg(all(test, feature = "native", feature = "with-serial-port-1"))]
 #[allow(unused)]
 async fn serial_oks(lines: &str, n: usize, timeout: embassy_time::Duration) -> alloc::string::String {
     use embassy_time::{Duration, Instant, Timer};

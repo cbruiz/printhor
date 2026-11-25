@@ -58,17 +58,19 @@ This means that the main short-term goal is not to develop a production firmware
 | I/O (serial, USB, SD card) | Functional | Host line-number protocol (`N`/`M110`); SD listing and print jobs |
 | GCode parsing | Functional | See [GCode compliance](#gcode-compliance) for the codes actually supported |
 | State and logic | Testing | Event bus, print job control (pause/resume/abort), alarms (`M112`/`M999`) |
-| Motion planner | Functional | Double S (jerk-limited) profile, look-ahead chaining, quick stop (`M410`), soft end-stops (`M211`) |
+| Motion planner | Functional | Double S (jerk-limited) profile, look-ahead chaining, quick stop (`M410`), soft end-stops (`M211`). See [doc/MOTION_PROFILE.md](doc/MOTION_PROFILE.md) |
 | Feed rate / flow overrides | Testing | `M220` (with `B`/`R` backup/restore) and `M221`, Marlin semantics; not applied to the firmware retraction |
 | Arcs (`G2`/`G3`) and Bézier splines (`G5`) | Testing | `with-arcs` / `with-beziers` features, segmented into linear moves |
 | Kinematics | Testing | Cartesian, Core-XY, anthropomorphic; Delta in Draft |
 | Homing | Testing | Abortable with `M410`/`M112`; home offsets (`M206`) |
-| Thermal control | Testing | PID, autotune (`M303`), thermal runaway / sensor fault protection |
+| Thermal control | Testing | PID, autotune (`M303`, see [doc/PID_AUTOTUNE.md](doc/PID_AUTOTUNE.md)), thermal runaway / sensor fault protection |
 | Firmware retraction | Testing | `G10`/`G11`, `M207`/`M208` |
+| Input shaping | Testing | `with-input-shaping` feature (off by default; no code without it), `M593`: ZV, EI, MZV or ZVD shapers on X and Y, step-exact, the shaped motion completed at the stops. `s_plot` shows its effect (residual ringing of a modeled frame). See [doc/INPUT_SHAPING.md](doc/INPUT_SHAPING.md) |
+| Pressure advance | Testing | `with-pressure-advance` feature (off by default), `M900 K`: the extruder leads by `K` times its speed, junction mismatches spread along the move, lead released at the stops; step-exact. See [doc/PRESSURE_ADVANCE.md](doc/PRESSURE_ADVANCE.md) |
 | Settings persistence | Testing | `M500`/`M501` (`with-eeprom`), `M502`/`M503` |
 | Probing | Testing | `G30` single probe, probe offset (`M851`), deploy/stow (`M401`/`M402`, servo `M280`), sled dock/undock (`G31`/`G32`) |
 | Bed leveling | TODO | `G29*` accepted without effect; `with-mesh-leveling` has no implementation yet |
-| Laser/CNC | Draft | `M3`/`M4`/`M5` accepted without effect |
+| Laser/CNC | Testing | `with-laser` (laser PWM on the SKR Mini E3, the Nucleo CNC hat, the RP2040 and the simulator; not yet on the MKS Robin Nano). `M3` constant power, off during the rapids (`G0`) and the homing (as GRBL's laser mode); `M4` dynamic power, scaled by the speed relative to the programmed `F` (constant energy per unit of length); `M5` off. Queued with the motion and switched by the step ISR exactly at the junction, without breaking the chaining; off on `M410`/`M112`, never on in dry run. A spindle shares the same PWM (no direction nor RPM control); `M7`/`M8`/`M9` keep the coolant state only (no coolant output yet). With input shaping, the tool actions follow the commanded motion (the shaped axes lag it a few ms) |
 | Display (serial TFT) | Testing | BTT TFT (e.g. TFT35) on the display UART with `marlin-compat`: `M115` capabilities, `M503 S0`, `M211`, `M220`/`M221`, `M117` as a status notification. Directly driven LCDs: TODO |
 | Instrumentation | Testing | Motion execution metrics (`M800`, `motion-metrics`), MCU operation benchmark (`M801`, `mcu-bench`) |
 
@@ -211,15 +213,19 @@ This plot was self-explanatory, but it has been deprecated in favor of the previ
 We are keeping it because it is clear and useful for a high level understanding.
 
 # TODO
-* Code productivization. Mostly based on https://dl.acm.org/doi/pdf/10.1145/3519941.3535075 and https://jamesmunns.com/blog/fmt-unreasonably-expensive/:
-  * Code size reduction.
-  * Remove unwrap/panic calls.
-  * Remove unsafe code (a little bit, but there it is)
-  * Remove trivial/redundant computation __but not compromising readability__.
-* Display: directly driven LCDs (serial TFTs work in Marlin mode)
-* I/O control
-  * xonxoff
-* exFAT support would be great.
+- [ ] Code productivization. Mostly based on https://dl.acm.org/doi/pdf/10.1145/3519941.3535075 and https://jamesmunns.com/blog/fmt-unreasonably-expensive/:
+  - [ ] Code size reduction (ongoing: `release-opt` profile, no heap formatting in the reports, see [Controlling the code size](#controlling-the-code-size)).
+  - Remove unwrap/panic calls.
+    - [x] In the firmware core (`printhor`, `printhor-hwa-common`, `printhor-hwa-utils`): none left outside the tests.
+    - [ ] In the board crates: the hardware initialization (`expect`/`panic!` when a peripheral can not be set up) and the `todo!()` of the boilerplate and ESP32 skeletons.
+  - Remove unsafe code (a little bit, but there it is).
+    - [x] In the firmware core: only the unavoidable ones are left (the `udf` of the panic handler, the `no_mangle` export of the step ISR and the FPU `vsqrt` instruction).
+    - [ ] In the board crates: interrupt handlers, register access and linker symbols.
+  - [ ] Remove trivial/redundant computation __but not compromising readability__.
+- [ ] Display: directly driven LCDs (serial TFTs work in Marlin mode)
+- [ ] I/O control
+  - [ ] xonxoff
+- [ ] exFAT support would be great (FAT with long file names is supported).
 
 # Customization
 
@@ -282,9 +288,9 @@ recoverable with `M999`.
 | G10 / G11 | `with-motion` | Firmware retract / recover (needs `with-e-axis`; otherwise accepted without effect) | DONE |
 | G17 | `with-motion` | XY plane selection (the only plane supported) | Accepted |
 | G21 | `with-motion` | Millimeter units (the only unit supported) | Accepted |
-| G28 | `with-motion` | Homing. Z0 is the plane where the Z end-stop (or probe) triggers, the bed; the homing ends 10 mm above it, so `M114` reports `Z:10` (as Marlin's `Z_AFTER_HOMING`). Home offsets (`M206`) apply. Abortable with `M410`/`M112` | DONE |
+| G28 | `with-motion` | Homing. Z0 is the plane where the Z end-stop (or probe) triggers, the bed; the homing ends 10 mm above it, so `M114` reports `Z:10` (as Marlin's `Z_AFTER_HOMING`), with the probe over the bed center (Marlin's `Z_SAFE_HOMING`). Some axes only (Marlin's semantics: `G28 X Y`, the words are flags): Z is raised first (to 10 mm above the bed when known, never lower), the given X/Y axes are homed and left at their end-stops; `G28 Z` (X and Y known, otherwise `Home XY first`) or `G28 X Y Z` end as the full homing. Moves need every axis homed. Home offsets (`M206`) apply. Abortable with `M410`/`M112` | DONE |
 | G29 / G29.1 / G29.2 | `with-motion` | Bed leveling | Accepted, no effect |
-| G30 | `with-probe + with-z-axis` | Single Z probe at the current position, or at `X Y` (absolute, where the probe goes: the nozzle goes there minus the probe offset). Waits for the queued moves, requires homing. Deploys the probe, lowers Z until it triggers (down to the homing trigger plane plus 5 mm), raises back to the start height and stows it. Answers `Bed X: <x> Y: <y> Z: <z>` (nozzle Z at the trigger plus the probe Z offset, in the M114 coordinates: a flat bed probes at `Z: 0.00`). Not triggering raises the alarm (`Error:Probing failed`, recoverable with `M999` and `G28`) | DONE |
+| G30 | `with-probe + with-z-axis` | Single Z probe at the current position, or at `X Y` (absolute, where the probe goes: the nozzle goes there minus the probe offset). Waits for the queued moves, requires homing. As the Z sample of the homing: raises Z 10 mm (before the travel and the probe deploy), deploys the probe, lowers Z until it triggers (fast, then the fine approach; down to the homing trigger plane plus 5 mm), stows it and leaves Z 10 mm above where it triggered. Answers `Bed X: <x> Y: <y> Z: <z>` (nozzle Z at the trigger plus the probe Z offset, in the M114 coordinates: a flat bed probes at `Z: 0.00`). Not triggering raises the alarm (`Error:Probing failed`, recoverable with `M999` and `G28`) | DONE |
 | G31 / G32 | `with-probe` | Dock / undock the probe sled | DONE |
 | G80 | `with-motion` | Cancel canned cycle | Accepted |
 | G90 / G91 | `with-motion` | Absolute / relative positioning | DONE |
@@ -292,15 +298,17 @@ recoverable with `M999`.
 | G94 | `with-motion` | Units per minute feed rate mode (the only mode supported) | Accepted |
 | M | * | List the supported M-codes | DONE |
 | M2 | `with-sd-card + with-print-job` | Program end: ends the print job | DONE |
-| M3 / M4 / M5 | * | Spindle or laser on (CW/CCW) / off | Accepted, no effect |
+| M3 / M4 / M5 | `with-laser` | Laser (or spindle, same PWM) on / off, `S` 0-255 (full power by default). `M3`: constant power, off during `G0` and homing; `M4`: dynamic power (scaled by the speed relative to `F`). Queued with the motion | DONE |
+| M7 / M8 / M9 | * | Mist / flood coolant on, coolant off. Queued with the motion | Partial: state only (no coolant output) |
 | M18 | `with-motion` | Disable steppers (alias of `M84`) | DONE |
-| M20 | `with-sd-card` | List SD files (files only, no directories) | DONE* |
+| M20 | `with-sd-card` | List SD files: `<path> <size>`, those of the subdirectories with their path (4 levels; hidden ones excluded). `L`: also the long path (each entry by its long name, or its short one), Marlin's `M20 L`. `F"<dir>"` lists a directory | DONE |
 | M21 | `with-sd-card` | Init SD card | DONE |
 | M22 | `with-sd-card` | Release the SD card. Refused while it is in use (print job, file being written) | DONE |
-| M23 | `with-sd-card + with-print-job` | Select SD file. Answers `File opened: <name> Size: <bytes>` | DONE |
+| M23 | `with-sd-card + with-print-job` | Select SD file, named by short or long names (case-insensitive; also every path given to the SD commands). Answers `File opened: <name> Size: <bytes>` | DONE |
 | M24 | `with-sd-card + with-print-job` | Start / resume SD print. Error without a selected file; `ok` (no effect) when already printing | DONE |
 | M25 | `with-sd-card + with-print-job` | Pause SD print (effective once the planned moves are done). `ok` (no effect) when already paused | DONE |
 | M28 / M29 | `with-sd-card` | Write the next lines of the channel to a file (`M28 <name>`) until `M29`. Not allowed while printing | DONE |
+| M33 | `with-sd-card` | The long path of a file or directory (`/<long name>/...`, short names where there is no long one) | DONE |
 | M27 | `with-sd-card + with-print-job` | SD print status: `SD printing byte <pos>/<size>` or `Not SD printing`. `S<secs>` auto-reports periodically (`S0` off) | DONE* |
 | M37 | * | Dry run mode (`S1` on / `S0` off) | DONE |
 | M73 | * | Print progress: `P` percentage, `R` remaining minutes. Without words, reports it (the file percentage when the slicer gave none). Stored with `with-print-job` | DONE |
@@ -312,7 +320,7 @@ recoverable with `M999`.
 | M100 | * | Report memory usage | DONE |
 | M104 / M109 | `with-hot-end` | Set / wait for hot-end temperature | DONE |
 | M105 | * | Report temperatures (two decimals, built without heap) | DONE |
-| M106 / M107 | `with-fan-layer` | Layer fan on (`S` 0-255) / off | DONE |
+| M106 / M107 | `with-fan-layer` | Fan on (`S` 0-255, full power by default; `P0` the layer fan, `P1` the extra fan with `with-fan-extra-1`) / layer fan off. Queued with the motion | DONE |
 | M110 | * | Set current line number (host protocol) | DONE |
 | M112 | * | Emergency stop (heaters off, motion aborted, alarm until `M999`) | DONE |
 | M114 | `with-motion` | Report the position of the enabled axes (then `E`) and their step counts | DONE |
@@ -322,6 +330,7 @@ recoverable with `M999`.
 | M119 | `with-motion` | Report endstop status (disabled axes report 0) | DONE |
 | M140 / M190 | `with-hot-bed` | Set / wait for bed temperature | DONE |
 | M280 | `with-probe` | Servo position (`P0 S<angle>`, 0-180). Without `S`, reports the PWM state | DONE |
+| M200 | `with-motion + with-e-axis` | Volumetric extrusion (Marlin's), off by default: `D<diameter>` sets the filament diameter and enables it (`D0` disables it), `S1`/`S0` enables/disables it, `L<mm³/s>` limits the volumetric flow of the extruding moves (0-20, `0` unlimited, also when disabled). Enabled, E words are volumes. Without words, reports `M200 S<0/1> D<diameter> L<limit>`. In `M503`/`M500`, reset by `M502`. `M115` reports `Cap:VOLUMETRIC` as enabled or not | DONE |
 | M201 | `with-motion` | Max acceleration per axis | DONE |
 | M203 | `with-motion` | Max feed rate per axis | DONE |
 | M204 | `with-motion` | Starting acceleration (`P` print, `T` travel) | DONE |
@@ -333,7 +342,7 @@ recoverable with `M999`.
 | M221 | `with-motion` | Flow percentage of the extruder (`S`, 10-255 %), applied to the E displacement of the moves planned from then on. Only `T0` (single extruder). Without `S`, reports `echo:E0 Flow: <n>%` | DONE |
 | M301 / M304 | `with-hot-end / with-hot-bed` | Hot-end / bed PID constants | DONE |
 | M302 | `with-hot-end + with-e-axis` | Cold extrusion prevention | DONE |
-| M303 | `with-hot-end or with-hot-bed` | PID autotune | DONE |
+| M303 | `with-hot-end or with-hot-bed` | PID autotune by relay feedback (`E0` hot-end, `E-1` bed; `S` target, default 150/70; `C` min cycles, 3-20, default 5; `U1` applies the result). Runs in the temperature control loop: the host gets `ok` at its end and can poll temperatures meanwhile. Bias balancing, Fourier estimate of the ultimate gain, finishes once three cycles agree; classic Ziegler–Nichols (hot-end) / "no overshoot" (bed), as Marlin. Reported as Marlin (`bias/d/min/max`, `Ku/Tu`, `Kp/Ki/Kd` per cycle, temperatures every 2 s, `#define DEFAULT_Kp ...`) | DONE |
 | M400 | `with-motion` | Wait for the queued moves to finish | DONE |
 | M401 / M402 | `with-probe` | Deploy / stow the probe | DONE |
 | M410 | `with-motion` | Quick stop: abort the current move and discard the queue | DONE |
@@ -345,7 +354,9 @@ recoverable with `M999`.
 | M801 | `with-motion` | MCU operation cost benchmark (needs `mcu-bench`) | DONE |
 | M851 | `with-motion` | Probe offset (`X Y Z`). Without words, reports `Probe Offset X Y Z` | DONE |
 | M862.1 / M862.3 | `with-motion` | Prusa printer checks | Accepted, no effect |
-| M900 | `with-motion` | Linear advance factor | Accepted, no effect |
+| M593 | `with-motion + with-input-shaping` | Input shaping (Marlin's, plus the type): `F<Hz>` frequency (`0` disables it, else 20 Hz or above), `D<ratio>` damping (0-0.5), `T<type>` 0 ZV, 1 EI, 2 MZV, 3 ZVD, of the axes `X`/`Y` given (both without them). Defaults: ZVD, 40.01 Hz, 0.15 (tuned with `s_plot`; Marlin's: ZV, 40 Hz, 0.15). Without values, reports `M593 X F<f> D<d> T<t>` per axis. Applied from the next stop. In `M503`/`M500`, reset by `M502` | DONE |
+| M900 | `with-motion` | Linear advance factor | Accepted, no effect (without `with-pressure-advance`) |
+| M900 | `with-motion + with-pressure-advance` | Pressure advance (Marlin's linear advance): `K<seconds>` sets the factor (0-10, `0` disables it, the default), `T0` only. Without `K`, reports `Advance K=<k>`. Applied to the extruding moves (E forward along with other axes) from the next move executed. In `M503`/`M500`, reset by `M502` | DONE |
 | M907 | `with-motion` | Motor current | Accepted, no effect |
 | M999 | * | Clear the alarm state (homing required afterward) | DONE |
 

@@ -28,7 +28,9 @@ use hwa::traits::{AsyncEeprom, EepromError};
 use hwa::{Contract, HwiContract};
 
 const MAGIC: [u8; 4] = *b"PTHR";
-const VERSION: u8 = 1;
+/// 2: volumetric extrusion (M200) added. The pressure advance factor (M900) is an optional
+/// section (see [LAYOUT_PRESSURE_ADVANCE])
+const VERSION: u8 = 2;
 const HEADER_LEN: usize = 12;
 /// Exact payload length of this firmware (enabled features). The image buffers are sized with
 /// it: no heap (the smaller boards have a tiny one) and no length to trust from the memory.
@@ -39,15 +41,26 @@ const PAYLOAD_LEN: usize = {
     {
         // steps per unit, max speed, max accel, max jerk, home offset; print and travel accel
         len += 5 * CoordSel::num_axis() * 4 + 2 * 4;
-        // retraction: length, feed rate, z hop, recover extra, recover feed rate
+        // retraction: length, feed rate, z hop, recover extra, recover feed rate; volumetric
+        // extrusion: enabled, diameter, flow limit
         #[cfg(feature = "with-e-axis")]
         {
-            len += 5 * 4;
+            len += 5 * 4 + 3 * 4;
         }
         // probe offset (M851)
         #[cfg(feature = "with-probe")]
         {
             len += CoordSel::num_axis() * 4;
+        }
+        // pressure advance factor (M900)
+        #[cfg(feature = "with-pressure-advance")]
+        {
+            len += 4;
+        }
+        // input shapers of X and Y (M593): type, frequency, damping
+        #[cfg(feature = "with-input-shaping")]
+        {
+            len += 2 * 3 * 4;
         }
     }
     #[cfg(feature = "with-hot-end")]
@@ -75,6 +88,10 @@ const LAYOUT_HOT_END: u8 = 1 << 2;
 const LAYOUT_HOT_BED: u8 = 1 << 3;
 #[allow(unused)]
 const LAYOUT_PROBE: u8 = 1 << 4;
+#[allow(unused)]
+const LAYOUT_PRESSURE_ADVANCE: u8 = 1 << 5;
+#[allow(unused)]
+const LAYOUT_INPUT_SHAPING: u8 = 1 << 6;
 
 const fn layout_flags() -> u8 {
     #[allow(unused_mut)]
@@ -98,6 +115,14 @@ const fn layout_flags() -> u8 {
     #[cfg(all(feature = "with-motion", feature = "with-probe"))]
     {
         flags |= LAYOUT_PROBE;
+    }
+    #[cfg(all(feature = "with-motion", feature = "with-pressure-advance"))]
+    {
+        flags |= LAYOUT_PRESSURE_ADVANCE;
+    }
+    #[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+    {
+        flags |= LAYOUT_INPUT_SHAPING;
     }
     flags
 }
@@ -230,6 +255,14 @@ struct MotionSettings {
     probe_offset: TVector<Real>,
     #[cfg(feature = "with-e-axis")]
     retraction: [Option<Real>; 5],
+    /// Enabled (1/0), diameter, flow limit
+    #[cfg(feature = "with-e-axis")]
+    volumetric: [Option<Real>; 3],
+    #[cfg(feature = "with-pressure-advance")]
+    pressure_advance: Option<Real>,
+    /// Per axis (X, Y): type, frequency, damping
+    #[cfg(feature = "with-input-shaping")]
+    input_shaping: [[Option<Real>; 3]; 2],
 }
 
 /// Encodes the current settings. Returns the payload and the length written (`PAYLOAD_LEN`)
@@ -257,6 +290,18 @@ async fn encode(processor: &processing::GCodeProcessor) -> ([u8; PAYLOAD_LEN], u
             for v in [r.length, r.feed_rate, r.z_hop, r.recover_extra, r.recover_feed_rate] {
                 w.real(Some(v));
             }
+            let v = cfg.get_volumetric();
+            w.f32(v.enabled as u8 as f32);
+            w.real(Some(v.diameter));
+            w.real(Some(v.limit));
+        }
+        #[cfg(feature = "with-pressure-advance")]
+        w.real(Some(cfg.get_pressure_advance()));
+        #[cfg(feature = "with-input-shaping")]
+        for s in cfg.get_input_shaping() {
+            w.f32(s.kind.index() as f32);
+            w.real(Some(s.frequency));
+            w.real(Some(s.damping));
         }
     }
     #[cfg(feature = "with-hot-end")]
@@ -301,6 +346,12 @@ fn decode(payload: &[u8]) -> Settings {
             probe_offset: r.vector(),
             #[cfg(feature = "with-e-axis")]
             retraction: [r.real(), r.real(), r.real(), r.real(), r.real()],
+            #[cfg(feature = "with-e-axis")]
+            volumetric: [r.real(), r.real(), r.real()],
+            #[cfg(feature = "with-pressure-advance")]
+            pressure_advance: r.real(),
+            #[cfg(feature = "with-input-shaping")]
+            input_shaping: [[r.real(), r.real(), r.real()], [r.real(), r.real(), r.real()]],
         });
     }
     #[cfg(feature = "with-hot-end")]
@@ -347,6 +398,33 @@ async fn apply(processor: &processing::GCodeProcessor, s: Settings) {
                 .filter(|x| x.is_defined_positive())
                 .unwrap_or(r.recover_feed_rate);
             cfg.set_retraction(r);
+            let mut v = cfg.get_volumetric();
+            let [enabled, diameter, limit] = m.volumetric;
+            v.enabled = enabled.map_or(v.enabled, |e| !e.is_zero());
+            v.diameter = diameter.filter(|d| d.is_positive()).unwrap_or(v.diameter);
+            v.limit = limit.filter(|l| l.is_positive()).unwrap_or(v.limit);
+            cfg.set_volumetric(v);
+        }
+        #[cfg(feature = "with-pressure-advance")]
+        if let Some(k) = m.pressure_advance.filter(|k| k.is_positive()) {
+            cfg.set_pressure_advance(k);
+        }
+        #[cfg(feature = "with-input-shaping")]
+        {
+            use crate::motion::{ShaperConfig, ShaperKind};
+            let mut shapers = cfg.get_input_shaping();
+            for (shaper, [kind, frequency, damping]) in shapers.iter_mut().zip(m.input_shaping) {
+                if let Some(kind) = kind.and_then(|k| k.to_i32()).and_then(ShaperKind::from_index) {
+                    shaper.kind = kind;
+                }
+                if let Some(f) = frequency.filter(|f| ShaperConfig::is_valid_frequency(*f)) {
+                    shaper.frequency = f;
+                }
+                if let Some(d) = damping.filter(|d| ShaperConfig::is_valid_damping(*d)) {
+                    shaper.damping = d;
+                }
+            }
+            cfg.set_input_shaping(shapers);
         }
     }
     #[cfg(feature = "with-hot-end")]

@@ -18,11 +18,15 @@ use crate::processing::S;
 #[cfg(feature = "with-motion")]
 use crate::processing::SJ;
 #[allow(unused)]
-use crate::processing::{ESC, PID, SBR, SFZ, SP, SPT, SR, ST};
+use crate::processing::{DSLT, ESC, PID, SBR, SFZ, SP, SPT, SR, ST};
 #[cfg(feature = "with-arcs")]
 use crate::processing::ARC;
 #[cfg(feature = "with-beziers")]
 use crate::processing::BEZIER;
+#[cfg(feature = "with-pressure-advance")]
+use crate::processing::KT;
+#[cfg(feature = "with-input-shaping")]
+use crate::processing::DFTXY;
 use hwa::CommChannel;
 
 // dyn trait could reduce code size a lot with the penalty of the indirection
@@ -186,6 +190,7 @@ where
                                         let has_text_argument = match (ch, frx) {
                                             ('m', Some((23, 0)))
                                             | ('m', Some((28, 0)))
+                                            | ('m', Some((33, 0)))
                                             | ('m', Some((117, 0)))
                                             | ('m', Some((118, 0))) => true,
                                             _ => false,
@@ -435,9 +440,11 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((8, 0))) => Some(GCodeValue::M8),
         ('m', Some((9, 0))) => Some(GCodeValue::M9),
         #[cfg(feature = "with-sd-card")]
-        ('m', Some((20, 0))) => Some(GCodeValue::M20(None)),
+        ('m', Some((20, 0))) => Some(GCodeValue::M20(None, false)),
         #[cfg(feature = "with-sd-card")]
         ('m', Some((21, 0))) => Some(GCodeValue::M21),
+        #[cfg(feature = "with-sd-card")]
+        ('m', Some((33, 0))) => Some(GCodeValue::M33(None)),
         #[cfg(feature = "with-sd-card")]
         ('m', Some((22, 0))) => Some(GCodeValue::M22),
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
@@ -499,6 +506,8 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((140, 0))) => Some(GCodeValue::M140(S::new())),
         #[cfg(feature = "with-hot-bed")]
         ('m', Some((190, 0))) => Some(GCodeValue::M190(SR::new())),
+        #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+        ('m', Some((200, 0))) => Some(GCodeValue::M200(DSLT::new())),
         #[cfg(feature = "with-motion")]
         ('m', Some((201, 0))) => Some(GCodeValue::M201(EXYZ::new())),
         #[cfg(feature = "with-motion")]
@@ -543,8 +552,12 @@ fn init_current(ch: char, frx: Option<(i32, u8)>) -> Option<GCodeValue> {
         ('m', Some((8621, 1))) => Some(GCodeValue::M862_1),
         #[cfg(feature = "with-motion")]
         ('m', Some((8623, 1))) => Some(GCodeValue::M862_3),
-        #[cfg(feature = "with-motion")]
+        #[cfg(all(feature = "with-motion", not(feature = "with-pressure-advance")))]
         ('m', Some((900, 0))) => Some(GCodeValue::M900),
+        #[cfg(all(feature = "with-motion", feature = "with-pressure-advance"))]
+        ('m', Some((900, 0))) => Some(GCodeValue::M900(KT::new())),
+        #[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+        ('m', Some((593, 0))) => Some(GCodeValue::M593(DFTXY::new())),
         #[cfg(feature = "with-motion")]
         ('m', Some((907, 0))) => Some(GCodeValue::M907),
         ('m', Some((999, 0))) => Some(GCodeValue::M999),
@@ -682,6 +695,30 @@ fn update_current(
             set_word(&mut p.t, 't', ch, frx);
         }
         #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+        GCodeValue::M200(p) => {
+            set_word(&mut p.d, 'd', ch, frx);
+            set_word(&mut p.s, 's', ch, frx);
+            set_word(&mut p.l, 'l', ch, frx);
+            set_word(&mut p.t, 't', ch, frx);
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-pressure-advance"))]
+        GCodeValue::M900(p) => {
+            set_word(&mut p.k, 'k', ch, frx);
+            set_word(&mut p.t, 't', ch, frx);
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+        GCodeValue::M593(p) => {
+            set_word(&mut p.d, 'd', ch, frx);
+            set_word(&mut p.f, 'f', ch, frx);
+            set_word(&mut p.t, 't', ch, frx);
+            // The axes are flags (`M593 X F40`), also with a value (ignored, as Marlin)
+            match ch {
+                'x' => p.x = Some(hwa::math::ONE),
+                'y' => p.y = Some(hwa::math::ONE),
+                _ => {}
+            }
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
         GCodeValue::M207(p) | GCodeValue::M208(p) => {
             set_word(&mut p.s, 's', ch, frx);
             set_word(&mut p.f, 'f', ch, frx);
@@ -726,63 +763,68 @@ fn update_current(
             set_word(&mut p.e, 'e', ch, frx);
             set_word(&mut p.s, 's', ch, frx);
             set_word(&mut p.c, 'c', ch, frx);
+            // A flag: `U` alone is `U1`
+            if ch == 'u' {
+                p.u.replace(frx.map_or(hwa::math::ONE, helpers::to_fixed));
+            }
         }
+        // The axes to home: their words are flags (`G28 X Y`), also with a value (ignored, as Marlin)
         #[cfg(feature = "with-motion")]
         #[allow(unused_variables)] // No axes enabled: every word is ignored
         GCodeValue::G28(coord) => match (ch, frx) {
             #[cfg(feature = "with-e-axis")]
-            ('e', Some(val)) => {
-                coord.e.replace(helpers::to_fixed(val));
+            ('e', val) => {
+                coord.e.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             //
             #[cfg(feature = "with-x-axis")]
-            ('x', Some(val)) => {
-                coord.x.replace(helpers::to_fixed(val));
+            ('x', val) => {
+                coord.x.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-y-axis")]
-            ('y', Some(val)) => {
-                coord.y.replace(helpers::to_fixed(val));
+            ('y', val) => {
+                coord.y.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-z-axis")]
-            ('z', Some(val)) => {
-                coord.z.replace(helpers::to_fixed(val));
+            ('z', val) => {
+                coord.z.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             //
             #[cfg(feature = "with-a-axis")]
-            ('a', Some(val)) => {
-                coord.a.replace(helpers::to_fixed(val));
+            ('a', val) => {
+                coord.a.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-b-axis")]
-            ('b', Some(val)) => {
-                coord.b.replace(helpers::to_fixed(val));
+            ('b', val) => {
+                coord.b.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-c-axis")]
-            ('c', Some(val)) => {
-                coord.c.replace(helpers::to_fixed(val));
+            ('c', val) => {
+                coord.c.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-i-axis")]
-            ('i', Some(val)) => {
-                coord.i.replace(helpers::to_fixed(val));
+            ('i', val) => {
+                coord.i.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-j-axis")]
-            ('j', Some(val)) => {
-                coord.j.replace(helpers::to_fixed(val));
+            ('j', val) => {
+                coord.j.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-k-axis")]
-            ('k', Some(val)) => {
-                coord.k.replace(helpers::to_fixed(val));
+            ('k', val) => {
+                coord.k.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-u-axis")]
-            ('u', Some(val)) => {
-                coord.u.replace(helpers::to_fixed(val));
+            ('u', val) => {
+                coord.u.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-v-axis")]
-            ('v', Some(val)) => {
-                coord.v.replace(helpers::to_fixed(val));
+            ('v', val) => {
+                coord.v.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             #[cfg(feature = "with-w-axis")]
-            ('w', Some(val)) => {
-                coord.w.replace(helpers::to_fixed(val));
+            ('w', val) => {
+                coord.w.replace(val.map_or(hwa::math::ZERO, helpers::to_fixed));
             }
             _ => {}
         },
@@ -848,11 +890,20 @@ fn update_current(
             _ => {}
         },
         #[cfg(feature = "with-sd-card")]
-        GCodeValue::M20(path) => {
+        GCodeValue::M20(path, long_names) => {
             if ch == 'f' {
                 if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
                     path.replace(mstr);
                 }
+            } else if ch == 'l' {
+                // A flag: `L` alone (Marlin's `M20 L`)
+                *long_names = frx.is_none_or(|v| v.0 != 0);
+            }
+        }
+        #[cfg(feature = "with-sd-card")]
+        GCodeValue::M33(path) => {
+            if let async_gcode::RealValue::Literal(async_gcode::Literal::String(mstr)) = fv {
+                path.replace(mstr);
             }
         }
         #[cfg(all(feature = "with-sd-card", feature = "with-print-job"))]
@@ -1843,6 +1894,85 @@ mod tests {
             .next_gcode(CommChannel::Internal)
             .await
             .expect_err("None");
+    }
+
+    /// The words of the G-codes added for Marlin parity: flags without a value and text paths
+    #[futures_test::test]
+    async fn flags_and_paths_of_homing_volumetric_autotune_and_sd() {
+        async fn parse(line: &str) -> GCodeValue {
+            let stream = BufferStream::new(line.as_bytes().to_vec().into());
+            let mut parser = GCodeLineParser::new(stream);
+            parser.next_gcode(CommChannel::Internal).await.expect(line).value
+        }
+        let one = Some(hwa::math::ONE);
+        let zero = Some(hwa::math::ZERO);
+        // G28: the axes are flags, with or without a value
+        #[cfg(all(feature = "with-motion", feature = "with-x-axis", feature = "with-y-axis", feature = "with-z-axis"))]
+        {
+            match parse("G28 X Y\n").await {
+                GCodeValue::G28(axes) => assert!(axes.x == zero && axes.y == zero && axes.z.is_none()),
+                other => panic!("{:?}", other),
+            }
+            match parse("G28 Z5\n").await {
+                GCodeValue::G28(axes) => assert!(axes.x.is_none() && axes.z.is_some()),
+                other => panic!("{:?}", other),
+            }
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-input-shaping"))]
+        {
+            match parse("M593 X F37.5 D0.1 T2\n").await {
+                GCodeValue::M593(p) => assert!(
+                    p.x == one && p.y.is_none() && p.f == Some(hwa::math::Real::new(375, 1))
+                        && p.d == Some(hwa::math::Real::new(1, 1)) && p.t == Some(hwa::math::TWO)
+                ),
+                other => panic!("{:?}", other),
+            }
+            match parse("M593 Y0 X\n").await {
+                GCodeValue::M593(p) => assert!(p.x == one && p.y == one && p.f.is_none()),
+                other => panic!("{:?}", other),
+            }
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-pressure-advance"))]
+        {
+            match parse("M900 K0.045 T0\n").await {
+                GCodeValue::M900(p) => assert!(p.k == Some(hwa::math::Real::new(45, 3)) && p.t == zero),
+                other => panic!("{:?}", other),
+            }
+            match parse("M900\n").await {
+                GCodeValue::M900(p) => assert!(p.k.is_none() && p.t.is_none()),
+                other => panic!("{:?}", other),
+            }
+        }
+        #[cfg(all(feature = "with-motion", feature = "with-e-axis"))]
+        match parse("M200 D2.85 S1 L5 T0\n").await {
+            GCodeValue::M200(p) => {
+                assert_eq!(p.d, Some(hwa::math::Real::new(285, 2)));
+                assert!(p.s == one && p.l == Some(hwa::math::FIVE) && p.t == zero);
+            }
+            other => panic!("{:?}", other),
+        }
+        #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
+        {
+            match parse("M303 E-1 S60 C8 U\n").await {
+                GCodeValue::M303(p) => assert!(p.u == one && p.c == Some(hwa::math::EIGHT)),
+                other => panic!("{:?}", other),
+            }
+            match parse("M303 U0\n").await {
+                GCodeValue::M303(p) => assert!(p.u == zero),
+                other => panic!("{:?}", other),
+            }
+        }
+        #[cfg(feature = "with-sd-card")]
+        {
+            assert_eq!(parse("M20 L\n").await, GCodeValue::M20(None, true));
+            assert_eq!(parse("M20 L0\n").await, GCodeValue::M20(None, false));
+            assert_eq!(parse("M20\n").await, GCodeValue::M20(None, false));
+            assert_eq!(
+                parse("M33 /Long Folder Name/AREALL~1.GCO\n").await,
+                GCodeValue::M33(Some("/Long Folder Name/AREALL~1.GCO".into()))
+            );
+        }
+        let _ = (one, zero);
     }
 
     #[futures_test::test]

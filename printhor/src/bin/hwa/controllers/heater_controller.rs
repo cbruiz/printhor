@@ -100,7 +100,8 @@
 //! output in the range [0, 255], derivative on the measurement and anti-windup. Out of the
 //! functional range (±[PID_FUNCTIONAL_RANGE] ºC around the target) the heater runs in bang-bang mode.
 //!
-//! `M303` relay autotune (Åström–Hägglund + Ziegler–Nichols classic rules) is also provided.
+//! `M303` relay autotune (Åström–Hägglund + Ziegler–Nichols rules, see [autotune]) is also
+//! provided.
 use crate::hwa;
 use hwa::DeferEvent::{AwaitRequested, Completed};
 #[allow(unused)]
@@ -111,6 +112,10 @@ use hwa::{AsyncMutexStrategy, SyncMutexStrategy};
 use hwa::{CommChannel, DeferAction};
 use hwa::{EventFlags, EventStatus};
 
+mod autotune;
+pub use autotune::{AutotuneCycle, AutotuneEstimate, AutotuneOutcome, TuningRule};
+use autotune::Autotune;
+
 /// Max value of the PID output (Marlin's PID_MAX)
 const PID_MAX: f32 = 255.0;
 
@@ -118,17 +123,15 @@ const PID_MAX: f32 = 255.0;
 /// integral term reset (Marlin's PID_FUNCTIONAL_RANGE)
 const PID_FUNCTIONAL_RANGE: f32 = 10.0;
 
-/// Smoothing factor of the derivative term (Marlin's PID_K1)
-const PID_D_FILTER: f32 = 0.95;
+/// Time constant (s) of the low-pass filter of the derivative term: Marlin's (`PID_K1` = 0.95
+/// applied every `PID_dT` ≈ 0.128 s, i.e. `PID_dT·K1/(1 - K1)`), so that the constants tuned for
+/// Marlin (and by `M303`) behave the same whatever the control period. Applying `K1` itself every
+/// period of this firmware (0.5 s) filtered with ~10 s: the derivative term lagged ~80º at the
+/// ultimate frequency of a hot-end and the Ziegler–Nichols constants left the loop barely stable
+const PID_D_FILTER_TIME_S: f32 = 2.4;
 
 /// Targets must be at least this margin (ºC) below the max temperature (Marlin's HOTEND_OVERSHOOT)
 pub const TARGET_MAX_TEMP_MARGIN: f32 = 15.0;
-
-/// Autotune is aborted when the temperature exceeds the target by this margin (ºC)
-const AUTOTUNE_MAX_OVERSHOOT: f32 = 30.0;
-
-/// Autotune is aborted after this time (seconds)
-const AUTOTUNE_TIMEOUT_S: u64 = 20 * 60;
 
 /// The safety and control settings of a heater
 #[derive(Clone, Copy, Debug)]
@@ -187,17 +190,54 @@ pub enum HeaterError {
     Faulted(HeaterFault),
     /// The requested target exceeds the allowed max
     TargetTooHigh,
+    /// A PID autotune is running (M303)
+    Busy,
 }
 
-/// Outcome of a finished autotune, to be reported by the temperature task
+/// A PID autotune request (M303)
 #[derive(Clone, Copy, Debug)]
-pub enum AutotuneOutcome {
-    /// Computed PID constants (Kp, Ki, Kd). Already applied.
-    Done(f32, f32, f32),
-    /// Aborted: overshoot
-    Overshoot,
-    /// Aborted: timeout
-    Timeout,
+pub struct AutotuneRequest {
+    /// Target temperature (ºC)
+    pub target: f32,
+    /// Min cycles (Marlin's `C`)
+    pub cycles: u8,
+    pub rule: TuningRule,
+    /// Apply the constants found (Marlin's `U1`)
+    pub apply: bool,
+    /// Who asked (the reports go there)
+    pub channel: CommChannel,
+    pub order_num: u32,
+    /// The response (`ok`) waits for the end of the autotune (see [DeferAction])
+    pub deferred: bool,
+}
+
+impl AutotuneRequest {
+    /// Classic rule, not applied, not deferred
+    pub const fn new(target: f32, cycles: u8) -> Self {
+        Self {
+            target,
+            cycles,
+            rule: TuningRule::ClassicPid,
+            apply: false,
+            channel: CommChannel::Internal,
+            order_num: 0,
+            deferred: false,
+        }
+    }
+}
+
+/// The end of an autotune, to be reported by the temperature task (to the channel that asked
+/// for it, whose response is completed then when deferred)
+#[derive(Clone, Copy, Debug)]
+pub struct AutotuneEnd {
+    pub outcome: AutotuneOutcome,
+    pub request: AutotuneRequest,
+}
+
+/// A running autotune and who asked for it
+struct AutotuneRun {
+    tune: Autotune,
+    request: AutotuneRequest,
 }
 
 /// PID controller in physical units
@@ -238,8 +278,10 @@ impl PidControl {
             _ => 0.0,
         };
         self.last_temp = Some(temp);
-        // Derivative on measurement (no kick on target changes), low-pass filtered
-        self.d_term = PID_D_FILTER * self.d_term + (1.0 - PID_D_FILTER) * (self.kd * derivative);
+        // Derivative on measurement (no kick on target changes), low-pass filtered with the time
+        // constant PID_D_FILTER_TIME_S (first order, discretized for the elapsed `dt`)
+        let smoothing = PID_D_FILTER_TIME_S / (PID_D_FILTER_TIME_S + dt.max(0.0));
+        self.d_term = smoothing * self.d_term + (1.0 - smoothing) * (self.kd * derivative);
 
         // Out of the functional range the integral is frozen (not reset), so that the learned
         // bias is kept and the transfer back to PID control is smooth
@@ -271,102 +313,6 @@ enum ProtectionState {
     FirstHeating,
     /// Target was reached (runaway protected)
     Stable,
-}
-
-/// Relay autotune state
-struct Autotune {
-    target: f32,
-    cycles: u8,
-    max_cycles: u8,
-    heating: bool,
-    bias: f32,
-    d: f32,
-    t_start: embassy_time::Instant,
-    t1: embassy_time::Instant,
-    t2: embassy_time::Instant,
-    t_high: f32,
-    t_low: f32,
-    max_t: f32,
-    min_t: f32,
-    gains: Option<(f32, f32, f32)>,
-}
-
-impl Autotune {
-    fn new(target: f32, max_cycles: u8, now: embassy_time::Instant) -> Self {
-        Self {
-            target,
-            cycles: 0,
-            max_cycles: max_cycles.max(3),
-            heating: true,
-            bias: PID_MAX / 2.0,
-            d: PID_MAX / 2.0,
-            t_start: now,
-            t1: now,
-            t2: now,
-            t_high: 0.0,
-            t_low: 0.0,
-            max_t: f32::MIN,
-            min_t: f32::MAX,
-            gains: None,
-        }
-    }
-
-    /// Advances the relay autotune. Returns the power to apply, or the outcome when finished.
-    fn step(&mut self, temp: f32, now: embassy_time::Instant) -> Result<f32, AutotuneOutcome> {
-        if temp > self.target + AUTOTUNE_MAX_OVERSHOOT {
-            return Err(AutotuneOutcome::Overshoot);
-        }
-        if (now - self.t_start).as_secs() > AUTOTUNE_TIMEOUT_S {
-            return Err(AutotuneOutcome::Timeout);
-        }
-        self.max_t = self.max_t.max(temp);
-        self.min_t = self.min_t.min(temp);
-        let min_half_cycle = embassy_time::Duration::from_secs(5);
-
-        if self.heating && temp > self.target && (now - self.t2) > min_half_cycle {
-            self.heating = false;
-            self.t1 = now;
-            self.t_high = (self.t1 - self.t2).as_millis() as f32 / 1000.0;
-            self.max_t = self.target;
-        }
-        if !self.heating && temp < self.target && (now - self.t1) > min_half_cycle {
-            self.heating = true;
-            self.t2 = now;
-            self.t_low = (self.t2 - self.t1).as_millis() as f32 / 1000.0;
-            if self.cycles > 0 {
-                let period = self.t_low + self.t_high;
-                if period > 0.0 {
-                    self.bias += (self.d * (self.t_high - self.t_low)) / period;
-                }
-                self.bias = self.bias.clamp(20.0, PID_MAX - 20.0);
-                self.d = if self.bias > PID_MAX / 2.0 {
-                    PID_MAX - 1.0 - self.bias
-                } else {
-                    self.bias
-                };
-                let amplitude = (self.max_t - self.min_t) / 2.0;
-                if self.cycles > 2 && amplitude > 0.0 && period > 0.0 {
-                    let ku = (4.0 * self.d) / (core::f32::consts::PI * amplitude);
-                    let tu = period;
-                    let kp = 0.6 * ku;
-                    let ki = 2.0 * kp / tu;
-                    let kd = kp * tu / 8.0;
-                    self.gains = Some((kp, ki, kd));
-                }
-            }
-            self.cycles += 1;
-            self.min_t = self.target;
-        }
-        if self.cycles > self.max_cycles {
-            if let Some((kp, ki, kd)) = self.gains {
-                return Err(AutotuneOutcome::Done(kp, ki, kd));
-            }
-        }
-        Ok(match self.heating {
-            true => self.bias + self.d,
-            false => self.bias - self.d,
-        })
-    }
 }
 
 /// A controller struct for managing a heater device.
@@ -418,8 +364,11 @@ where
     watch: Option<(embassy_time::Instant, f32)>,
     /// Thermal runaway deadline
     runaway_deadline: Option<embassy_time::Instant>,
-    autotune: Option<Autotune>,
-    autotune_outcome: Option<AutotuneOutcome>,
+    autotune: Option<AutotuneRun>,
+    /// The last cycle of the running autotune, until reported
+    autotune_cycle: Option<AutotuneCycle>,
+    /// The end of the last autotune, until reported
+    autotune_end: Option<AutotuneEnd>,
 }
 impl<HA, HP> HeaterController<HA, HP>
 where
@@ -469,7 +418,8 @@ where
             watch: None,
             runaway_deadline: None,
             autotune: None,
-            autotune_outcome: None,
+            autotune_cycle: None,
+            autotune_end: None,
         }
     }
     pub async fn init(&mut self, v_ref_default: u16) {
@@ -566,7 +516,7 @@ where
                 return Err(HeaterError::TargetTooHigh);
             }
             // A new target cancels a running autotune
-            self.autotune = None;
+            self.cancel_autotune();
             let previous_target = self.target_temp;
             let was_on = self.is_on();
             self.target_temp = requested_temp;
@@ -586,7 +536,7 @@ where
         } else {
             self.target_temp = 0.0f32;
             self.current_channel = CommChannel::Internal;
-            self.autotune = None;
+            self.cancel_autotune();
             self.off();
             Ok(false)
         }
@@ -641,19 +591,32 @@ where
             <= self.config.temp_window
     }
 
-    /// Starts a relay PID autotune at the given target (M303)
-    pub fn start_autotune(&mut self, target: f32, cycles: u8) -> Result<(), HeaterError> {
+    /// Starts a relay PID autotune (M303, see [autotune]). When `deferred`, the response to the
+    /// requester waits for its end (the temperature task completes it, see [Self::complete_autotune]).
+    pub async fn start_autotune(&mut self, request: AutotuneRequest) -> Result<(), HeaterError> {
         if let Some(fault) = self.fault {
             return Err(HeaterError::Faulted(fault));
         }
-        if target > self.max_target_temp() {
+        if self.autotune.is_some() {
+            return Err(HeaterError::Busy);
+        }
+        if request.target > self.max_target_temp() {
             return Err(HeaterError::TargetTooHigh);
         }
-        self.target_temp = target;
+        self.target_temp = request.target;
         self.on();
+        self.pid.reset();
         self.start_protection();
-        self.autotune = Some(Autotune::new(target, cycles, embassy_time::Instant::now()));
-        self.autotune_outcome = None;
+        self.autotune = Some(AutotuneRun {
+            tune: Autotune::new(request.target, request.cycles, request.rule, embassy_time::Instant::now()),
+            request,
+        });
+        self.autotune_cycle = None;
+        if request.deferred {
+            self.defer_channel
+                .send(AwaitRequested(self.defer_action, request.channel, request.order_num))
+                .await;
+        }
         Ok(())
     }
 
@@ -661,9 +624,42 @@ where
         self.autotune.is_some()
     }
 
-    /// Takes the outcome of the last finished autotune, if any
-    pub fn take_autotune_outcome(&mut self) -> Option<AutotuneOutcome> {
-        self.autotune_outcome.take()
+    /// The channel that asked for the running autotune
+    pub fn autotune_channel(&self) -> Option<CommChannel> {
+        self.autotune.as_ref().map(|run| run.request.channel)
+    }
+
+    /// Takes the reports of the autotune: its last cycle and its end, if any
+    pub fn take_autotune_events(&mut self) -> (Option<AutotuneCycle>, Option<AutotuneEnd>) {
+        (self.autotune_cycle.take(), self.autotune_end.take())
+    }
+
+    /// Completes the deferred response of a finished autotune (see [Self::start_autotune])
+    pub async fn complete_autotune(&mut self, end: &AutotuneEnd) {
+        if end.request.deferred {
+            self.defer_channel
+                .send(Completed(self.defer_action, end.request.channel, end.request.order_num))
+                .await;
+        }
+    }
+
+    /// Ends the running autotune, if any. The heater is left as it is
+    fn end_autotune(&mut self, outcome: AutotuneOutcome) {
+        if let Some(run) = self.autotune.take() {
+            if let (AutotuneOutcome::Done { kp, ki, kd, .. }, true) = (outcome, run.request.apply) {
+                let f = |v: Real| Some(v.to_f64() as f32);
+                self.set_pid(f(kp), f(ki), f(kd));
+            }
+            self.autotune_end = Some(AutotuneEnd {
+                outcome,
+                request: run.request,
+            });
+        }
+    }
+
+    /// A running autotune is cancelled (new target, heater shut down)
+    fn cancel_autotune(&mut self) {
+        self.end_autotune(AutotuneOutcome::Interrupted);
     }
 
     fn start_protection(&mut self) {
@@ -781,7 +777,7 @@ where
     /// running autotune is cancelled.
     pub fn shutdown(&mut self) {
         self.target_temp = 0.0;
-        self.autotune = None;
+        self.cancel_autotune();
         self.off();
     }
 
@@ -904,14 +900,19 @@ where
                 Real::from_f32(temp)
             );
             if self.fault.is_none() && self.is_on() {
-                let output = match self.autotune.as_mut().map(|at| at.step(temp, now)) {
-                    Some(Ok(power)) => power,
-                    Some(Err(outcome)) => {
-                        self.autotune = None;
-                        self.autotune_outcome = Some(outcome);
-                        if let AutotuneOutcome::Done(kp, ki, kd) = outcome {
-                            self.set_pid(Some(kp), Some(ki), Some(kd));
+                let output = match self.autotune.as_mut().map(|run| run.tune.step(temp, now)) {
+                    Some(Ok(power)) => {
+                        if let Some(cycle) = self.autotune.as_mut().and_then(|run| run.tune.take_cycle()) {
+                            self.autotune_cycle = Some(cycle);
                         }
+                        power
+                    }
+                    Some(Err(outcome)) => {
+                        // The last cycle is reported before the end
+                        if let Some(cycle) = self.autotune.as_mut().and_then(|run| run.tune.take_cycle()) {
+                            self.autotune_cycle = Some(cycle);
+                        }
+                        self.end_autotune(outcome);
                         // Autotune leaves the heater off, as Marlin does
                         self.target_temp = 0.0;
                         self.off();
@@ -1044,37 +1045,6 @@ mod tests {
             temp += (t_inf - temp) * (1.0 - (-dt / tau).exp());
         }
         assert!((temp - 200.0).abs() < 2.0, "settled at {}", temp);
-    }
-
-    /// Relay autotune on a first-order plant: finishes with positive gains that make the PID
-    /// settle on the same plant
-    #[test]
-    fn autotune_on_first_order_plant() {
-        let (amb, gain, tau, dt) = (22.0f32, 330.0f32, 20.0f32, 0.5f32);
-        let t0 = embassy_time::Instant::from_ticks(0);
-        let mut now = t0;
-        let mut at = Autotune::new(200.0, 5, t0);
-        let mut temp = amb;
-        let gains = loop {
-            match at.step(temp, now) {
-                Ok(output) => {
-                    let t_inf = amb + gain * (output / PID_MAX);
-                    temp += (t_inf - temp) * (1.0 - (-dt / tau).exp());
-                    now += embassy_time::Duration::from_millis(500);
-                }
-                Err(AutotuneOutcome::Done(kp, ki, kd)) => break (kp, ki, kd),
-                Err(other) => panic!("autotune failed: {:?}", other),
-            }
-            assert!((now - t0).as_secs() < 3600, "autotune does not converge");
-        };
-        assert!(gains.0 > 0.0 && gains.1 > 0.0 && gains.2 > 0.0, "gains: {:?}", gains);
-        let mut pid = PidControl::new(gains.0, gains.1, gains.2);
-        let mut temp = amb;
-        for _ in 0..2400 {
-            let power = pid.next(200.0, temp, dt) / PID_MAX;
-            temp += (amb + gain * power - temp) * (1.0 - (-dt / tau).exp());
-        }
-        assert!((temp - 200.0).abs() < 2.0, "tuned PID settled at {}", temp);
     }
 
     #[test]

@@ -2,8 +2,27 @@
 
 use crate as hwa;
 use embedded_sdmmc::{
-    Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager,
+    DirEntry, LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, ShortFileName, TimeSource,
+    Timestamp, VolumeIdx, VolumeManager,
 };
+
+/// Max length (UTF-8 bytes) of a long file name (VFAT): a longer one is presented by its short
+/// name. As long as the longest text of a G-code (`MAX_TEXT_LENGTH`), so that any long name
+/// listed can be sent back (e.g. `M23 <long name>`)
+pub const LONG_NAME_LEN: usize = 128;
+
+/// A short (8.3) name as text: `NAME.EXT`
+pub type ShortName = heapless::String<12>;
+
+/// A long file name (see [LONG_NAME_LEN])
+pub type LongName = heapless::String<LONG_NAME_LEN>;
+
+/// The text of a short (8.3) name (`NAME.EXT`)
+pub fn short_name(name: &ShortFileName) -> ShortName {
+    let mut text = ShortName::new();
+    let _ = core::fmt::Write::write_fmt(&mut text, format_args!("{}", name));
+    text
+}
 
 /// Represents various errors that can occur while interacting with an SD card.
 #[derive(Debug)]
@@ -381,6 +400,13 @@ where
         }
         match &self.opened_entries[parent_ref.0 as usize] {
             Some(Entry::Directory(parent)) => {
+                // The entry may be named by its short name or by its long name (case-insensitive):
+                // from now on, by its short name (the cache key and the name to open it)
+                let canonical = match self.find_entry(*parent, entry_name, None) {
+                    Some(entry) => short_name(&entry.name),
+                    None => return Err(SDCardError::NotFound),
+                };
+                let entry_name = canonical.as_str();
                 // Needs to have a parent already opened
                 let mut cached_entry_ref = None;
 
@@ -470,6 +496,131 @@ where
         }
     }
 
+    /// The entry of `dir` named `name`: by its short name or by its long name (ASCII
+    /// case-insensitive). When `long` is given, the long name of the entry (empty when it has
+    /// none, or it is longer than [LONG_NAME_LEN]) is copied there.
+    fn find_entry(
+        &self,
+        dir: RawDirectory,
+        name: &str,
+        mut long: Option<&mut LongName>,
+    ) -> Option<DirEntry> {
+        // A short name: found without reading the long names
+        if long.is_none() {
+            if let Ok(entry) = self.mgr.find_directory_entry(dir, name) {
+                return Some(entry);
+            }
+        }
+        let mut storage = [0u8; LONG_NAME_LEN];
+        let mut lfn = LfnBuffer::new(&mut storage);
+        let mut found = None;
+        let _ = self.mgr.iterate_dir_lfn(dir, &mut lfn, |entry, long_name| {
+            let matches = !entry.attributes.is_volume()
+                && (short_name(&entry.name).eq_ignore_ascii_case(name)
+                    || long_name.is_some_and(|l| l.eq_ignore_ascii_case(name)));
+            if !matches {
+                return core::ops::ControlFlow::Continue(());
+            }
+            if let Some(out) = long.as_deref_mut() {
+                out.clear();
+                let _ = out.push_str(long_name.unwrap_or(""));
+            }
+            found = Some(entry.clone());
+            core::ops::ControlFlow::Break(())
+        });
+        found
+    }
+
+    /// Lists a directory with the long names of its entries (`None` when an entry has none, or
+    /// it is longer than [LONG_NAME_LEN]). `func` may stop the listing (`ControlFlow::Break`).
+    pub fn list_dir_lfn<F>(&mut self, dir_ref: &EntryRef, mut func: F)
+    where
+        F: FnMut(&DirEntry, Option<&str>) -> core::ops::ControlFlow<()>,
+    {
+        match &self.opened_entries[dir_ref.0 as usize] {
+            Some(Entry::Directory(dir)) => {
+                let mut storage = [0u8; LONG_NAME_LEN];
+                let mut lfn = LfnBuffer::new(&mut storage);
+                let _ = self.mgr.iterate_dir_lfn(*dir, &mut lfn, |entry, long_name| {
+                    func(entry, long_name)
+                });
+            }
+            Some(Entry::File(_)) => {
+                hwa::error!("Unable to list a file entry")
+            }
+            _ => {
+                hwa::error!("Unable to list a directory which is not open")
+            }
+        }
+    }
+
+    /// The long path of `path` (named by short or long names): `/<name>/<name>...`, each entry
+    /// by its long name, or by its short name when it has none (Marlin's `M33`). Truncated when
+    /// it does not fit `out`.
+    pub fn long_path<const N: usize>(
+        &mut self,
+        path: &str,
+        out: &mut heapless::String<N>,
+    ) -> Result<(), SDCardError> {
+        let mut stack = self.open_path("")?;
+        let mut result = Ok(());
+        let mut segments = path
+            .split('/')
+            .filter(|segment| !segment.is_empty() && *segment != ".")
+            .peekable();
+        while let Some(segment) = segments.next() {
+            let Some(&dir_ref) = stack.last() else {
+                break;
+            };
+            let dir = match &self.opened_entries[dir_ref.0 as usize] {
+                Some(Entry::Directory(dir)) => *dir,
+                _ => {
+                    result = Err(SDCardError::NotFound);
+                    break;
+                }
+            };
+            let mut long = LongName::new();
+            let Some(entry) = self.find_entry(dir, segment, Some(&mut long)) else {
+                result = Err(SDCardError::NotFound);
+                break;
+            };
+            let short = short_name(&entry.name);
+            let name = if long.is_empty() { short.as_str() } else { long.as_str() };
+            let _ = out.push('/');
+            for c in name.chars() {
+                if out.push(c).is_err() {
+                    break;
+                }
+            }
+            if segments.peek().is_none() {
+                break;
+            }
+            // A file in the middle of the path
+            if !entry.attributes.is_directory() {
+                result = Err(SDCardError::NotFound);
+                break;
+            }
+            match self.raw_open_entry(&dir_ref, short.as_str()) {
+                Ok(sub_dir) => {
+                    if let Err(sub_dir) = stack.push(sub_dir) {
+                        self.close_entry(sub_dir);
+                        result = Err(SDCardError::MaxOpenDirs);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    result = Err(e);
+                    break;
+                }
+            }
+        }
+        if result.is_ok() && out.is_empty() {
+            let _ = out.push('/');
+        }
+        self.release_path(&mut stack);
+        result
+    }
+
     pub fn list_dir<F>(&mut self, dir_ref: &EntryRef, mut func: F)
     where
         F: FnMut(&embedded_sdmmc::DirEntry),
@@ -518,6 +669,13 @@ where
             self.release_path(&mut path_stack);
             return Err(SDCardError::MaxOpenDirs);
         };
+        // An existing file may be named by its long name: it is truncated (by its short name).
+        // A new one needs a short name (long names can not be created)
+        let existing = self
+            .find_entry(parent_dir, name, None)
+            .filter(|entry| !entry.attributes.is_directory())
+            .map(|entry| short_name(&entry.name));
+        let name = existing.as_ref().map_or(name, |n| n.as_str());
         match self
             .mgr
             .open_file_in_dir(parent_dir, name, Mode::ReadWriteCreateOrTruncate)
