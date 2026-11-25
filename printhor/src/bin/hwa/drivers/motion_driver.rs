@@ -675,16 +675,17 @@ impl MotionDriver {
     }
 }
 
-#[cfg(test)]
+// Its only test needs the cartesian X, Y and Z axes
+#[cfg(all(
+    test,
+    feature = "with-x-axis",
+    feature = "with-y-axis",
+    feature = "with-z-axis",
+    not(feature = "with-motion-core-xy-kinematics")
+))]
 mod tests {
     use super::*;
 
-    #[cfg(all(
-        feature = "with-x-axis",
-        feature = "with-y-axis",
-        feature = "with-z-axis",
-        not(feature = "with-motion-core-xy-kinematics")
-    ))]
     #[test]
     fn homing_step_frequency_from_feed_rates() {
         // Marlin's HOMING_FEEDRATE_MM_M (51, 51, 5 mm/s) with 80/80/400 steps/mm

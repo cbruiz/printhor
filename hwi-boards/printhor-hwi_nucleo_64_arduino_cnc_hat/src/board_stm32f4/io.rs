@@ -169,7 +169,7 @@ impl MotionI2c {
             .clamp(110, 500) as u16;
         let index = axis.index();
         if index < 16 {
-            #[cfg(feature = "debug-motion_control-broadcast")]
+            #[cfg(feature = "debug-motion-broadcast")]
             hwa::info!("[MotionI2c] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
             if self.state[index].off != pwm {
                 self.state[index].off = pwm;
