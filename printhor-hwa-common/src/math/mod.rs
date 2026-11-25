@@ -243,6 +243,8 @@ mod solver_test {
 mod test {
     use crate as hwa;
     use hwa::math;
+    // Only the tests that need the X axis use it
+    #[cfg(feature = "with-x-axis")]
     use math::CoordSel;
     use math::Real;
     use math::TVector;
@@ -384,7 +386,7 @@ mod test {
         let _two = math::TWO.to_f64() as f32;
 
         cfg_if::cfg_if! {
-            if #[cfg(feature="with-x-axis")] {
+            if #[cfg(all(feature="with-x-axis", feature="with-y-axis"))] {
                 let four_four = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(4.0f32));
                 let two_two = TVector::new_with_coord(CoordSel::X.union(CoordSel::Y), Some(2.0f32));
                 assert_eq!(four_four.sqrt().rdp(6), two_two);
@@ -939,11 +941,13 @@ mod test {
         assert_eq!(one.clamp_higher_than(none), one);
         #[cfg(feature = "with-e-axis")]
         let two: TVector<Real> = one + one;
+        // With a single coord set to 1, the max is still 2 if there is another axis (1 otherwise)
+        let max_but_one = if CoordSel::num_axis() > 1 { Some(math::TWO) } else { Some(math::ONE) };
 
         #[cfg(feature = "with-e-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::E, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-e-axis")]
         assert_eq!(
@@ -953,7 +957,7 @@ mod test {
         #[cfg(feature = "with-x-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::X, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-x-axis")]
         assert_eq!(
@@ -963,7 +967,7 @@ mod test {
         #[cfg(feature = "with-y-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::Y, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-y-axis")]
         assert_eq!(
@@ -973,7 +977,7 @@ mod test {
         #[cfg(feature = "with-z-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::Z, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-z-axis")]
         assert_eq!(
@@ -983,7 +987,7 @@ mod test {
         #[cfg(feature = "with-a-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::A, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-a-axis")]
         assert_eq!(
@@ -993,7 +997,7 @@ mod test {
         #[cfg(feature = "with-b-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::B, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-b-axis")]
         assert_eq!(
@@ -1003,7 +1007,7 @@ mod test {
         #[cfg(feature = "with-c-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::C, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-c-axis")]
         assert_eq!(
@@ -1013,7 +1017,7 @@ mod test {
         #[cfg(feature = "with-i-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::I, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-i-axis")]
         assert_eq!(
@@ -1023,7 +1027,7 @@ mod test {
         #[cfg(feature = "with-j-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::J, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-j-axis")]
         assert_eq!(
@@ -1033,7 +1037,7 @@ mod test {
         #[cfg(feature = "with-k-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::K, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-k-axis")]
         assert_eq!(
@@ -1043,7 +1047,7 @@ mod test {
         #[cfg(feature = "with-u-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::U, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-u-axis")]
         assert_eq!(
@@ -1053,7 +1057,7 @@ mod test {
         #[cfg(feature = "with-v-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::V, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-v-axis")]
         assert_eq!(
@@ -1063,7 +1067,7 @@ mod test {
         #[cfg(feature = "with-w-axis")]
         assert_eq!(
             two.copy_with_coords(CoordSel::W, Some(math::ONE)).vmax(),
-            Some(math::TWO)
+            max_but_one
         );
         #[cfg(feature = "with-w-axis")]
         assert_eq!(

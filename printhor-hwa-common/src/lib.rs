@@ -11,6 +11,15 @@ pub use printhor_hwa_common_macros::*;
 pub use printhor_hwa_utils::*;
 use strum::EnumCount;
 
+// `micromath` serves the f32 and f64 backends. With `fixed-point-128-impl` too (it takes precedence,
+// and `float-point-f32-impl` is a default feature), it is not used, which cargo would report as an
+// unused dependency
+#[cfg(all(
+    feature = "fixed-point-128-impl",
+    any(feature = "float-point-f32-impl", feature = "float-point-f64-impl")
+))]
+use micromath as _;
+
 mod event_bus;
 pub use event_bus::*;
 

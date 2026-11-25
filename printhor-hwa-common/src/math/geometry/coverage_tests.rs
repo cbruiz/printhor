@@ -6,6 +6,7 @@
 use super::*;
 use crate as hwa;
 use hwa::math;
+#[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))]
 use std::string::String;
 use std::vec::Vec;
 
@@ -26,12 +27,15 @@ fn vector_from(f: impl Fn(usize, CoordSel) -> Option<Real>) -> TVector<Real> {
     t
 }
 
-/// A `fmt::Write` sink that fails once more than `budget` bytes have been written.
+/// A `fmt::Write` sink that fails once more than `budget` bytes have been written (the `Debug`
+/// tests, which need the X and Y axes).
+#[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))]
 struct LimitedWriter {
     out: String,
     budget: usize,
 }
 
+#[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))]
 impl core::fmt::Write for LimitedWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         if s.len() > self.budget {
@@ -45,6 +49,7 @@ impl core::fmt::Write for LimitedWriter {
     }
 }
 
+#[cfg(all(feature = "with-x-axis", feature = "with-y-axis"))]
 fn write_limited(budget: usize, args: core::fmt::Arguments) -> (core::fmt::Result, String) {
     let mut w = LimitedWriter {
         out: String::new(),
@@ -252,13 +257,15 @@ fn increment_skips_undefined_coords() {
 #[test]
 fn vmax_vmin_scan_every_axis_in_both_orders() {
     let n = CoordSel::num_axis() as i64;
+    // Without any axis compiled in, no coord is defined: there is no max nor min
+    let expected = |v: i64| (n > 0).then_some(int(v));
     let ascending = vector_from(|i, _| Some(int(i as i64)));
-    assert_eq!(ascending.vmax(), Some(int(n - 1)));
-    assert_eq!(ascending.vmin(), Some(int(0)));
+    assert_eq!(ascending.vmax(), expected(n - 1));
+    assert_eq!(ascending.vmin(), expected(0));
 
     let descending = vector_from(|i, _| Some(int(n - i as i64)));
-    assert_eq!(descending.vmax(), Some(int(n)));
-    assert_eq!(descending.vmin(), Some(int(1)));
+    assert_eq!(descending.vmax(), expected(n));
+    assert_eq!(descending.vmin(), expected(1));
 
     // Undefined coords are ignored; a single defined coord is both the max and the min
     for (i, c) in axes().into_iter().enumerate() {
@@ -320,7 +327,12 @@ fn sign_maps_positive_to_one_and_the_rest_to_minus_one() {
 #[test]
 fn with_coord_and_map_values_respect_undefined_coords() {
     let all = axes();
-    let first = all[0];
+    let Some(&first) = all.first() else {
+        // Without any axis compiled in, every vector is the empty one
+        assert_eq!(TVector::<Real>::one(), TVector::new());
+        assert_eq!(TVector::<Real>::one().with_coord(CoordSel::all_axis(), Some(math::THREE)), TVector::new());
+        return;
+    };
     let rest = CoordSel::all_axis().difference(first);
     let t = TVector::<Real>::one().with_coord(first, None);
 
@@ -462,7 +474,8 @@ fn arithmetic_ops_of_integer_coordinates() {
     // Integer vectors: steps per axis
     let steps: TVector<u32> = TVector::new_with_const_value(7u32);
     assert_eq!(steps.sum(), 7 * CoordSel::num_axis() as u32);
-    assert_eq!(steps.vmax(), Some(7));
+    // Without any axis compiled in, no coord is defined: there is no max
+    assert_eq!(steps.vmax(), (CoordSel::num_axis() > 0).then_some(7));
     assert!(TVector::<u8>::zero().is_nan_or_zero());
     assert_eq!(TVector::<u16>::one().negligible_coords(), CoordSel::empty());
     assert_eq!(TVector::<u64>::zero().not_negligible_coords(), CoordSel::empty());

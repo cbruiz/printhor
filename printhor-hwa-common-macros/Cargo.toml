@@ -25,7 +25,8 @@ cfg-if = "1"
 # Path only (no version): `cargo publish` drops them. They depend on this crate, so with a version
 # none of the three crates could be published first
 [dev-dependencies]
-printhor-hwa-common = { default-features = false, path = "../printhor-hwa-common" }
+# A math backend is needed to build it (the `float-point-*` features of this crate select another one)
+printhor-hwa-common = { default-features = false, features = ["float-point-f32-impl"], path = "../printhor-hwa-common" }
 printhor-hwa-utils = { default-features = false, path = "../printhor-hwa-utils" }
 
 [lib]
