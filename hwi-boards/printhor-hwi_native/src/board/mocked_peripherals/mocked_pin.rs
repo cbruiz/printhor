@@ -35,6 +35,11 @@ impl MockedIOPin {
         Self { id, global_state }
     }
 
+    /// The pin number
+    pub fn id(&self) -> u8 {
+        self.id
+    }
+
     pub fn set_high(&mut self) {
         loop {
             if let Ok(mut mg) = self.global_state.try_lock() {

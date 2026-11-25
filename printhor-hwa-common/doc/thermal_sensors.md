@@ -1,0 +1,1 @@
+../../doc/thermal_sensors.md

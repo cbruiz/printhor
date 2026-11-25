@@ -259,7 +259,7 @@ impl CoordSel {
                     CoordSel::I => "θ(3)",
                     #[cfg(feature = "with-j-axis")]
                     CoordSel::J => "ϕ(3)",
-                    #[cfg(feature = "with-j-axis")]
+                    #[cfg(feature = "with-k-axis")]
                     CoordSel::K => "ψ(3)",
                     //
                     #[cfg(feature = "with-u-axis")]
@@ -299,7 +299,7 @@ impl CoordSel {
             CoordSel::I => "I",
             #[cfg(feature = "with-j-axis")]
             CoordSel::J => "J",
-            #[cfg(feature = "with-j-axis")]
+            #[cfg(feature = "with-k-axis")]
             CoordSel::K => "K",
             //
             #[cfg(feature = "with-u-axis")]
@@ -323,10 +323,10 @@ impl CoordSel {
     pub const fn motion_relevant_axis() -> CoordSel {
         cfg_if::cfg_if! {
             if #[cfg(feature = "with-e-axis")] {
-                CoordSel::all().difference(CoordSel::UNSET.union(CoordSel::E))
+                CoordSel::all_axis().difference(CoordSel::E)
             }
             else {
-                CoordSel::all().difference(CoordSel::UNSET)
+                CoordSel::all_axis()
             }
         }
     }
@@ -1045,150 +1045,124 @@ where
 
         #[cfg(feature = "with-e-axis")]
         if _coord_idx.contains(CoordSel::E) {
-            self.e = self.e.and_then(|v| {
+            if let Some(v) = self.e {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.e
+                    self.e = Some(v - T::one());
                 }
-            })
+            }
         }
 
         #[cfg(feature = "with-x-axis")]
         if _coord_idx.contains(CoordSel::X) {
-            self.x = self.x.and_then(|v| {
+            if let Some(v) = self.x {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.x
+                    self.x = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-y-axis")]
         if _coord_idx.contains(CoordSel::Y) {
-            self.y = self.y.and_then(|v| {
+            if let Some(v) = self.y {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.y
+                    self.y = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-z-axis")]
         if _coord_idx.contains(CoordSel::Z) {
-            self.z = self.z.and_then(|v| {
+            if let Some(v) = self.z {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.z
+                    self.z = Some(v - T::one());
                 }
-            })
+            }
         }
 
         #[cfg(feature = "with-a-axis")]
         if _coord_idx.contains(CoordSel::A) {
-            self.a = self.a.and_then(|v| {
+            if let Some(v) = self.a {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.a
+                    self.a = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-b-axis")]
         if _coord_idx.contains(CoordSel::B) {
-            self.b = self.b.and_then(|v| {
+            if let Some(v) = self.b {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.b
+                    self.b = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-c-axis")]
         if _coord_idx.contains(CoordSel::C) {
-            self.c = self.c.and_then(|v| {
+            if let Some(v) = self.c {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.c
+                    self.c = Some(v - T::one());
                 }
-            })
+            }
         }
 
         #[cfg(feature = "with-i-axis")]
         if _coord_idx.contains(CoordSel::I) {
-            self.i = self.i.and_then(|v| {
+            if let Some(v) = self.i {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.i
+                    self.i = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-j-axis")]
         if _coord_idx.contains(CoordSel::J) {
-            self.j = self.j.and_then(|v| {
+            if let Some(v) = self.j {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.j
+                    self.j = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-k-axis")]
         if _coord_idx.contains(CoordSel::K) {
-            self.k = self.k.and_then(|v| {
+            if let Some(v) = self.k {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.k
+                    self.k = Some(v - T::one());
                 }
-            })
+            }
         }
 
         #[cfg(feature = "with-u-axis")]
         if _coord_idx.contains(CoordSel::U) {
-            self.u = self.u.and_then(|v| {
+            if let Some(v) = self.u {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.u
+                    self.u = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-v-axis")]
         if _coord_idx.contains(CoordSel::V) {
-            self.v = self.v.and_then(|v| {
+            if let Some(v) = self.v {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.v
+                    self.v = Some(v - T::one());
                 }
-            })
+            }
         }
         #[cfg(feature = "with-w-axis")]
         if _coord_idx.contains(CoordSel::W) {
-            self.w = self.w.and_then(|v| {
+            if let Some(v) = self.w {
                 if v.is_defined_positive() {
                     changed = true;
-                    Some(v - T::one())
-                } else {
-                    self.w
+                    self.w = Some(v - T::one());
                 }
-            })
+            }
         }
         changed
     }
@@ -1792,6 +1766,7 @@ where
 
     /// Evaluates when a vector has all coordinates bounded by other
     /// Meaning that every x, y, z ... of Self is lower than other's
+    /// None is assumed to mean that the coord bound does not apply
     pub fn bounded_by(&self, _rhs: &TVector<T>) -> bool {
         #[allow(unused_mut)]
         let mut matching_point = true;
@@ -1800,18 +1775,11 @@ where
             None => {}
             Some(lv) => match _rhs.e {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1822,18 +1790,11 @@ where
             None => {}
             Some(lv) => match _rhs.x {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1843,18 +1804,11 @@ where
             None => {}
             Some(lv) => match _rhs.y {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1864,18 +1818,11 @@ where
             None => {}
             Some(lv) => match _rhs.z {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1886,18 +1833,11 @@ where
             None => {}
             Some(lv) => match _rhs.a {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1907,18 +1847,11 @@ where
             None => {}
             Some(lv) => match _rhs.b {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1928,18 +1861,11 @@ where
             None => {}
             Some(lv) => match _rhs.c {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1950,18 +1876,11 @@ where
             None => {}
             Some(lv) => match _rhs.i {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1971,18 +1890,11 @@ where
             None => {}
             Some(lv) => match _rhs.j {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -1992,18 +1904,11 @@ where
             None => {}
             Some(lv) => match _rhs.k {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -2014,18 +1919,11 @@ where
             None => {}
             Some(lv) => match _rhs.u {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -2035,18 +1933,11 @@ where
             None => {}
             Some(lv) => match _rhs.v {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
-                    }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
                     }
                 }
             },
@@ -2056,23 +1947,16 @@ where
             None => {}
             Some(lv) => match _rhs.w {
                 None => {
-                    if !lv.is_zero() {
-                        return false;
-                    }
                 }
                 Some(rv) => {
                     if lv > rv {
                         // coordinate exceeding
                         return false;
                     }
-                    if lv < rv {
-                        // coordinate preceeding
-                        matching_point = false;
-                    }
                 }
             },
         }
-        !matching_point
+        matching_point
     }
 
     pub fn is_nan_or_zero(&self) -> bool {
@@ -2590,9 +2474,9 @@ where
         ((*self) * rhs).sum()
     }
 
-    /// Computes the orthogonal projection of `other` over `this`
+    /// Computes the scalar projection of `other` over `this`
     /// proj(self, other) = \frac{self \cdot other}{|self|^(2)}
-    pub fn orthogonal_projection(&self, other: TVector<T>) -> T
+    pub fn scalar_projection(&self, other: TVector<T>) -> T
     where
         T: RealOps + core::ops::AddAssign<T> + core::ops::Div<Output = T>,
         TVector<T>: core::ops::Mul<TVector<T>, Output = TVector<T>>,
@@ -3587,7 +3471,10 @@ impl RealOps for f32 {
     where
         Self: Sized,
     {
-        if !self.is_sign_negative() {
+        if *self == 0.0 {
+            // Also -0.0, which compares equal to zero but has the sign bit set
+            Some(0.0)
+        } else if !self.is_sign_negative() {
             cfg_if::cfg_if! {
                 if #[cfg(feature = "fixed-point-128-impl")] {
                     Real::from_f32(*self).sqrt().map(|v| v.0.to_f32())?
@@ -3670,3 +3557,6 @@ impl RealOps for Real {
         Real::floor(self)
     }
 }
+
+#[cfg(test)]
+mod coverage_tests;

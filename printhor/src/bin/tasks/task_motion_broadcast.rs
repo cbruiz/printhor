@@ -63,7 +63,7 @@ pub async fn task_motion_broadcast(
                 let mut mg = _motion_sender.lock().await;
                 let mut changed = false;
                 motion_event.pos_wu.foreach_values(|coord, val| {
-                    changed |= mg.set_angle(coord, val);
+                    changed |= mg.set_angle(coord, &servo_angle(coord, *val));
                 });
 
                 #[cfg(feature = "debug-motion-broadcast")]
@@ -98,6 +98,15 @@ pub async fn task_motion_broadcast(
             }
         }
     }
+}
+
+/// The angle to drive the servo of `coord` to, for the joint angle `angle`: its direction (a servo
+/// mounted mirrored) and its calibration offset, see [HwiContract::SERVO_DIRECTION] and
+/// [HwiContract::SERVO_OFFSET]
+fn servo_angle(coord: hwa::CoordSel, angle: Real) -> Real {
+    let direction = Contract::SERVO_DIRECTION.get_coord(coord).unwrap_or(math::ONE);
+    let offset = Contract::SERVO_OFFSET.get_coord(coord).unwrap_or(math::ZERO);
+    direction * angle + offset
 }
 
 fn flush(

@@ -3,24 +3,28 @@ name = "printhor-hwa-common"
 version = "0.0.4"
 edition = "2024"
 authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
-description = "Printor harware abstraction utillery"
+description = "Printhor hardware abstraction layer: common contract and machinery"
 readme = "README.md"
 repository = "https://github.com/cbruiz/printhor"
-keywords = ["hardware", "abstration", "library", "printhor"]
+keywords = ["hardware", "abstraction", "library", "printhor"]
 categories = ["hardware-support"]
-license = "MIT"
-documentation = "https://docs.rs/printhor-hwa_common"
-homepage = "https://github.com/cbruiz/printhor"
+license.workspace = true
+documentation = "https://docs.rs/printhor-hwa-common"
+
+[package.metadata.docs.rs]
+# A math backend must be selected (see the `float-point-*` and `fixed-point-*` features)
+features = ["float-point-f32-impl"]
 
 [lib]
 
 [features]
-std = ["futures-test/std", "embassy-executor/arch-std",
+std = ["futures-test/std", "embassy-executor/platform-std",
     "embassy-executor/executor-thread",
     "printhor-hwa-common-macros/std",
     "printhor-hwa-utils/std",
     "embassy-time/std"]
-default = ["std", "with-log"]
+# A math backend is required: f32 unless another one is selected (see the math backend features)
+default = ["std", "with-log", "float-point-f32-impl"]
 nightly = []
 with-log = ["log", "printhor-hwa-utils/with-log"]
 with-defmt = ["defmt", "printhor-hwa-utils/with-defmt", "embedded-sdmmc/defmt-log"]
@@ -29,7 +33,7 @@ with-serial-port-1 = ["async-gcode", "embedded-io-async"]
 with-serial-port-2 = ["async-gcode", "embedded-io-async"]
 with-spi = ["embedded-hal-0"]
 with-i2c = ["embedded-hal-0"]
-with-ps-on = ["embedded-hal-1"]
+with-ps-on = []
 with-probe = ["embedded-hal-0"]
 with-laser = ["embedded-hal-0"]
 with-fan-layer = ["embedded-hal-0"]
@@ -44,12 +48,16 @@ with-hot-end = ["embedded-hal-0"]
 with-hot-bed = ["embedded-hal-0"]
 with-sd-card = ["async-gcode", "embedded-sdmmc", "heapless"]
 with-print-job = []
-with-trinamic = ["embassy-embedded-hal"]
+with-trinamic = []
+with-eeprom = ["dep:embedded-hal-async"]
 
 sd-card-spi = []
 
-float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl"]
-float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl"]
+# Math backend (exactly one is meant to be selected; fixed-point-128-impl, then float-point-f64-impl, take precedence)
+float-point-f32-impl = ["printhor-hwa-common-macros/float-point-f32-impl", "dep:micromath"]
+float-point-f64-impl = ["printhor-hwa-common-macros/float-point-f64-impl", "dep:micromath", "dep:ryu"]
+# Soft-float operation counters of `Real` (host measuring aid, see `math::op_count`)
+op-count = []
 fixed-point-128-impl = ["printhor-hwa-common-macros/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 with-all-axis = [
@@ -74,36 +82,37 @@ with-v-axis = []
 with-w-axis = []
 
 [dependencies]
-printhor-hwa-common-macros = { version = "0", default-features = false, path = "../printhor-hwa-common-macros" }
-printhor-hwa-utils = { version = "0",  default-features = false, path = "../printhor-hwa-utils", features = [] }
-const_env = { version = "0.1.2"}
+printhor-hwa-common-macros = { version = "0.0.4", default-features = false, path = "../printhor-hwa-common-macros" }
+printhor-hwa-utils = { version = "0.0.4",  default-features = false, path = "../printhor-hwa-utils", features = [] }
+const_env = { version = "0.1.5"}
 
-embassy-sync = { version = "0.6.2", features = [] }
-embassy-executor = { version = "0.7.0", default-features = false, features = [] }
-embassy-time = { version = "0.4.0", features = [] }
-embassy-embedded-hal = { version = "0.3.0", optional = true, default-features = false, features = [] }
+embassy-sync = { version = "0.8.0", features = [] }
+embassy-executor = { version = "0.10.0", default-features = false, features = [] }
+embassy-time = { version = "0.5.1", features = [] }
 
-embedded-hal-1 = { package = "embedded-hal", version = "1.0.0", default-features = false, optional = true }
 embedded-hal-0 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"], optional = true }
-embedded-sdmmc = { version = "0.8.1", default-features = false, features = [], optional = true }
-embedded-io-async = { version = "0.6.1", default-features = false, features = [], optional = true }
-async-gcode = { version = "0.3.0", default-features = false, features = [], optional = true}
+embedded-sdmmc = { version = "0.10.0", default-features = false, features = [], optional = true }
+embedded-io-async = { version = "0.7.0", default-features = false, features = [], optional = true }
+embedded-hal-async = { version = "1.0.0", default-features = false, features = [], optional = true }
+async-gcode = { package = "printhor-async-gcode", version = "0.4.0", path = "../libs/async-gcode", default-features = false, features = [], optional = true}
 
-heapless = { version = "0.8.0", default-features = false, features = [], optional = true }
+heapless = { version = "0.9.3", default-features = false, features = [], optional = true }
 
-bitflags = { version = "2.8.0", default-features = false, features = ["bytemuck"] }
+bitflags = { version = "2.13.2", default-features = false }
 cfg-if = { version = "1.0.0" }
-defmt = { version = "0.3.10", optional = true, default-features = false, features = [] }
-log = { version = "0.4.26", default-features = false, optional = true }
-strum = { version = "0.27.1", default-features = false, features = ["derive"] }
+defmt = { version = "1.2.0", optional = true, default-features = false, features = [] }
+log = { version = "0.4.35", default-features = false, optional = true }
+strum = { version = "0.28.0", default-features = false, features = ["derive"] }
 
 num-traits = { version = "0.2.19", default-features = false, features = [] }
-micromath = { version = "2.1.0", default-features = false, features = [] }
-rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { optional = true, version = "1.36.0" }
-ryu = {version = "1.0.19", default-features = false }
+micromath = { version = "2.1.0", default-features = false, features = [], optional = true }
+rust_decimal = { optional = true, version = "1.43.0", default-features = false, features = ["maths"] }
+rust_decimal_macros = { optional = true, version = "1.40.0" }
+ryu = { version = "1.0.23", default-features = false, features = ["small"], optional = true }
 
 [dev-dependencies]
-futures-test = { version = "0.3.31", default-features = false }
-tmc2209 = { version = "0.2.2"}
-env_logger = { version = "0.11.6" }
+futures-test = { version = "0.3.34", default-features = false }
+env_logger = { version = "0.11.11" }
+
+[lints]
+workspace = true

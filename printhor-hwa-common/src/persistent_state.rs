@@ -1,11 +1,18 @@
 //! A synchronization primitive for polling values from a task.
-//! Basically, a copy of embassy_sync::Signal with a dirty hack to not lose the consumed value
+//! Basically, a copy of embassy_sync::Signal with a dirty hack to not lose the consumed value,
+//! and that can be awaited by several tasks at once.
 use crate as hwa;
-use core::cell::Cell;
+use core::cell::RefCell;
 use core::future::{Future, poll_fn};
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 use embassy_sync::blocking_mutex::Mutex;
+use embassy_sync::waitqueue::MultiWakerRegistration;
 use hwa::AsyncRawMutex;
+
+/// Tasks that may wait at once without waking each other: e.g. the motion queue availability is
+/// awaited by the control task (a host) and the print job task. With more waiters it still works,
+/// waking them all (each one registers again).
+const MAX_WAITERS: usize = 3;
 
 #[allow(unused)]
 pub struct PersistentState<M, T>
@@ -13,18 +20,18 @@ where
     M: AsyncRawMutex,
     T: Send + Copy,
 {
-    state: Mutex<M, Cell<State<T>>>,
+    state: Mutex<M, RefCell<State<T>>>,
 }
 
-#[allow(unused)]
-#[derive(Clone)]
-enum State<T>
+struct State<T>
 where
     T: Send + Copy,
 {
-    None,
-    Waiting(Waker),
-    Signaled(T),
+    /// The value signaled. Kept until [PersistentState::reset]: every wait completes with it
+    value: Option<T>,
+    /// The tasks waiting for a value. A single waker made two waiters wake each other endlessly
+    /// (a busy loop) until the value was signaled
+    wakers: MultiWakerRegistration<MAX_WAITERS>,
 }
 
 #[allow(unused)]
@@ -36,7 +43,10 @@ where
     /// Create a new `Signal`.
     pub const fn new() -> Self {
         Self {
-            state: Mutex::new(Cell::new(State::None)),
+            state: Mutex::new(RefCell::new(State {
+                value: None,
+                wakers: MultiWakerRegistration::new(),
+            })),
         }
     }
 }
@@ -58,48 +68,30 @@ where
     M: AsyncRawMutex,
     T: Send + Copy,
 {
-    /// Mark this Signal as signaled.
+    /// Mark this Signal as signaled, waking every waiting task.
     pub fn signal(&self, val: T) {
         self.state.lock(|cell| {
-            let state = cell.replace(State::Signaled(val));
-            if let State::Waiting(waker) = state {
-                waker.wake();
-            }
+            let mut state = cell.borrow_mut();
+            state.value = Some(val);
+            state.wakers.wake();
         })
     }
 
-    /// Remove the queued value in this `Config`, if any.
+    /// Remove the queued value in this `Config`, if any. The waiting tasks keep waiting.
     pub fn reset(&self) {
         self.state.lock(|cell| {
-            cell.set(State::None);
+            cell.borrow_mut().value = None;
         });
     }
 
     fn poll_wait(&self, cx: &mut Context<'_>) -> Poll<T> {
         self.state.lock(|cell| {
-            let state = cell.replace(State::None);
-
-            match state {
-                State::None => {
-                    //info!("Poll State::None");
-                    cell.set(State::Waiting(cx.waker().clone()));
+            let mut state = cell.borrow_mut();
+            match state.value {
+                Some(r) => Poll::Ready(r),
+                None => {
+                    state.wakers.register(cx.waker());
                     Poll::Pending
-                }
-                State::Waiting(w) if w.will_wake(cx.waker()) => {
-                    //info!("Poll State::Waiting.1");
-                    cell.set(State::Waiting(w));
-                    Poll::Pending
-                }
-                State::Waiting(w) => {
-                    hwa::error!("Poll State::Waiting.2");
-                    cell.set(State::Waiting(cx.waker().clone()));
-                    w.wake();
-                    Poll::Pending
-                }
-                State::Signaled(r) => {
-                    //info!("Poll State::Signaled cv=({})", r);
-                    cell.set(State::Signaled(r));
-                    Poll::Ready(r)
                 }
             }
         })
@@ -112,15 +104,7 @@ where
 
     /// non-blocking method to check whether this signal has been signaled.
     pub fn signaled(&self) -> bool {
-        self.state.lock(|cell| {
-            let state = cell.replace(State::None);
-
-            let res = matches!(state, State::Signaled(_));
-
-            cell.set(state);
-
-            res
-        })
+        self.state.lock(|cell| cell.borrow().value.is_some())
     }
 }
 
@@ -160,5 +144,30 @@ mod tests {
             Poll::Ready(())
         })
         .await;
+    }
+
+    /// Two tasks waiting at once do not wake each other (that was a busy loop), and both are
+    /// woken by the signal
+    #[test]
+    fn two_waiters() {
+        use futures_test::task::new_count_waker;
+        let persistent_state: hwa::PersistentState<MutexType, bool> = hwa::PersistentState::new();
+        let (waker_a, count_a) = new_count_waker();
+        let (waker_b, count_b) = new_count_waker();
+        let mut cx_a = core::task::Context::from_waker(&waker_a);
+        let mut cx_b = core::task::Context::from_waker(&waker_b);
+        let mut fut_a = core::pin::pin!(persistent_state.wait());
+        let mut fut_b = core::pin::pin!(persistent_state.wait());
+        for _ in 0..3 {
+            assert!(fut_a.as_mut().poll(&mut cx_a).is_pending());
+            assert!(fut_b.as_mut().poll(&mut cx_b).is_pending());
+        }
+        assert_eq!((count_a.get(), count_b.get()), (0, 0));
+        // A reset while waiting keeps them waiting
+        persistent_state.reset();
+        persistent_state.signal(true);
+        assert_eq!((count_a.get(), count_b.get()), (1, 1));
+        assert_eq!(fut_a.as_mut().poll(&mut cx_a), Poll::Ready(true));
+        assert_eq!(fut_b.as_mut().poll(&mut cx_b), Poll::Ready(true));
     }
 }

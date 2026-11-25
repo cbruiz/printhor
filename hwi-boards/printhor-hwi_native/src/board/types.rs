@@ -53,7 +53,9 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-probe", feature = "with-hot-end",feature = "with-hot-bed",
         feature = "with-laser", feature = "with-fan-layer", feature = "with-fan-extra-1"))] {
-        pub type Pwm1LockType = hwa::SyncNoopMutexType;
+        /// A critical section mutex: the fans and the laser are also switched by the step
+        /// executor (the ticker thread), when it reaches the tool actions queued with the motion
+        pub type Pwm1LockType = hwa::SyncCsMutexType;
     }
 }
 
@@ -159,6 +161,13 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-sd-card")] {
         pub type SDCardBlockDevice = super::device::SDCardBlockDevice;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        // Lock-free: the EEPROM is only used from the (single) executor of the GCode processing
+        pub type EepromMutexStrategy = hwa::AsyncStandardStrategy<hwa::AsyncNoopMutexType, super::device::Eeprom>;
     }
 }
 

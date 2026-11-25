@@ -7,8 +7,7 @@ description = "Printhor Hardware Abstraction starter project"
 repository = "https://github.com/cbruiz/printhor"
 keywords = ["hardware", "abstraction"]
 license = "MIT"
-documentation = "https://docs.rs/prinThor"
-homepage = "https://github.com/cbruiz/printhor"
+documentation = "https://docs.rs/printhor-hwi_boilerplate"
 
 [lib]
 
@@ -21,10 +20,10 @@ with-serial-usb = ["embassy-usb", "printhor-hwa-common/with-serial-usb"]
 with-serial-port-1 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-1"]
 with-serial-port-2 = ["embedded-io-async", "printhor-hwa-common/with-serial-port-2"]
 with-print-job = ["printhor-hwa-common/with-print-job"]
-with-spi = ["embedded-hal", "printhor-hwa-common/with-spi"]
+with-spi = ["printhor-hwa-common/with-spi"]
 with-i2c = ["printhor-hwa-common/with-i2c"]
-with-hot-end = ["embedded-hal", "printhor-hwa-common/with-hot-end"]
-with-hot-bed = ["embedded-hal", "printhor-hwa-common/with-hot-bed"]
+with-hot-end = ["printhor-hwa-common/with-hot-end"]
+with-hot-bed = ["printhor-hwa-common/with-hot-bed"]
 with-motion = ["printhor-hwa-common/with-motion"]
 with-motion-broadcast = ["printhor-hwa-common/with-motion-broadcast"]
 with-motion-stepper = []
@@ -32,12 +31,12 @@ with-motion-cartessian-kinematics = ["printhor-hwa-common/with-motion-cartessian
 with-motion-delta-kinematics = ["printhor-hwa-common/with-motion-delta-kinematics"]
 with-motion-core-xy-kinematics = ["printhor-hwa-common/with-motion-core-xy-kinematics"]
 with-motion-anthropomorphic-kinematics = ["printhor-hwa-common/with-motion-anthropomorphic-kinematics"]
-with-probe = ["embedded-hal", "printhor-hwa-common/with-probe"]
+with-probe = ["printhor-hwa-common/with-probe"]
 with-sd-card = ["printhor-hwa-common/with-sd-card"]
-with-fan-layer = ["embedded-hal", "printhor-hwa-common/with-fan-layer"]
-with-fan-extra-1 = ["embedded-hal", "printhor-hwa-common/with-fan-extra-1"]
-with-laser = ["embedded-hal", "printhor-hwa-common/with-laser"]
-with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-executor/defmt"]
+with-fan-layer = ["printhor-hwa-common/with-fan-layer"]
+with-fan-extra-1 = ["printhor-hwa-common/with-fan-extra-1"]
+with-laser = ["printhor-hwa-common/with-laser"]
+with-defmt = ["defmt", "printhor-hwa-common/with-defmt", "printhor-hwa-utils/with-defmt", "embassy-executor/defmt"]
 with-trinamic = ["printhor-hwa-common/with-trinamic"]
 with-ps-on = ["printhor-hwa-common/with-ps-on"]
 
@@ -66,36 +65,31 @@ float-point-f64-impl = ["printhor-hwa-common/float-point-f64-impl"]
 fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl", "rust_decimal", "rust_decimal_macros"]
 
 [dependencies]
-#defmt = { version = "0.3.10", optional = true, default-features = false, features=["alloc"] }
+defmt = { version = "1.2.0", optional = true, default-features = false, features=["alloc"] }
 #cortex-m = { version = "0.7.7", default-features = false, features = ["inline-asm", "critical-section-single-core"] }
 #cortex-m-rt = { version = "0.7.5", default-features = false }
-#alloc-cortex-m = { version = "0.4.4", default-features = false, features = [] }
+#embedded-alloc = { version = "0.7.0", default-features = false, features = ["llff"] }
 critical-section = { version = "1.2.0", default-features = false, features = ["restore-state-bool"]}
 
-embassy-executor = { version = "0.7.0", default-features = false, features = ["executor-thread", "task-arena-size-16384"] }
-embassy-sync = { version = "0.6.2", default-features = false, features = [] }
-embassy-time = { version = "0.4.0", default-features = false, features = ["tick-hz-1_000_000", "generic-queue-128"] }
-embassy-futures = { version = "0.1.1", default-features = false, features = [] }
-embassy-usb = { version = "0.4.0", default-features = false, features = [], optional = true }
+embassy-executor = { version = "0.10.0", default-features = false, features = ["executor-thread"] }
+embassy-time = { version = "0.5.1", default-features = false, features = ["tick-hz-1_000_000", "generic-queue-128"] }
+embassy-usb = { version = "0.6.0", default-features = false, features = [], optional = true }
 
 printhor-hwa-common = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-common" }
 printhor-hwa-utils = { version = "0.0.4", default-features = false, features = [], path = "../../printhor-hwa-utils" }
-async-gcode = {version = "0.3.0", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value"] }
+async-gcode = { package = "printhor-async-gcode", version = "0.4.0", path = "../../libs/async-gcode", default-features = false, features=["parse-checksum", "parse-trailing-comment", "optional-value", "string-value"] }
 
-embedded-hal = { version = "1.0.0", default-features = false, optional = true }
-embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", default-features = false, features = ["unproven"] }
-embedded-io-async = { version = "0.6.1", default-features = false, optional = true, features = [] }
+embedded-io-async = { version = "0.7.0", default-features = false, optional = true, features = [] }
 
 cfg-if = { version = "1.0.0"}
-const_env = { version = "0.1.2" }
+const_env = { version = "0.1.5" }
 
-rust_decimal = { optional = true, version = "1.36.0", default-features = false, features = ["maths", "serde-with-str"] }
-rust_decimal_macros = { optional = true, default-features = false, version = "1.36.0" }
+rust_decimal = { optional = true, version = "1.43.0", default-features = false, features = ["maths"] }
+rust_decimal_macros = { optional = true, default-features = false, version = "1.40.0" }
 
 [patch.crates-io]
-async-gcode = { path = "../../libs/async-gcode" }
-embassy-executor = { path = "../../libs/embassy/embassy-executor" }
-embassy-sync = { path = "../../libs/embassy/embassy-sync" }
-embassy-time = { path = "../../libs/embassy/embassy-time" }
-embassy-futures = { path = "../../libs/embassy/embassy-futures" }
-embassy-usb = { path = "../../libs/embassy/embassy-usb" }
+#embassy-executor = { path = "../../libs/embassy/embassy-executor" }
+#embassy-sync = { path = "../../libs/embassy/embassy-sync" }
+#embassy-time = { path = "../../libs/embassy/embassy-time" }
+#embassy-futures = { path = "../../libs/embassy/embassy-futures" }
+#embassy-usb = { path = "../../libs/embassy/embassy-usb" }

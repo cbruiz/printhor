@@ -13,13 +13,16 @@ mod types;
 pub(crate) mod io;
 
 #[global_allocator]
-static HEAP: alloc_cortex_m::CortexMHeap = alloc_cortex_m::CortexMHeap::empty();
+static HEAP: embedded_alloc::LlffHeap = embedded_alloc::LlffHeap::empty();
 
 pub struct Contract;
 impl HwiContract for Contract {
 
     //#region "Board specific constants"
 
+    /// Machine name reported to hosts and displays (M115 `MACHINE_TYPE`). Overridable at build
+    /// time with the `MACHINE_TYPE` environment variable (see `.cargo/config.toml`)
+    #[const_env::env_item("MACHINE_TYPE")]
     const MACHINE_TYPE: &'static str = "NUCLEO64";
     const MACHINE_BOARD: &'static str = "NUCLEO64_Arduino_CNC_Hat_v3.x";
     /// ARM Cortex M4F @100MHZ, 32kB SRAM, 128kB Program
@@ -37,17 +40,17 @@ impl HwiContract for Contract {
 
     //#region "Watchdog settings"
 
-    #[const_env::from_env("WATCHDOG_TIMEOUT_US")]
+    #[const_env::env_item("WATCHDOG_TIMEOUT_US")]
     const WATCHDOG_TIMEOUT_US: u32 = 10_000_000;
 
     //#endregion
 
     //#region "Memory management/tracking settings"
 
-    #[const_env::from_env("MAX_HEAP_SIZE_BYTES")]
+    #[const_env::env_item("MAX_HEAP_SIZE_BYTES")]
     const MAX_HEAP_SIZE_BYTES: usize = 256;
 
-    #[const_env::from_env("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
+    #[const_env::env_item("MAX_EXPECTED_STATIC_ALLOC_BYTES")]
     const MAX_EXPECTED_STATIC_ALLOC_BYTES: usize = 8096;
 
     fn heap_current_size() -> usize {
@@ -101,13 +104,13 @@ impl HwiContract for Contract {
                         hwa::make_vector!(x=2, y=2, z=2, e=2)
                     };
 
-                    #[const_env::from_env("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
+                    #[const_env::env_item("MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY")]
                     const MOTION_PLANNER_MICRO_SEGMENT_FREQUENCY: u32 = 100;
 
-                    #[const_env::from_env("STEP_PLANNER_CLOCK_FREQUENCY")]
+                    #[const_env::env_item("STEP_PLANNER_CLOCK_FREQUENCY")]
                     const STEP_PLANNER_CLOCK_FREQUENCY: u32 = 100_000;
 
-                    #[const_env::from_env("SEGMENT_QUEUE_SIZE")]
+                    #[const_env::env_item("SEGMENT_QUEUE_SIZE")]
                     const SEGMENT_QUEUE_SIZE: u8 = 10;
                 }
             }
@@ -121,38 +124,38 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-end")] {
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_MV")]
             const HOT_END_ADC_V_REF_DEFAULT_MV: u16 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_END_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_END_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_BETA: f32 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_END_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_NOMINAL_RESISTANCE")]
             const HOT_END_THERM_NOMINAL_RESISTANCE: f32 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_END_THERM_PULL_UP_RESISTANCE")]
+            #[const_env::env_item("HOT_END_THERM_PULL_UP_RESISTANCE")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32 = todo!("not implemented");
         }
     }
     cfg_if::cfg_if! {
         if #[cfg(feature="with-hot-bed")] {
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_MV")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_MV")]
             const HOT_BED_ADC_V_REF_DEFAULT_MV: u16 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
+            #[const_env::env_item("HOT_BED_ADC_V_REF_DEFAULT_SAMPLE")]
             const HOT_BED_ADC_V_REF_DEFAULT_SAMPLE: u16 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_BED_THERM_BETA")]
+            #[const_env::env_item("HOT_BED_THERM_BETA")]
             const HOT_BED_THERM_BETA: f32 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_BED_THERM_NOMINAL_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_NOMINAL_RESISTANCE")]
             const HOT_BED_THERM_NOMINAL_RESISTANCE: f32 = todo!("not implemented");
 
-            #[const_env::from_env("HOT_BED_THERM_PULL_UP_RESISTANCE")]
+            #[const_env::env_item("HOT_BED_THERM_PULL_UP_RESISTANCE")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32 = todo!("not implemented");
         }
     }
@@ -195,9 +198,9 @@ impl HwiContract for Contract {
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-1")] {
 
-            #[const_env::from_env("SERIAL_PORT1_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT1_BAUD_RATE")]
             const SERIAL_PORT1_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT1_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT1_RX_BUFFER_SIZE")]
             const SERIAL_PORT1_RX_BUFFER_SIZE: usize = 128;
 
             type SerialPort1Tx = types::SerialPort1TxMutexStrategy;
@@ -207,9 +210,9 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-serial-port-2")] {
-            #[const_env::from_env("SERIAL_PORT2_BAUD_RATE")]
+            #[const_env::env_item("SERIAL_PORT2_BAUD_RATE")]
             const SERIAL_PORT2_BAUD_RATE: u32 = 115200;
-            #[const_env::from_env("SERIAL_PORT2_RX_BUFFER_SIZE")]
+            #[const_env::env_item("SERIAL_PORT2_RX_BUFFER_SIZE")]
             const SERIAL_PORT2_RX_BUFFER_SIZE: usize = 512;
 
             type SerialPort2Tx = types::SerialPort2TxMutexStrategy;
@@ -219,7 +222,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-spi")] {
-            #[const_env::from_env("SPI_FREQUENCY")]
+            #[const_env::env_item("SPI_FREQUENCY")]
             const SPI_FREQUENCY: u32 = 20_000_000;
             type SpiController = types::Spi1MutexStrategyType;
         }
@@ -227,7 +230,7 @@ impl HwiContract for Contract {
 
     cfg_if::cfg_if! {
         if #[cfg(feature = "with-i2c")] {
-            #[const_env::from_env("I2C_FREQUENCY")]
+            #[const_env::env_item("I2C_FREQUENCY")]
             const I2C_FREQUENCY: u32 = 100_000;
             type I2cMotionMutexStrategy = types::I2cMutexStrategyType;
         }
@@ -379,6 +382,8 @@ impl HwiContract for Contract {
 
                 embassy_stm32::bind_interrupts!(struct SerialPort1IRQs {
                     USART2 => embassy_stm32::usart::InterruptHandler<embassy_stm32::peripherals::USART2>;
+                    DMA1_STREAM6 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH6>;
+                    DMA1_STREAM5 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH5>;
                 });
                 {
                     use embassy_stm32::interrupt::InterruptExt;
@@ -405,9 +410,9 @@ impl HwiContract for Contract {
                 let (serial_port_1_tx_device, serial_port_1_rx_device) = embassy_stm32::usart::Uart::new(
                     p.USART2,
                     p.PA3, p.PA2,
-                    SerialPort1IRQs,
                     p.DMA1_CH6,
                     p.DMA1_CH5,
+                    SerialPort1IRQs,
                     cfg,
                 ).expect("Ready").split();
                 let serial_port_1_tx = hwa::make_static_async_controller!(
@@ -430,7 +435,7 @@ impl HwiContract for Contract {
 
         #[cfg(all(feature = "with-trinamic"))]
         let trinamic_uart = {
-            todo!("Not implemented")
+            compile_error!("with-trinamic is not supported on this board")
         };
 
         cfg_if::cfg_if! {
@@ -480,13 +485,17 @@ impl HwiContract for Contract {
                     if #[cfg(feature = "with-i2c")] {
                         hwa::info!("with-i2c...");
 
+                        // embassy-stm32 0.6: the DMA channels bind their interrupts too
                         embassy_stm32::bind_interrupts!(struct I2C1Irqs {
                             I2C1_EV => embassy_stm32::i2c::EventInterruptHandler<embassy_stm32::peripherals::I2C1>;
                             I2C1_ER => embassy_stm32::i2c::ErrorInterruptHandler<embassy_stm32::peripherals::I2C1>;
+                            DMA1_STREAM1 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH1>;
+                            DMA1_STREAM0 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH0>;
                         });
 
-                        let i2c_freq = embassy_stm32::time::hz(Self::I2C_FREQUENCY);
-                        let i2c_conf = embassy_stm32::i2c::Config::default();
+                        // embassy-stm32 0.6: the frequency is part of the configuration
+                        let mut i2c_conf = embassy_stm32::i2c::Config::default();
+                        i2c_conf.frequency = embassy_stm32::time::hz(Self::I2C_FREQUENCY);
 
                         let i2c = hwa::make_static_async_controller!(
                             "I2C1",
@@ -498,10 +507,11 @@ impl HwiContract for Contract {
                                 p.PB8,
                                 // SDA
                                 p.PB9,
-                                I2C1Irqs,
+                                // TX (I2C1_TX: DMA1 stream 1, channel 0), RX (I2C1_RX: DMA1 stream 0,
+                                // channel 1). DMA1 streams 5/6 are taken by USART2
                                 p.DMA1_CH1,
                                 p.DMA1_CH0,
-                                i2c_freq,
+                                I2C1Irqs,
                                 i2c_conf,
                             )).await
                         );
@@ -517,7 +527,7 @@ impl HwiContract for Contract {
             if #[cfg(feature = "with-fan-layer")] {
                 let fan_layer_pwm = device::PwmFanLayer::new(
                     p.TIM2,
-                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(
+                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new(
                         p.PA15,
                         embassy_stm32::gpio::OutputType::PushPull,
                     )),
@@ -546,7 +556,7 @@ impl HwiContract for Contract {
                         p.TIM3,
                         None,
                         None,
-                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch3(
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new(
                             p.PC8,
                             embassy_stm32::gpio::OutputType::PushPull,
                         )),
@@ -565,7 +575,7 @@ impl HwiContract for Contract {
                     None,
                     None,
                     None,
-                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch4(p.PA11, embassy_stm32::gpio::OutputType::PushPull)),
+                    Some(embassy_stm32::timer::simple_pwm::PwmPin::new(p.PA11, embassy_stm32::gpio::OutputType::PushPull)),
                     embassy_stm32::time::hz(5_000),
                     embassy_stm32::timer::low_level::CountingMode::CenterAlignedBothInterrupts,
                 );
@@ -598,11 +608,11 @@ impl HwiContract for Contract {
                     types::HotEndHotBedPwmMutexStrategy,
                     device::HotEndHotBedPwm::new(
                         p.TIM15,
-                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch1(
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new(
                             p.PB14,
                             embassy_stm32::gpio::OutputType::PushPull,
                         )),
-                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new_ch2(
+                        Some(embassy_stm32::timer::simple_pwm::PwmPin::new(
                             p.PB15,
                             embassy_stm32::gpio::OutputType::PushPull,
                         )),
@@ -787,7 +797,8 @@ impl HwiContract for Contract {
                 interrupt::RTC_ALARM.set_priority(interrupt::Priority::P2);
 
                 let spawner = EXECUTOR_HIGH.start(interrupt::RTC_ALARM);
-                spawner.spawn(_token).map_err(|_| ())
+                spawner.spawn(_token);
+                Ok(())
             }
         }
     }

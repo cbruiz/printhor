@@ -15,8 +15,23 @@ impl Real {
         Self::from_lit(num, scale)
     }
 
+    /// Powers of ten that are exact in `f64` (`10^k = 2^k·5^k`, `5^22 < 2^53`): the same values
+    /// `powi` produces, without its loop.
+    const POW10: [F; 23] = [
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+        1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+    ];
+
+    /// `num / 10^scale`. Hot path (G-code literals, loop counters, µs → s): `scale == 0` is a
+    /// plain conversion and small scales use an exact table, bit-identical to `powi`.
     pub fn from_lit(num: i64, scale: u32) -> Self {
-        let s = F::powi(10.0, scale as i32);
+        if scale == 0 {
+            return Self(num as F);
+        }
+        let s = match Self::POW10.get(scale as usize) {
+            Some(p) => *p,
+            None => F::powi(10.0, scale as i32),
+        };
         Self((num as F) / s)
     }
 
@@ -104,8 +119,9 @@ impl Real {
         self.0.to_i64()
     }
 
+    /// Truncated integer part. Never panics: saturates out of range and NaN is 0 (as `as` does)
     pub fn int(&self) -> i64 {
-        self.0.to_i64().unwrap()
+        self.0 as i64
     }
 
     /// Radians to degrees
@@ -120,14 +136,121 @@ impl Real {
         (*self) * hwa::math::PI / hwa::make_real!(180.0)
     }
 
+    //cbrt implementation from rust libm
+    pub fn libm_cbrt(x: f64) -> f64 {
+        const B1: u32 = 715094163; /* B1 = (1023-1023/3-0.03306235651)*2**20 */
+        const B2: u32 = 696219795; /* B2 = (1023-1023/3-54/3-0.03306235651)*2**20 */
+
+        const P0: f64 = 1.87595182427177009643; /* 0x3ffe03e6, 0x0f61e692 */
+        const P1: f64 = -1.88497979543377169875; /* 0xbffe28e0, 0x92f02420 */
+        const P2: f64 = 1.621429720105354466140; /* 0x3ff9f160, 0x4a49d6c2 */
+        const P3: f64 = -0.758397934778766047437; /* 0xbfe844cb, 0xbee751d9 */
+        const P4: f64 = 0.145996192886612446982; /* 0x3fc2b000, 0xd4e4edd7 */
+
+        let x1p54 = f64::from_bits(0x4350000000000000); // 0x1p54 === 2 ^ 54
+
+        let mut ui: u64 = x.to_bits();
+        let mut r: f64;
+        let s: f64;
+        let mut t: f64;
+        let w: f64;
+        let mut hx: u32 = (ui >> 32) as u32 & 0x7fffffff;
+
+        if hx >= 0x7ff00000 {
+            /* cbrt(NaN,INF) is itself */
+            return x + x;
+        }
+
+        /*
+         * Rough cbrt to 5 bits:
+         *    cbrt(2**e*(1+m) ~= 2**(e/3)*(1+(e%3+m)/3)
+         * where e is integral and >= 0, m is real and in [0, 1), and "/" and
+         * "%" are integer division and modulus with rounding towards minus
+         * infinity.  The RHS is always >= the LHS and has a maximum relative
+         * error of about 1 in 16.  Adding a bias of -0.03306235651 to the
+         * (e%3+m)/3 term reduces the error to about 1 in 32. With the IEEE
+         * floating point representation, for finite positive normal values,
+         * ordinary integer divison of the value in bits magically gives
+         * almost exactly the RHS of the above provided we first subtract the
+         * exponent bias (1023 for doubles) and later add it back.  We do the
+         * subtraction virtually to keep e >= 0 so that ordinary integer
+         * division rounds towards minus infinity; this is also efficient.
+         */
+        if hx < 0x00100000 {
+            /* zero or subnormal? */
+            ui = (x * x1p54).to_bits();
+            hx = (ui >> 32) as u32 & 0x7fffffff;
+            if hx == 0 {
+                return x; /* cbrt(0) is itself */
+            }
+            hx = hx / 3 + B2;
+        } else {
+            hx = hx / 3 + B1;
+        }
+        ui &= 1 << 63;
+        ui |= (hx as u64) << 32;
+        t = f64::from_bits(ui);
+
+        /*
+         * New cbrt to 23 bits:
+         *    cbrt(x) = t*cbrt(x/t**3) ~= t*P(t**3/x)
+         * where P(r) is a polynomial of degree 4 that approximates 1/cbrt(r)
+         * to within 2**-23.5 when |r - 1| < 1/10.  The rough approximation
+         * has produced t such than |t/cbrt(x) - 1| ~< 1/32, and cubing this
+         * gives us bounds for r = t**3/x.
+         *
+         * Try to optimize for parallel evaluation as in __tanf.c.
+         */
+        r = (t * t) * (t / x);
+        t = t * ((P0 + r * (P1 + r * P2)) + ((r * r) * r) * (P3 + r * P4));
+
+        /*
+         * Round t away from zero to 23 bits (sloppily except for ensuring that
+         * the result is larger in magnitude than cbrt(x) but not much more than
+         * 2 23-bit ulps larger).  With rounding towards zero, the error bound
+         * would be ~5/6 instead of ~4/6.  With a maximum error of 2 23-bit ulps
+         * in the rounded t, the infinite-precision error in the Newton
+         * approximation barely affects third digit in the final error
+         * 0.667; the error in the rounded t can be up to about 3 23-bit ulps
+         * before the final error is larger than 0.667 ulps.
+         */
+        ui = t.to_bits();
+        ui = (ui + 0x80000000) & 0xffffffffc0000000;
+        t = f64::from_bits(ui);
+
+        /* one step Newton iteration to 53 bits with error < 0.667 ulps */
+        s = t * t; /* t*t is exact */
+        r = x / s; /* error <= 0.5 ulps; |r| < |t| */
+        w = t + t; /* t+t is exact */
+        r = (r - t) / (w + r); /* r-t is exact; w+r ~= 3*t */
+        t = t + t * r; /* error <= 0.5 + 0.5/3 + epsilon */
+        t
+    }
+
+    /// Computes the cube root of the argument.
+    pub fn cbrt(self) -> Self {
+        let r = Real::from_inner(Real::libm_cbrt(self.0));
+        r
+    }
+
     pub fn sqrt(self) -> Option<Self> {
         if self < math::ZERO {
             None
         } else if self == math::ZERO {
             Some(math::ZERO)
         } else {
-            // The famous inverse square root approximation of 'ID Software'
-            let r = math::ONE / Real::from_inner(Self::quake_isqrt(self.inner()));
+            // y ≈ 1/sqrt(x). See `quake_isqrt` for the convergence analysis.
+            // sqrt(x) = x·y (no division) plus a division-free Markstein/Heron correction.
+            // Subnormals defeat the exponent-based seed: scale them by an even power of two
+            // (exact) and undo it on the result (sqrt(x·4^k) = sqrt(x)·2^k)
+            let (x, unscale) = if self.0 < f64::MIN_POSITIVE {
+                (self.0 * 18014398509481984.0f64, 1.0 / 134217728.0f64)
+            } else {
+                (self.0, 1.0)
+            };
+            let y = Self::quake_isqrt(x);
+            let r0 = x * y;
+            let r = Real::from_inner((r0 + 0.5 * y * (x - r0 * r0)) * unscale);
             if self < math::EPSILON {
                 hwa::trace!("Very small sqrt calculation: sqrt({:?}) = {:?} ", self.0, r);
             }
@@ -135,11 +258,18 @@ impl Real {
         }
     }
 
+    /// Fast inverse square root with Newton refinement.
+    ///
+    /// The magic-constant seed has a relative error ≈ 3.4e-2 and every Newton step squares it
+    /// (e_{k+1} ≈ 1.5·e_k²): 1.7e-3 → 4.5e-6 → 3e-11 → 1.4e-21.
+    /// **Four** iterations are therefore required to reach f64 precision (ε ≈ 2.2e-16);
+    /// with only three the result was limited to ~3e-11 relative error.
     fn quake_isqrt(number: f64) -> f64 {
         let xhalf = number * 0.5;
         let mut y = f64::from_bits(
             0x5fe6ec85e7de30da_i64.wrapping_sub(number.to_bits() as i64 >> 1) as u64,
         );
+        y = y * (1.5 - xhalf * y * y);
         y = y * (1.5 - xhalf * y * y);
         y = y * (1.5 - xhalf * y * y);
         y = y * (1.5 - xhalf * y * y);
@@ -160,6 +290,10 @@ impl Real {
 
     /// Computes the four quadrant arctangent of self (y) and other (x) in radians.
     pub fn atan2(self, other: Real) -> Self {
+        if self.0 == 0.0 && other.0 == 0.0 {
+            // micromath computes 0/0 at the origin. 0 by convention
+            return Real(0.0);
+        }
         Real(
             micromath::F32(self.0 as f32)
                 .atan2(micromath::F32(other.0 as f32))
@@ -169,7 +303,9 @@ impl Real {
 
     /// Computes the arccosine of a number. Return value is in radians in the range [0, pi] or NaN if the number is outside the range [-1, 1].
     pub fn acos(self) -> Self {
-        Real(self.0.acos())
+        // micromath (f32), like the other transcendental functions of this backend:
+        // `f64::acos` is not available in `core`, so `self.0.acos()` broke the no_std f64 build.
+        Real(<f32 as micromath::F32Ext>::acos(self.0 as f32) as f64)
     }
 
     #[inline]
@@ -329,7 +465,8 @@ impl core::cmp::Ord for Real {
         Self: Sized,
         Self: PartialOrd,
     {
-        Real(self.0.clamp(min.0, max.0))
+        // Not f32::clamp: its (formatted) assert links core's float formatting
+        Real(self.0.max(min.0).min(max.0))
     }
 }
 

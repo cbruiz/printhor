@@ -2,6 +2,13 @@
 name = "printhor-hwa-common-macros"
 version = "0.0.4"
 edition = "2024"
+authors = ["Carlos Barrales Ruiz <cbruiz@gmail.com>"]
+description = "Printhor hardware abstraction layer: procedural macros"
+repository = "https://github.com/cbruiz/printhor"
+keywords = ["hardware", "abstraction", "macros", "printhor"]
+categories = ["development-tools::procedural-macro-helpers", "embedded"]
+license.workspace = true
+documentation = "https://docs.rs/printhor-hwa-common-macros"
 
 [features]
 default = ["std"]
@@ -11,14 +18,19 @@ fixed-point-128-impl = ["printhor-hwa-common/fixed-point-128-impl"]
 std = []
 
 [dependencies]
-syn = "2.0"
+syn = { version = "3.0", features = ["full"] } # Expr::Await etc. (no longer unified from syn 2 users)
 quote = "1.0"
-proc-macro2 = "1.0"
 cfg-if = "1"
 
+# Path only (no version): `cargo publish` drops them. They depend on this crate, so with a version
+# none of the three crates could be published first
 [dev-dependencies]
-printhor-hwa-common = {version = "0", default-features = false, path = "../printhor-hwa-common"}
-printhor-hwa-utils = {version = "0", default-features = false, path = "../printhor-hwa-utils"}
+# A math backend is needed to build it (the `float-point-*` features of this crate select another one)
+printhor-hwa-common = { default-features = false, features = ["float-point-f32-impl"], path = "../printhor-hwa-common" }
+printhor-hwa-utils = { default-features = false, path = "../printhor-hwa-utils" }
 
 [lib]
 proc-macro = true
+
+[lints]
+workspace = true

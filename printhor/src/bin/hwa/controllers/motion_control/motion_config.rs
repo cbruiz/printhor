@@ -165,6 +165,21 @@ impl MotionConfig {
         );
     }
 
+    /// The probe position relative to the nozzle (world units)
+    pub fn get_probe_offset(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.probe_offset_wu)
+    }
+
+    /// Sets the probe offset (M851) of the given axis
+    pub fn update_probe_offset(&self, offset: &TVector<Real>) {
+        let mut offset = *offset;
+        offset.set_coord(CoordSel::motion_relevant_axis().complement(), None);
+        self.cfg.apply_mut(|m| {
+            m.probe_offset_wu
+                .assign_if_set(CoordSel::motion_relevant_axis(), &offset);
+        });
+    }
+
     pub fn set_probe_offset(&self, mut offset: TVector<Real>) {
         offset.set_coord(CoordSel::motion_relevant_axis().complement(), None);
         self.cfg.apply_mut(|m| m.probe_offset_wu = offset);
@@ -173,6 +188,127 @@ impl MotionConfig {
             offset,
             Contract::WORLD_UNIT_MAGNITUDE,
         );
+    }
+
+    /// Sets the home offsets (M206) of the given axis (E is ignored)
+    pub fn update_home_offset(&self, offset: &TVector<Real>) {
+        let mut offset = *offset;
+        offset.set_coord(CoordSel::motion_relevant_axis().complement(), None);
+        self.cfg.apply_mut(|m| {
+            m.home_offset_wu
+                .assign_if_set(CoordSel::motion_relevant_axis(), &offset);
+        });
+    }
+
+    /// The home offsets (M206) in world units
+    pub fn get_home_offset(&self) -> TVector<Real> {
+        self.cfg.apply(|m| m.home_offset_wu)
+    }
+
+    /// The logical position of the machine right after homing: the homing point shifted by the
+    /// home offsets (M206)
+    pub fn get_logical_homing_point(&self) -> TVector<Real> {
+        let offset = self.get_home_offset();
+        let mut point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
+        point.apply_values(|coord, v| Some(*v + offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
+        point
+    }
+
+    /// The native (machine) position right after the homing (`G28`), as Marlin with
+    /// `Z_SAFE_HOMING`: X and Y at the safe homing point (the bed center, minus the probe XY
+    /// offset so that the probe is over it, within the machine bounds), and Z
+    /// [homing_z_clearance](hwa::drivers::motion_driver::homing_z_clearance) above the plane where
+    /// the Z end-stop (or the probe) triggered. With the probe the nozzle is `-probe_offset.z`
+    /// above the bed there (Marlin's convention: a negative offset is a probe below the nozzle),
+    /// so the bed plane is at the Z of the homing point (Z0 when it is 0, Marlin's `Z_MIN_POS`).
+    pub fn get_native_post_homing_position(&self) -> TVector<Real> {
+        #[allow(unused_mut)]
+        let mut point = Contract::DEFAULT_WORLD_HOMING_POINT_WU;
+        #[allow(unused)]
+        let bounds = self.get_machine_bounds();
+        #[allow(unused)]
+        let probe = self.get_probe_offset();
+        #[allow(unused)]
+        let probe_offset = |coord: CoordSel| {
+            if cfg!(feature = "with-probe") {
+                probe.get_coord(coord).unwrap_or(hwa::math::ZERO)
+            } else {
+                hwa::math::ZERO
+            }
+        };
+        // A Cartesian head parks over the centre of the bed, a clearance above it. Not a joint space
+        // machine (anthropomorphic legs): X/Y/Z are the coordinates of its first leg, whose homing
+        // point is the home pose, as for every other leg
+        #[cfg(all(
+            any(feature = "with-x-axis", feature = "with-y-axis"),
+            not(feature = "with-motion-anthropomorphic-kinematics")
+        ))]
+        for coord in [CoordSel::X, CoordSel::Y] {
+            if let (Some(home), Some(size)) = (point.get_coord(coord), bounds.get_coord(coord)) {
+                let safe = (size * hwa::math::HALF - probe_offset(coord))
+                    .max(hwa::math::ZERO)
+                    .min(size);
+                point.set_coord(coord, Some(home + safe));
+            }
+        }
+        #[cfg(all(feature = "with-z-axis", not(feature = "with-motion-anthropomorphic-kinematics")))]
+        if let Some(z) = point.z {
+            point.z = Some(
+                z - probe_offset(CoordSel::Z) + hwa::drivers::motion_driver::homing_z_clearance(),
+            );
+        }
+        point
+    }
+
+    /// The travel of the axes in logical coordinates `(min, max)`: from the end-stop (the homing
+    /// point) to the end of the frame (the machine bounds), shifted by the home offsets (M206), as
+    /// Marlin's soft end-stops. Only the axes with both a homing point and a size are set.
+    pub fn get_logical_travel(&self) -> (TVector<Real>, TVector<Real>) {
+        let offset = self.get_home_offset();
+        let size = self.get_machine_bounds();
+        let (mut min, mut max) = (TVector::new(), TVector::new());
+        Contract::DEFAULT_WORLD_HOMING_POINT_WU.foreach_values(|coord, home| {
+            if let Some(len) = size.get_coord(coord) {
+                let low = *home + offset.get_coord(coord).unwrap_or(hwa::math::ZERO);
+                min.set_coord(coord, Some(low));
+                max.set_coord(coord, Some(low + len));
+            }
+        });
+        (min, max)
+    }
+
+    /// The logical position of a native (machine) position: shifted by the home offsets (M206)
+    pub fn logical_from_native(&self, native: &TVector<Real>) -> TVector<Real> {
+        let offset = self.get_home_offset();
+        let mut point = *native;
+        point.apply_values(|coord, v| Some(*v + offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
+        point
+    }
+
+    /// The native (machine) position of a logical position: the inverse of
+    /// [Self::logical_from_native]
+    pub fn native_from_logical(&self, logical: &TVector<Real>) -> TVector<Real> {
+        let offset = self.get_home_offset();
+        let mut point = *logical;
+        point.apply_values(|coord, v| Some(*v - offset.get_coord(coord).unwrap_or(hwa::math::ZERO)));
+        point
+    }
+
+    /// The logical position right after the homing (`G28`): see
+    /// [Self::get_native_post_homing_position]
+    pub fn get_post_homing_position(&self) -> TVector<Real> {
+        self.logical_from_native(&self.get_native_post_homing_position())
+    }
+
+    /// The logical Z the nozzle is at when the probe (or the Z end-stop) triggers on the bed plane
+    /// of the homing: `-probe_offset.z` above it
+    pub fn get_logical_trigger_z(&self) -> Real {
+        let z = self.get_logical_homing_point().z.unwrap_or(hwa::math::ZERO);
+        if cfg!(feature = "with-probe") {
+            z - self.get_probe_offset().z.unwrap_or(hwa::math::ZERO)
+        } else {
+            z
+        }
     }
 
     pub fn get_units_per_space_magnitude(&self) -> TVector<Real> {
@@ -192,12 +328,120 @@ impl MotionConfig {
         self.get_units_per_space_magnitude() * self.get_micro_steps_as_vector()
     }
 
-    fn get_flow_rate(&self) -> u8 {
+    pub fn get_flow_rate(&self) -> u8 {
         self.cfg.apply(|m| m.flow_rate)
     }
 
-    fn get_speed_rate(&self) -> u8 {
+    pub fn get_speed_rate(&self) -> u8 {
         self.cfg.apply(|m| m.speed_rate)
+    }
+
+    /// Updates the max speed (space units/s) only for the given coordinates (M203)
+    pub fn update_max_speed(&self, speed: &TVector<Real>) {
+        self.cfg.apply_mut(|m| {
+            m.max_speed_su.assign_if_set(CoordSel::all_axis(), speed);
+        });
+    }
+
+    /// Updates the max acceleration (space units/s²) only for the given coordinates (M201)
+    pub fn update_max_accel(&self, accel: &TVector<Real>) {
+        self.cfg.apply_mut(|m| {
+            m.max_accel_su.assign_if_set(CoordSel::all_axis(), accel);
+        });
+    }
+
+    /// Updates the steps per space unit only for the given coordinates (M92).
+    ///
+    /// The value includes micro-stepping, so the full-step scale is derived from the current micro-steps.
+    pub fn update_steps_per_space_unit(&self, steps: &TVector<Real>) {
+        let micro_steps = self.get_micro_steps_as_vector();
+        let units = steps.map(|coord, value| match value {
+            Some(v) if v.is_defined_positive() => match micro_steps.get_coord(coord) {
+                Some(ms) if ms.is_defined_positive() => Some(*v / ms),
+                _ => None,
+            },
+            _ => None,
+        });
+        self.cfg.apply_mut(|m| {
+            m.units_per_space_magnitude
+                .assign_if_set(CoordSel::all_axis(), &units);
+        });
+        self.compute_min_speed();
+    }
+
+    /// Sets the acceleration limit (space units/s² along the path) for extruding moves (M204 P/S)
+    pub fn set_print_accel(&self, accel: Option<Real>) {
+        self.cfg.apply_mut(|m| m.print_accel_su = accel);
+    }
+
+    /// Sets the acceleration limit (space units/s² along the path) for travel moves (M204 T/S)
+    pub fn set_travel_accel(&self, accel: Option<Real>) {
+        self.cfg.apply_mut(|m| m.travel_accel_su = accel);
+    }
+
+    pub fn get_print_accel(&self) -> Option<Real> {
+        self.cfg.apply(|m| m.print_accel_su)
+    }
+
+    pub fn get_travel_accel(&self) -> Option<Real> {
+        self.cfg.apply(|m| m.travel_accel_su)
+    }
+
+    /// Firmware retraction settings (M207/M208)
+    pub fn get_retraction(&self) -> RetractionConfig {
+        self.cfg.apply(|m| m.retraction)
+    }
+
+    pub fn set_retraction(&self, retraction: RetractionConfig) {
+        self.cfg.apply_mut(|m| m.retraction = retraction);
+    }
+
+    /// Volumetric extrusion settings (M200)
+    #[cfg(feature = "with-e-axis")]
+    pub fn get_volumetric(&self) -> VolumetricConfig {
+        self.cfg.apply(|m| m.volumetric)
+    }
+
+    #[cfg(feature = "with-e-axis")]
+    pub fn set_volumetric(&self, volumetric: VolumetricConfig) {
+        self.cfg.apply_mut(|m| m.volumetric = volumetric);
+    }
+
+    /// The factor from the E words of the moves to the filament length to feed: the M221 flow
+    /// percentage and, with volumetric extrusion (M200), the inverse of the filament
+    /// cross-section (E words are volumes). Marlin's `e_factor`
+    /// The pressure advance factor `K` (seconds): the extruder leads its nominal position by `K`
+    /// times its speed (`M900 K`). Zero disables it
+    #[cfg(feature = "with-pressure-advance")]
+    pub fn get_pressure_advance(&self) -> Real {
+        self.cfg.apply(|m| m.pressure_advance_k)
+    }
+
+    #[cfg(feature = "with-pressure-advance")]
+    pub fn set_pressure_advance(&self, k: Real) {
+        self.cfg.apply_mut(|m| m.pressure_advance_k = k);
+    }
+
+    /// The input shapers of X and Y (`M593`), applied from the next stop
+    #[cfg(feature = "with-input-shaping")]
+    pub fn get_input_shaping(&self) -> [crate::motion::ShaperConfig; 2] {
+        self.cfg.apply(|m| m.input_shaping)
+    }
+
+    #[cfg(feature = "with-input-shaping")]
+    pub fn set_input_shaping(&self, shapers: [crate::motion::ShaperConfig; 2]) {
+        self.cfg.apply_mut(|m| m.input_shaping = shapers);
+    }
+
+    pub fn get_e_factor(&self) -> Real {
+        #[cfg(feature = "with-e-axis")]
+        {
+            self.get_flow_rate_as_real() * self.get_volumetric().volumetric_multiplier()
+        }
+        #[cfg(not(feature = "with-e-axis"))]
+        {
+            self.get_flow_rate_as_real()
+        }
     }
 
     pub fn get_flow_rate_as_real(&self) -> Real {
@@ -210,6 +454,22 @@ impl MotionConfig {
 
     pub fn get_default_travel_speed(&self) -> Real {
         self.cfg.apply(|m| m.default_travel_speed)
+    }
+
+    /// Largest instantaneous velocity change at a junction (`space_units`/s, `0`: unlimited),
+    /// see [Contract::DEFAULT_CORNER_SPEED_CHANGE_PS]
+    pub fn set_corner_speed_change(&self, dv: Real) {
+        let dv = dv.max(hwa::math::ZERO);
+        self.cfg.apply_mut(|m| m.corner_speed_change_su_s = dv);
+        hwa::info!(
+            "[MotionConfig:UserConf] Corner speed change set to {:?} {}/s",
+            dv,
+            Contract::SPACE_UNIT_MAGNITUDE
+        );
+    }
+
+    pub fn get_corner_speed_change(&self) -> Real {
+        self.cfg.apply(|m| m.corner_speed_change_su_s)
     }
 
     pub fn get_min_speed(&self) -> TVector<Real> {
@@ -234,6 +494,40 @@ impl MotionConfig {
 
     pub fn get_machine_bounds(&self) -> TVector<Real> {
         self.cfg.apply(|m| m.world_size_wu)
+    }
+
+    /// Applies the machine defaults from the [Contract] (boot and M502)
+    pub fn apply_defaults(&self) {
+        self.set_max_speed(Contract::DEFAULT_MAX_SPEED_PS);
+        self.set_max_accel(Contract::DEFAULT_MAX_ACCEL_PS);
+        self.set_max_jerk(Contract::DEFAULT_MAX_JERK_PS);
+        self.set_default_travel_speed(Contract::DEFAULT_TRAVEL_SPEED_PS);
+        self.set_corner_speed_change(Contract::DEFAULT_CORNER_SPEED_CHANGE_PS);
+        self.set_space_units_per_world_unit(Contract::DEFAULT_UNITS_PER_WU);
+        self.set_micro_steps_per_axis(Contract::DEFAULT_MICRO_STEPS_PER_AXIS);
+        self.set_world_center(Contract::DEFAULT_WORLD_CENTER_WU);
+        self.set_world_size(Contract::DEFAULT_WORLD_SIZE_WU);
+        self.set_nozzle_offset(TVector::new_with_const_value(hwa::math::ZERO));
+        self.set_probe_offset(Contract::DEFAULT_PROBE_OFFSET_WU);
+        self.cfg.apply_mut(|m| {
+            m.home_offset_wu = TVector::new_with_coord(CoordSel::motion_relevant_axis(), Some(hwa::math::ZERO))
+        });
+        self.set_flow_rate(100);
+        self.set_speed_rate(100);
+        self.set_print_accel(None);
+        self.set_travel_accel(None);
+        self.set_retraction(RetractionConfig::defaults());
+        #[cfg(feature = "with-e-axis")]
+        self.set_volumetric(VolumetricConfig::defaults());
+        #[cfg(feature = "with-pressure-advance")]
+        self.set_pressure_advance(Real::from_f32(DEFAULT_PRESSURE_ADVANCE_K));
+        #[cfg(feature = "with-input-shaping")]
+        self.set_input_shaping([
+            default_shaper(DEFAULT_INPUT_SHAPING_FREQ_X, DEFAULT_INPUT_SHAPING_DAMPING_X),
+            default_shaper(DEFAULT_INPUT_SHAPING_FREQ_Y, DEFAULT_INPUT_SHAPING_DAMPING_Y),
+        ]);
+        // Compute min speed. Really useful because of discretion effects
+        self.compute_min_speed();
     }
 
     pub fn compute_min_speed(&self) {
@@ -279,7 +573,7 @@ impl MotionConfig {
         );
         if hwa::Contract::CLAMP_MIN_SPEED {
             hwa::info!(
-                "[MotionConfig:ComputedConf] Min speed (1 step at half `SegmentSampling`) is space: {:?} {}/s",
+                "[MotionConfig:ComputedConf] Min speed (1 step at center of `SegmentSampling`) is space: {:?} {}/s",
                 v_min,
                 Contract::SPACE_UNIT_MAGNITUDE
             );
@@ -297,6 +591,27 @@ impl MotionConfig {
         } else {
             hwa::info!(
                 "[MotionConfig:ComputedConf] Max feed rate (1 step per `MicroSegmentInterpolation`) is UNSET"
+            );
+        }
+
+        // The step plan executor does at most one step per tick and axis: whatever the planner
+        // plans faster is executed at that speed (the motion takes longer than planned)
+        let v_clock = one_step_space_displacement / dt;
+        let max_speed = self.get_max_speed();
+        let mut _clock_limited = false;
+        max_speed.foreach_values(|coord, v| {
+            if let Some(limit) = v_clock.get_coord(coord) {
+                _clock_limited |= limit < *v;
+            }
+        });
+        if _clock_limited {
+            hwa::warn!(
+                "[MotionConfig:ComputedConf] The step planner clock ({} Hz, one step per tick) limits the speed to {:?} {}/s, below the max speed {:?} {}/s: raise STEP_PLANNER_CLOCK_FREQUENCY",
+                Contract::STEP_PLANNER_CLOCK_FREQUENCY,
+                v_clock,
+                Contract::SPACE_UNIT_MAGNITUDE,
+                max_speed,
+                Contract::SPACE_UNIT_MAGNITUDE
             );
         }
 
@@ -352,6 +667,9 @@ pub struct MotionConfigContent {
     /// The default travel speed in `space_units`/s.
     default_travel_speed: Real,
 
+    /// Largest instantaneous velocity change at a junction in `space_units`/s (`0`: unlimited)
+    corner_speed_change_su_s: Real,
+
     /// The scale of `space_unit` by `space_magnitude`, not considering micro-stepping
     units_per_space_magnitude: TVector<Real>,
     /// The micro-stepping scale for each axis
@@ -366,11 +684,176 @@ pub struct MotionConfigContent {
     nozzle_offset_wu: TVector<Real>,
     /// The machine's probe offset respect to homing end-stops or logical 0
     probe_offset_wu: TVector<Real>,
+    /// The home offsets (M206): logical position = native position + offset
+    home_offset_wu: TVector<Real>,
 
     /// The flow rate for the motion, represented as a percentage.
     flow_rate: u8,
     /// The speed rate for the motion, represented as a percentage.
     pub speed_rate: u8,
+
+    /// Acceleration limit along the path for extruding moves (M204 P)
+    print_accel_su: Option<Real>,
+    /// Acceleration limit along the path for travel moves (M204 T)
+    travel_accel_su: Option<Real>,
+
+    /// Firmware retraction settings
+    retraction: RetractionConfig,
+
+    /// Volumetric extrusion settings (M200)
+    #[cfg(feature = "with-e-axis")]
+    volumetric: VolumetricConfig,
+
+    #[cfg(feature = "with-pressure-advance")]
+    pressure_advance_k: Real,
+
+    #[cfg(feature = "with-input-shaping")]
+    input_shaping: [crate::motion::ShaperConfig; 2],
+}
+
+/// Firmware retraction settings (G10/G11, M207/M208)
+#[derive(Clone, Copy, Debug)]
+pub struct RetractionConfig {
+    /// Retract length in world units
+    pub length: Real,
+    /// Retract feed rate in world units/s
+    pub feed_rate: Real,
+    /// Z lift on retraction in world units
+    pub z_hop: Real,
+    /// Extra length added on recover in world units
+    pub recover_extra: Real,
+    /// Recover feed rate in world units/s
+    pub recover_feed_rate: Real,
+}
+
+impl RetractionConfig {
+    pub const fn new() -> Self {
+        Self {
+            length: hwa::math::ZERO,
+            feed_rate: hwa::math::ONE,
+            z_hop: hwa::math::ZERO,
+            recover_extra: hwa::math::ZERO,
+            recover_feed_rate: hwa::math::ONE,
+        }
+    }
+
+    /// Marlin-like defaults: 3 mm at 45 mm/s, recover at 25 mm/s
+    pub fn defaults() -> Self {
+        Self {
+            length: Real::from_lit(3, 0),
+            feed_rate: Real::from_lit(45, 0),
+            z_hop: hwa::math::ZERO,
+            recover_extra: hwa::math::ZERO,
+            recover_feed_rate: Real::from_lit(25, 0),
+        }
+    }
+}
+
+/// Nominal filament diameter (world units) of the volumetric extrusion until `M200 D` sets it
+/// (Marlin's `DEFAULT_NOMINAL_FILAMENT_DIA`). Overridable at build time
+#[cfg(feature = "with-e-axis")]
+#[const_env::env_item("DEFAULT_FILAMENT_DIAMETER_MM")]
+const DEFAULT_FILAMENT_DIAMETER_MM: f32 = 1.75;
+
+/// The default pressure advance factor `K` (seconds, `M900 K`, restored by `M502`): off
+#[cfg(feature = "with-pressure-advance")]
+#[const_env::env_item("DEFAULT_PRESSURE_ADVANCE_K")]
+const DEFAULT_PRESSURE_ADVANCE_K: f32 = 0.0;
+
+/// The default input shapers (`M593`, restored by `M502`): the one `s_plot` tunes on `pen-test.gcode`
+/// with the motion of the SKR Mini E3 V3 (`skr_mini_e3_v3_fdm`), on its frame model (Ender-3 like:
+/// 40 Hz, damping 0.15, Marlin's defaults): resonance identified at 40.01 Hz and damping 0.150, ZVD
+/// chosen by Klipper's score (0.7% of vibration left over ±10% of the frequency, ZV 7.4%). Marlin's
+/// are ZV, 40 Hz, 0.15. A frequency of 0 disables the shaper of that axis; the type is `M593 T`
+/// (0 ZV, 1 EI, 2 MZV, 3 ZVD)
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_TYPE")]
+const DEFAULT_INPUT_SHAPING_TYPE: u8 = 3;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_FREQ_X")]
+const DEFAULT_INPUT_SHAPING_FREQ_X: f32 = 40.01;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_FREQ_Y")]
+const DEFAULT_INPUT_SHAPING_FREQ_Y: f32 = 40.01;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_DAMPING_X")]
+const DEFAULT_INPUT_SHAPING_DAMPING_X: f32 = 0.15;
+#[cfg(feature = "with-input-shaping")]
+#[const_env::env_item("DEFAULT_INPUT_SHAPING_DAMPING_Y")]
+const DEFAULT_INPUT_SHAPING_DAMPING_Y: f32 = 0.15;
+
+#[cfg(feature = "with-input-shaping")]
+fn default_shaper(frequency: f32, damping: f32) -> crate::motion::ShaperConfig {
+    crate::motion::ShaperConfig {
+        kind: crate::motion::ShaperKind::from_index(DEFAULT_INPUT_SHAPING_TYPE as i32)
+            .unwrap_or(crate::motion::ShaperKind::Zv),
+        frequency: Real::from_f32(frequency),
+        damping: Real::from_f32(damping),
+    }
+}
+
+/// Volumetric extrusion settings (M200), as Marlin's `VOLUMETRIC_EXTRUSION`. Disabled by
+/// default: the E words are filament lengths.
+///
+/// Enabled, the E words are volumes (world units³) and the extruder feeds `E / A` of filament,
+/// `A` being the cross-section of the filament (the M221 flow percentage still applies). The
+/// logical extruder position (G92 E, M114) stays in the units of the E words. The firmware
+/// retraction (G10/G11) is a filament length in both modes.
+#[cfg(feature = "with-e-axis")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct VolumetricConfig {
+    /// The E words are volumes
+    pub enabled: bool,
+    /// Filament diameter (world units). Zero: no conversion, even when enabled
+    pub diameter: Real,
+    /// Max volumetric flow (world units³/s) of the extruding moves, `0`: unlimited (Marlin's
+    /// `VOLUMETRIC_EXTRUDER_LIMIT`, `M200 L`). It applies in both modes
+    pub limit: Real,
+}
+
+#[cfg(feature = "with-e-axis")]
+impl VolumetricConfig {
+    /// Disabled, without a diameter and no flow limit (until [Self::defaults] are applied)
+    pub const fn new() -> Self {
+        Self {
+            enabled: false,
+            diameter: hwa::math::ZERO,
+            limit: hwa::math::ZERO,
+        }
+    }
+
+    /// Marlin's defaults: disabled, nominal diameter and no flow limit
+    pub fn defaults() -> Self {
+        Self {
+            diameter: Real::from_f32(DEFAULT_FILAMENT_DIAMETER_MM),
+            ..Self::new()
+        }
+    }
+
+    /// Cross-section of the filament (world units²), `None` without a diameter
+    pub fn area(&self) -> Option<Real> {
+        self.diameter.is_defined_positive().then(|| {
+            let radius = self.diameter * hwa::math::HALF;
+            hwa::math::PI * radius * radius
+        })
+    }
+
+    /// From the E words to filament length: `1 / A` when enabled (with a diameter), `1` otherwise
+    pub fn volumetric_multiplier(&self) -> Real {
+        match (self.enabled, self.area()) {
+            (true, Some(area)) => area.recip(),
+            _ => hwa::math::ONE,
+        }
+    }
+
+    /// The max filament feed rate (world units/s) that the volumetric flow limit allows, `None`
+    /// when unlimited
+    pub fn max_filament_speed(&self) -> Option<Real> {
+        match (self.limit.is_defined_positive(), self.area()) {
+            (true, Some(area)) => Some(self.limit / area),
+            _ => None,
+        }
+    }
 }
 
 impl MotionConfigContent {
@@ -386,6 +869,7 @@ impl MotionConfigContent {
             max_jerk_su: TVector::new(),
 
             default_travel_speed: hwa::math::ONE,
+            corner_speed_change_su_s: hwa::math::ZERO,
             units_per_space_magnitude: TVector::new_with_const_value(hwa::math::ONE),
             micro_steps_per_axis: TVector::new_with_const_value(1),
             world_center_wu: TVector::new_with_const_value(hwa::math::ZERO),
@@ -393,9 +877,24 @@ impl MotionConfigContent {
 
             nozzle_offset_wu: TVector::new_with_const_value(hwa::math::ZERO),
             probe_offset_wu: TVector::new_with_const_value(hwa::math::ZERO),
+            home_offset_wu: TVector::new_with_coord(CoordSel::motion_relevant_axis(), Some(hwa::math::ZERO)),
 
             flow_rate: 100,
             speed_rate: 100,
+
+            print_accel_su: None,
+            travel_accel_su: None,
+
+            retraction: RetractionConfig::new(),
+
+            #[cfg(feature = "with-e-axis")]
+            volumetric: VolumetricConfig::new(),
+
+            #[cfg(feature = "with-pressure-advance")]
+            pressure_advance_k: hwa::math::ZERO,
+
+            #[cfg(feature = "with-input-shaping")]
+            input_shaping: [crate::motion::ShaperConfig::disabled(); 2],
         }
     }
 }

@@ -56,9 +56,9 @@ cfg_if::cfg_if! {
                 self.set_enabled(hwa::CoordSel::all_axis(), false)
             }
 
-            fn disable(&mut self, _channels: hwa::CoordSel)
+            fn disable(&mut self, channels: hwa::CoordSel)
             {
-                self.set_enabled(hwa::CoordSel::all_axis(), false)
+                self.set_enabled(channels, false)
             }
 
             fn set_enabled(&mut self, _channels: hwa::CoordSel, _enabled: bool);
@@ -127,8 +127,57 @@ cfg_if::cfg_if! {
         pub use embedded_sdmmc::BlockDevice as SDBlockDevice;
 
         pub trait AsyncSDBlockDevice: embedded_sdmmc::BlockDevice {
-            fn do_retain(&self) -> impl core::future::Future<Output = Result<(), ()>>;
+            /// What [Self::do_lock] yields and [Self::do_hold] keeps (e.g. the guard of the SPI bus)
+            type Lock;
+            /// Retains the device (e.g. its SPI bus) in two steps: since embedded-sdmmc 0.10 the
+            /// device is only reachable inside `VolumeManager::device(|d| ..)`, so this future
+            /// must not borrow `self` (it is awaited after that borrow ends), and the lock it
+            /// yields is then kept by the device itself with [Self::do_hold].
+            fn do_lock(&self) -> impl core::future::Future<Output = Option<Self::Lock>> + use<Self>;
+            /// Keeps the lock taken by [Self::do_lock] until [Self::do_release]
+            fn do_hold(&self, lock: Self::Lock) -> Result<(), ()>;
             fn do_release(&self) -> Result<(), ()>;
+            /// Forgets the card state, so that the next access initializes the card again (a card
+            /// inserted, replaced or not ready when the firmware started). No-op by default.
+            fn reset_card(&mut self) {}
         }
     }
 }
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        /// Errors of an [AsyncEeprom] device
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+        pub enum EepromError {
+            /// The access goes beyond the capacity of the device
+            OutOfBounds,
+            /// The device did not answer (or answered with an error)
+            Bus,
+            /// The device did not finish an internal write cycle in time
+            Timeout,
+        }
+
+        /// A non-volatile byte-addressable memory (EEPROM or alike), used to persist the settings
+        /// (M500/M501).
+        ///
+        /// Boards with such a memory implement this trait (see [crate::eeprom::I2cEeprom24x] for
+        /// the common I2C 24Cxx chips) and export it through
+        /// [crate::HwiContract::EepromMutexStrategy]. Every operation is async: the bus transfers
+        /// and the internal write cycles never block the executor.
+        pub trait AsyncEeprom {
+            /// The capacity of the memory in bytes
+            fn capacity(&self) -> usize;
+
+            /// Reads `buffer.len()` bytes starting at `offset`
+            fn read(&mut self, offset: usize, buffer: &mut [u8]) -> impl core::future::Future<Output = Result<(), EepromError>>;
+
+            /// Writes `data` starting at `offset`. Implementations should skip the unchanged
+            /// regions to reduce the wear and the latency.
+            fn write(&mut self, offset: usize, data: &[u8]) -> impl core::future::Future<Output = Result<(), EepromError>>;
+        }
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests;

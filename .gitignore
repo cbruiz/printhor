@@ -28,3 +28,14 @@ libs/*/target
 /run*.sh
 /*.info
 /printhor/test-data
+/s_plot.csv
+/printhor/s_plot.csv
+# s-plot: the ringing analysis, and the runs without and with input shaping (with-input-shaping)
+/s_plot_vibration*.csv
+/printhor/s_plot_vibration*.csv
+/*-without-shaping.*
+/printhor/*-without-shaping.*
+/*-with-input-shaping.*
+/printhor/*-with-input-shaping.*
+/*.md
+!/README.md

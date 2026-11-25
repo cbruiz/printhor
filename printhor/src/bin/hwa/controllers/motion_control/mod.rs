@@ -8,13 +8,10 @@ mod motion_segment;
 mod motion_status;
 
 /// The module to hold the planned segment ring-buffer.
-mod motion_ring_buffer;
+pub(crate) mod motion_ring_buffer;
 
 /// The module with the motion planner logic.
 mod motion_planner;
-
-/// The module for motion interpolation.
-mod motion_interpolation;
 
 /// The module for motion timing (formally: the StepPlan generator).
 mod motion_step_plan;
@@ -25,24 +22,80 @@ mod motion_step_plan_executor;
 /// The module to drive the step pins.
 mod motion_step_actuator;
 
+/// Motion execution metrics (feature `motion-metrics`, reported by `M800`)
+pub mod motion_metrics;
+
+/// The tool actions (fans, laser/spindle, coolant) queued with the motion.
+mod tool_actions;
+
 use crate::hwa;
 pub use motion_config::*;
-pub use motion_interpolation::*;
 pub use motion_planner::*;
 pub use motion_segment::*;
 pub use motion_status::*;
 pub use motion_step_actuator::*;
 pub use motion_step_plan::*;
 pub use motion_step_plan_executor::*;
+pub use tool_actions::*;
 
 pub(in crate::hwa) use motion_ring_buffer::RingBuffer;
+
+/// What a homing (`G28`) does, decided when it is planned (see [MotionPlanner::plan_homing]):
+/// the axes it homes and where it leaves the machine.
+///
+/// `G28` alone (or with every axis) is the full homing. With some axes (Marlin's semantics, with
+/// `Z_SAFE_HOMING`): Z is raised first (never lowered), the given X/Y axes are homed and left at
+/// their end-stops, and Z (when given) is sampled at the safe homing point, where the machine is
+/// left as after the full homing (the probe over the bed center).
+#[derive(Clone, Copy, Debug)]
+pub struct HomingPlan {
+    /// The axes homed. Every homing axis for the full homing
+    pub axes: hwa::CoordSel,
+    /// The full homing: `G28` without axes, or with all of them
+    pub full: bool,
+    /// The native (machine) position before the homing: only the known coordinates
+    pub start: hwa::math::TVector<hwa::math::Real>,
+    /// The native Z to raise to before homing X and Y (never lower), when Z is known. Otherwise
+    /// it is raised `HOMING_Z_RAISE_MM` from where it is (unknown)
+    pub z_clearance: Option<hwa::math::Real>,
+    /// The native position after the homing: only the known coordinates
+    pub end: hwa::math::TVector<hwa::math::Real>,
+    /// The axes whose position comes from a homing, afterwards
+    pub homed: hwa::CoordSel,
+}
+
+impl HomingPlan {
+    /// The axes the homing finds (by their end-stop, or the probe): X, Y and Z
+    pub const fn homing_axes() -> hwa::CoordSel {
+        #[allow(unused_mut)]
+        let mut axes = hwa::CoordSel::empty();
+        #[cfg(feature = "with-x-axis")]
+        {
+            axes = axes.union(hwa::CoordSel::X);
+        }
+        #[cfg(feature = "with-y-axis")]
+        {
+            axes = axes.union(hwa::CoordSel::Y);
+        }
+        #[cfg(feature = "with-z-axis")]
+        {
+            axes = axes.union(hwa::CoordSel::Z);
+        }
+        axes
+    }
+
+    /// Whether the whole position is known afterwards (the moves are allowed)
+    pub fn position_known(&self) -> bool {
+        self.full || self.homed.contains(Self::homing_axes())
+    }
+}
 
 /// Represents a scheduled move in the motion system.
 pub enum ScheduledMove {
     /// A movement segment.
     Move(Segment, u32),
     /// A homing action.
-    Homing(u32),
+    Homing(u32, HomingPlan),
     /// A dwell action.
     Dwell(Option<u32>, u32),
     /// A set-position action.
@@ -60,6 +113,8 @@ pub enum MovType {
     Dwell(hwa::CommChannel),
     /// A set-position action with a communication channel.
     SetPosition(hwa::CommChannel),
+    /// Tool actions queued alone (see [PlanEntry::Tools]).
+    Tools(hwa::CommChannel),
 }
 
 /// Represents an entry in the motion plan.
@@ -71,16 +126,22 @@ pub enum PlanEntry {
     ///
     /// *_1: Segment* - The motion segment.
     ///
-    /// *_2: CommChannel* - The input channel requesting the move.
+    /// *_2: DeferAction* - The defer action.
     ///
-    /// *_3: bool* - Indicates if motion is deferred or not.
+    /// *_3: CommChannel* - The input channel requesting the move.
+    ///
+    /// *_4: bool* - Indicates if motion is deferred or not.
+    ///
+    /// *_5: u32* - The motion id (sequential number, for tracceability)
     PlannedMove(Segment, hwa::DeferAction, hwa::CommChannel, bool, u32),
     /// A homing action request.
     ///
     /// *_1: CommChannel* - The input channel requesting the move.
     ///
     /// *_2: bool* - Indicates if motion is deferred or not.
-    Homing(hwa::CommChannel, bool, u32),
+    ///
+    /// *_4: HomingPlan* - What the homing does.
+    Homing(hwa::CommChannel, bool, u32, HomingPlan),
     /// A Dwell action request.
     ///
     /// *_1: CommChannel* - The input channel requesting the action.
@@ -98,6 +159,15 @@ pub enum PlanEntry {
     ///
     /// *_3: bool* - Indicates if motion is deferred or not.
     SetPosition(hwa::CommChannel, Position, bool, u32),
+
+    /// Tool actions requested while the queue was empty: no motion. The actions themselves are
+    /// kept in `RingBuffer::post_tools`, as those requested after any other entry (see
+    /// `MotionPlanner::schedule_tool_action`).
+    ///
+    /// *_1: CommChannel* - The input channel requesting the action.
+    ///
+    /// *_2: u32* - The order number.
+    Tools(hwa::CommChannel, u32),
 
     /// An executing move.
     ///

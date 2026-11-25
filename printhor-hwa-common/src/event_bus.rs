@@ -7,13 +7,20 @@ use core::ops::{BitAnd, BitOr};
 use hwa::event_bus_channel::{EventBusChannelController, EventBusSubscriber};
 use printhor_hwa_utils::*;
 
-#[const_env::from_env("EVENT_BUS_NUM_SUBSCRIBERS")]
+#[const_env::env_item("EVENT_BUS_NUM_SUBSCRIBERS")]
 const EVENT_BUS_NUM_SUBSCRIBERS: usize = 6;
 
 pub type EventBusPubSubType<M> =
     embassy_sync::pubsub::PubSubChannel<M, EventFlags, 1, EVENT_BUS_NUM_SUBSCRIBERS, 1>;
-pub type EventBusPublisherType<M> =
-    embassy_sync::pubsub::Publisher<'static, M, EventFlags, 1, EVENT_BUS_NUM_SUBSCRIBERS, 1>;
+/// An immediate publisher: unlike a regular one, it is not counted, so obtaining it never fails
+pub type EventBusPublisherType<M> = embassy_sync::pubsub::ImmediatePublisher<
+    'static,
+    M,
+    EventFlags,
+    1,
+    EVENT_BUS_NUM_SUBSCRIBERS,
+    1,
+>;
 pub type EventBusSubscriberType<'a, M> =
     embassy_sync::pubsub::Subscriber<'a, M, EventFlags, 1, EVENT_BUS_NUM_SUBSCRIBERS, 1>;
 
@@ -34,6 +41,7 @@ bitflags::bitflags! {
     /// - `SYS_BOOT_FAILURE`: System boot failure.
     /// - `SYS_READY`: System is ready.
     /// - `ATX_ON`: ATX power is on.
+    /// - `TMC_OK`: The Trinamic drivers are configured (always set without `with-trinamic`).
     /// - `HOMING`: Homing operation in progress.
     /// - `MOVING`: System is moving.
     /// - `MOV_QUEUE_EMPTY`: Movement queue is empty.
@@ -80,27 +88,47 @@ bitflags::bitflags! {
         const SYS_READY        =  0b0001000000000000;
         /// ATX power is on
         const ATX_ON           =  0b0000100000000000;
+        /// The TMC drivers are configured and healthy. Set from the start without `with-trinamic`
+        /// (see [EventFlags::INITIAL]): the motion waits for it, so it must never be missing
+        /// when nobody manages it
+        const TMC_OK           =  0b0000010000000000;
         /// Homing operation in progress
-        const HOMING          =   0b0000010000000000;
+        const HOMING          =   0b0000001000000000;
         /// System is moving
-        const MOVING           =  0b0000001000000000;
+        const MOVING           =  0b0000000100000000;
         /// Movement queue is empty
-        const MOV_QUEUE_EMPTY  =  0b0000000100000000;
+        const MOV_QUEUE_EMPTY  =  0b0000000010000000;
         /// Movement queue is full
-        const MOV_QUEUE_FULL   =  0b0000000010000000;
+        const MOV_QUEUE_FULL   =  0b0000000001000000;
         /// Job printing in progress
-        const JOB_PRINTING     =  0b0000000001000000;
+        const JOB_PRINTING     =  0b0000000000100000;
         /// Job is paused
-        const JOB_PAUSED       =  0b0000000000100000;
+        const JOB_PAUSED       =  0b0000000000010000;
         /// Job completed
-        const JOB_COMPLETED    =  0b0000000000010000;
+        const JOB_COMPLETED    =  0b0000000000001000;
         /// Dry Run (do nothing. Just interpret)
-        const DRY_RUN          =  0b0000000000001000;
+        const DRY_RUN          =  0b0000000000000100;
         /// HotBed temperature is okay
-        const HOT_BED_TEMP_OK   = 0b0000000000000100;
+        const HOT_BED_TEMP_OK   = 0b0000000000000010;
         /// HotEnd temperature is okay
-        const HOT_END_TEMP_OK   = 0b0000000000000010;
+        const HOT_END_TEMP_OK   = 0b0000000000000001;
     }
+}
+
+impl EventFlags {
+    /// The status the event bus starts with. Without `with-trinamic` nothing manages the drivers:
+    /// [EventFlags::TMC_OK] is set from the start (the motion waits for it). With it, the drivers
+    /// task sets it once every driver is configured.
+    pub const INITIAL: EventFlags = {
+        #[cfg(feature = "with-trinamic")]
+        {
+            EventFlags::empty()
+        }
+        #[cfg(not(feature = "with-trinamic"))]
+        {
+            EventFlags::TMC_OK
+        }
+    };
 }
 
 #[cfg(feature = "with-defmt")]
@@ -537,8 +565,19 @@ where
 
     pub async fn subscriber(&self) -> EventBusSubscriber<'static, M> {
         let mut req = self.channel_controller.lock().await;
-        let inner = req.subscriber().expect("Exceeded");
-        EventBusSubscriber::new(inner, req.get_status())
+        match req.subscriber() {
+            Ok(inner) => EventBusSubscriber::new(inner, req.get_status()),
+            Err(_) => {
+                // A static design limit (one subscriber per task, created at startup). Never
+                // panics: the requesting task is parked, and the rest of the system goes on
+                hwa::error!(
+                    "[EventBus] Too many subscribers (max {}): task parked",
+                    EVENT_BUS_NUM_SUBSCRIBERS
+                );
+                drop(req);
+                core::future::pending().await
+            }
+        }
     }
 }
 
@@ -552,8 +591,18 @@ mod test {
     use std::sync::RwLock;
     use std::task::Poll;
 
+    fn init_logging() {
+        let env = env_logger::Env::new().default_filter_or("info");
+        use std::io::Write;
+        let _ = env_logger::builder()
+            .parse_env(env)
+            .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+            .try_init();
+    }
+
     #[test]
     fn test_flags() {
+        init_logging();
         let flags = EventFlags::all();
         hwa::info!("all flags: {:?}", flags);
         let event_status = EventStatus::not_containing(EventFlags::SYS_BOOTING);
@@ -593,6 +642,12 @@ mod test {
         RwLock::new(None);
 
     fn initialize() {
+        let env = env_logger::Env::new().default_filter_or("info");
+        use std::io::Write;
+        let _ = env_logger::builder()
+            .parse_env(env)
+            .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+            .try_init();
         let mut global = EVENT_BUS.write().unwrap();
 
         if global.is_none() {
@@ -612,6 +667,7 @@ mod test {
 
     #[futures_test::test]
     async fn test_event_bus() {
+        init_logging();
         initialize();
         let mg = EVENT_BUS.read().unwrap();
         let event_bus = mg.as_ref().unwrap();
@@ -619,8 +675,8 @@ mod test {
         let event_status = EventStatus::new()
             .and_containing(EventFlags::SYS_BOOTING)
             .and_not_containing(EventFlags::SYS_BOOT_FAILURE);
-        hwa::info!("{:?}", event_status);
-        hwa::info!("{:?}", event_status);
+        hwa::debug!("{:?}", event_status);
+        hwa::debug!("{:?}", event_status);
         event_bus.publish_event(event_status).await;
 
         assert!(
@@ -636,14 +692,14 @@ mod test {
         let the_flags = subscriber.get_status().await;
         assert_eq!(
             the_flags,
-            EventFlags::SYS_BOOTING,
+            EventFlags::INITIAL | EventFlags::SYS_BOOTING,
             "StateChecks [1]: flag SYS_BOOTING read from a lately created subscriber"
         );
 
         let the_flags = subscriber.get_status().await;
         assert_eq!(
             the_flags,
-            EventFlags::SYS_BOOTING,
+            EventFlags::INITIAL | EventFlags::SYS_BOOTING,
             "StateChecks [1]: Again, flag SYS_BOOTING read from a lately created subscriber (idempotence test)"
         );
 

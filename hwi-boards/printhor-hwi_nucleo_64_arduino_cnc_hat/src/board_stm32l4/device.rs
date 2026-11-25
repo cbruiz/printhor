@@ -87,7 +87,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _mask.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn step_toggle(&mut self, _channels: hwa::CoordSel) {
@@ -105,7 +105,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn step_high(&mut self, _channels: hwa::CoordSel) {
@@ -123,7 +123,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn step_low(&mut self, _channels: hwa::CoordSel) {
@@ -141,7 +141,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
             }
             fn endstop_triggered(&mut self, _channels: hwa::CoordSel) -> bool {
@@ -161,7 +161,7 @@ cfg_if::cfg_if! {
                 }
                 #[cfg(feature = "with-e-axis")]
                 if _channels.contains(hwa::CoordSel::E) {
-                    unreachable!()
+                    // The CNC Hat has no E driver: nothing to do (never panics)
                 }
                 triggered
             }
@@ -204,8 +204,8 @@ cfg_if::cfg_if!{
 
 cfg_if::cfg_if!{
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
-        pub type HotEndHotBedAdc = super::io::adc::AdcWrapper<embassy_stm32::peripherals::ADC1, embassy_stm32::peripherals::DMA1_CH1>;
-        pub type HotEndHotBedAdcPin = embassy_stm32::adc::AnyAdcChannel<embassy_stm32::peripherals::ADC1>;
+        pub type HotEndHotBedAdc = super::io::adc::AdcWrapper<embassy_stm32::peripherals::ADC1>;
+        pub type HotEndHotBedAdcPin = embassy_stm32::adc::AnyAdcChannel<'static, embassy_stm32::peripherals::ADC1>;
         pub type HotEndHotBedPwm = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM15>;
     }
 }

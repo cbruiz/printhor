@@ -5,56 +5,110 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # Allows running the workflow manually from the Actions tab
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  # The firmware coverage steps also measure the native simulator. It is a path dependency outside the
+  # workspace: `--dep-coverage` gets it instrumented, but the report of `--dep-coverage` only keeps
+  # crates.io dependencies (an empty report here). So the report is generated apart, with the default
+  # file filter (it drops every path outside the workspace) replaced by this equivalent one.
+  # Like the `*_tests.rs` modules, the integration scenarios are test code: they are not measured.
+  FW_COV_IGNORE: '/rustc/[0-9a-f]+/|/\.cargo/(registry|git)/|/\.rustup/toolchains/|/target/|/libs/|/(tests|examples|benches)/|[/_-]tests\.rs$|/task_integration\.rs$'
+  # Input of the G-code parser benchmark (perf-bench feature): a slicer output tracked in libs/async-gcode
+  PRINTHOR_BENCH_GCODE: ${{ github.workspace }}/libs/async-gcode/assets/random_3d_print.gcode
+  # Compact cargo output (no build chatter). `--quiet` would also switch libtest to its terse format
+  # (one `.` per test, interleaved with the logs): `--format pretty` restores one line per test. The
+  # firmware logs (RUST_LOG, `info` by default) are kept: e.g. the MotionConfig summary.
+  # cfg(coverage) is set through RUSTFLAGS (see the step "Set cfg(coverage)") instead of by
+  # cargo-llvm-cov, which prints a notice on every run when it sets it
+  TEST_ARGS: --quiet --no-cfg-coverage --no-cfg-coverage-nightly -- --format pretty
 
 jobs:
   build:
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout repository and submodules
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7
         with:
           submodules: recursive
+      - name: Install the Rust toolchain of rust-toolchain.toml and llvm-tools (required by cargo-llvm-cov)
+        run: |
+          cargo --version # rustup installs the toolchain of rust-toolchain.toml on first use
+          rustup component add llvm-tools
+          rustc --version
       - name: Build
-        run: cargo build --features native --package prinThor --bin printhor
+        run: cargo build --release --features native --package prinThor --bin printhor
       - name: Generate doc
+        env:
+          RUSTDOCFLAGS: --html-in-header doc/doc.header.html
         run: cargo doc --no-deps
       - name: Install cargo-llvm-cov
-        run: cargo install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
       - name: Install lcov
-        run: sudo apt-get -y install lcov
+        run: sudo apt-get update && sudo apt-get -y install lcov
+      # For the coverage steps only (the build and doc above are not affected). As cargo-llvm-cov
+      # does: cfg(coverage_nightly) only with a nightly toolchain
+      - name: Set cfg(coverage)
+        run: |
+          COV_CFG="--cfg=coverage"
+          rustc -V | grep -q nightly && COV_CFG="$COV_CFG --cfg=coverage_nightly"
+          echo "RUSTFLAGS=${RUSTFLAGS:+$RUSTFLAGS }$COV_CFG" >> "$GITHUB_ENV"
       - name: Generate code coverage of full featured hwa-common with f32 precision (default)
-        run: cargo llvm-cov --profile release -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f32.info
+        run: cargo llvm-cov --profile dev -p printhor-hwa-common --features float-point-f32-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f32.info $TEST_ARGS
       - name: Generate code coverage of full featured hwa-common with f64 precision
-        run: cargo llvm-cov --profile release -p printhor-hwa-common --features float-point-f64-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f64.info
+        run: cargo llvm-cov --profile dev -p printhor-hwa-common --features float-point-f64-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-f64.info $TEST_ARGS
       - name: Generate code coverage of full featured hwa-common with fixed point 128 precision
-        run: cargo llvm-cov --profile release -p printhor-hwa-common --features fixed-point-128-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-fp128.info
+        run: cargo llvm-cov --profile dev -p printhor-hwa-common --features fixed-point-128-impl,with-motion,with-all-axis --ignore-filename-regex libs --lcov --output-path lcov.hwa-fp128.info $TEST_ARGS
 
       - name: Generate code coverage of native simulator backend [cartessian] (default)
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov --profile release -p printhor-hwi_native --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-base.info
+        run: cargo llvm-cov --profile dev -p printhor-hwi_native --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-base.info $TEST_ARGS
       - name: Generate code coverage of native simulator backend [core-xy]
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov --profile release  -p printhor-hwi_native --features with-motion-core-xy-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-core-xy.info
+        run: cargo llvm-cov --profile dev  -p printhor-hwi_native --features with-motion-core-xy-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-core-xy.info $TEST_ARGS
       - name: Generate code coverage of native simulator backend [anthropomorphic]
         working-directory: ./hwi-boards/printhor-hwi_native
-        run: cargo llvm-cov --profile release -p printhor-hwi_native --features with-motion-anthropomorphic-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-anthropomorphic.info
+        run: cargo llvm-cov --profile dev -p printhor-hwi_native --features with-motion-anthropomorphic-kinematics --ignore-filename-regex libs --lcov --output-path ../../lcov.hwi-anthropomorphic.info $TEST_ARGS
       - name: Generate code coverage for a (default) [cartessian-cnc] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-cnc.info
-      - name: Generate code coverage for a [cartessian-fdm] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features cartessian-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-cartessian-fdm.info
+        run: |
+          cargo llvm-cov --no-report --profile dev --workspace --features cartessian-cnc,perf-bench --dep-coverage printhor-hwi_native $TEST_ARGS
+          cargo llvm-cov report --profile dev --no-default-ignore-filename-regex --ignore-filename-regex "$FW_COV_IGNORE" --lcov --output-path lcov.fw-cartessian-cnc.info
+          test -s lcov.fw-cartessian-cnc.info # a wrong filter does not fail: it produces an empty report
+          grep -q '^SF:.*printhor-hwi_native' lcov.fw-cartessian-cnc.info # the simulator is measured
+      # The only configuration built with the motion execution metrics (M800): the FDM one, as the
+      # boards that enable them (see the skr_mini_e3_v3_fdm feature)
+      - name: Generate code coverage for a [cartessian-fdm] machine firmware with motion-metrics (native simulator backend)
+        run: |
+          cargo llvm-cov --no-report --profile dev --workspace --features cartessian-fdm,perf-bench,motion-metrics --dep-coverage printhor-hwi_native $TEST_ARGS
+          cargo llvm-cov report --profile dev --no-default-ignore-filename-regex --ignore-filename-regex "$FW_COV_IGNORE" --lcov --output-path lcov.fw-cartessian-fdm.info
+          test -s lcov.fw-cartessian-fdm.info # a wrong filter does not fail: it produces an empty report
+          grep -q '^SF:.*printhor-hwi_native' lcov.fw-cartessian-fdm.info # the simulator is measured
       - name: Generate code coverage for a [core-xy-fdm] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features core-xy-fdm --ignore-filename-regex libs --lcov --output-path lcov.fw-core-xy-fdm.info
+        run: |
+          cargo llvm-cov --no-report --profile dev --workspace --features core-xy-fdm,perf-bench --dep-coverage printhor-hwi_native $TEST_ARGS
+          cargo llvm-cov report --profile dev --no-default-ignore-filename-regex --ignore-filename-regex "$FW_COV_IGNORE" --lcov --output-path lcov.fw-core-xy-fdm.info
+          test -s lcov.fw-core-xy-fdm.info # a wrong filter does not fail: it produces an empty report
+          grep -q '^SF:.*printhor-hwi_native' lcov.fw-core-xy-fdm.info # the simulator is measured
       - name: Generate code coverage for an [anthropomorphic-quadruped-robot] machine firmware (native simulator backend)
-        run: cargo llvm-cov --profile release --workspace --features anthropomorphic-quad-robot --ignore-filename-regex libs --lcov --output-path lcov.fw-anthropomorphic-quad-robot.info
+        run: |
+          cargo llvm-cov --no-report --profile dev --workspace --features anthropomorphic-quad-robot,perf-bench --dep-coverage printhor-hwi_native $TEST_ARGS
+          cargo llvm-cov report --profile dev --no-default-ignore-filename-regex --ignore-filename-regex "$FW_COV_IGNORE" --lcov --output-path lcov.fw-anthropomorphic-quad-robot.info
+          test -s lcov.fw-anthropomorphic-quad-robot.info # a wrong filter does not fail: it produces an empty report
+          grep -q '^SF:.*printhor-hwi_native' lcov.fw-anthropomorphic-quad-robot.info # the simulator is measured
       - name: Generate code coverage for a (default) [cartessian-cnc] machine firmware (s-plot)
-        run: cargo llvm-cov --profile release --features s-plot-bin,cartessian-cnc --ignore-filename-regex libs --lcov --output-path lcov.s-plot.info
+        run: |
+          cargo llvm-cov --no-report --profile dev --features s-plot-bin,cartessian-cnc --dep-coverage printhor-hwi_native $TEST_ARGS
+          cargo llvm-cov report --profile dev --no-default-ignore-filename-regex --ignore-filename-regex "$FW_COV_IGNORE" --lcov --output-path lcov.s-plot.info
+          test -s lcov.s-plot.info # a wrong filter does not fail: it produces an empty report
+          grep -q '^SF:.*printhor-hwi_native' lcov.s-plot.info # the simulator is measured
       - name: Merge lcov files
-        run: lcov --add-tracefile lcov.hwa-f32.info -t hwa-f32 -a lcov.hwa-f64.info -t hwa-f64 -a lcov.hwa-fp128.info -t hwa-fp128 -a lcov.hwi-anthropomorphic.info -t t4 -a lcov.hwi-base.info -t t5 -a lcov.hwi-core-xy.info -t t6 -a lcov.fw-anthropomorphic-quad-robot.info -t t7 -a lcov.fw-cartessian-cnc.info -t t8 -a lcov.fw-cartessian-fdm.info -t t9 -a lcov.fw-core-xy-fdm.info -t t10 -a lcov.s-plot.info -t t11 -o lcov.info
+        run: lcov --quiet --add-tracefile lcov.hwa-f32.info -t hwa-f32 -a lcov.hwa-f64.info -t hwa-f64 -a lcov.hwa-fp128.info -t hwa-fp128 -a lcov.hwi-anthropomorphic.info -t t4 -a lcov.hwi-base.info -t t5 -a lcov.hwi-core-xy.info -t t6 -a lcov.fw-anthropomorphic-quad-robot.info -t t7 -a lcov.fw-cartessian-cnc.info -t t8 -a lcov.fw-cartessian-fdm.info -t t9 -a lcov.fw-core-xy-fdm.info -t t10 -a lcov.s-plot.info -t t11 -o lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:

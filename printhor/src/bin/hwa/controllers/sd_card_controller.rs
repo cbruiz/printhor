@@ -114,6 +114,8 @@ where
     > {
         hwa::debug!("Locking card");
         let mut card = self.card.lock().await;
+        // A card inserted (or not ready) after the start is mounted now
+        let _ = card.mount().await;
         hwa::debug!("Retaining device");
         let _r = card.retain_device().await;
         hwa::debug!("opening root dir");
@@ -135,6 +137,12 @@ where
         let _ = card.release_device();
     }
 
+    /// Number of entries (directories and files) currently opened on the card
+    #[allow(unused)]
+    pub async fn opened_entries_count(&self) -> usize {
+        self.card.lock().await.opened_entries_count()
+    }
+
     pub async fn list_dir<F>(&self, dir: &hwa::sd_card::EntryRef, func: F)
     where
         F: FnMut(&embedded_sdmmc::DirEntry),
@@ -143,6 +151,32 @@ where
         let _r = card.retain_device().await;
         card.list_dir(dir, func);
         let _ = card.release_device();
+    }
+
+    /// Lists a directory with the long names of its entries (see
+    /// [hwa::sd_card::SDStateManager::list_dir_lfn])
+    pub async fn list_dir_lfn<F>(&self, dir: &hwa::sd_card::EntryRef, func: F)
+    where
+        F: FnMut(&embedded_sdmmc::DirEntry, Option<&str>) -> core::ops::ControlFlow<()>,
+    {
+        let mut card = self.card.lock().await;
+        let _r = card.retain_device().await;
+        card.list_dir_lfn(dir, func);
+        let _ = card.release_device();
+    }
+
+    /// The long path of `path` (M33): see [hwa::sd_card::SDStateManager::long_path]
+    pub async fn long_path(
+        &self,
+        path: &str,
+    ) -> Result<heapless::String<LONG_PATH_LEN>, hwa::sd_card::SDCardError> {
+        let mut card = self.card.lock().await;
+        let _ = card.mount().await;
+        let _ = card.retain_device().await;
+        let mut out = heapless::String::new();
+        let result = card.long_path(path, &mut out);
+        let _ = card.release_device();
+        result.map(|_| out)
     }
 
     #[allow(unused)]
@@ -165,14 +199,67 @@ where
     ) -> Result<SDCardStream<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>, hwa::sd_card::SDCardError>
     {
         let mut card = self.card.lock().await;
+        let _ = card.mount().await;
         let _ = card.retain_device().await;
         hwa::debug!("Opened root dir");
         let result = card.open_file_path(_file_path);
+        // The size is read here, with the card already locked: the users get it without awaiting
+        // while holding the (large) stream
+        let length = match &result {
+            Ok(path) => path.last().map_or(0, |entry| card.file_length(*entry).unwrap_or(0)),
+            Err(_) => 0,
+        };
         let _ = card.release_device();
         match result {
-            Ok(path) => Ok(SDCardStream::new(self.clone(), path)),
+            Ok(path) => Ok(SDCardStream::new(self.clone(), path, length)),
             Err(_e) => Err(_e),
         }
+    }
+
+    /// Mounts the card (M21): initializes it again when the volume is not open. On failure, the
+    /// reason (see [Self::mount_error]).
+    pub async fn mount(&self) -> Result<(), hwa::sd_card::SDCardError> {
+        self.card.lock().await.mount().await
+    }
+
+    /// Releases the card (M22). Refused while files or directories are open.
+    pub async fn unmount(&self) -> Result<(), hwa::sd_card::SDCardError> {
+        self.card.lock().await.unmount()
+    }
+
+    /// Why the card could not be mounted (empty when it is mounted)
+    pub async fn mount_error(
+        &self,
+    ) -> crate::processing::LineBuf<{ hwa::sd_card::MOUNT_ERROR_LEN }> {
+        crate::processing::LineBuf::from(self.card.lock().await.mount_error())
+    }
+
+    /// Creates (or truncates) a file and opens it for writing (M28). Released with
+    /// [Self::close_path], which flushes it.
+    pub async fn create_file(
+        &self,
+        file_path: &str,
+    ) -> Result<heapless::Vec<hwa::sd_card::EntryRef, MAX_OPENED_ENTRIES>, hwa::sd_card::SDCardError>
+    {
+        let mut card = self.card.lock().await;
+        let _ = card.mount().await;
+        let _ = card.retain_device().await;
+        let result = card.create_file(file_path);
+        let _ = card.release_device();
+        result
+    }
+
+    /// Appends `data` to a file opened with [Self::create_file]
+    pub async fn write(
+        &self,
+        entry: hwa::sd_card::EntryRef,
+        data: &[u8],
+    ) -> Result<(), hwa::sd_card::SDCardError> {
+        let mut card = self.card.lock().await;
+        let _ = card.retain_device().await;
+        let result = card.write(entry, data);
+        let _ = card.release_device();
+        result
     }
 
     pub async fn read(
@@ -206,13 +293,24 @@ pub enum SDEntryType {
     DIRECTORY,
 }
 
+/// Max length of a long path (M33): a longer one is truncated
+pub const LONG_PATH_LEN: usize = 256;
+
 /// A structure representing an entry in the SD card directory.
 ///
 /// This can be either a file or a directory and contains metadata about the entry.
 #[derive(Debug, Clone)]
 pub struct SDDirEntry {
-    /// The name of the entry (file or directory).
-    pub name: alloc::string::String,
+    /// The name of the entry (file or directory): a FAT 8.3 name (no heap)
+    pub name: crate::processing::LineBuf<12>,
+
+    /// The long name (VFAT) of the entry: empty when it has none (or it is longer than
+    /// [hwa::sd_card::LONG_NAME_LEN])
+    pub long_name: crate::processing::LineBuf<{ hwa::sd_card::LONG_NAME_LEN }>,
+
+    /// Hidden from the listings: hidden or system attribute, or a long name starting with `.`
+    /// (e.g. the metadata of macOS), or `.` and `..`
+    pub hidden: bool,
 
     /// The type of the entry, indicating whether it's a file or a directory.
     pub entry_type: SDEntryType,
@@ -276,40 +374,31 @@ where
                 let mut idx = 0;
                 let mut entry = None;
                 self.controller
-                    .list_dir(dir, |dir_entry| {
-                        if self.current_index == idx {
-                            let name: alloc::string::String =
-                                match dir_entry.name.extension().is_empty() {
-                                    true => alloc::string::String::from_utf8_lossy(
-                                        dir_entry.name.base_name(),
-                                    )
-                                    .to_string(),
-                                    false => {
-                                        alloc::format!(
-                                            "{}.{}",
-                                            alloc::string::String::from_utf8_lossy(
-                                                dir_entry.name.base_name()
-                                            )
-                                            .to_string()
-                                            .as_str(),
-                                            alloc::string::String::from_utf8_lossy(
-                                                dir_entry.name.extension()
-                                            )
-                                            .to_string()
-                                            .as_str()
-                                        )
-                                    }
-                                };
-                            entry = Some(SDDirEntry {
-                                name,
-                                entry_type: match dir_entry.attributes.is_directory() {
-                                    true => SDEntryType::DIRECTORY,
-                                    false => SDEntryType::FILE,
-                                },
-                                size: dir_entry.size,
-                            });
+                    .list_dir_lfn(dir, |dir_entry, long_name| {
+                        // Not files: the volume label
+                        if dir_entry.attributes.is_volume() {
+                            return core::ops::ControlFlow::Continue(());
                         }
-                        idx += 1;
+                        if self.current_index != idx {
+                            idx += 1;
+                            return core::ops::ControlFlow::Continue(());
+                        }
+                        let short = hwa::sd_card::short_name(&dir_entry.name);
+                        let attributes = dir_entry.attributes;
+                        entry = Some(SDDirEntry {
+                            name: crate::processing::LineBuf::from(short.as_str()),
+                            long_name: crate::processing::LineBuf::from(long_name.unwrap_or("")),
+                            hidden: attributes.is_hidden()
+                                || attributes.is_system()
+                                || short.starts_with('.')
+                                || long_name.is_some_and(|l| l.starts_with('.')),
+                            entry_type: match attributes.is_directory() {
+                                true => SDEntryType::DIRECTORY,
+                                false => SDEntryType::FILE,
+                            },
+                            size: dir_entry.size,
+                        });
+                        core::ops::ControlFlow::Break(())
                     })
                     .await;
                 if entry.is_some() {
@@ -329,7 +418,12 @@ where
     }
 }
 
-const BSIZE: usize = 32;
+/// Read chunk of the G-code stream: one SD block. Every chunk locks the card controller and
+/// retains/releases the device (the SPI bus on real boards), so small chunks multiply that cost
+/// (32-byte chunks were ~16x more calls for the same bytes).
+const BSIZE: usize = 512;
+// BSIZE must fit in u16 because SDCardStream::bytes_read is u16.
+const _: () = assert!(BSIZE <= u16::MAX as usize, "BSIZE exceeds u16::MAX; update bytes_read field type");
 
 pub struct SDCardStream<
     D,
@@ -345,8 +439,14 @@ pub struct SDCardStream<
     buffer: [u8; BSIZE],
     #[cfg(feature = "native")]
     buff_str: String,
-    bytes_read: u8,
-    current_byte_index: u8,
+    bytes_read: u16,
+    current_byte_index: u16,
+    /// Bytes delivered so far (the position in the file)
+    position: u32,
+    /// Size of the file in bytes
+    length: u32,
+    /// Publishes `position` to [crate::hwa::controllers::JOB_PROGRESS] (the stream of the job)
+    track_progress: bool,
 }
 
 impl<D, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_OPENED_ENTRIES: usize>
@@ -357,6 +457,7 @@ where
     pub fn new(
         card_controller: GenericSDCardController<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>,
         path: heapless::Vec<hwa::sd_card::EntryRef, MAX_OPENED_ENTRIES>,
+        length: u32,
     ) -> Self {
         Self {
             card_controller,
@@ -366,7 +467,75 @@ where
             buff_str: String::new(),
             bytes_read: 0,
             current_byte_index: 0,
+            position: 0,
+            length,
+            track_progress: false,
         }
+    }
+
+    /// The size of the file in bytes (0 if unknown)
+    pub fn length(&self) -> u32 {
+        self.length
+    }
+
+    /// From now on, the position is published as the job progress
+    pub fn track_progress(&mut self) {
+        self.track_progress = true;
+    }
+
+    #[inline]
+    fn advance(&mut self) {
+        self.position = self.position.saturating_add(1);
+        #[cfg(feature = "with-print-job")]
+        if self.track_progress {
+            // Plain store (no read-modify-write): available on every target, Cortex-M0+ included
+            crate::hwa::controllers::JOB_PROGRESS.set_position(self.position);
+        }
+    }
+}
+
+impl<D, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_OPENED_ENTRIES: usize>
+    SDCardStream<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>
+where
+    D: hwa::traits::AsyncSDBlockDevice + 'static,
+{
+    /// Closes the stream, releasing the opened entries of its path
+    pub async fn close(self) {
+        self.into_closer().close().await;
+    }
+
+    /// Keeps only what closing needs (a few bytes), dropping the stream and its block buffer.
+    /// To be called before awaiting the close, so a task does not hold the whole stream (~0.5 KB)
+    /// in its state while closing.
+    pub fn into_closer(self) -> SDCardStreamCloser<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES> {
+        SDCardStreamCloser {
+            card_controller: self.card_controller,
+            path: self.path,
+        }
+    }
+}
+
+/// What closing a [SDCardStream] needs: see [SDCardStream::into_closer]
+pub struct SDCardStreamCloser<
+    D,
+    const MAX_DIRS: usize,
+    const MAX_FILES: usize,
+    const MAX_OPENED_ENTRIES: usize,
+> where
+    D: hwa::traits::AsyncSDBlockDevice + 'static,
+{
+    card_controller: GenericSDCardController<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>,
+    path: heapless::Vec<hwa::sd_card::EntryRef, MAX_OPENED_ENTRIES>,
+}
+
+impl<D, const MAX_DIRS: usize, const MAX_FILES: usize, const MAX_OPENED_ENTRIES: usize>
+    SDCardStreamCloser<D, MAX_DIRS, MAX_FILES, MAX_OPENED_ENTRIES>
+where
+    D: hwa::traits::AsyncSDBlockDevice + 'static,
+{
+    /// Releases the opened entries of the path
+    pub async fn close(mut self) {
+        self.card_controller.close_path(&mut self.path).await;
     }
 }
 
@@ -381,6 +550,7 @@ where
         if self.current_byte_index < self.bytes_read {
             let byte = self.buffer[self.current_byte_index as usize];
             self.current_byte_index += 1;
+            self.advance();
             Some(Ok(byte))
         } else {
             self.current_byte_index = 0;
@@ -394,26 +564,30 @@ where
                     #[cfg(feature = "native")]
                     {
                         self.buff_str =
-                            String::from_utf8(self.buffer[..bytes_read].to_vec()).unwrap();
+                            String::from_utf8_lossy(&self.buffer[..bytes_read]).into_owned();
                     }
-                    self.bytes_read = bytes_read as u8;
+                    self.bytes_read = bytes_read as u16;
                     if bytes_read > 0 {
                         let byte = self.buffer[self.current_byte_index as usize];
                         self.current_byte_index = 1;
+                        self.advance();
                         Some(Ok(byte))
                     } else {
-                        // FIXME not correct
-                        self.bytes_read = 0;
-                        self.current_byte_index = 0;
+                        // EOF: no more data in this block
+                        hwa::debug!("SDCardStream: EOF reached");
                         None
                     }
                 }
-                Err(_) => Some(Err(async_gcode::Error::NumberOverflow)),
+                Err(e) => {
+                    hwa::error!("SDCardStream: read error: {:?}", e);
+                    None
+                }
             }
         }
     }
 
     async fn recovery_check(&mut self) {
-        //TODO
+        self.bytes_read = 0;
+        self.current_byte_index = 0;
     }
 }

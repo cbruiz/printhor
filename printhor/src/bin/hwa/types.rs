@@ -1,5 +1,6 @@
 //! This module contains the peripheral and devices export required for ALL HWI boards
 use crate::hwa;
+#[allow(unused)]
 use crate::processing;
 #[allow(unused)]
 use crate::tasks;
@@ -100,6 +101,14 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "with-i2c")] {
         pub type I2CMotionMutexStrategy = <hwa::Contract as HwiContract>::I2cMotionMutexStrategy;
         pub type I2CMotionController = hwa::StaticSyncController<I2CMotionMutexStrategy>;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        pub type EepromController = hwa::StaticAsyncController<
+            <hwa::Contract as HwiContract>::EepromMutexStrategy
+        >;
     }
 }
 
@@ -252,6 +261,12 @@ cfg_if::cfg_if! {
             {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
         >;
 
+        /// The entries opened for a path (parent directories, then the file or directory)
+        pub type SDCardPath = heapless::Vec<
+            hwa::sd_card::EntryRef,
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+        >;
+
     }
 }
 
@@ -261,13 +276,16 @@ cfg_if::cfg_if! {
 
         pub type PrinterControllerSignalMutexType = <hwa::Contract as HwiContract>::PrinterControllerSignalMutexType;
 
-        pub type SDCardLineParser = processing::GCodeLineParser<
-            hwa::controllers::sd_card_controller::SDCardStream<
-                <hwa::Contract as HwiContract>::SDCardBlockDevice,
-                {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
-                {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
-                {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES}
-            >
+        /// The stream of the print job file
+        pub type PrintJobStream = hwa::controllers::sd_card_controller::SDCardStream<
+            <hwa::Contract as HwiContract>::SDCardBlockDevice,
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS},
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_FILES},
+            {<hwa::Contract as HwiContract>::SD_CARD_MAX_DIRS + <hwa::Contract as HwiContract>::SD_CARD_MAX_FILES}
         >;
+
+        /// The parser of the print job: on [processing::GCodeInputStream::PrintJob], the stream type
+        /// of the host channels too, so that the G-code parser is instantiated once
+        pub type SDCardLineParser = processing::GCodeLineParser<processing::GCodeInputStream>;
     }
 }

@@ -21,6 +21,7 @@ use crate::{hwa, processing};
 
 use hwa::controllers::PrinterController;
 use hwa::controllers::PrinterControllerEvent;
+use hwa::controllers::JOB_PROGRESS;
 use hwa::sd_card::SDCardError;
 use hwa::{CommChannel, EventFlags, EventStatus};
 use processing::{CodeExecutionFailure, CodeExecutionSuccess, GCodeCmd, GCodeValue};
@@ -44,7 +45,9 @@ use embassy_time::Instant;
 /// 5. **State Updates**: Publishes events to signal the state of the print job (e.g., `JOB_PAUSED`, `JOB_COMPLETED`).
 ///
 /// The robust handling of print job execution ensures that the 3D printer can efficiently and reliably process and execute the G-code commands.
-/// FIXME: JOB_PAUSE status flag remains!!
+///
+/// Job status flags: `JOB_PAUSED` while a file is selected or the job is paused, `JOB_PRINTING`
+/// while running and `JOB_COMPLETED` when the end of the file is reached.
 #[allow(unused_mut)]
 #[embassy_executor::task(pool_size = 1)]
 pub async fn task_print_job(
@@ -57,15 +60,12 @@ pub async fn task_print_job(
 
     hwa::info!("[task_print_job] Waiting for SYS_BOOTING");
     // Pauses this task until system is ready
-    match subscriber
-        .ft_wait_for(EventStatus::not_containing(EventFlags::SYS_BOOTING))
-        .await
-    {
-        Ok(_) => hwa::info!("[task_print_job] Got SYS_BOOTING. Continuing."),
-        Err(_) => crate::initialization_error(),
-    }
+    crate::helpers::wait_for_flags(&event_bus, EventFlags::SYS_BOOTING, false).await;
+    hwa::info!("[task_print_job] Got SYS_BOOTING. Continuing.");
 
-    let mut print_job_parser = None;
+    let mut print_job_parser: Option<hwa::types::SDCardLineParser> = None;
+    // Last M27 S auto-report
+    let mut last_report = Instant::now();
     let mut job_time = Duration::from_ticks(0);
 
     loop {
@@ -73,10 +73,14 @@ pub async fn task_print_job(
             .ft_wait_for(EventStatus::not_containing(EventFlags::SYS_ALARM))
             .await;
 
-        match embassy_time::with_timeout(Duration::from_secs(10), printer_controller.consume())
-            .await
-        {
+        // Woken up at least every M27 S interval, for the auto-report
+        let idle_timeout = match JOB_PROGRESS.autoreport() {
+            Some((secs, _)) => Duration::from_secs(u64::from(secs)).min(Duration::from_secs(10)),
+            None => Duration::from_secs(10),
+        };
+        match embassy_time::with_timeout(idle_timeout, printer_controller.consume()).await {
             Err(_) => {
+                autoreport(&processor, &mut last_report).await;
                 #[cfg(feature = "trace-commands")]
                 hwa::info!("[trace-commands] [task_print_job] Timeout");
                 #[cfg(test)]
@@ -92,13 +96,19 @@ pub async fn task_print_job(
                     file_path.as_str()
                 );
                 job_time = Duration::from_ticks(0);
-                print_job_parser = match card_controller.new_stream(file_path.as_str()).await {
-                    Ok(stream) => {
-                        let parser = processing::GCodeLineParser::new(stream);
-                        processor.write(channel, "File opened: ").await;
-                        processor.write(channel, file_path.as_str()).await;
-                        processor.write(channel, "\nFile selected\n").await;
-                        Some(parser)
+                // A previously selected file is closed before selecting the new one
+                close_job_file(&mut print_job_parser).await;
+                JOB_PROGRESS.clear();
+                match card_controller.new_stream(file_path.as_str()).await {
+                    Ok(mut stream) => {
+                        // M27/M73 progress: the stream publishes its position from now on
+                        JOB_PROGRESS.start(stream.length());
+                        stream.track_progress();
+                        // Moved in place before awaiting: the (large) parser is never held twice
+                        // in the task state
+                        print_job_parser = Some(processing::GCodeLineParser::new(
+                            processing::GCodeInputStream::PrintJob(stream),
+                        ));
                     }
                     Err(_e) => {
                         let error_msg = match _e {
@@ -108,11 +118,26 @@ pub async fn task_print_job(
                         };
                         hwa::error!("{}", error_msg);
                         processor
-                            .write(channel, alloc::format!("error; {}\n", error_msg).as_str())
+                            .write(channel, crate::processing::LineBuf::<192>::from_fmt(format_args!("error; {}\n", error_msg)).as_str())
                             .await;
+                        // Nothing selected: back to Ready, so M24 is rejected instead of
+                        // starting a job without a file
+                        printer_controller.finish(channel);
+                        publish_job_idle(&processor).await;
                         continue;
                     }
-                };
+                }
+                // Marlin format: hosts read the size to compute the progress
+                processor.write(channel, "File opened: ").await;
+                processor.write(channel, file_path.as_str()).await;
+                processor
+                    .write_u32(
+                        channel,
+                        " Size: ",
+                        JOB_PROGRESS.sd_bytes().map_or(0, |(_, s)| s),
+                        "\nFile selected\n",
+                    )
+                    .await;
                 processor
                     .event_bus
                     .publish_event(
@@ -122,6 +147,29 @@ pub async fn task_print_job(
                     .await;
             }
             Ok(PrinterControllerEvent::Resume(channel)) => {
+                // A stale event (e.g. M24 followed by M524 before it was consumed): the status
+                // is the reference
+                if !printer_controller.is_printing().await {
+                    hwa::debug!("[task-print-job] Stale Resume ignored");
+                    continue;
+                }
+                if print_job_parser.is_none() {
+                    // Should not happen (the controller rejects M24 with no file selected), but
+                    // it is recoverable: report it and go back to Ready
+                    hwa::error!("[task-print-job] Resume with no file selected");
+                    processor.write(channel, "error; No file selected\n").await;
+                    printer_controller.finish(channel);
+                    publish_job_idle(&processor).await;
+                    continue;
+                }
+                processor
+                    .event_bus
+                    .publish_event(
+                        EventStatus::containing(EventFlags::JOB_PRINTING)
+                            .and_not_containing(EventFlags::JOB_PAUSED)
+                            .and_not_containing(EventFlags::JOB_COMPLETED),
+                    )
+                    .await;
                 let mut interrupted = false;
                 let mut fatal_error = false;
                 let job_t0 = Instant::now();
@@ -130,27 +178,11 @@ pub async fn task_print_job(
                         Ok(gcode) => {
                             match &gcode.value {
                                 GCodeValue::M2 => {
-                                    match printer_controller
-                                        .set(PrinterControllerEvent::Abort(channel))
-                                        .await
-                                    {
-                                        Ok(_f) => {
-                                            processor
-                                                .write(channel, "echo: Print job terminated\n")
-                                                .await;
-                                            break;
-                                        }
-                                        Err(_e) => {
-                                            let s = alloc::format!(
-                                                "echo: M2: Unable to terminate: {:?}\n",
-                                                _e
-                                            );
-                                            processor.write(channel, s.as_str()).await;
-                                            fatal_error = true;
-                                            hwa::error!("Response: ERR {}", gcode);
-                                            break;
-                                        }
-                                    }
+                                    // End of program: the job ends here (as at EOF)
+                                    processor
+                                        .write(channel, "echo: Print job terminated\n")
+                                        .await;
+                                    break;
                                 }
                                 _ => {
                                     #[cfg(feature = "trace-commands")]
@@ -186,8 +218,27 @@ pub async fn task_print_job(
                                         }
                                         Ok(CodeExecutionSuccess::DEFERRED(_status)) => {
                                             hwa::debug!("[task-print-job] Deferred {} (D)", gcode);
-                                            if subscriber.ft_wait_for(_status).await.is_err() {
-                                                // Must pause. Recoverable when SYS_ALARM go down
+                                            // Interruptible: M524/M25 must not wait for
+                                            // a condition that may never come (e.g. heating)
+                                            let waited = embassy_futures::select::select(
+                                                subscriber.ft_wait_for(_status),
+                                                wait_not_printing(&printer_controller),
+                                            )
+                                            .await;
+                                            if let embassy_futures::select::Either::Second(_) =
+                                                waited
+                                            {
+                                                interrupted = true;
+                                                break;
+                                            }
+                                            if let embassy_futures::select::Either::First(Err(_)) =
+                                                waited
+                                            {
+                                                // SYS_ALARM (machine halted): the job is aborted
+                                                hwa::error!(
+                                                    "[task-print-job] SYS_ALARM raised. Aborting job"
+                                                );
+                                                fatal_error = true;
                                                 break;
                                             } else {
                                                 hwa::debug!(
@@ -263,11 +314,11 @@ pub async fn task_print_job(
                                     processor
                                         .write(
                                             channel,
-                                            alloc::format!(
+                                            crate::processing::LineBuf::<192>::from_fmt(format_args!(
                                                 "[task-print-job] Ignoring gcode not supported: {} at {}\n",
                                                 _gcode,
                                                 current_line
-                                            )
+                                            ))
                                             .as_str(),
                                         )
                                         .await;
@@ -277,20 +328,41 @@ pub async fn task_print_job(
                                         current_line
                                     );
                                 }
-                                processing::GCodeLineParserError::ParseError(_ln) => {
+                                processing::GCodeLineParserError::ParseError(_ln, _why) => {
                                     hwa::warn!(
-                                        "[task-print-job] Parse error at line {}",
-                                        current_line
+                                        "[task-print-job] Parse error at line {}: {} (skipped)",
+                                        current_line,
+                                        _why
                                     );
                                 }
+                                // A file line with a checksum (e.g. written with M28 by a host
+                                // that numbers its lines): skipped as any line not parsed
+                                processing::GCodeLineParserError::BadChecksum(_ln, _computed, _received) => {
+                                    hwa::warn!(
+                                        "[task-print-job] Checksum mismatch at line {} (received {}, computed {}): skipped",
+                                        current_line,
+                                        _received,
+                                        _computed
+                                    );
+                                }
+                                // The line number check is only enabled for host channels
+                                processing::GCodeLineParserError::LineNumberMismatch(_) => {}
                             }
                         }
                     }
-                    // Peek new event to see if job is cancelled
-                    if printer_controller.signaled().await {
+                    // Paused (M25) or aborted (M524): the status changes before the event is
+                    // consumed, so the job stops right after the current command
+                    if !printer_controller.is_printing().await {
                         interrupted = true;
                         break;
                     }
+                    autoreport(&processor, &mut last_report).await;
+                }
+                // An error caused by an intentional interruption (e.g. a move cut by M524's quick
+                // stop) is not a job failure
+                if fatal_error && !printer_controller.is_printing().await {
+                    fatal_error = false;
+                    interrupted = true;
                 }
                 if subscriber
                     .ft_wait_until(EventFlags::MOV_QUEUE_EMPTY)
@@ -301,42 +373,119 @@ pub async fn task_print_job(
                 }
                 job_time += job_t0.elapsed();
                 if fatal_error {
-                    printer_controller
-                        .set(PrinterControllerEvent::Abort(channel))
-                        .await
-                        .unwrap();
+                    // Ended by the job itself: no event is involved (it could be rejected if the
+                    // status changed meanwhile), the job is just closed and the machine is idle
+                    let line = print_job_parser.as_ref().map_or(0, |p| p.get_line());
+                    printer_controller.finish(channel);
+                    publish_job_idle(&processor).await;
+                    JOB_PROGRESS.clear();
+                    close_job_file(&mut print_job_parser).await;
+                    processor
+                        .write(
+                            channel,
+                            crate::processing::LineBuf::<192>::from_fmt(format_args!("echo: Job aborted (error at line {})\n", line)).as_str(),
+                        )
+                        .await;
                 } else if !interrupted {
                     processor
                         .event_bus
                         .publish_event(
                             EventStatus::containing(EventFlags::JOB_COMPLETED)
-                                .and_not_containing(EventFlags::JOB_PAUSED),
+                                .and_not_containing(EventFlags::JOB_PAUSED)
+                                .and_not_containing(EventFlags::JOB_PRINTING),
                         )
                         .await;
+                    printer_controller.finish(channel);
+                    JOB_PROGRESS.clear();
+                    processor.write(channel, "Done printing file\n").await;
                     // Job completed or cancelled
-                    match print_job_parser.take() {
-                        None => {}
-                        Some(mut p) => p.close().await,
-                    }
+                    // Closing the stream releases the file (and its directories) on the card
+                    close_job_file(&mut print_job_parser).await;
                     hwa::info!(
-                        "[task-print-job] Job completed in {:03} seconds",
-                        job_time.as_millis() as f64 / 1000.0
+                        "[task-print-job] Job completed in {} ms",
+                        job_time.as_millis()
                     );
                 }
             }
-            Ok(PrinterControllerEvent::Abort(channel)) => {
-                processor.write(channel, "echo: Job aborted\n").await;
-                match print_job_parser.take() {
-                    None => {}
-                    Some(mut p) => p.close().await,
+            Ok(PrinterControllerEvent::Pause(channel)) => {
+                // The job loop was interrupted. The parser is kept so that M24 resumes from here.
+                // A stale event (already resumed or aborted) does not change the flags
+                if !matches!(
+                    printer_controller.status().await,
+                    hwa::controllers::PrinterControllerStatus::Paused(_)
+                ) {
+                    continue;
                 }
+                processor
+                    .event_bus
+                    .publish_event(
+                        EventStatus::containing(EventFlags::JOB_PAUSED)
+                            .and_not_containing(EventFlags::JOB_PRINTING),
+                    )
+                    .await;
+                let _ = channel;
+            }
+            Ok(PrinterControllerEvent::Abort(channel)) => {
+                // The aborted file is closed in any case. The flags only when nothing new was
+                // selected meanwhile (M524 quickly followed by M23)
+                if matches!(
+                    printer_controller.status().await,
+                    hwa::controllers::PrinterControllerStatus::Ready(_)
+                ) {
+                    publish_job_idle(&processor).await;
+                }
+                JOB_PROGRESS.clear();
+                processor.write(channel, "echo: Job aborted\n").await;
+                close_job_file(&mut print_job_parser).await;
                 hwa::debug!("[task-print-job] File done");
             }
-            Ok(_) => {
-                hwa::warn!("[task-print-job] Unexpected event");
-                continue;
-            }
         }
+    }
+}
+
+/// Sends the `M27` report to the `M27 S` channel when its interval elapsed (no-op when off)
+async fn autoreport(processor: &processing::GCodeProcessor, last_report: &mut Instant) {
+    if let Some((secs, channel)) = JOB_PROGRESS.autoreport() {
+        if last_report.elapsed() >= Duration::from_secs(u64::from(secs)) {
+            *last_report = Instant::now();
+            processor.write_sd_status(channel).await;
+        }
+    }
+}
+
+/// Closes the job file (if any), releasing its entries on the card.
+///
+/// The (large) parser is reduced to its closer synchronously, before awaiting: the task state never
+/// holds a second copy of the parser while closing.
+async fn close_job_file(print_job_parser: &mut Option<hwa::types::SDCardLineParser>) {
+    let closer = print_job_parser
+        .take()
+        .and_then(|parser| match parser.into_stream() {
+            processing::GCodeInputStream::PrintJob(stream) => Some(stream.into_closer()),
+            // Never: the print job parser is only built on the job stream
+            #[allow(unreachable_patterns)]
+            _ => None,
+        });
+    if let Some(closer) = closer {
+        closer.close().await;
+    }
+}
+
+/// Job flags when no job is selected nor running
+async fn publish_job_idle(processor: &processing::GCodeProcessor) {
+    processor
+        .event_bus
+        .publish_event(
+            EventStatus::not_containing(EventFlags::JOB_PAUSED)
+                .and_not_containing(EventFlags::JOB_PRINTING),
+        )
+        .await;
+}
+
+/// Completes when the job is not meant to be running any more (paused or aborted)
+async fn wait_not_printing(printer_controller: &PrinterController) {
+    while printer_controller.is_printing().await {
+        embassy_time::Timer::after(Duration::from_millis(50)).await;
     }
 }
 

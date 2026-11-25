@@ -96,57 +96,68 @@ pub mod serial_port_2 {
     }
 }
 
+/// ADC for the thermistors.
+///
+/// Conversions go through DMA (DMA1_CH1, with its own interrupt line), so the temperature task
+/// yields while the ADC converts instead of busy-waiting and stalling the other tasks of the
+/// executor (e.g. the homing step train).
 #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))]
 pub mod adc {
-
-    // Hard-coded ADC1 sample time (6.5 cycles): Around 1us
-    const ADC1_SAMPLE_TIME:embassy_stm32::adc::SampleTime = embassy_stm32::adc::SampleTime::CYCLES6_5;
-
     use printhor_hwa_common as hwa;
 
-    pub struct AdcWrapper<T, RxDma>
+    /// Long sample time: thermistor inputs are high impedance (pull-up + RC filter)
+    const ADC1_SAMPLE_TIME: embassy_stm32::adc::SampleTime =
+        embassy_stm32::adc::SampleTime::CYCLES247_5;
+
+    embassy_stm32::bind_interrupts!(struct AdcDmaIrqs {
+        DMA1_CHANNEL1 => embassy_stm32::dma::InterruptHandler<embassy_stm32::peripherals::DMA1_CH1>;
+    });
+
+    pub struct AdcWrapper<T>
     where
-        T: embassy_stm32::adc::Instance,
-        RxDma: embassy_stm32::adc::RxDma<T>,
+        T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
     {
         adc: embassy_stm32::adc::Adc<'static, T>,
-        dma: RxDma
+        dma: embassy_stm32::Peri<'static, embassy_stm32::peripherals::DMA1_CH1>,
     }
 
-    impl<T, RxDma> AdcWrapper<T, RxDma>
+    impl<T> AdcWrapper<T>
     where
-        T: embassy_stm32::adc::Instance,
-        RxDma: embassy_stm32::adc::RxDma<T>,
+        T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
     {
-        pub fn new(adc_peripheral: T, dma: RxDma) -> Self {
-            let mut adc = embassy_stm32::adc::Adc::new(adc_peripheral);
-            adc.set_resolution(embassy_stm32::adc::Resolution::BITS12);
-            adc.set_sample_time(ADC1_SAMPLE_TIME);
+        pub fn new(
+            adc_peripheral: embassy_stm32::Peri<'static, T>,
+            dma: embassy_stm32::Peri<'static, embassy_stm32::peripherals::DMA1_CH1>,
+        ) -> Self {
+            let mut config = embassy_stm32::adc::AdcConfig::default();
+            config.resolution = Some(embassy_stm32::adc::Resolution::BITS12);
             Self {
-                adc,
+                adc: embassy_stm32::adc::Adc::new_with_config(adc_peripheral, config),
                 dma,
             }
         }
     }
 
-    impl<T, RxDma> hwa::traits::UnifiedAdc16 for AdcWrapper<T, RxDma>
+    impl<T> hwa::traits::UnifiedAdc16 for AdcWrapper<T>
     where
-        T: embassy_stm32::adc::Instance,
-        RxDma: embassy_stm32::adc::RxDma<T>,
+        T: embassy_stm32::adc::Instance<Regs = embassy_stm32::pac::adc::Adc>,
+        embassy_stm32::peripherals::DMA1_CH1: embassy_stm32::adc::RxDma<T>,
     {
         type VRefPin = ();
-        type SamplePin = embassy_stm32::adc::AnyAdcChannel<T>;
+        type SamplePin = embassy_stm32::adc::AnyAdcChannel<'static, T>;
 
-        fn read_adc(&mut self, _pin: &mut Self::SamplePin) -> impl core::future::Future<Output=u16> {
-            async {
-                let sequence = [(_pin, ADC1_SAMPLE_TIME)];
-                let mut readings = [0u16];
-                self.adc.read(
-                    &mut self.dma,
-                    sequence.into_iter(),
-                    &mut readings
-                ).await;
-                readings[0]
+        fn read_adc(&mut self, pin: &mut Self::SamplePin) -> impl core::future::Future<Output = u16> {
+            async move {
+                let mut reading = [0u16; 1];
+                self.adc
+                    .read(
+                        self.dma.reborrow(),
+                        AdcDmaIrqs,
+                        [(pin, ADC1_SAMPLE_TIME)].into_iter(),
+                        &mut reading,
+                    )
+                    .await;
+                reading[0]
             }
         }
     }
@@ -154,19 +165,19 @@ pub mod adc {
 
 #[cfg(feature = "with-i2c")]
 pub struct MotionI2c {
-    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>>,
+    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>>,
     state: [pwm_pca9685::ChannelOnOffControl; 16],
 }
 
 #[cfg(feature = "with-i2c")]
 impl MotionI2c {
-    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>) -> Self {
+    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>) -> Self {
 
         let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
         let pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();
 
         const PRESCALE:u8 = 126;
-        hwa::info!("I2C Prescale: {}", PRESCALE);
+        hwa::info!("[MotionI2c] I2C Prescale: {}", PRESCALE);
 
         let mut instance = Self {
             pwm,
@@ -179,9 +190,9 @@ impl MotionI2c {
         };
 
         let world_center = crate::Contract::DEFAULT_WORLD_HOMING_POINT_WU;
-        hwa::info!("I2C: Proyecting {:?}", world_center);
+        hwa::info!("[MotionI2c] I2C: Proyecting {:?}", world_center);
         let space_center = crate::Contract.project_to_space(&world_center).unwrap();
-        hwa::info!("I2C: Got {:?}", space_center);
+        hwa::info!("[MotionI2c] I2C: Got {:?}", space_center);
         space_center.foreach_values(|_c, _v| {
             instance.set_angle(_c, _v);
         });
@@ -210,7 +221,7 @@ impl MotionI2c {
                 }
             };
         if got_timeout {
-            hwa::warn!("Timeout initializing I2C");
+            hwa::warn!("[MotionI2c] Timeout initializing I2C");
         }
         instance
     }
@@ -236,13 +247,14 @@ impl MotionI2c {
         // with some analog servos (tested with TowerPro SG90 and brand-less MG90S)
         const PULSE_CENTER: hwa::math::Real = hwa::make_real!(309.0);
         const CNT_BY_ANGLE: hwa::math::Real = hwa::make_real!(2.1944444444);
-        let pwm = ((calibrated_angle * CNT_BY_ANGLE) + PULSE_CENTER).round().to_i32().unwrap()
-            .max(110).min(500) as u16;
+        // Saturating: an out of range or NaN angle never panics (NaN is 0, then clamped)
+        let pwm = ((calibrated_angle * CNT_BY_ANGLE) + PULSE_CENTER).round().int()
+            .clamp(110, 500) as u16;
         let index = axis.index();
 
         if index < 16 {
             #[cfg(feature = "debug-motion-broadcast")]
-            hwa::info!("[task_motion_broadcast] set PWM [{:?}, {:?}] angle: ({:?})->{:?} : {:?} -> {:?}", axis, index, angle, calibrated_angle, self.state[index].off, pwm );
+            hwa::info!("[MotionI2c] set PWM [{:?}, {:?}] angle: ({:?})->{:?} : {:?} -> {:?}", axis, index, angle, calibrated_angle, self.state[index].off, pwm );
             if self.state[index].off != pwm {
                 self.state[index].off = pwm;
                 true
@@ -261,7 +273,7 @@ impl MotionI2c {
         let t0 = embassy_time::Instant::now();
         let _ = self.pwm.set_all_channels(&self.state).await;
         #[cfg(feature = "verbose-timings")]
-        hwa::info!("I2C update took {:?} us", t0.elapsed().as_micros());
+        hwa::info!("[MotionI2c] I2C update took {:?} us", t0.elapsed().as_micros());
     }
 
     pub async fn reset(&mut self) {

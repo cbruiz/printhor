@@ -78,6 +78,30 @@
 //!  </dd>
 //! </dl>
 //!
+//!
+//! # Safety
+//!
+//! The controller implements the usual protections of a FDM firmware. On any fault, the heater is
+//! shut down, the fault is latched (until `M999` or reset) and `SYS_ALARM` is raised, so that every
+//! other heater is shut down too (see `task_temperature`).
+//!
+//! - **MAXTEMP**: The measured temperature reached the configured maximum.
+//! - **MINTEMP**: The measured temperature is below the configured minimum while heating (typically
+//!   a disconnected or broken thermistor).
+//! - **Sensor error**: The measurement is not a number.
+//! - **Heating failed** (watch): While heating, the temperature did not increase the configured
+//!   amount in the configured period (heater cartridge or thermistor out of the block, broken heater...).
+//! - **Thermal runaway**: Once the target was reached, the temperature fell below
+//!   `target - hysteresis` for longer than the configured period.
+//!
+//! # Control
+//!
+//! A PID controller in physical units (compatible with Marlin's `M301`/`M304` constants), with the
+//! output in the range [0, 255], derivative on the measurement and anti-windup. Out of the
+//! functional range (±[PID_FUNCTIONAL_RANGE] ºC around the target) the heater runs in bang-bang mode.
+//!
+//! `M303` relay autotune (Åström–Hägglund + Ziegler–Nichols rules, see [autotune]) is also
+//! provided.
 use crate::hwa;
 use hwa::DeferEvent::{AwaitRequested, Completed};
 #[allow(unused)]
@@ -88,25 +112,213 @@ use hwa::{AsyncMutexStrategy, SyncMutexStrategy};
 use hwa::{CommChannel, DeferAction};
 use hwa::{EventFlags, EventStatus};
 
+mod autotune;
+pub use autotune::{AutotuneCycle, AutotuneEstimate, AutotuneOutcome, TuningRule};
+use autotune::Autotune;
+
+/// Max value of the PID output (Marlin's PID_MAX)
+const PID_MAX: f32 = 255.0;
+
+/// Out of this range (ºC) around the target, the PID is bypassed (full on/off) and its
+/// integral term reset (Marlin's PID_FUNCTIONAL_RANGE)
+const PID_FUNCTIONAL_RANGE: f32 = 10.0;
+
+/// Time constant (s) of the low-pass filter of the derivative term: Marlin's (`PID_K1` = 0.95
+/// applied every `PID_dT` ≈ 0.128 s, i.e. `PID_dT·K1/(1 - K1)`), so that the constants tuned for
+/// Marlin (and by `M303`) behave the same whatever the control period. Applying `K1` itself every
+/// period of this firmware (0.5 s) filtered with ~10 s: the derivative term lagged ~80º at the
+/// ultimate frequency of a hot-end and the Ziegler–Nichols constants left the loop barely stable
+const PID_D_FILTER_TIME_S: f32 = 2.4;
+
+/// Targets must be at least this margin (ºC) below the max temperature (Marlin's HOTEND_OVERSHOOT)
+pub const TARGET_MAX_TEMP_MARGIN: f32 = 15.0;
+
+/// The safety and control settings of a heater
+#[derive(Clone, Copy, Debug)]
+pub struct HeaterConfig {
+    /// MAXTEMP (ºC)
+    pub max_temp: f32,
+    /// MINTEMP (ºC)
+    pub min_temp: f32,
+    /// Thermal runaway hysteresis (ºC)
+    pub protection_hysteresis: f32,
+    /// Thermal runaway period (s)
+    pub protection_period_s: u32,
+    /// Heating watch increase (ºC)
+    pub watch_increase: f32,
+    /// Heating watch period (s)
+    pub watch_period_s: u32,
+    /// Temperature window to consider the target reached (ºC)
+    pub temp_window: f32,
+    /// Default PID constants (Kp, Ki, Kd)
+    pub pid: (f32, f32, f32),
+}
+
+/// The reason of a heater fault
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+pub enum HeaterFault {
+    /// Measured temperature reached MAXTEMP
+    MaxTemp,
+    /// Measured temperature below MINTEMP while heating
+    MinTemp,
+    /// The measurement is not a number
+    SensorError,
+    /// The temperature did not increase as expected while heating
+    HeatingFailed,
+    /// The temperature fell below the target after having reached it
+    ThermalRunaway,
+}
+
+impl HeaterFault {
+    pub const fn description(&self) -> &'static str {
+        match self {
+            HeaterFault::MaxTemp => "MAXTEMP triggered",
+            HeaterFault::MinTemp => "MINTEMP triggered",
+            HeaterFault::SensorError => "Temperature sensor error",
+            HeaterFault::HeatingFailed => "Heating failed",
+            HeaterFault::ThermalRunaway => "Thermal Runaway",
+        }
+    }
+}
+
+/// The reasons why a target temperature is rejected
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
+pub enum HeaterError {
+    /// The heater is in fault state. Requires `M999`
+    Faulted(HeaterFault),
+    /// The requested target exceeds the allowed max
+    TargetTooHigh,
+    /// A PID autotune is running (M303)
+    Busy,
+}
+
+/// A PID autotune request (M303)
+#[derive(Clone, Copy, Debug)]
+pub struct AutotuneRequest {
+    /// Target temperature (ºC)
+    pub target: f32,
+    /// Min cycles (Marlin's `C`)
+    pub cycles: u8,
+    pub rule: TuningRule,
+    /// Apply the constants found (Marlin's `U1`)
+    pub apply: bool,
+    /// Who asked (the reports go there)
+    pub channel: CommChannel,
+    pub order_num: u32,
+    /// The response (`ok`) waits for the end of the autotune (see [DeferAction])
+    pub deferred: bool,
+}
+
+impl AutotuneRequest {
+    /// Classic rule, not applied, not deferred
+    pub const fn new(target: f32, cycles: u8) -> Self {
+        Self {
+            target,
+            cycles,
+            rule: TuningRule::ClassicPid,
+            apply: false,
+            channel: CommChannel::Internal,
+            order_num: 0,
+            deferred: false,
+        }
+    }
+}
+
+/// The end of an autotune, to be reported by the temperature task (to the channel that asked
+/// for it, whose response is completed then when deferred)
+#[derive(Clone, Copy, Debug)]
+pub struct AutotuneEnd {
+    pub outcome: AutotuneOutcome,
+    pub request: AutotuneRequest,
+}
+
+/// A running autotune and who asked for it
+struct AutotuneRun {
+    tune: Autotune,
+    request: AutotuneRequest,
+}
+
+/// PID controller in physical units
+struct PidControl {
+    kp: f32,
+    ki: f32,
+    kd: f32,
+    /// Integral of the error (ºC·s)
+    integral: f32,
+    /// Filtered derivative term
+    d_term: f32,
+    last_temp: Option<f32>,
+}
+
+impl PidControl {
+    const fn new(kp: f32, ki: f32, kd: f32) -> Self {
+        Self {
+            kp,
+            ki,
+            kd,
+            integral: 0.0,
+            d_term: 0.0,
+            last_temp: None,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.integral = 0.0;
+        self.d_term = 0.0;
+        self.last_temp = None;
+    }
+
+    /// Computes the output in [0, PID_MAX]
+    fn next(&mut self, target: f32, temp: f32, dt: f32) -> f32 {
+        let error = target - temp;
+        let derivative = match self.last_temp {
+            Some(last) if dt > 0.0 => (temp - last) / dt,
+            _ => 0.0,
+        };
+        self.last_temp = Some(temp);
+        // Derivative on measurement (no kick on target changes), low-pass filtered with the time
+        // constant PID_D_FILTER_TIME_S (first order, discretized for the elapsed `dt`)
+        let smoothing = PID_D_FILTER_TIME_S / (PID_D_FILTER_TIME_S + dt.max(0.0));
+        self.d_term = smoothing * self.d_term + (1.0 - smoothing) * (self.kd * derivative);
+
+        // Out of the functional range the integral is frozen (not reset), so that the learned
+        // bias is kept and the transfer back to PID control is smooth
+        if target <= 0.0 {
+            self.integral = 0.0;
+            0.0
+        } else if error > PID_FUNCTIONAL_RANGE {
+            PID_MAX
+        } else if error < -PID_FUNCTIONAL_RANGE {
+            0.0
+        } else {
+            self.integral += error * dt;
+            // Anti-windup: the integral term can not exceed the output range
+            if self.ki > 0.0 {
+                let max_integral = PID_MAX / self.ki;
+                self.integral = self.integral.clamp(0.0, max_integral);
+            }
+            (self.kp * error + self.ki * self.integral - self.d_term).clamp(0.0, PID_MAX)
+        }
+    }
+}
+
+/// Thermal protection state machine
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ProtectionState {
+    /// Heater off
+    Inactive,
+    /// Heating up to the target (watched)
+    FirstHeating,
+    /// Target was reached (runaway protected)
+    Stable,
+}
+
 /// A controller struct for managing a heater device.
 ///
 /// This controller interacts with both an ADC (Analog-Digital Converter)
 /// and a PWM (Pulse-Width Modulation) controller to measure and regulate the temperature.
-///
-/// # Generics
-/// TBD
-///
-/// # Fields
-/// * `adc`: A reference to the ADC controller used for temperature measurement.
-/// * `adc_pin`: The pin used by the ADC controller for reading values.
-/// * `v_ratio`: The precomputed ratio of volts per ADC unit for voltage to temperature conversion.
-/// * `pwm`: A PWM controller used to apply heating power.
-/// * `defer_channel`: A channel for submitting status changes for deferred processing.
-/// * `target_temp`: The target or desired temperature value in Celsius.
-/// * `current_resistance`: The last measured resistance value in Ohms, cached for quick access.
-/// * `commander_channel`: The communication channel that sent the current request.
-/// * `on`: A boolean indicating whether the heater is currently on.
-/// * `thermistor_properties`: Properties of the thermistor including its resistance and beta coefficient.
 pub struct HeaterController<HA, HP>
 where
     HA: AsyncMutexStrategy + 'static,
@@ -131,14 +343,32 @@ where
     /// Last measured resistance value in Ohms, cached for quick access.
     current_resistance: f32,
     current_channel: CommChannel,
+    /// Order number of the most recently registered temperature-await request.
+    pending_order_num: u32,
+    /// Whether the pending await must also wait for cooling down (M109 R)
+    wait_cooling: bool,
     state_machine: HeaterStateMachine,
     defer_channel: hwa::types::DeferChannel,
     defer_action: DeferAction,
     temperature_flags: EventFlags,
     /// Cache of the heater controller's operational state (on or off).
     on: bool,
-    #[cfg(feature = "native")]
-    t0: embassy_time::Instant,
+    config: HeaterConfig,
+    pid: PidControl,
+    /// Last applied power in [0, 1]
+    power: f32,
+    last_update: Option<embassy_time::Instant>,
+    fault: Option<HeaterFault>,
+    protection: ProtectionState,
+    /// Heating watch: (deadline, temperature to reach)
+    watch: Option<(embassy_time::Instant, f32)>,
+    /// Thermal runaway deadline
+    runaway_deadline: Option<embassy_time::Instant>,
+    autotune: Option<AutotuneRun>,
+    /// The last cycle of the running autotune, until reported
+    autotune_cycle: Option<AutotuneCycle>,
+    /// The end of the last autotune, until reported
+    autotune_end: Option<AutotuneEnd>,
 }
 impl<HA, HP> HeaterController<HA, HP>
 where
@@ -160,6 +390,7 @@ where
         defer_channel: hwa::types::DeferChannel,
         defer_action: DeferAction,
         defer_flags: EventFlags,
+        config: HeaterConfig,
     ) -> Self {
         Self {
             adc,
@@ -171,13 +402,24 @@ where
             target_temp: 0.0f32,
             current_resistance: 0.0f32,
             current_channel: CommChannel::Internal,
+            pending_order_num: 0,
+            wait_cooling: false,
             state_machine: HeaterStateMachine::new(),
             on: false,
             defer_channel,
             defer_action,
             temperature_flags: defer_flags,
-            #[cfg(feature = "native")]
-            t0: embassy_time::Instant::now(),
+            config,
+            pid: PidControl::new(config.pid.0, config.pid.1, config.pid.2),
+            power: 0.0,
+            last_update: None,
+            fault: None,
+            protection: ProtectionState::Inactive,
+            watch: None,
+            runaway_deadline: None,
+            autotune: None,
+            autotune_cycle: None,
+            autotune_end: None,
         }
     }
     pub async fn init(&mut self, v_ref_default: u16) {
@@ -188,104 +430,258 @@ where
         self.target_temp
     }
 
+    /// The highest target temperature accepted
+    pub fn max_target_temp(&self) -> f32 {
+        self.config.max_temp - TARGET_MAX_TEMP_MARGIN
+    }
+
+    pub fn get_config(&self) -> &HeaterConfig {
+        &self.config
+    }
+
+    /// Test hook: changes the configuration (e.g. a shorter heating watch period, so that a
+    /// protection scenario does not wait as long as on a real machine)
+    #[cfg(test)]
+    pub fn config_mut(&mut self) -> &mut HeaterConfig {
+        &mut self.config
+    }
+
+    /// The latched fault, if any
+    pub fn fault(&self) -> Option<HeaterFault> {
+        self.fault
+    }
+
+    /// Clears the latched fault (M999). The heater remains off.
+    pub fn clear_fault(&mut self) {
+        self.fault = None;
+        self.protection = ProtectionState::Inactive;
+        self.watch = None;
+        self.runaway_deadline = None;
+    }
+
+    /// Current PID constants (Kp, Ki, Kd)
+    pub fn get_pid(&self) -> (f32, f32, f32) {
+        (self.pid.kp, self.pid.ki, self.pid.kd)
+    }
+
+    /// Sets the PID constants. `None` keeps the current value (M301/M304)
+    pub fn set_pid(&mut self, kp: Option<f32>, ki: Option<f32>, kd: Option<f32>) {
+        if let Some(kp) = kp {
+            self.pid.kp = kp;
+        }
+        if let Some(ki) = ki {
+            self.pid.ki = ki;
+        }
+        if let Some(kd) = kd {
+            self.pid.kd = kd;
+        }
+        self.pid.reset();
+    }
+
+    /// Restores the default PID constants (M502)
+    pub fn reset_pid(&mut self) {
+        let (kp, ki, kd) = self.config.pid;
+        self.set_pid(Some(kp), Some(ki), Some(kd));
+    }
+
     /// Sets the target temperature for the heater.
-    ///
-    /// This method is responsible for setting a new target temperature and determining whether
-    /// the command to reach that temperature should be deferred. If the requested temperature
-    /// is significantly different from the current target temperature, the method will trigger
-    /// a defer event.
     ///
     /// # Parameters
     ///
-    /// * `channel`: The communication channel that has sent the current request.
+    /// * `channel`: The communication channel that has sent the current request. When it is not
+    ///   [CommChannel::Internal], the response is deferred until the target is reached.
     /// * `action`: The action to be deferred.
-    /// * `requested_temp`: The newly requested temperature in Celsius degrees.
+    /// * `requested_temp`: The newly requested temperature in Celsius degrees. Zero or less turns
+    ///   the heater off.
+    /// * `wait_cooling`: When deferred, also wait if the heater has to cool down (M109 R). Otherwise
+    ///   the response is not deferred when the current temperature is above the target.
     ///
     /// # Returns
     ///
-    /// * `bool` - Returns `true` if the command is deferred (i.e., it needs to delay ACK to reach the desired temperature).
-    ///
-    /// # Notes
-    ///
-    /// * If the requested temperature is above `0.0f32`, the heater will be turned on.
-    /// * If the difference between the requested temperature and the current target temperature
-    ///   is significant (more than 10%), a defer event will be triggered.
-    /// * If the requested temperature is `0.0f32` or less, the heater will be turned off.
+    /// * `Ok(true)` if the response is deferred.
+    /// * `Err` if the request is rejected (faulted heater or target too high).
     pub async fn set_target_temp(
         &mut self,
         channel: CommChannel,
         action: DeferAction,
         requested_temp: f32,
         order_num: u32,
-    ) -> bool {
+        wait_cooling: bool,
+    ) -> Result<bool, HeaterError> {
         if requested_temp > 0.0f32 {
-            let tdiff = requested_temp - self.target_temp;
+            if let Some(fault) = self.fault {
+                return Err(HeaterError::Faulted(fault));
+            }
+            if requested_temp > self.max_target_temp() {
+                return Err(HeaterError::TargetTooHigh);
+            }
+            // A new target cancels a running autotune
+            self.cancel_autotune();
+            let previous_target = self.target_temp;
+            let was_on = self.is_on();
             self.target_temp = requested_temp;
             self.on();
-            if tdiff.abs() > 0.1f32 * self.target_temp {
-                self.current_channel = channel;
-                self.defer_channel
-                    .send(AwaitRequested(action, channel, order_num))
-                    .await;
-                true
-            } else {
-                self.current_channel = CommChannel::Internal;
-                false
+            if !was_on || requested_temp != previous_target {
+                self.pid.reset();
+                self.start_protection();
             }
+            // M104/M140 use CommChannel::Internal: they are immediate commands and must not block
+            // the host. Only defer when the caller holds a real host channel.
+            if channel == CommChannel::Internal {
+                return Ok(false);
+            }
+            Ok(self
+                .subscribe_if_needed(channel, action, order_num, wait_cooling)
+                .await)
         } else {
             self.target_temp = 0.0f32;
             self.current_channel = CommChannel::Internal;
+            self.cancel_autotune();
             self.off();
-            false
+            Ok(false)
         }
     }
 
-    /// Checks if the temperature is within an acceptable range compared to the target temperature.
+    /// Defers the response until the current target is reached (M109/M190 with no `S`).
     ///
-    /// If the heater is on and the measured temperature differs from the target temperature by
-    /// more than 10%, this method will trigger a defer event, requesting to delay processing until
-    /// the temperature stabilizes.
-    ///
-    /// # Parameters
-    ///
-    /// * `channel`: The communication channel that sent the current request.
-    /// * `action`: The action to be deferred if the temperature is not within the acceptable range.
-    ///
-    /// # Returns
-    ///
-    /// * `bool` - Returns `true` if the command is deferred (indicating a need to delay ACK
-    ///   to allow the temperature to stabilize), otherwise returns `false`.
-    ///
-    /// # Notes
-    ///
-    /// * If the heater is off or the current temperature is not greater than zero, the method
-    ///   returns `false` without triggering a defer event.
-    /// * Otherwise, it compares the current temperature with the target temperature.
-    /// * If the difference exceeds 10% of the target temperature, a defer event is triggered,
-    ///   and the method returns `true`. The commander's channel is updated to the provided channel.
-    /// * If the temperature difference is within the 10% range, the method returns `false`
-    ///   and sets the commander's channel to `CommChannel::Internal`.
+    /// Returns `true` if the response is deferred.
     pub async fn ping_subscribe(
         &mut self,
         channel: CommChannel,
         action: DeferAction,
         order_num: u32,
     ) -> bool {
-        if self.is_on() && self.state_machine.current_temperature > 0.0f32 {
-            let tdiff = self.state_machine.current_temperature - self.target_temp;
-            if tdiff.abs() > 0.1f32 * self.target_temp {
-                self.current_channel = channel;
-                self.defer_channel
-                    .send(AwaitRequested(action, channel, order_num))
-                    .await;
-                true
-            } else {
-                self.current_channel = CommChannel::Internal;
-                false
-            }
+        if self.is_on() && self.target_temp > 0.0f32 {
+            self.subscribe_if_needed(channel, action, order_num, false)
+                .await
         } else {
             false
         }
+    }
+
+    async fn subscribe_if_needed(
+        &mut self,
+        channel: CommChannel,
+        action: DeferAction,
+        order_num: u32,
+        wait_cooling: bool,
+    ) -> bool {
+        let current = self.state_machine.current_temperature;
+        let must_wait = if wait_cooling {
+            !self.is_within_window()
+        } else {
+            current < self.target_temp - self.config.temp_window
+        };
+        if must_wait {
+            self.current_channel = channel;
+            self.pending_order_num = order_num;
+            self.wait_cooling = wait_cooling;
+            self.defer_channel
+                .send(AwaitRequested(action, channel, order_num))
+                .await;
+            true
+        } else {
+            self.current_channel = CommChannel::Internal;
+            false
+        }
+    }
+
+    fn is_within_window(&self) -> bool {
+        (self.state_machine.current_temperature - self.target_temp).abs()
+            <= self.config.temp_window
+    }
+
+    /// Starts a relay PID autotune (M303, see [autotune]). When `deferred`, the response to the
+    /// requester waits for its end (the temperature task completes it, see [Self::complete_autotune]).
+    pub async fn start_autotune(&mut self, request: AutotuneRequest) -> Result<(), HeaterError> {
+        if let Some(fault) = self.fault {
+            return Err(HeaterError::Faulted(fault));
+        }
+        if self.autotune.is_some() {
+            return Err(HeaterError::Busy);
+        }
+        if request.target > self.max_target_temp() {
+            return Err(HeaterError::TargetTooHigh);
+        }
+        self.target_temp = request.target;
+        self.on();
+        self.pid.reset();
+        self.start_protection();
+        self.autotune = Some(AutotuneRun {
+            tune: Autotune::new(request.target, request.cycles, request.rule, embassy_time::Instant::now()),
+            request,
+        });
+        self.autotune_cycle = None;
+        if request.deferred {
+            self.defer_channel
+                .send(AwaitRequested(self.defer_action, request.channel, request.order_num))
+                .await;
+        }
+        Ok(())
+    }
+
+    pub fn is_autotuning(&self) -> bool {
+        self.autotune.is_some()
+    }
+
+    /// The channel that asked for the running autotune
+    pub fn autotune_channel(&self) -> Option<CommChannel> {
+        self.autotune.as_ref().map(|run| run.request.channel)
+    }
+
+    /// Takes the reports of the autotune: its last cycle and its end, if any
+    pub fn take_autotune_events(&mut self) -> (Option<AutotuneCycle>, Option<AutotuneEnd>) {
+        (self.autotune_cycle.take(), self.autotune_end.take())
+    }
+
+    /// Completes the deferred response of a finished autotune (see [Self::start_autotune])
+    pub async fn complete_autotune(&mut self, end: &AutotuneEnd) {
+        if end.request.deferred {
+            self.defer_channel
+                .send(Completed(self.defer_action, end.request.channel, end.request.order_num))
+                .await;
+        }
+    }
+
+    /// Ends the running autotune, if any. The heater is left as it is
+    fn end_autotune(&mut self, outcome: AutotuneOutcome) {
+        if let Some(run) = self.autotune.take() {
+            if let (AutotuneOutcome::Done { kp, ki, kd, .. }, true) = (outcome, run.request.apply) {
+                let f = |v: Real| Some(v.to_f64() as f32);
+                self.set_pid(f(kp), f(ki), f(kd));
+            }
+            self.autotune_end = Some(AutotuneEnd {
+                outcome,
+                request: run.request,
+            });
+        }
+    }
+
+    /// A running autotune is cancelled (new target, heater shut down)
+    fn cancel_autotune(&mut self) {
+        self.end_autotune(AutotuneOutcome::Interrupted);
+    }
+
+    fn start_protection(&mut self) {
+        self.protection = ProtectionState::FirstHeating;
+        self.runaway_deadline = None;
+        self.arm_watch();
+    }
+
+    /// Arms the heating watch, only when the temperature is far enough from the target
+    fn arm_watch(&mut self) {
+        let current = self.state_machine.current_temperature;
+        let threshold = self.target_temp
+            - (self.config.watch_increase + self.config.protection_hysteresis + 1.0);
+        self.watch = if current < threshold {
+            Some((
+                embassy_time::Instant::now()
+                    + embassy_time::Duration::from_secs(self.config.watch_period_s as u64),
+                current + self.config.watch_increase,
+            ))
+        } else {
+            None
+        };
     }
 
     // Updates the latest measured temperature in Celsius degrees
@@ -305,6 +701,7 @@ where
 
     // Sets the applied power in scale between 0 and 100
     pub fn set_power(&mut self, power: u8) {
+        self.power = (power.min(100) as f32) / 100.0;
         self.pwm.set_power(power);
     }
 
@@ -313,29 +710,9 @@ where
         self.pwm.get_power()
     }
 
-    // Sets the applied power in scale between 0 and 100
     /// Reads the current temperature in Celsius degrees.
     ///
-    /// # Returns
-    ///
-    /// * `f32` - The current temperature measurement in Celsius degrees.
-    ///
-    /// # Implementation Note
-    ///
-    /// This asynchronous function locks the ADC bus to perform a temperature
-    /// measurement. Depending on the feature configuration, the measurement
-    /// can be performed asynchronously or synchronously. The raw ADC value read
-    /// from the ADC pin is then converted to a temperature value, using the
-    /// `convert_to_celsius` method, which is also responsible for updating the
-    /// cached temperature and resistance values.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// let mut controller = HeaterController::new(adc, adc_pin, pwm, defer_channel, thermistor_properties);
-    /// let current_temp = controller.read_temp().await;
-    /// println!("Current Temperature: {} °C", current_temp);
-    /// ```
+    /// Returns the measured resistance of the thermistor.
     pub async fn read_temp(&mut self) -> f32 {
         let value = self.adc.read_sample().await;
         (
@@ -353,19 +730,15 @@ where
     /// * The Temperature in Celsius degrees
     /// * Even though it's not strictly necessary, the measured resistance, which is really useful to debug and review
     fn convert_to_celcius(&self, sample: u16) -> (f32, f32) {
+        if sample > 4095 {
+            // Out of the 12-bit range: not a valid reading (sensor error)
+            return (f32::NAN, f32::NAN);
+        }
         let sample_v = f32::from(sample) * self.v_ratio;
         let measured_resistance: f32 =
             (sample_v * self.r_pull_up) / ((4095.0f32 * self.v_ratio) - sample_v);
 
-        /*
-        hwa::trace!("sample: {:?} : v: {:?} Volt measured_resistance: {:?} Ohm",
-            sample, Real::from_f32(sample_v), Real::from_f32(measured_resistance),
-        );
-        */
-
-        let log_mr_by_r_nominal: f32 = micromath::F32::from(measured_resistance / self.r_nominal)
-            .ln()
-            .into();
+        let log_mr_by_r_nominal: f32 = accurate_ln(measured_resistance / self.r_nominal);
         (
             (1.0 / (log_mr_by_r_nominal / self.beta + 1.0 / 298.15)) - 273.15,
             measured_resistance,
@@ -381,15 +754,7 @@ where
     }
 
     pub fn is_awaited(&self) -> bool {
-        match &self.current_channel {
-            CommChannel::Internal => false,
-            #[cfg(any(
-                feature = "with-serial-usb",
-                feature = "with-serial-port-1",
-                feature = "with-serial-port-2"
-            ))]
-            _ => true,
-        }
+        !matches!(self.current_channel, CommChannel::Internal)
     }
 
     // Checks if heater is enabled
@@ -401,93 +766,174 @@ where
     }
     pub fn off(&mut self) {
         self.on = false;
-        self.pwm.set_power(0);
+        self.protection = ProtectionState::Inactive;
+        self.watch = None;
+        self.runaway_deadline = None;
+        self.pid.reset();
+        self.set_power(0);
     }
 
-    /// Updates the state machine with the current temperature readings and
-    /// performs the required actions based on the new temperature state.
-    ///
-    /// # Arguments
-    ///
-    /// * `ctrl` - A reference to the heater controller.
-    ///
-    /// This method carries out the following operations:
-    ///
-    /// 1. Locks the ADC to ensure exclusive access during the update process.
-    /// 2. Reads the current temperature.
-    /// 3. If the "native" feature is enabled, checks whether the heater has been on for more than 5 seconds and
-    ///    adjusts the current temperature reading accordingly.
-    /// 4. Determines the new state of the heater based on the current temperature and target temperature:
-    ///    - If the heater is on, computes the control output using the PID controller and adjusts the power supplied to the heater.
-    ///    - If the heater is off, resets the current temperature to zero and sets the state to `Duty`.
-    /// 5. Updates the current state of the state machine if it has changed.
-    /// 6. Publishes events to the event bus based on the new state.
-    ///
-    pub async fn update(&mut self, event_bus: &hwa::types::EventBus) {
-        use num_traits::ToPrimitive;
-        hwa::debug!("Updating HEATER...");
+    /// Shuts the heater down because of a safety reason (SYS_ALARM): target is reset and any
+    /// running autotune is cancelled.
+    pub fn shutdown(&mut self) {
+        self.target_temp = 0.0;
+        self.cancel_autotune();
+        self.off();
+    }
 
-        let temp = self.read_temp().await;
+    /// Latches a fault and shuts the heater down
+    fn trigger_fault(&mut self, fault: HeaterFault) {
+        hwa::error!(
+            "[Heater {:?}] {} (temp: {:?} target: {:?}). Shutting down",
+            self.defer_action,
+            fault.description(),
+            Real::from_f32(self.state_machine.current_temperature),
+            Real::from_f32(self.target_temp),
+        );
+        self.fault = Some(fault);
+        self.shutdown();
+    }
 
-        self.set_current_temp(temp);
-
-        #[cfg(feature = "native")]
-        {
-            if self.is_on() {
-                if self.t0.elapsed() > embassy_time::Duration::from_secs(5) {
-                    self.state_machine.current_temperature = self.get_target_temp();
+    /// Checks the safety conditions with the latest measurement
+    fn check_safety(&mut self, temp: f32, now: embassy_time::Instant) -> Option<HeaterFault> {
+        if temp.is_nan() {
+            // A disconnected sensor of an unused heater must not halt the machine
+            return self.is_on().then_some(HeaterFault::SensorError);
+        }
+        if temp >= self.config.max_temp {
+            return Some(HeaterFault::MaxTemp);
+        }
+        if !self.is_on() {
+            return None;
+        }
+        if temp < self.config.min_temp {
+            return Some(HeaterFault::MinTemp);
+        }
+        let target = self.target_temp;
+        let hysteresis = self.config.protection_hysteresis;
+        match self.protection {
+            ProtectionState::Inactive => {}
+            ProtectionState::FirstHeating => {
+                if temp >= target - hysteresis {
+                    self.protection = ProtectionState::Stable;
+                    self.watch = None;
+                    self.runaway_deadline = None;
+                } else if let Some((deadline, watch_temp)) = self.watch {
+                    if now >= deadline {
+                        if temp < watch_temp {
+                            return Some(HeaterFault::HeatingFailed);
+                        }
+                        self.arm_watch();
+                    }
+                }
+            }
+            ProtectionState::Stable if self.autotune.is_some() => {
+                // The relay autotune oscillates around the target on purpose. MAXTEMP, MINTEMP and
+                // the autotune overshoot and timeout limits still apply.
+                self.runaway_deadline = None;
+            }
+            ProtectionState::Stable => {
+                if temp < target - hysteresis {
+                    match self.runaway_deadline {
+                        None => {
+                            self.runaway_deadline = Some(
+                                now + embassy_time::Duration::from_secs(
+                                    self.config.protection_period_s as u64,
+                                ),
+                            );
+                        }
+                        Some(deadline) if now >= deadline => {
+                            return Some(HeaterFault::ThermalRunaway);
+                        }
+                        _ => {}
+                    }
+                } else {
+                    self.runaway_deadline = None;
                 }
             }
         }
+        None
+    }
+
+    /// Updates the state machine with the current temperature readings and
+    /// performs the required actions based on the new temperature state:
+    ///
+    /// 1. Reads the current temperature.
+    /// 2. Checks the safety conditions. On fault, the heater is shut down and the fault latched.
+    /// 3. Computes the power to apply (PID or autotune).
+    /// 4. Publishes the temperature flags and flushes the deferred responses when the target is reached.
+    ///
+    /// Returns the fault detected in this update, if any.
+    pub async fn update(&mut self, event_bus: &hwa::types::EventBus) -> Option<HeaterFault> {
+        hwa::trace!("Updating HEATER...");
+        let now = embassy_time::Instant::now();
+        let dt = match self.last_update {
+            Some(last) => ((now - last).as_micros() as f32 / 1_000_000.0).clamp(0.0, 10.0),
+            None => 0.0,
+        };
+        self.last_update = Some(now);
+
+        let _ = self.read_temp().await;
+
+        let temp = self.state_machine.current_temperature;
+
+        let new_fault = match self.fault {
+            Some(_) => None,
+            None => self.check_safety(temp, now),
+        };
+        if let Some(fault) = new_fault {
+            self.trigger_fault(fault);
+            event_bus
+                .publish_event(
+                    EventStatus::containing(EventFlags::SYS_ALARM)
+                        .and_not_containing(self.temperature_flags),
+                )
+                .await;
+            self.state_machine.state = State::Duty;
+            return new_fault;
+        }
+
         let new_state = {
             hwa::trace!(
                 "MEASURED_TEMP[{:?}] {:?}",
                 self.defer_action,
-                Real::from_f32(self.state_machine.current_temperature)
+                Real::from_f32(temp)
             );
-            if self.is_on() {
-                let target_temp = self.get_target_temp();
-                self.state_machine.pid.setpoint(target_temp);
-
-                self.state_machine.last_temperature = self.state_machine.current_temperature;
-
-                let delta = self
-                    .state_machine
-                    .pid
-                    .next_control_output(self.state_machine.current_temperature)
-                    .output;
-                let power = if delta > 0.0f32 {
-                    if delta < 100.0f32 {
-                        delta / 100.0f32
-                    } else {
-                        1.0f32
+            if self.fault.is_none() && self.is_on() {
+                let output = match self.autotune.as_mut().map(|run| run.tune.step(temp, now)) {
+                    Some(Ok(power)) => {
+                        if let Some(cycle) = self.autotune.as_mut().and_then(|run| run.tune.take_cycle()) {
+                            self.autotune_cycle = Some(cycle);
+                        }
+                        power
                     }
-                } else {
-                    0.0f32
+                    Some(Err(outcome)) => {
+                        // The last cycle is reported before the end
+                        if let Some(cycle) = self.autotune.as_mut().and_then(|run| run.tune.take_cycle()) {
+                            self.autotune_cycle = Some(cycle);
+                        }
+                        self.end_autotune(outcome);
+                        // Autotune leaves the heater off, as Marlin does
+                        self.target_temp = 0.0;
+                        self.off();
+                        0.0
+                    }
+                    None => self.pid.next(self.target_temp, temp, dt),
                 };
-
-                /*
-                hwa::trace!(
-                    "TEMP {:?} -> {:?}, {:?} P={:?} [{:?}]",
-                    Real::from_f32(self.state_machine.last_temperature),
-                    Real::from_f32(self.state_machine.current_temperature),
-                    Real::from_f32(delta), Real::from_f32(power), Real::from_f32(target_temp),
-                );
-                */
-
-                self.set_power((power * 100.0f32).to_u8().unwrap_or(0));
-
-                if (self.state_machine.current_temperature - self.get_target_temp()).abs()
-                    / target_temp
-                    < 0.25
-                {
+                if self.is_on() {
+                    let percent = ((output / PID_MAX) * 100.0).clamp(0.0, 100.0);
+                    self.set_power(percent as u8);
+                }
+                if !self.is_on() {
+                    State::Duty
+                } else if self.is_within_window() {
                     State::Maintaining
                 } else {
                     State::Targeting
                 }
             } else {
-                if self.state_machine.last_temperature != self.state_machine.current_temperature {
-                    self.state_machine.last_temperature = self.state_machine.current_temperature;
+                if self.power > 0.0 {
+                    self.set_power(0);
                 }
                 State::Duty
             }
@@ -496,44 +942,35 @@ where
         if new_state != self.state_machine.state {
             hwa::trace!("Temp changed to {:?}", new_state);
             match new_state {
-                State::Duty => {
-                    #[cfg(feature = "native")]
-                    {
-                        self.t0 = embassy_time::Instant::now();
-                    }
+                State::Duty | State::Targeting => {
                     event_bus
                         .publish_event(EventStatus::not_containing(self.temperature_flags))
                         .await;
                 }
                 State::Maintaining => {
-                    #[cfg(feature = "native")]
                     hwa::debug!("Temperature reached. Firing {:?}.", self.temperature_flags);
-                    // FIXME: proper order_num
-                    self.flush_notification(self.defer_action, 0).await;
                     event_bus
                         .publish_event(EventStatus::containing(self.temperature_flags))
                         .await;
                 }
-                State::Targeting => {
-                    #[cfg(feature = "native")]
-                    {
-                        self.t0 = embassy_time::Instant::now();
-                    }
-                    event_bus
-                        .publish_event(EventStatus::not_containing(self.temperature_flags))
-                        .await;
-                }
             }
             self.state_machine.state = new_state;
-        } else if self.is_awaited() {
-            match new_state {
-                State::Maintaining => {
-                    // FIXME: proper order_num
-                    self.flush_notification(self.defer_action, 0).await;
+        }
+        if self.is_awaited() {
+            let reached = match self.wait_cooling {
+                true => new_state == State::Maintaining,
+                false => {
+                    new_state == State::Maintaining
+                        || (self.is_on()
+                            && temp >= self.target_temp - self.config.temp_window)
                 }
-                _ => {}
+            };
+            if reached {
+                self.flush_notification(self.defer_action, self.pending_order_num)
+                    .await;
             }
         }
+        None
     }
 }
 
@@ -551,28 +988,113 @@ enum State {
 
 /// Represents the finite state machine for handling the heater's operation states.
 struct HeaterStateMachine {
-    /// PID controller used to regulate the heater's temperature.
-    pid: pid::Pid<f32>,
     /// Current temperature being read from the heater.
     current_temperature: f32,
-    /// The last recorded temperature of the heater.
-    last_temperature: f32,
     /// The current state of the heater's finite state machine (FSM).
     state: State,
 }
 
 impl HeaterStateMachine {
     fn new() -> Self {
-        let mut pid: pid::Pid<f32> = pid::Pid::new(0.0f32, 100.0f32);
-        pid.p(5.0f32, 100.0f32);
-        pid.i(0.01f32, 100.0f32);
-        pid.d(1.5f32, 100.0f32);
-
         Self {
-            pid,
             current_temperature: 0f32,
-            last_temperature: 0f32,
             state: State::Duty,
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pid_full_power_far_below_target() {
+        let mut pid = PidControl::new(22.2, 1.08, 114.0);
+        assert_eq!(pid.next(200.0, 25.0, 0.5), PID_MAX);
+        // Integral frozen out of the functional range
+        assert_eq!(pid.integral, 0.0);
+    }
+
+    #[test]
+    fn pid_off_far_above_target() {
+        let mut pid = PidControl::new(22.2, 1.08, 114.0);
+        assert_eq!(pid.next(200.0, 230.0, 0.5), 0.0);
+        assert_eq!(pid.next(0.0, 25.0, 0.5), 0.0);
+    }
+
+    #[test]
+    fn pid_integral_is_bounded() {
+        let mut pid = PidControl::new(22.2, 1.08, 114.0);
+        for _ in 0..10_000 {
+            let _ = pid.next(200.0, 195.0, 0.5);
+        }
+        assert!(pid.integral * pid.ki <= PID_MAX + 0.001);
+        let out = pid.next(200.0, 195.0, 0.5);
+        assert!(out >= 0.0 && out <= PID_MAX);
+    }
+
+    /// Closed loop with a first-order plant: the PID must settle near the target
+    #[test]
+    fn pid_settles_on_first_order_plant() {
+        let mut pid = PidControl::new(21.73, 1.54, 76.55);
+        let (amb, gain, tau, dt) = (22.0f32, 330.0f32, 20.0f32, 0.5f32);
+        let mut temp = amb;
+        for _ in 0..2400 {
+            let power = pid.next(200.0, temp, dt) / PID_MAX;
+            let t_inf = amb + gain * power;
+            temp += (t_inf - temp) * (1.0 - (-dt / tau).exp());
+        }
+        assert!((temp - 200.0).abs() < 2.0, "settled at {}", temp);
+    }
+
+    #[test]
+    fn heater_fault_descriptions() {
+        assert_eq!(HeaterFault::ThermalRunaway.description(), "Thermal Runaway");
+        assert_eq!(HeaterFault::MaxTemp.description(), "MAXTEMP triggered");
+    }
+}
+
+#[cfg(test)]
+mod safety_tests;
+
+/// Natural logarithm accurate to 1 ulp in f32 (micromath's `ln` is a coarse approximation that
+/// yields several ºC of error in the thermistor conversion). Pure f32 (fdlibm's `logf` scheme):
+/// f64 would link the soft-double routines (~3.5 KB) on the boards without double-precision FPU.
+///
+/// `x = m·2^e` with `m ∈ [√½, √2)`, `f = m-1` (exact), `s = f/(2+f)`, `|s| < 0.172`, and
+/// `ln(m) = f - f²/2 + s·(f²/2 + R(s²))` where `R` is the odd atanh series (four terms reach f32
+/// precision). `e·ln2` is split in hi/lo parts so that the sum keeps full precision.
+/// Verified exhaustively against f64 `ln` (1 ulp max; < 0.0001 ºC in the thermistor range).
+fn accurate_ln(x: f32) -> f32 {
+    if x.is_nan() || x < 0.0 {
+        return f32::NAN;
+    }
+    if x == 0.0 {
+        return f32::NEG_INFINITY;
+    }
+    if x.is_infinite() {
+        return f32::INFINITY;
+    }
+    let (mut bits, mut e) = (x.to_bits(), 0i32);
+    if bits < 0x0080_0000 {
+        // Subnormal: normalize first (×2^24)
+        bits = (x * 16_777_216.0).to_bits();
+        e -= 24;
+    }
+    e += ((bits >> 23) as i32) - 127;
+    let mut m = f32::from_bits((bits & 0x007F_FFFF) | 0x3F80_0000);
+    if m > core::f32::consts::SQRT_2 {
+        m *= 0.5;
+        e += 1;
+    }
+    // ln2 = LN2_HI + LN2_LO, LN2_HI with trailing zero bits so that `e·LN2_HI` is exact
+    const LN2_HI: f32 = 6.931_381_225_6e-1;
+    const LN2_LO: f32 = 9.058_000_614_5e-6;
+    let f = m - 1.0;
+    let s = f / (2.0 + f);
+    let s2 = s * s;
+    let r = s2 * (2.0 / 3.0 + s2 * (2.0 / 5.0 + s2 * (2.0 / 7.0 + s2 * (2.0 / 9.0))));
+    let hfsq = 0.5 * f * f;
+    let ef = e as f32;
+    ef * LN2_HI - ((hfsq - (s * (hfsq + r) + ef * LN2_LO)) - f)
 }

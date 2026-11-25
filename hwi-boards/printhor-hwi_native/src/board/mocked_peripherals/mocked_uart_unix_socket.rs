@@ -1,17 +1,18 @@
 use printhor_hwa_common as hwa;
 use hwa::HwiContract;
 use crate::Contract;
-use async_std::os::unix::net::{Incoming, UnixListener, UnixStream};
-use async_std::io::{ReadExt, WriteExt};
+use smol::net::unix::{UnixListener, UnixStream};
+use smol::io::{AsyncReadExt, AsyncWriteExt};
 use std::io::ErrorKind;
 use std::net::Shutdown;
-use async_std::stream::StreamExt;
 
 /// A quick and dirty approach to get it done with the unix sockets communication
 /// The approach is thought to be full duplex in relation with an external process
 
 pub struct RawConnectionManager {
-    incoming: &'static hwa::AsyncMutex<hwa::AsyncNoopMutexType, Incoming<'static>>,
+    /// Accepts are serialized by the `reader` lock (only the Rx side accepts connections)
+    /// None when the socket could not be bound: the port never gets a connection
+    listener: Option<&'static UnixListener>,
     reader: &'static hwa::AsyncMutex<hwa::AsyncNoopMutexType, Option<UnixStream>>,
     writer: &'static hwa::AsyncMutex<hwa::AsyncNoopMutexType, Option<UnixStream>>,
 }
@@ -23,7 +24,7 @@ pub struct MockedUartUnixSocket {
 impl MockedUartUnixSocket {
     pub async fn new(socket_path: String) -> Self {
 
-        match async_std::fs::remove_file(&socket_path).await {
+        match smol::fs::remove_file(&socket_path).await {
             Ok(_) => {
                 // Fine
             }
@@ -33,21 +34,24 @@ impl MockedUartUnixSocket {
                         // Fine
                     }
                     _other => {
-                        hwa::error!("[mocked-unix-socket] Unable to remove prior socket file. Will panic later, probably due to error: {:?}", e);
+                        hwa::error!("[mocked-unix-socket] Unable to remove prior socket file. Binding will probably fail due to error: {:?}", e);
                     }
                 }
             }
         }
 
-        let instance = match UnixListener::bind(socket_path).await {
-            Ok(listener) => listener,
-            // Address is in use, not enough permissions to do it [...]
-            Err(_e) => panic!("[mocked-unix-socket] Can't bind to socket path: {:?}", _e),
-        };
-        let listener = hwa::make_static_ref! {
-            "Listener",
-            UnixListener,
-            instance
+        // Address is in use, not enough permissions to do it [...]: reported, and the port stays
+        // disconnected (never panics)
+        let listener = match UnixListener::bind(socket_path) {
+            Ok(instance) => Some(&*hwa::make_static_ref! {
+                "Listener",
+                UnixListener,
+                instance
+            }),
+            Err(_e) => {
+                hwa::error!("[mocked-unix-socket] Can't bind to socket path: {:?}. Port disabled", _e);
+                None
+            }
         };
 
         Self {
@@ -55,11 +59,7 @@ impl MockedUartUnixSocket {
                 "UnixConnection",
                 RawConnectionManager,
                 RawConnectionManager {
-                    incoming: hwa::make_static_ref! {
-                        "Acceptor",
-                        hwa::AsyncMutex<hwa::AsyncNoopMutexType, Incoming<'static>>,
-                        hwa::AsyncMutex::new(listener.incoming())
-                    },
+                    listener,
                     reader: hwa::make_static_ref! {
                         "UnixSocketReader",
                         hwa::AsyncMutex<hwa::AsyncNoopMutexType, Option<UnixStream>>,
@@ -103,21 +103,29 @@ impl MockedUartNamedPipeRx {
         let reader_instance = match rg.as_mut() {
             None => {
                 // Wait for another accept
-                let mut ag = self.manager.incoming.lock().await;
                 if !self.is_already_trying_to_listen {
                     hwa::info!("[mocked-unix-socket] Waiting for connection");
                     self.is_already_trying_to_listen = true;
                 }
-                let stream = ag.next().await.unwrap().unwrap();
+                let listener = match self.manager.listener {
+                    Some(listener) => listener,
+                    // Disabled port: no data, ever
+                    None => core::future::pending().await,
+                };
+                let (stream, _addr) = match listener.accept().await {
+                    Ok(accepted) => accepted,
+                    Err(_e) => {
+                        hwa::error!("[mocked-unix-socket] Accept failed: {:?}", _e);
+                        return Err(());
+                    }
+                };
                 let mut wg = self.manager.writer.lock().await;
                 wg.replace(stream.clone());
                 rg.replace(stream);
                 hwa::info!("[mocked-unix-socket] Connection established");
                 match rg.as_mut() {
-                    None => {
-                        // Better to panic than falling into a busy loop
-                        panic!("[mocked-unix-socket] Unexpectedly unable to get stream instance")
-                    }
+                    // Not expected (just replaced). Reported as a read error, never panics
+                    None => return Err(()),
                     Some(guarded_instance) => { guarded_instance }
                 }
             }

@@ -32,9 +32,9 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature="with-spi")] {
-        pub type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
-        //pub type Spi2 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
-        pub type Spi3 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async>;
+        pub type Spi1 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async, embassy_stm32::spi::mode::Master>;
+        //pub type Spi2 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async, embassy_stm32::spi::mode::Master>;
+        pub type Spi3 = embassy_stm32::spi::Spi<'static, embassy_stm32::mode::Async, embassy_stm32::spi::mode::Master>;
     }
 }
 
@@ -48,29 +48,47 @@ cfg_if::cfg_if! {
 pub type PwmLaser =
     embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM16>;
 
+// Heaters, fans and thermistors (MKS Robin Nano V3.1 pinout):
+//  TH1 (hot-end) PC1 ADC1 | TB (hot-bed) PC0 ADC1
+//  HE0 PE5 TIM9_CH1 | H-BED PA0 TIM5_CH1 | FAN2 PB1 TIM3_CH4 | FAN1 PC14 (no timer: on/off)
 cfg_if::cfg_if! {
-    if #[cfg(any(feature="with-hot-end", feature="with-hot-end"))] {
-        pub type AdcImpl<PERI> = embassy_stm32::adc::Adc<'static, PERI>;
-        pub use embassy_stm32::adc::Instance as AdcTrait;
-        pub use embassy_stm32::adc::AdcChannel as AdcPinTrait;
-        pub use embassy_stm32::adc::VrefInt as VrefInt;
-        pub type AdcHotendHotbedPeripheral = embassy_stm32::peripherals::ADC1;
+    if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
+        pub type HotEndHotBedAdc = super::io::adc::AdcWrapper<embassy_stm32::peripherals::ADC1>;
+        pub type HotEndHotBedAdcPin = embassy_stm32::adc::AnyAdcChannel<'static, embassy_stm32::peripherals::ADC1>;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-end")] {
+        pub type PwmHotEnd = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM9>;
+        pub type HotEndAdcPin = HotEndHotBedAdcPin;
+        pub type HotEndPwmChannel = embassy_stm32::timer::Channel;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-hot-bed")] {
+        pub type PwmHotBed = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM5>;
+        pub type HotBedAdcPin = HotEndHotBedAdcPin;
+        pub type HotBedPwmChannel = embassy_stm32::timer::Channel;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-layer")] {
+        pub type PwmFanLayer = embassy_stm32::timer::simple_pwm::SimplePwm<'static, embassy_stm32::peripherals::TIM3>;
+        pub type FanLayerPwmChannel = embassy_stm32::timer::Channel;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-fan-extra-1")] {
+        pub type PwmFanExtra1 = super::io::OnOffPwm;
+        pub type FanExtra1PwmChannel = ();
+    }
+}
 
-    }
-}
 cfg_if::cfg_if! {
-    if #[cfg(feature="with-hot-bed")] {
-        pub type AdcHotendHotbed = AdcImpl<AdcHotendHotbedPeripheral>;
-        pub type AdcHotbedPeripheral = AdcHotendHotbedPeripheral;
-        pub type AdcHotbedPin = embassy_stm32::peripherals::PC4;
-    }
-}
-cfg_if::cfg_if! {
-    if #[cfg(feature="with-hot-end")] {
-        pub type AdcHotendPeripheral = AdcHotendHotbedPeripheral;
-        pub type AdcHotend = AdcHotendHotbed;
-        pub type AdcHotbed = AdcHotendHotbed;
-        pub type AdcHotendPin = embassy_stm32::peripherals::PA0;
+    if #[cfg(feature = "with-eeprom")] {
+        /// On-board 24C32 (4KB) EEPROM on I2C1 (PB6: SCL, PB7: SDA)
+        pub type EepromI2c = embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>;
+        pub type Eeprom = hwa::eeprom::At24c32<EepromI2c>;
     }
 }
 

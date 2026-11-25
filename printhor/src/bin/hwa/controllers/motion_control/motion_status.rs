@@ -79,6 +79,18 @@ impl Position {
     pub fn update_from_world_coordinates(&mut self, updated_world_coordinates: &TVector<Real>) {
         self.world_pos
             .assign_if_set(CoordSel::motion_relevant_axis(), updated_world_coordinates);
+        // Keep world and space consistent: an unreachable target is replaced by the closest
+        // reachable one (the effector would end there anyway), so that the planned position, the
+        // reported position (M114) and relative moves all refer to the real effector position.
+        let reachable = Contract.clamp_to_workspace(&self.world_pos);
+        if reachable != self.world_pos {
+            hwa::warn!(
+                "[Position] Target {:?} is outside the reachable workspace. Moving to {:?}",
+                self.world_pos,
+                reachable
+            );
+            self.world_pos = reachable;
+        }
         match Contract.project_to_space(&self.world_pos) {
             Ok(space_pos) => {
                 self.is_set = true;
@@ -205,6 +217,94 @@ impl MotionStatus {
     pub fn is_absolute_positioning(&self) -> bool {
         self.cfg.apply(|m| m.absolute_positioning)
     }
+
+    /// Sets the extruder positioning mode (M82: absolute, M83: relative)
+    pub fn set_relative_extrusion(&self, relative: bool) {
+        self.cfg.apply_mut(|m| m.relative_extrusion = relative);
+    }
+
+    pub fn is_relative_extrusion(&self) -> bool {
+        self.cfg.apply(|m| m.relative_extrusion)
+    }
+
+    /// Whether E words must be interpreted as relative displacements.
+    ///
+    /// As in Marlin, E is relative when either G91 (all axis relative) or M83 is in effect.
+    pub fn is_e_relative(&self) -> bool {
+        self.cfg
+            .apply(|m| !m.absolute_positioning || m.relative_extrusion)
+    }
+
+    /// The last planned logical position of the extruder in world units (affected by G92 E)
+    pub fn get_logical_e(&self) -> Real {
+        self.cfg.apply(|m| m.logical_e_wu)
+    }
+
+    pub fn set_logical_e(&self, e: Real) {
+        self.cfg.apply_mut(|m| m.logical_e_wu = e);
+    }
+
+    /// The modal feed rate in world units per second (last `F` word received)
+    pub fn get_feed_rate(&self) -> Option<Real> {
+        self.cfg.apply(|m| m.feed_rate_wu_s)
+    }
+
+    pub fn set_feed_rate(&self, feed_rate_wu_s: Real) {
+        self.cfg.apply_mut(|m| m.feed_rate_wu_s = Some(feed_rate_wu_s));
+    }
+
+    /// Firmware retraction state (G10/G11)
+    pub fn is_retracted(&self) -> bool {
+        self.cfg.apply(|m| m.retracted)
+    }
+
+    pub fn set_retracted(&self, retracted: bool) {
+        self.cfg.apply_mut(|m| m.retracted = retracted);
+    }
+
+    /// Marks the position as unknown, so that homing is required before any move
+    pub fn invalidate_position(&self) {
+        self.cfg.apply_mut(|m| {
+            m.last_planned_position.is_set = false;
+            m.current_position.is_set = false;
+            m.homed_axes = CoordSel::empty();
+        });
+    }
+
+    /// Marks the position as not (completely) known, keeping the axes already homed: a homing of
+    /// some axes while others are still unknown (e.g. `G28 X Y` before Z is homed). Homing is
+    /// required before any move
+    pub fn set_position_unknown(&self) {
+        self.cfg.apply_mut(|m| {
+            m.last_planned_position.is_set = false;
+            m.current_position.is_set = false;
+        });
+    }
+
+    /// The axes whose position comes from a homing (the end-stops are where the machine bounds
+    /// say), see [hwa::controllers::HomingPlan]
+    pub fn set_homed_axes(&self, axes: CoordSel) {
+        self.cfg.apply_mut(|m| m.homed_axes = axes);
+    }
+
+    pub fn homed_axes(&self) -> CoordSel {
+        self.cfg.apply(|m| m.homed_axes)
+    }
+
+    /// Every axis found by the homing is homed
+    pub fn is_homed(&self) -> bool {
+        let axes = self.homed_axes();
+        !axes.is_empty() && axes.contains(hwa::controllers::HomingPlan::homing_axes())
+    }
+
+    /// Soft end-stops (M211 S): moves are clipped to the travel of the axes once homed
+    pub fn set_soft_endstops(&self, enabled: bool) {
+        self.cfg.apply_mut(|m| m.soft_endstops = enabled);
+    }
+
+    pub fn soft_endstops(&self) -> bool {
+        self.cfg.apply(|m| m.soft_endstops)
+    }
 }
 
 impl Clone for MotionStatus {
@@ -222,6 +322,18 @@ pub struct MotionStatusContent {
     pub last_planned_position: Position,
     /// Flag indicating if absolute positioning is enabled.
     pub absolute_positioning: bool,
+    /// Flag indicating if E words are relative (M83) regardless of G90
+    pub relative_extrusion: bool,
+    /// Logical extruder position in world units
+    pub logical_e_wu: Real,
+    /// Modal feed rate in world units per second
+    pub feed_rate_wu_s: Option<Real>,
+    /// Firmware retraction state
+    pub retracted: bool,
+    /// The axes whose position comes from a homing
+    pub homed_axes: CoordSel,
+    /// Soft end-stops enabled (M211)
+    pub soft_endstops: bool,
     /// Flag indicating if the laser is enabled (only present when the `with-laser` feature is enabled).
     #[cfg(feature = "with-laser")]
     #[allow(unused)]
@@ -240,6 +352,12 @@ impl MotionStatusContent {
             current_position: Position::new(),
             last_planned_position: Position::new(),
             absolute_positioning: true,
+            relative_extrusion: false,
+            logical_e_wu: Real::zero(),
+            feed_rate_wu_s: None,
+            retracted: false,
+            homed_axes: CoordSel::empty(),
+            soft_endstops: true,
             #[cfg(feature = "with-laser")]
             laser: false,
         }

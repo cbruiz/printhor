@@ -91,15 +91,15 @@ pub trait HwiContract: Sized {
         if #[cfg(feature = "with-motion")] {
 
             /// The world unit magnitude. by default: mm
-            #[const_env::from_env("WORLD_UNIT_MAGNITUDE")]
+            #[const_env::env_item("WORLD_UNIT_MAGNITUDE")]
             const WORLD_UNIT_MAGNITUDE: &'static str = "mm";
 
             /// The (work)space unit magnitude. by default: mm
-            #[const_env::from_env("SPACE_UNIT_MAGNITUDE")]
+            #[const_env::env_item("SPACE_UNIT_MAGNITUDE")]
             const SPACE_UNIT_MAGNITUDE: &'static str = "mm";
 
             /// The physical unit magnitude. by default: mm
-            #[const_env::from_env("PHYSICAL_UNIT_MAGNITUDE")]
+            #[const_env::env_item("PHYSICAL_UNIT_MAGNITUDE")]
             const PHYSICAL_UNIT_MAGNITUDE: &'static str = "mm";
 
             /// World size to apply bounds restriction in World Units ([hwa::HwiContract::WORLD_UNIT_MAGNITUDE])
@@ -118,6 +118,34 @@ pub trait HwiContract: Sized {
             const DEFAULT_WORLD_HOMING_POINT_WU: hwa::math::TVector<hwa::math::Real> = const {
                 hwa::math::TVector::new_with_coord(hwa::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
             };
+
+            /// Default probe offset (`M851`) in World Units: the probe position relative to the
+            /// nozzle, as Marlin's `NOZZLE_TO_PROBE_OFFSET` (a negative Z is a probe that triggers
+            /// below the nozzle). Applied at boot and by `M502`; `M500` persists a changed one.
+            const DEFAULT_PROBE_OFFSET_WU: hwa::math::TVector<hwa::math::Real> = const {
+                hwa::math::TVector::new_with_coord(hwa::CoordSel::motion_relevant_axis(), hwa::make_optional_real!(0.0))
+            };
+
+            /// Homing feed rate of each axis (World Units / second), as Marlin's
+            /// `HOMING_FEEDRATE_MM_M` (divided by 60): the fast approach to the end-stop and the
+            /// other homing moves of the axis. The slow (fine) approach is this rate divided by
+            /// the bump divisor (2 for X and Y, 4 for Z, as Marlin's `HOMING_BUMP_DIVISOR`).
+            ///
+            /// A move with an axis without a rate (none by default) homes at fixed step rates
+            /// instead (whatever the steps per unit): 2000 steps/s, and 1000 steps/s the slow
+            /// approach of X and Y; 1000 steps/s the descent of Z and 250 steps/s its slow one.
+            ///
+            /// The homing moves have no acceleration ramp: the motors start (and stop) at once
+            /// at this rate, so it must be within their start-stop range.
+            const HOMING_FEED_RATE_PS: hwa::math::TVector<hwa::math::Real> = hwa::math::TVector::new();
+
+            /// Speed-up of the step clock of the homing moves (1: the step frequencies of the homing
+            /// sequence as they are).
+            ///
+            /// Only meant for simulators, where the time of the homing moves is wall time spent by
+            /// tests: the very same steps and end-stop checks are run, faster. Real boards must keep
+            /// the default (the multiplication by a constant 1 is optimized away).
+            const HOMING_STEP_FREQUENCY_SCALE: u64 = 1;
 
             /// Transforms a World position to (Work)space position. By default, identity transform applied
             ///
@@ -166,6 +194,12 @@ pub trait HwiContract: Sized {
                 }
             }
 
+            /// Returns the reachable world position closest to `world_pos`.
+            /// Identity by default (unbounded / box-bounded kinematics).
+            fn clamp_to_workspace(&self, world_pos: &hwa::math::TVector<hwa::math::Real>) -> hwa::math::TVector<hwa::math::Real> {
+                *world_pos
+            }
+
             /// Apply calculated min speed boundaries
             const CLAMP_MIN_SPEED: bool = true;
             /// Apply calculated max feed rate boundaries
@@ -179,6 +213,31 @@ pub trait HwiContract: Sized {
             const DEFAULT_MAX_JERK_PS: hwa::math::TVector<hwa::math::Real>;
             /// Default max speed in physical units by second
             const DEFAULT_TRAVEL_SPEED_PS: hwa::math::Real;
+
+            /// Largest instantaneous change of the velocity vector at the junction of two moves
+            /// (Physical Units / second, as Marlin's `M205 X`/Klipper's square corner velocity):
+            /// a corner of angle θ is crossed at no more than `Δv / (2·sin(θ/2))`. The direction
+            /// changes at once at a junction, so the motors take that jump without any ramp: a
+            /// jolt that excites the frame. Collinear junctions are not limited. `0`: only the
+            /// projection limit (`v·cos θ`). Settable with `M205 X`.
+            const DEFAULT_CORNER_SPEED_CHANGE_PS: hwa::math::Real = hwa::make_real!(5.0);
+
+            /// Servo outputs (`with-motion-broadcast`): the direction of each axis, `1` or `-1` for
+            /// a servo mounted mirrored (e.g. the femur and tibia servos of two of the legs of a
+            /// quadruped with rotational symmetry). The servo is driven to
+            /// `SERVO_DIRECTION · angle + SERVO_OFFSET`.
+            const SERVO_DIRECTION: hwa::math::TVector<hwa::math::Real> = hwa::math::TVector::new_with_coord(
+                hwa::math::CoordSel::all_axis(),
+                hwa::make_optional_real!(1.0),
+            );
+
+            /// Servo outputs (`with-motion-broadcast`): the angle (degrees) to add to each axis, so
+            /// that the joint angle 0 (the home pose) is the centre position of a servo whose horn
+            /// is not mounted exactly there (its calibration). See [Self::SERVO_DIRECTION].
+            const SERVO_OFFSET: hwa::math::TVector<hwa::math::Real> = hwa::math::TVector::new_with_coord(
+                hwa::math::CoordSel::all_axis(),
+                hwa::make_optional_real!(0.0),
+            );
 
             /// Default units per workspace unit
             const DEFAULT_UNITS_PER_WU: hwa::math::TVector<hwa::math::Real>;
@@ -238,8 +297,46 @@ pub trait HwiContract: Sized {
             /// Normally, thermistor is not connected directly to `AGND` and `ADC Pin`,
             /// so considering this variation is very important for accuracy.
             /// This value can be calculated based in the board schematics or physically measured.
-            #[doc = include_str!("../../doc/thermal_sensors.md")]
+            #[doc = include_str!("../doc/thermal_sensors.md")]
             const HOT_END_THERM_PULL_UP_RESISTANCE: f32;
+
+            /// Max temperature (ºC) of the **HotEnd**. Reaching it shuts down every heater and raises
+            /// `SYS_ALARM` (MAXTEMP). Targets above `HOT_END_MAX_TEMP - 15` are rejected.
+            const HOT_END_MAX_TEMP: f32 = 310.0;
+
+            /// Min temperature (ºC) of the **HotEnd**. A lower reading while heating is considered a
+            /// sensor failure (MINTEMP), as it is what an open/disconnected thermistor reads.
+            const HOT_END_MIN_TEMP: f32 = 5.0;
+
+            /// Thermal runaway protection: once the target is reached, the temperature may not fall
+            /// more than this hysteresis (ºC) below the target for longer than the period.
+            const HOT_END_THERMAL_PROTECTION_HYSTERESIS: f32 = 4.0;
+
+            /// Thermal runaway protection period in seconds.
+            const HOT_END_THERMAL_PROTECTION_PERIOD_S: u32 = 40;
+
+            /// Heating watch: while heating, the temperature must increase at least this amount (ºC)...
+            const HOT_END_WATCH_TEMP_INCREASE: f32 = 2.0;
+
+            /// ...every period (seconds). Otherwise, heating is considered failed.
+            const HOT_END_WATCH_TEMP_PERIOD_S: u32 = 20;
+
+            /// The temperature is considered reached (M109) when within this window (ºC)
+            const HOT_END_TEMP_WINDOW: f32 = 3.0;
+
+            /// Default PID proportional constant (Marlin units: output in [0, 255] per ºC).
+            ///
+            /// Defaults are the ones of a stock Creality Ender-3. Tune them with `M303`.
+            const HOT_END_PID_KP: f32 = 21.73;
+
+            /// Default PID integral constant (Marlin units: per second)
+            const HOT_END_PID_KI: f32 = 1.54;
+
+            /// Default PID derivative constant (Marlin units: seconds)
+            const HOT_END_PID_KD: f32 = 76.55;
+
+            /// Extrusion is prevented below this hot-end temperature (ºC). See M302.
+            const EXTRUDE_MIN_TEMP: f32 = 170.0;
         }
     }
 
@@ -270,8 +367,38 @@ pub trait HwiContract: Sized {
             /// Normally, thermistor is not connected directly to `AGND` and `ADC Pin`,
             /// so considering this variation is very important for accuracy.
             /// This value can be calculated based in the board schematics or physically measured.
-            #[doc = include_str!("../../doc/thermal_sensors.md")]
+            #[doc = include_str!("../doc/thermal_sensors.md")]
             const HOT_BED_THERM_PULL_UP_RESISTANCE: f32;
+
+            /// Max temperature (ºC) of the **HotBed** (MAXTEMP). See [HwiContract::HOT_END_MAX_TEMP]
+            const HOT_BED_MAX_TEMP: f32 = 150.0;
+
+            /// Min temperature (ºC) of the **HotBed** (MINTEMP). See [HwiContract::HOT_END_MIN_TEMP]
+            const HOT_BED_MIN_TEMP: f32 = 5.0;
+
+            /// See [HwiContract::HOT_END_THERMAL_PROTECTION_HYSTERESIS]
+            const HOT_BED_THERMAL_PROTECTION_HYSTERESIS: f32 = 2.0;
+
+            /// See [HwiContract::HOT_END_THERMAL_PROTECTION_PERIOD_S]
+            const HOT_BED_THERMAL_PROTECTION_PERIOD_S: u32 = 20;
+
+            /// See [HwiContract::HOT_END_WATCH_TEMP_INCREASE]
+            const HOT_BED_WATCH_TEMP_INCREASE: f32 = 2.0;
+
+            /// See [HwiContract::HOT_END_WATCH_TEMP_PERIOD_S]
+            const HOT_BED_WATCH_TEMP_PERIOD_S: u32 = 60;
+
+            /// See [HwiContract::HOT_END_TEMP_WINDOW]
+            const HOT_BED_TEMP_WINDOW: f32 = 2.0;
+
+            /// See [HwiContract::HOT_END_PID_KP]
+            const HOT_BED_PID_KP: f32 = 462.1;
+
+            /// See [HwiContract::HOT_END_PID_KI]
+            const HOT_BED_PID_KI: f32 = 85.47;
+
+            /// See [HwiContract::HOT_END_PID_KD]
+            const HOT_BED_PID_KD: f32 = 624.59;
         }
     }
     //#endregion
@@ -430,9 +557,34 @@ pub trait HwiContract: Sized {
     }
 
     cfg_if::cfg_if! {
+        if #[cfg(feature = "with-eeprom")] {
+            /// Offset (bytes) of the settings image in the EEPROM. Allows reserving the
+            /// beginning of the memory for other purposes (e.g. a bootloader)
+            const EEPROM_SETTINGS_OFFSET: usize = 0;
+            /// The non-volatile memory where the settings are persisted (M500/M501)
+            type EepromMutexStrategy: hwa::AsyncMutexStrategy<Resource: traits::AsyncEeprom>;
+        }
+    }
+
+    cfg_if::cfg_if! {
         if #[cfg(feature = "with-trinamic")] {
             const TRINAMIC_UART_BAUD_RATE: u32;
             type TrinamicUartDevice: traits::TrinamicUartTrait;
+
+            /// Sense resistor of the drivers (ohms), as Marlin's `X_RSENSE`... Only used to
+            /// compute the current scale of [Self::TRINAMIC_RUN_CURRENT_MA]: a wrong value
+            /// drives a wrong current (check the schematic of the board).
+            const TRINAMIC_RSENSE_OHMS: f32 = 0.11;
+
+            /// RMS run current (mA) of the driver of each axis, as Marlin's `X_CURRENT`, ...,
+            /// `E0_CURRENT`: set through the UART (`IRUN` and `vsense`, as Marlin), with the
+            /// internal current reference. A driver without a value (none by default) keeps the
+            /// current it powers up with, scaled by the voltage of its `VREF` pin.
+            const TRINAMIC_RUN_CURRENT_MA: hwa::math::TVector<u16> = hwa::math::TVector::new();
+
+            /// Standstill (hold) current as a fraction of the run current, as Marlin's
+            /// `HOLD_MULTIPLIER`. Only for the drivers with a [Self::TRINAMIC_RUN_CURRENT_MA].
+            const TRINAMIC_HOLD_MULTIPLIER: f32 = 0.5;
         }
     }
 
@@ -567,6 +719,9 @@ where
 
     #[cfg(feature = "with-fan-extra-1")]
     pub fan_extra1_pwm_channel: C::FanExtra1PwmChannel,
+
+    #[cfg(feature = "with-eeprom")]
+    pub eeprom: hwa::StaticAsyncController<C::EepromMutexStrategy>,
 
     #[cfg(feature = "with-motion-broadcast")]
     pub high_priority_core: C::HighPriorityCore,

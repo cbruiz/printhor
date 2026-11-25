@@ -122,8 +122,8 @@ pub async fn task_defer(
                 if subscriptions.update(action, channel, -1).unwrap_or(false) {
                     cfg_if::cfg_if! {
                         if #[cfg(feature="trace-commands")] {
-                            let msg = alloc::format!("ok; [trace-commands] {:?} completed @{:?}\n", action, channel);
-                            hwa::info!("{}", msg.trim_end());
+                            let msg = crate::processing::LineBuf::<192>::from_fmt(format_args!("ok; [trace-commands] {:?} completed @{:?}\n", action, channel));
+                            hwa::info!("[task-defer] {}", msg.as_str().trim_end());
                             processor.write(channel, msg.as_str()).await;
 
                         }

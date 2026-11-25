@@ -2,8 +2,27 @@
 
 use crate as hwa;
 use embedded_sdmmc::{
-    Mode, RawDirectory, RawFile, RawVolume, TimeSource, Timestamp, VolumeIdx, VolumeManager,
+    DirEntry, LfnBuffer, Mode, RawDirectory, RawFile, RawVolume, ShortFileName, TimeSource,
+    Timestamp, VolumeIdx, VolumeManager,
 };
+
+/// Max length (UTF-8 bytes) of a long file name (VFAT): a longer one is presented by its short
+/// name. As long as the longest text of a G-code (`MAX_TEXT_LENGTH`), so that any long name
+/// listed can be sent back (e.g. `M23 <long name>`)
+pub const LONG_NAME_LEN: usize = 128;
+
+/// A short (8.3) name as text: `NAME.EXT`
+pub type ShortName = heapless::String<12>;
+
+/// A long file name (see [LONG_NAME_LEN])
+pub type LongName = heapless::String<LONG_NAME_LEN>;
+
+/// The text of a short (8.3) name (`NAME.EXT`)
+pub fn short_name(name: &ShortFileName) -> ShortName {
+    let mut text = ShortName::new();
+    let _ = core::fmt::Write::write_fmt(&mut text, format_args!("{}", name));
+    text
+}
 
 /// Represents various errors that can occur while interacting with an SD card.
 #[derive(Debug)]
@@ -32,7 +51,41 @@ pub enum SDCardError {
 
     /// Error indicating that the specified item was not found.
     NotFound,
+
+    /// The name is not a valid FAT 8.3 file name
+    InvalidName,
+
+    /// Writing to the card failed (or the file is not open for writing)
+    WriteError,
+
+    /// The resource is in use (an open file, or entries still open on the volume)
+    Busy,
 }
+
+/// Size of the text kept with the reason why the volume could not be opened
+pub const MOUNT_ERROR_LEN: usize = 64;
+
+/// A `core::fmt::Write` sink into a fixed buffer that keeps what fits (truncates, never fails)
+struct Truncating<'a, const N: usize>(&'a mut heapless::String<N>);
+
+impl<const N: usize> core::fmt::Write for Truncating<'_, N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            if self.0.push(c).is_err() {
+                break;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl core::fmt::Display for SDCardError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl core::error::Error for SDCardError {}
 
 pub struct DummyTimeSource {}
 impl TimeSource for DummyTimeSource {
@@ -90,6 +143,10 @@ pub struct SDStateManager<
 {
     mgr: VolumeManager<D, DummyTimeSource, MAX_DIRS, MAX_FILES>,
     vol: Option<RawVolume>,
+    /// The partition opened as the volume
+    partition: usize,
+    /// Why the volume could not be opened (empty when it is, or was not tried yet)
+    mount_error: heapless::String<MOUNT_ERROR_LEN>,
     opened_entries: heapless::Vec<Option<Entry>, MAX_OPENED_ENTRIES>,
     opened_entries_ref_counts: heapless::Vec<RefCounts, MAX_OPENED_ENTRIES>,
 }
@@ -103,33 +160,87 @@ where
     where
         D: hwa::traits::AsyncSDBlockDevice,
     {
-        let mut card = VolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
-        hwa::debug!("Locking device...");
-        let _ = card.device().do_retain().await;
-        hwa::debug!("Opening volume...");
-        let vol = card.open_raw_volume(VolumeIdx(partition));
-        hwa::debug!("Unlocking device...");
-        let _ = card.device().do_release();
+        let card = VolumeManager::new_with_limits(device, DummyTimeSource {}, /* u32 */ 0);
         let mut opened_dirs = heapless::Vec::new();
         let mut opened_dirs_ref_counts = heapless::Vec::new();
-        for _ in 0..MAX_DIRS {
+        for _ in 0..MAX_OPENED_ENTRIES {
             let _ = opened_dirs.push(None);
             let _ = opened_dirs_ref_counts.push(RefCounts::empty());
         }
-        Self {
+        let mut manager = Self {
             mgr: card,
-            vol: vol.ok(),
+            vol: None,
+            partition,
+            mount_error: heapless::String::new(),
             opened_entries: opened_dirs,
             opened_entries_ref_counts: opened_dirs_ref_counts,
+        };
+        // A card not inserted (or not ready) is not an error here: it is mounted later on demand
+        let _ = manager.mount().await;
+        manager
+    }
+
+    /// Opens the volume when it is not open yet: the card is initialized again (it may have been
+    /// inserted or replaced after the start). On failure, [Self::mount_error] tells why.
+    pub async fn mount(&mut self) -> Result<(), SDCardError> {
+        if self.vol.is_some() {
+            return Ok(());
+        }
+        self.mgr.device(|d| d.reset_card());
+        let _ = self.retain_device().await;
+        hwa::debug!("Opening volume...");
+        let vol = self.mgr.open_raw_volume(VolumeIdx(self.partition));
+        let _ = self.mgr.device(|d| d.do_release());
+        self.mount_error.clear();
+        match vol {
+            Ok(vol) => {
+                hwa::info!("[sd_card] Volume {} opened", self.partition);
+                self.vol = Some(vol);
+                Ok(())
+            }
+            Err(_e) => {
+                use core::fmt::Write;
+                let _ = write!(Truncating(&mut self.mount_error), "{}", _e);
+                hwa::warn!("[sd_card] Unable to open the volume: {}", self.mount_error.as_str());
+                Err(SDCardError::NoSuchVolume)
+            }
         }
     }
 
+    /// Closes the volume (M22: the card can then be removed). Refused while entries are open.
+    pub fn unmount(&mut self) -> Result<(), SDCardError> {
+        match self.vol {
+            None => Ok(()),
+            Some(_) if self.opened_entries_count() > 0 => Err(SDCardError::Busy),
+            Some(vol) => {
+                let result = self.mgr.close_volume(vol).map_err(|_| SDCardError::InternalError);
+                self.vol = None;
+                self.mount_error.clear();
+                result
+            }
+        }
+    }
+
+    /// Whether the volume is open
+    pub fn is_mounted(&self) -> bool {
+        self.vol.is_some()
+    }
+
+    /// Why the volume could not be opened (empty when it is open, or it was not tried)
+    pub fn mount_error(&self) -> &str {
+        self.mount_error.as_str()
+    }
+
     pub async fn retain_device(&mut self) -> Result<(), ()> {
-        self.mgr.device().do_retain().await
+        let lock = self.mgr.device(|d| d.do_lock());
+        match lock.await {
+            Some(lock) => self.mgr.device(|d| d.do_hold(lock)),
+            None => Err(()),
+        }
     }
 
     pub fn release_device(&mut self) -> Result<(), ()> {
-        self.mgr.device().do_release()
+        self.mgr.device(|d| d.do_release())
     }
 
     pub fn open_path(
@@ -185,6 +296,11 @@ where
         }
     }
 
+    /// Number of entries (directories and files) currently opened on the card
+    pub fn opened_entries_count(&self) -> usize {
+        self.opened_entries.iter().filter(|e| e.is_some()).count()
+    }
+
     pub fn release_path(&mut self, _path_stack: &mut heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>) {
         loop {
             match _path_stack.pop() {
@@ -212,14 +328,17 @@ where
                 },
                 Some(Entry::File(file)) => match self.mgr.close_file(file) {
                     Ok(_) => {
-                        hwa::info!("Closed file");
+                        hwa::debug!("Closed file");
                     }
                     Err(_e) => {
                         hwa::error!("Inconsistency error closing file. Continuing anyway");
                     }
                 },
                 None => {
-                    hwa::error!("Inconsistency error closing dir. Continuing anyway");
+                    hwa::error!(
+                        "[sd_card] Inconsistency closing entry #{}: it is not open. Continuing anyway",
+                        entry_ref.0
+                    );
                 }
             }
         }
@@ -281,6 +400,13 @@ where
         }
         match &self.opened_entries[parent_ref.0 as usize] {
             Some(Entry::Directory(parent)) => {
+                // The entry may be named by its short name or by its long name (case-insensitive):
+                // from now on, by its short name (the cache key and the name to open it)
+                let canonical = match self.find_entry(*parent, entry_name, None) {
+                    Some(entry) => short_name(&entry.name),
+                    None => return Err(SDCardError::NotFound),
+                };
+                let entry_name = canonical.as_str();
                 // Needs to have a parent already opened
                 let mut cached_entry_ref = None;
 
@@ -370,13 +496,54 @@ where
         }
     }
 
-    pub fn list_dir<F>(&mut self, dir_ref: &EntryRef, func: F)
+    /// The entry of `dir` named `name`: by its short name or by its long name (ASCII
+    /// case-insensitive). When `long` is given, the long name of the entry (empty when it has
+    /// none, or it is longer than [LONG_NAME_LEN]) is copied there.
+    fn find_entry(
+        &self,
+        dir: RawDirectory,
+        name: &str,
+        mut long: Option<&mut LongName>,
+    ) -> Option<DirEntry> {
+        // A short name: found without reading the long names
+        if long.is_none() {
+            if let Ok(entry) = self.mgr.find_directory_entry(dir, name) {
+                return Some(entry);
+            }
+        }
+        let mut storage = [0u8; LONG_NAME_LEN];
+        let mut lfn = LfnBuffer::new(&mut storage);
+        let mut found = None;
+        let _ = self.mgr.iterate_dir_lfn(dir, &mut lfn, |entry, long_name| {
+            let matches = !entry.attributes.is_volume()
+                && (short_name(&entry.name).eq_ignore_ascii_case(name)
+                    || long_name.is_some_and(|l| l.eq_ignore_ascii_case(name)));
+            if !matches {
+                return core::ops::ControlFlow::Continue(());
+            }
+            if let Some(out) = long.as_deref_mut() {
+                out.clear();
+                let _ = out.push_str(long_name.unwrap_or(""));
+            }
+            found = Some(entry.clone());
+            core::ops::ControlFlow::Break(())
+        });
+        found
+    }
+
+    /// Lists a directory with the long names of its entries (`None` when an entry has none, or
+    /// it is longer than [LONG_NAME_LEN]). `func` may stop the listing (`ControlFlow::Break`).
+    pub fn list_dir_lfn<F>(&mut self, dir_ref: &EntryRef, mut func: F)
     where
-        F: FnMut(&embedded_sdmmc::DirEntry),
+        F: FnMut(&DirEntry, Option<&str>) -> core::ops::ControlFlow<()>,
     {
         match &self.opened_entries[dir_ref.0 as usize] {
             Some(Entry::Directory(dir)) => {
-                let _ = self.mgr.iterate_dir(*dir, func);
+                let mut storage = [0u8; LONG_NAME_LEN];
+                let mut lfn = LfnBuffer::new(&mut storage);
+                let _ = self.mgr.iterate_dir_lfn(*dir, &mut lfn, |entry, long_name| {
+                    func(entry, long_name)
+                });
             }
             Some(Entry::File(_)) => {
                 hwa::error!("Unable to list a file entry")
@@ -387,6 +554,166 @@ where
         }
     }
 
+    /// The long path of `path` (named by short or long names): `/<name>/<name>...`, each entry
+    /// by its long name, or by its short name when it has none (Marlin's `M33`). Truncated when
+    /// it does not fit `out`.
+    pub fn long_path<const N: usize>(
+        &mut self,
+        path: &str,
+        out: &mut heapless::String<N>,
+    ) -> Result<(), SDCardError> {
+        let mut stack = self.open_path("")?;
+        let mut result = Ok(());
+        let mut segments = path
+            .split('/')
+            .filter(|segment| !segment.is_empty() && *segment != ".")
+            .peekable();
+        while let Some(segment) = segments.next() {
+            let Some(&dir_ref) = stack.last() else {
+                break;
+            };
+            let dir = match &self.opened_entries[dir_ref.0 as usize] {
+                Some(Entry::Directory(dir)) => *dir,
+                _ => {
+                    result = Err(SDCardError::NotFound);
+                    break;
+                }
+            };
+            let mut long = LongName::new();
+            let Some(entry) = self.find_entry(dir, segment, Some(&mut long)) else {
+                result = Err(SDCardError::NotFound);
+                break;
+            };
+            let short = short_name(&entry.name);
+            let name = if long.is_empty() { short.as_str() } else { long.as_str() };
+            let _ = out.push('/');
+            for c in name.chars() {
+                if out.push(c).is_err() {
+                    break;
+                }
+            }
+            if segments.peek().is_none() {
+                break;
+            }
+            // A file in the middle of the path
+            if !entry.attributes.is_directory() {
+                result = Err(SDCardError::NotFound);
+                break;
+            }
+            match self.raw_open_entry(&dir_ref, short.as_str()) {
+                Ok(sub_dir) => {
+                    if let Err(sub_dir) = stack.push(sub_dir) {
+                        self.close_entry(sub_dir);
+                        result = Err(SDCardError::MaxOpenDirs);
+                        break;
+                    }
+                }
+                Err(e) => {
+                    result = Err(e);
+                    break;
+                }
+            }
+        }
+        if result.is_ok() && out.is_empty() {
+            let _ = out.push('/');
+        }
+        self.release_path(&mut stack);
+        result
+    }
+
+    pub fn list_dir<F>(&mut self, dir_ref: &EntryRef, mut func: F)
+    where
+        F: FnMut(&embedded_sdmmc::DirEntry),
+    {
+        match &self.opened_entries[dir_ref.0 as usize] {
+            Some(Entry::Directory(dir)) => {
+                let _ = self.mgr.iterate_dir(*dir, |entry| {
+                    func(entry);
+                    core::ops::ControlFlow::Continue(())
+                });
+            }
+            Some(Entry::File(_)) => {
+                hwa::error!("Unable to list a file entry")
+            }
+            _ => {
+                hwa::error!("Unable to list a directory which is not open")
+            }
+        }
+    }
+
+    /// Creates (or truncates) the file at `path` and opens it for writing. Returns the stack of
+    /// opened entries (parent directories, then the file), released with [Self::release_path]
+    /// (closing the file flushes it).
+    pub fn create_file(
+        &mut self,
+        path: &str,
+    ) -> Result<heapless::Vec<EntryRef, MAX_OPENED_ENTRIES>, SDCardError> {
+        // rsplit_once: slicing (`&path[..i]`) links the str panic formatting (unicode tables)
+        let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
+        if name.is_empty() || name == "." || name == ".." {
+            return Err(SDCardError::InvalidName);
+        }
+        let mut path_stack = self.open_path(dir)?;
+        let parent = match path_stack.last() {
+            Some(parent) => *parent,
+            None => return Err(SDCardError::InconsistencyError),
+        };
+        let parent_dir = match &self.opened_entries[parent.0 as usize] {
+            Some(Entry::Directory(directory)) => *directory,
+            _ => {
+                self.release_path(&mut path_stack);
+                return Err(SDCardError::NotFound);
+            }
+        };
+        let Some(new_idx) = self.opened_entries.iter().position(|e| e.is_none()) else {
+            self.release_path(&mut path_stack);
+            return Err(SDCardError::MaxOpenDirs);
+        };
+        // An existing file may be named by its long name: it is truncated (by its short name).
+        // A new one needs a short name (long names can not be created)
+        let existing = self
+            .find_entry(parent_dir, name, None)
+            .filter(|entry| !entry.attributes.is_directory())
+            .map(|entry| short_name(&entry.name));
+        let name = existing.as_ref().map_or(name, |n| n.as_str());
+        match self
+            .mgr
+            .open_file_in_dir(parent_dir, name, Mode::ReadWriteCreateOrTruncate)
+        {
+            Ok(file) => {
+                self.opened_entries[new_idx] = Some(Entry::File(file));
+                self.opened_entries_ref_counts[new_idx] =
+                    RefCounts::new(parent.0, alloc::string::String::from(name));
+                if let Err(entry) = path_stack.push(EntryRef(new_idx as u8)) {
+                    self.close_entry(entry);
+                    self.release_path(&mut path_stack);
+                    return Err(SDCardError::MaxOpenDirs);
+                }
+                Ok(path_stack)
+            }
+            Err(_e) => {
+                self.release_path(&mut path_stack);
+                Err(match _e {
+                    embedded_sdmmc::Error::FilenameError(_) => SDCardError::InvalidName,
+                    embedded_sdmmc::Error::FileAlreadyOpen => SDCardError::Busy,
+                    embedded_sdmmc::Error::TooManyOpenFiles => SDCardError::MaxOpenDirs,
+                    _ => SDCardError::WriteError,
+                })
+            }
+        }
+    }
+
+    /// Appends `data` to a file opened with [Self::create_file]
+    pub fn write(&mut self, entry_ref: EntryRef, data: &[u8]) -> Result<(), SDCardError> {
+        match &self.opened_entries[entry_ref.0 as usize] {
+            Some(Entry::File(file)) => self
+                .mgr
+                .write(*file, data)
+                .map_err(|_| SDCardError::WriteError),
+            _ => Err(SDCardError::InconsistencyError),
+        }
+    }
+
     pub fn open_file_path(
         &mut self,
         _path: &str,
@@ -394,6 +721,18 @@ where
         match self.open_path(_path) {
             Ok(_path_stack) => Ok(_path_stack),
             Err(_e) => Err(_e),
+        }
+    }
+
+    /// The size in bytes of an opened file
+    pub fn file_length(&self, entry_ref: EntryRef) -> Result<u32, SDCardError> {
+        match &self.opened_entries[entry_ref.0 as usize] {
+            Some(Entry::File(_file)) => self
+                .mgr
+                .file_length(*_file)
+                .map_err(|_e| SDCardError::InternalError),
+            Some(Entry::Directory(_)) => Err(SDCardError::InconsistencyError),
+            _ => Err(SDCardError::InconsistencyError),
         }
     }
 
@@ -438,7 +777,6 @@ mod test {
             &self,
             _blocks: &mut [Block],
             _start_block_idx: BlockIdx,
-            _reason: &str,
         ) -> Result<(), Self::Error> {
             Ok(())
         }
@@ -470,8 +808,18 @@ mod test {
         <<H as hwa::AsyncMutexStrategy>::Resource as hwa::traits::SDBlockDevice>::Error:
             From<SDCardError>,
     {
-        async fn do_retain(&self) -> Result<(), ()> {
-            self.dev.retain().await
+        type Lock = hwa::AsyncMutexGuard<
+            'static,
+            <H as hwa::AsyncMutexStrategy>::AsyncMutexType,
+            <H as hwa::AsyncMutexStrategy>::Resource,
+        >;
+
+        fn do_lock(&self) -> impl core::future::Future<Output = Option<Self::Lock>> + use<H> {
+            self.dev.lock_owned()
+        }
+
+        fn do_hold(&self, lock: Self::Lock) -> Result<(), ()> {
+            self.dev.hold(lock)
         }
 
         fn do_release(&self) -> Result<(), ()> {
@@ -493,10 +841,9 @@ mod test {
             &self,
             blocks: &mut [Block],
             start_block_idx: BlockIdx,
-            reason: &str,
         ) -> Result<(), Self::Error> {
             self.dev.apply_or_error(
-                |dev| dev.read(blocks, start_block_idx, reason),
+                |dev| dev.read(blocks, start_block_idx),
                 SDCardError::InternalError.into(),
             )
         }
@@ -512,6 +859,7 @@ mod test {
 
     #[futures_test::test]
     async fn test() {
+        hwa::info!("Expecting Err: the dummy device has no filesystem, it can not be mounted");
         type CardDev = DummyDevice;
         type MutexType = hwa::AsyncNoopMutexType;
         type MutexStrategyType = hwa::AsyncHoldableStrategy<MutexType, CardDev>;
@@ -524,3 +872,6 @@ mod test {
         let mut _card: SDStateManager<_, 2, 2, 4> = SDStateManager::new(a, 0).await;
     }
 }
+
+#[cfg(test)]
+mod coverage_tests;

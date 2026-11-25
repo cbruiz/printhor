@@ -18,8 +18,10 @@ impl MockedI2c {
         let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
         let mut pwm = pwm_pca9685::Pca9685::new(dev, address).unwrap();
 
-        pwm.set_prescale(100).unwrap();
-        pwm.enable().unwrap();
+        // The mocked bus never fails; errors are reported, never panic
+        if pwm.set_prescale(100).is_err() || pwm.enable().is_err() {
+            hwa::error!("[mocked_i2c] PCA9685 setup failed");
+        }
         hwa::debug!("[mocked_i2c] setting...");
 
         // period = 20 ms = 4095 count
@@ -50,8 +52,8 @@ impl MockedI2c {
 
     pub fn set_angle(&mut self, axis: hwa::math::CoordSel, angle: &hwa::math::Real) -> bool {
         let pwm = (
-            (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().to_i32().unwrap()
-        ).max(205).min(409) as u16;
+            (Real::from_f32(307.125f32) + (Real::from_f32(1.1375f32) * (*angle))).round().int()
+        ).clamp(205, 409) as u16;
         let index = axis.index();
         if index < 16 {
             if self.state[index].off != pwm {
@@ -70,7 +72,9 @@ impl MockedI2c {
     }
 
     pub async fn apply(&mut self) -> () {
-        self.pwm.set_all_channels(&self.state).unwrap();
+        if self.pwm.set_all_channels(&self.state).is_err() {
+            hwa::error!("[mocked_i2c] PCA9685 update failed");
+        }
     }
 }
 

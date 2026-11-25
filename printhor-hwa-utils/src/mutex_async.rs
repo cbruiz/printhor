@@ -58,6 +58,28 @@ where
         Err(())
     }
 
+    /// First step of a retain from a future that must not borrow `self`: locks the static mutex
+    /// (shared by every clone) and yields its guard, to be kept by [Self::hold]. `None` when the
+    /// strategy can not retain.
+    ///
+    /// Retaining a clone instead keeps nothing for `self`: each clone has its own holder (and
+    /// the guard is dropped with the clone, unlocking the mutex).
+    fn lock_owned(
+        &self,
+    ) -> impl core::future::Future<
+        Output = Option<AsyncMutexGuard<'static, Self::AsyncMutexType, Self::Resource>>,
+    > + use<Self> {
+        async { None }
+    }
+
+    /// Second step of [Self::lock_owned]: `self` keeps the guard (as [Self::retain] does)
+    fn hold(
+        &self,
+        _guard: AsyncMutexGuard<'static, Self::AsyncMutexType, Self::Resource>,
+    ) -> Result<(), ()> {
+        Err(())
+    }
+
     fn apply_or_error<F, U, E>(&self, f: F, error: E) -> Result<U, E>
     where
         F: FnOnce(&mut Self::Resource) -> Result<U, E>;
@@ -227,16 +249,36 @@ where
         Ok(())
     }
 
+    fn lock_owned(
+        &self,
+    ) -> impl core::future::Future<Output = Option<AsyncMutexGuard<'static, M, D>>> + use<M, D> {
+        let mutex = self.mutex;
+        async move { Some(mutex.lock().await) }
+    }
+
+    fn hold(&self, guard: AsyncMutexGuard<'static, M, D>) -> Result<(), ()> {
+        self.holder.set(guard);
+        Ok(())
+    }
+
     fn apply_or_error<F, U, E>(&self, f: F, error: E) -> Result<U, E>
     where
         F: FnOnce(&mut Self::Resource) -> Result<U, E>,
     {
-        self.holder
-            .retained_guard
-            .lock(|retained| match retained.borrow_mut().as_deref_mut() {
-                Some(guard) => f(guard),
-                None => Err(error),
-            })
+        // The guard is taken out for the call and put back: only those two moves run in a
+        // critical section, not `f`. Run inside it, a long operation (an SD card block over SPI:
+        // hundreds of µs) masked every interrupt, the step ticker included (stalled motion).
+        // `f` is synchronous and the holder belongs to the clone that retained it, so nothing
+        // else uses it meanwhile
+        let taken = self.holder.retained_guard.lock(|retained| retained.borrow_mut().take());
+        match taken {
+            Some(mut guard) => {
+                let result = f(&mut guard);
+                self.holder.set(guard);
+                result
+            }
+            None => Err(error),
+        }
     }
 }
 
@@ -262,6 +304,46 @@ mod test {
         }
     }
 
+    /// A retain from a future that can not borrow the controller (the SD card adapter, inside
+    /// `VolumeManager::device`): retaining a clone keeps nothing for the original (its own
+    /// holder), `lock_owned` + `hold` does
+    #[futures_test::test]
+    async fn test_holdable_lock_owned_and_hold() {
+        type MutexType = hwa::AsyncNoopMutexType;
+        static CELL_INSTANCE: hwa::StaticCell<hwa::AsyncMutex<MutexType, DummyDevice>> =
+            hwa::StaticCell::new();
+        type Controller = hwa::StaticAsyncController<hwa::AsyncHoldableStrategy<MutexType, DummyDevice>>;
+        let controller: Controller = hwa::StaticAsyncController::new(hwa::AsyncHoldableStrategy::new(
+            CELL_INSTANCE.init(hwa::AsyncMutex::new(DummyDevice::new())),
+        ));
+        let apply = |c: &Controller| -> Result<(), ()> {
+            c.apply_or_error(
+                |d: &mut DummyDevice| {
+                    d.do_nothing();
+                    Ok(())
+                },
+                (),
+            )
+        };
+
+        // The former bug: the clone is retained (and dropped), the original is not
+        {
+            let clone = controller.clone();
+            assert_eq!(clone.retain().await, Ok(()));
+        }
+        assert_eq!(apply(&controller), Err(()), "a retained clone keeps nothing");
+
+        // The future does not borrow the controller
+        let lock = controller.lock_owned();
+        let guard = lock.await.expect("holdable");
+        assert_eq!(controller.hold(guard), Ok(()));
+        assert_eq!(apply(&controller), Ok(()));
+        assert_eq!(controller.release(), Ok(()));
+        assert_eq!(apply(&controller), Err(()));
+        // Released: it can be locked again
+        assert!(controller.lock_owned().await.is_some());
+    }
+
     #[futures_test::test]
     async fn test_standard_static_controller() {
         type MutexType = hwa::AsyncNoopMutexType;
@@ -276,7 +358,7 @@ mod test {
 
         assert!(
             !controller.can_retain(),
-            "A AsyncStandardStrategy StaticAsyncController can NOT retain"
+            "A AsyncStandardStrategy can NOT retain"
         );
 
         let _r = controller.retain().await;
@@ -308,6 +390,8 @@ mod test {
             MUTEX_INSTANCE.init(hwa::AsyncMutex::new(DummyDevice::new())),
         ));
 
+        let alloc_size = hwa::stack_allocation_get();
+
         assert!(
             controller.can_retain(),
             "A Holdable StaticAsyncController can retain"
@@ -318,7 +402,7 @@ mod test {
         );
         assert!(
             controller.try_lock().is_err(),
-            "A retained Holdable cannot be lock until released"
+            "Retained Holdable cannot be lock until released"
         );
         assert!(
             controller.release().is_ok(),
@@ -338,6 +422,8 @@ mod test {
 
         let strategy = other_controller.deref();
         let _other_strategy = strategy.clone();
+
+        hwa::stack_allocation_decrement(alloc_size);
     }
 }
 

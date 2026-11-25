@@ -95,13 +95,13 @@ pub mod serial_port_2 {
 
 #[cfg(feature = "with-i2c")]
 pub struct MotionI2c {
-    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>>,
+    pwm: pwm_pca9685::Pca9685<embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>>,
     state: [pwm_pca9685::ChannelOnOffControl; 16],
 }
 
 #[cfg(feature = "with-i2c")]
 impl MotionI2c {
-    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async>) -> Self {
+    pub async fn new(pwm: embassy_stm32::i2c::I2c<'static, embassy_stm32::mode::Async, embassy_stm32::i2c::Master>) -> Self {
 
         let address = pwm_pca9685::Address::from((false, false, false, false, false, false));
         let pwm = pwm_pca9685::Pca9685::new(pwm, address).unwrap();
@@ -112,7 +112,7 @@ impl MotionI2c {
         // Ideally PRESCALE IS 121.57031250, so 121 rounding
         // However, measuring with oscilloscope, prescale=126 shows a constant 20.07ms period
         const PRESCALE:u8 = 126;
-        hwa::info!("I2C Prescale: {}", PRESCALE);
+        hwa::info!("[MotionI2c] I2C Prescale: {}", PRESCALE);
 
         let mut instance = Self {
             pwm,
@@ -151,7 +151,7 @@ impl MotionI2c {
                 }
             };
         if got_timeout {
-            hwa::warn!("Timeout initializing I2C");
+            hwa::warn!("[MotionI2c] Timeout initializing I2C");
         }
         instance
     }
@@ -164,12 +164,13 @@ impl MotionI2c {
         // with some analog servos (tested with TowerPro SG90 and brand-less MG90S)
         const PULSE_CENTER: hwa::math::Real = hwa::make_real!(309.0);
         const CNT_BY_ANGLE: hwa::math::Real = hwa::make_real!(2.1944444444);
-        let pwm = (((*angle) * CNT_BY_ANGLE) + PULSE_CENTER).round().to_i32().unwrap()
-            .max(110).min(500) as u16;
+        // Saturating: an out of range or NaN angle never panics (NaN is 0, then clamped)
+        let pwm = (((*angle) * CNT_BY_ANGLE) + PULSE_CENTER).round().int()
+            .clamp(110, 500) as u16;
         let index = axis.index();
         if index < 16 {
-            #[cfg(feature = "debug-motion_control-broadcast")]
-            hwa::info!("[task_motion_broadcast] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
+            #[cfg(feature = "debug-motion-broadcast")]
+            hwa::info!("[MotionI2c] set PWM [{:?}] [{:?}] = {:?} -> {:?}", angle, index, self.state[index].off, pwm );
             if self.state[index].off != pwm {
                 self.state[index].off = pwm;
                 true

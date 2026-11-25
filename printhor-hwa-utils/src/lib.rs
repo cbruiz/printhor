@@ -95,6 +95,11 @@ use core::ops::Deref;
 use portable_atomic::{AtomicUsize, Ordering};
 pub use static_cell::StaticCell;
 
+// The macros crate provides the `no_log` backend: it is not used with a log backend (`with-log`,
+// `with-defmt`), which cargo would report as an unused dependency
+#[cfg(any(feature = "with-log", feature = "with-defmt"))]
+use printhor_hwa_common_macros as _;
+
 //#region "Utilities"
 
 /// Global counter to keep track of memory allocation.

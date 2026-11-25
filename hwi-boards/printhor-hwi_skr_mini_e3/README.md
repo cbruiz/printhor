@@ -1,32 +1,77 @@
-![Minimum Rust: 1.85](https://img.shields.io/badge/Minimum%20Rust%20Version-1.85-green.svg)
-[![crates.io](https://img.shields.io/crates/v/prinThor.svg)](https://crates.io/crates/prinThor)
+![Minimum Rust: 1.99](https://img.shields.io/badge/Minimum%20Rust%20Version-1.99-green.svg)
+[![crates.io](https://img.shields.io/crates/v/printhor-hwi_skr_mini_e3.svg)](https://crates.io/crates/printhor-hwi_skr_mini_e3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Discord Shield](https://discordapp.com/api/guilds/1169965662618259456/widget.png?style=shield)
 
-<h3>Printhor: The highly reliable but not necessarily functional 3D printer firmware</h3>
+<h3>Printhor: The highly reliable but not necessarily functional 3D printer and robotics firmware</h3>
 
 <h5><p align="center"><i>If you are using this product or like the project, please <a href="https://github.com/cbruiz/printhor/stargazers">★</a> this repository to show your support! 🤩</i></p></h5>
 
 # Overview
 
-This board are quite functional:
-* https://biqu.equipment/products/bigtreetech-skr-mini-e3-v2-0-32-bit-control-board-integrated-tmc2209-uart-for-ender-4
+This board is quite functional:
+* [BIGTREETECH SKR Mini E3 V3.0](https://github.com/bigtreetech/BIGTREETECH-SKR-mini-E3) (See [datasheets/SKR_MINI_E3-V3.0](../../datasheets/SKR_MINI_E3-V3.0)).
 
 ### Binary image production (standard with defmt)
 
-The firmware.bin file ready to be uploaded to the SD can be produced with the following commandline:
-
-For SKR Minit E3 V3.0:
-```
-DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
-```
-or
+The `firmware.bin` file, ready to be copied to the SD card, can be produced with the following command line:
 
 ```shell
 DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
-Firmware size around 196kB as of now with previous settings.
+The firmware size is about 242kB as of now with these settings (the `skr_mini_e3_v3_fdm` profile,
+about 294kB).
+
+### FDM printer (stock Creality Ender-3)
+
+The `skr_mini_e3_v3_fdm` profile enables the hot-end, the hot-bed and the layer fan:
+
+```shell
+DEFMT_LOG=info cargo objcopy --release --no-default-features --features skr_mini_e3_v3_fdm --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
+```
+
+Add `with-fan-extra-1` to also drive FAN1. Wiring (from the board schematic):
+
+| Function             | Pin | Peripheral         |
+|----------------------|-----|--------------------|
+| Hot-end thermistor   | PA0 | ADC1 (TH0)         |
+| Hot-bed thermistor   | PC4 | ADC1 (THB)         |
+| Hot-end heater (HE0) | PC8 | TIM3_CH3 (100 Hz)  |
+| Hot-bed heater (BED) | PC9 | TIM3_CH4 (100 Hz)  |
+| Layer fan (FAN0)     | PC6 | TIM3_CH1 (100 Hz)  |
+| Extra fan (FAN1)     | PC7 | TIM3_CH2 (100 Hz)  |
+
+Thermistors: 100K NTC B3950 with a 4.7K pull-up (`HOT_END_THERM_*`/`HOT_BED_THERM_*`, overridable
+in `.cargo/config.toml`). Tune the PID constants with `M303` before printing.
+
+The motion defaults (`board_stm32g0/mod.rs`):
+
+| Setting                     | Default                                                     | Marlin's equivalent                        |
+|-----------------------------|-------------------------------------------------------------|------------------------------------------|
+| Steps per mm (8 µsteps)     | X/Y 80, Z 400, E 400 (10, 50 and 50 full steps/mm)          | `DEFAULT_AXIS_STEPS_PER_UNIT`  |
+| Driver run current          | X/Y/Z 580 mA, E 800 mA RMS, hold ×0.5 (R_sense 0.11 Ω)      | `*_CURRENT`, `HOLD_MULTIPLIER` |
+| Probe offset (`M851`)       | X 33, Y -4, Z -4.8                                          | `NOZZLE_TO_PROBE_OFFSET`       |
+| Position after homing       | X -17.3, Y -21, Z 0 (bed plane); travel to X 220, Y 202     | `*_MIN_POS`, `X/Y_MAX_POS`     |
+| Homing feed rate            | 51, 51, 5 mm/s (slow approach: 25.5, 25.5, 1.25 mm/s)       | `HOMING_FEEDRATE_MM_M`         |
+
+Steps per mm are full steps per mm times the micro-steps (`M92` changes them). The settings stored
+in the EEPROM (`M500`) are restored at boot instead: `M502` and `M500` apply these defaults.
+
+### Settings persistence (EEPROM)
+
+With the `with-eeprom` feature (enabled in the `skr_mini_e3_v3` and `skr_mini_e3_v3_fdm` profiles),
+the on-board AT24C32 (4KB) EEPROM stores the settings:
+
+| Function   | Pin | Peripheral                         |
+|------------|-----|------------------------------------|
+| EEPROM SCL | PB6 | I2C1 (400 kHz, DMA1 CH4/CH5)       |
+| EEPROM SDA | PB7 | I2C1                               |
+
+`M500` stores the steps per unit (`M92`), max feed rates (`M203`), max accelerations (`M201`),
+jerk, `M204`, home offsets (`M206`), firmware retraction (`M207`/`M208`), the PID constants
+(`M301`/`M304`) and the cold extrusion settings (`M302`). They are restored at boot and with `M501`.
+`M502` restores the defaults (in memory: `M500` stores them).
 
 ### Minimal-size binary image production
 
@@ -34,9 +79,9 @@ Firmware size around 196kB as of now with previous settings.
 DEFMT_LOG=off RUST_BACKTRACE=0 cargo objcopy --profile release-opt --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor -- -O binary firmware.bin
 ```
 
-Firmware size if 180kB as of now with previous settings.
+The firmware size is about 194kB as of now with these settings.
 
-### Run with JLink/SWD device
+### Run with a J-Link/SWD probe
 
 ```shell
 DEFMT_LOG=info RUST_BACKTRACE=1 RUSTFLAGS='--cfg board="skr_mini_e3_v3"' cargo run --release --no-default-features --features skr_mini_e3_v3 --target thumbv6m-none-eabi --bin printhor

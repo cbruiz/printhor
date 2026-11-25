@@ -5,12 +5,45 @@ use core::cell::RefCell;
 #[cfg(feature = "with-sd-card")]
 use embedded_hal_02::prelude::_embedded_hal_blocking_delay_DelayUs;
 #[cfg(feature = "with-sd-card")]
-use embedded_sdmmc::sdcard::AcquireOpts;
+use embedded_sdmmc::sdcard::spi::AcquireOpts;
 #[cfg(feature = "with-sd-card")]
 use embedded_sdmmc::{Block, BlockCount, BlockDevice, BlockIdx};
 
 #[cfg(feature = "with-sd-card")]
-use embedded_sdmmc::sdcard::proto::*;
+use embedded_sdmmc::embedded_sdmmc_types::sdcard::{
+    DATA_START_BLOCK, ERROR_OK, R1_IDLE_STATE, R1_ILLEGAL_COMMAND, R1_READY_STATE, crc7, crc16,
+    csd::Csd,
+};
+#[cfg(feature = "with-sd-card")]
+use sd_cmd::*;
+
+/// SD command indices (SD Physical Layer spec). embedded-sdmmc >= 0.10 no longer exports them as
+/// plain constants (it uses `CmdId`/`AcmdId`), so they are kept here with the same values.
+#[allow(dead_code)]
+mod sd_cmd {
+    /// GO_IDLE_STATE - init card in spi mode if CS low
+    pub const CMD0: u8 = 0x00;
+    /// SEND_IF_COND - verify SD Memory Card interface operating condition
+    pub const CMD8: u8 = 0x08;
+    /// SEND_CSD - read the Card Specific Data (CSD register)
+    pub const CMD9: u8 = 0x09;
+    /// STOP_TRANSMISSION - end multiple block read sequence
+    pub const CMD12: u8 = 0x0C;
+    /// READ_SINGLE_BLOCK - read a single data block from the card
+    pub const CMD17: u8 = 0x11;
+    /// READ_MULTIPLE_BLOCK - read a multiple data blocks from the card
+    pub const CMD18: u8 = 0x12;
+    /// APP_CMD - escape for application specific command
+    pub const CMD55: u8 = 0x37;
+    /// READ_OCR - read the OCR register of a card
+    pub const CMD58: u8 = 0x3A;
+    /// CRC_ON_OFF - enable or disable CRC checking
+    pub const CMD59: u8 = 0x3B;
+    /// SD_SEND_OP_COMD - Sends host capacity support information and activates the card's
+    /// initialization process
+    pub const ACMD41: u8 = 0x29;
+}
+
 
 /// Adapter to manage multiple drivers
 pub struct SPIAdapter<PIN: embedded_hal_02::digital::v2::OutputPin> {
@@ -44,25 +77,16 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
 
     /// Read the 'card specific data' block.
     fn read_csd(&self) -> Result<Csd, Error> {
-        match *self.card_type.borrow() {
-            Some(CardType::SD1) => {
-                let mut csd = CsdV1::new();
-                if self.card_command(CMD9, 0)? != 0 {
-                    return Err(Error::RegisterReadError);
-                }
-                self.read_data(&mut csd.data)?;
-                Ok(Csd::V1(csd))
-            }
-            Some(CardType::SD2 | CardType::SDHC) => {
-                let mut csd = CsdV2::new();
-                if self.card_command(CMD9, 0)? != 0 {
-                    return Err(Error::RegisterReadError);
-                }
-                self.read_data(&mut csd.data)?;
-                Ok(Csd::V2(csd))
-            }
-            None => Err(Error::CardNotFound),
+        if self.card_type.borrow().is_none() {
+            return Err(Error::CardNotFound);
         }
+        if self.card_command(CMD9, 0)? != 0 {
+            return Err(Error::RegisterReadError);
+        }
+        // The CSD layout is selected from its CSD_STRUCTURE field (as embedded-sdmmc 0.10 does)
+        let mut csd_raw = [0u8; 16];
+        self.read_data(&mut csd_raw)?;
+        Csd::new(&csd_raw).map_err(|_| Error::RegisterReadError)
     }
 
     /// Read an arbitrary number of bytes from the card using the SD Card
@@ -247,7 +271,10 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> SPIAdapter<PIN> {
             arg as u8,
             0,
         ];
-        buf[5] = crc7(&buf[0..5]);
+        // embedded-sdmmc >= 0.10 returns the raw 7-bit CRC: the byte is the CRC and the end bit
+        // (0.8 returned that byte). With the raw CRC every command but CMD0 (still in SD mode
+        // only for some cards) is rejected with a CRC error, e.g. CMD8: the card never opened
+        buf[5] = (crc7(&buf[0..5]) << 1) | 1;
 
         self.write_bytes(&buf)?;
 
@@ -336,7 +363,6 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PI
         &self,
         blocks: &mut [Block],
         start_block_idx: BlockIdx,
-        _reason: &str,
     ) -> Result<(), Self::Error> {
         self.check_init()?;
         let start_idx = match *self.card_type.borrow() {
@@ -362,18 +388,16 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PI
         })
     }
 
+    /// The card is only read: writing is reported as unsupported (never panics)
     fn write(&self, _blocks: &[Block], _start_block_idx: BlockIdx) -> Result<(), Self::Error> {
-        todo!()
+        Err(Error::WriteNotSupported)
     }
 
     fn num_blocks(&self) -> Result<BlockCount, Self::Error> {
         let num_blocks = self.with_chip_select(|s| {
             let csd = s.read_csd()?;
             //debug!("CSD: {:?}", csd);
-            match csd {
-                Csd::V1(ref contents) => Ok(contents.card_capacity_blocks()),
-                Csd::V2(ref contents) => Ok(contents.card_capacity_blocks()),
-            }
+            Ok(csd.card_capacity_blocks())
         })?;
         Ok(BlockCount(num_blocks))
     }
@@ -382,6 +406,8 @@ impl<PIN: embedded_hal_02::digital::v2::OutputPin> BlockDevice for SPIAdapter<PI
 #[cfg_attr(feature = "with-defmt", derive(defmt::Format))]
 #[derive(Debug, Copy, Clone)]
 pub enum Error {
+    /// Writing blocks is not supported (the card is only read)
+    WriteNotSupported,
     /// We got an error from the SPI peripheral
     Transport,
     /// We failed to enable CRC checking on the SD card

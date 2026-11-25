@@ -73,8 +73,8 @@ pub mod serial_usb {
         pub fn spawn(&mut self, spawner: embassy_executor::Spawner) {
             self.builder
                 .take()
-                .map(|builder| match spawner.spawn(serial_usb_task(builder.build())) {
-                    Ok(_) => (),
+                .map(|builder| match serial_usb_task(builder.build()) {
+                    Ok(token) => spawner.spawn(token),
                     Err(_) => {
                         panic!("Unable to spawn USB task")
                     }
@@ -146,13 +146,9 @@ pub mod serial_port_1 {
     #[allow(unused)]
     use hwa::HwiContract;
 
-    type UartRxDevice = embassy_rp::uart::UartRx<'static,
-        embassy_rp::peripherals::UART0,
-        embassy_rp::uart::Async>;
+    type UartRxDevice = embassy_rp::uart::UartRx<'static, embassy_rp::uart::Async>;
 
-    type UartTxDevice = embassy_rp::uart::UartTx<'static,
-        embassy_rp::peripherals::UART0,
-        embassy_rp::uart::Async>;
+    type UartTxDevice = embassy_rp::uart::UartTx<'static, embassy_rp::uart::Async>;
 
     pub struct SerialPort1TxAdapter {
         sender: UartTxDevice,
@@ -173,6 +169,10 @@ pub mod serial_port_1 {
             let len = buf.len();
             self.sender.write(buf).await?;
             Ok(len)
+        }
+
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
         }
     }
 
@@ -217,13 +217,9 @@ pub mod serial_port_2 {
     #[allow(unused)]
     use hwa::HwiContract;
 
-    type UartRxDevice = embassy_rp::uart::UartRx<'static,
-        embassy_rp::peripherals::UART1,
-        embassy_rp::uart::Async>;
+    type UartRxDevice = embassy_rp::uart::UartRx<'static, embassy_rp::uart::Async>;
 
-    type UartTxDevice = embassy_rp::uart::UartTx<'static,
-        embassy_rp::peripherals::UART1,
-        embassy_rp::uart::Async>;
+    type UartTxDevice = embassy_rp::uart::UartTx<'static, embassy_rp::uart::Async>;
 
     pub struct SerialPort2TxAdapter {
         sender: UartTxDevice,
@@ -244,6 +240,10 @@ pub mod serial_port_2 {
             let len = buf.len();
             self.sender.write(buf).await?;
             Ok(len)
+        }
+
+        async fn flush(&mut self) -> Result<(), Self::Error> {
+            Ok(())
         }
     }
 

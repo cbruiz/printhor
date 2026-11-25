@@ -11,6 +11,15 @@ pub use printhor_hwa_common_macros::*;
 pub use printhor_hwa_utils::*;
 use strum::EnumCount;
 
+// `micromath` serves the f32 and f64 backends. With `fixed-point-128-impl` too (it takes precedence,
+// and `float-point-f32-impl` is a default feature), it is not used, which cargo would report as an
+// unused dependency
+#[cfg(all(
+    feature = "fixed-point-128-impl",
+    any(feature = "float-point-f32-impl", feature = "float-point-f64-impl")
+))]
+use micromath as _;
+
 mod event_bus;
 pub use event_bus::*;
 
@@ -46,12 +55,20 @@ mod event_bus_channel;
 pub mod soft_uart;
 pub mod traits;
 pub mod uart;
+mod yield_now;
+pub use yield_now::yield_now;
 
 pub use contract::{HwiContext, HwiContract};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "with-sd-card")] {
         pub mod sd_card;
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "with-eeprom")] {
+        pub mod eeprom;
     }
 }
 
@@ -217,8 +234,10 @@ impl CommChannel {
     /// #[cfg(feature = "with-serial-usb")]
     /// assert_eq!(channel, CommChannel::SerialUsb); // Example assuming `with-serial-usb` feature is enabled
     ///
-    /// let internal_channel = CommChannel::index(hwa::SERIAL_PORT2_OFFSET + 1);
+    /// let internal_channel = CommChannel::index(CommChannel::index_of(CommChannel::Internal));
     /// assert_eq!(internal_channel, CommChannel::Internal);
+    /// let sink_channel = CommChannel::index(CommChannel::index_of(CommChannel::Sink));
+    /// assert_eq!(sink_channel, CommChannel::Sink);
     /// ```
     pub const fn index_of(channel: CommChannel) -> usize {
         match channel {
@@ -344,13 +363,13 @@ mod test {
     fn test_some_objects() {
         let _nd = hwa::NoDevice::new();
         let ch1 = hwa::CoordSel::X;
-        hwa::info!("{:?}", ch1);
+        hwa::debug!("{:?}", ch1);
         let mut ch2 = ch1.clone();
         assert_eq!(ch1, ch2);
         let ch3 = ch2;
         assert_eq!(ch2, ch3);
         ch2.set(hwa::CoordSel::Y, true);
-        hwa::info!("{:?}", ch2);
+        hwa::debug!("{:?}", ch2);
         assert_ne!(ch2, ch3);
 
         assert_eq!(hwa::CommChannel::count(), 5);

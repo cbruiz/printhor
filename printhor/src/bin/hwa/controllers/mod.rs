@@ -25,8 +25,11 @@ cfg_if::cfg_if! {
     if #[cfg(any(feature = "with-hot-end", feature = "with-hot-bed"))] {
         mod adc_controller;
         pub use adc_controller::GenericAdcController;
-        mod heater_controller;
-        pub use heater_controller::HeaterController;
+        pub mod heater_controller;
+        pub use heater_controller::{
+            AutotuneCycle, AutotuneEnd, AutotuneOutcome, AutotuneRequest, HeaterConfig,
+            HeaterController, HeaterError, HeaterFault, TuningRule,
+        };
     }
 }
 
@@ -39,7 +42,7 @@ cfg_if::cfg_if! {
 }
 
 #[cfg(feature = "with-trinamic")]
-pub use trinamic_controller::TrinamicController;
+pub use trinamic_controller::{TrinamicController, TrinamicError, TrinamicHealth};
 
 #[cfg(feature = "with-motion")]
 pub use motion_control::*;
